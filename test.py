@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Minimal local Forge launcher for quick-playing the test world.
+Local NeoForge launcher for quick-playing the 1.21.1 test world.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ ASSETS_DIR = DOT_MINECRAFT / "assets"
 MODS_DIR = DOT_MINECRAFT / "mods"
 SAVES_DIR = DOT_MINECRAFT / "saves"
 
-DEFAULT_INSTANCE = "1.20.1-Forge"
+DEFAULT_INSTANCE = "1.21.1-NeoForge"
 DEFAULT_WIDTH = 1600
 DEFAULT_HEIGHT = 900
 
@@ -266,7 +266,7 @@ def launch(instance: str, world: str, width: int, height: int) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build, copy, and quickplay the local Forge test instance.")
+    parser = argparse.ArgumentParser(description="Build, copy, and quickplay the local NeoForge test instance.")
     parser.add_argument("--instance", default=DEFAULT_INSTANCE)
     parser.add_argument("--world", help="Save folder name under .minecraft/saves. Defaults to the newest world.")
     parser.add_argument("--skip-build", action="store_true")

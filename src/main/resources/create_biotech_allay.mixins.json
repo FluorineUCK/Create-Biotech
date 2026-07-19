@@ -2,8 +2,7 @@
   "required": true,
   "minVersion": "0.8",
   "package": "com.yision.allay.mixin",
-  "compatibilityLevel": "JAVA_17",
-  "refmap": "create_biotech.refmap.json",
+  "compatibilityLevel": "JAVA_21",
   "mixins": [
     "PackagerBlockEntityMixin"
   ],

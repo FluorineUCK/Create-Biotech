@@ -50,7 +50,7 @@ CF_LOADER_VERSION_IDS = {
 }
 
 # 分支 → 构建配置映射
-# Create: Biotech 当前只有 1.20.1 Forge 单平台，结构保留以便后续扩展
+# Create: Biotech 按长期版本分支维护对应平台。
 BRANCH_CONFIG = {
     "main": {
         "mc_version": "1.20.1",
@@ -75,6 +75,19 @@ BRANCH_CONFIG = {
                 "jar_dir": "build/libs",
                 "modrinth_loader": "forge",
                 "curseforge_loader": "Forge",
+            },
+        ],
+    },
+    "1.21.1": {
+        "mc_version": "1.21.1",
+        "loaders": [
+            {
+                "name": "neoforge",
+                "display": "NeoForge",
+                "task": "build",
+                "jar_dir": "build/libs",
+                "modrinth_loader": "neoforge",
+                "curseforge_loader": "NeoForge",
             },
         ],
     },
