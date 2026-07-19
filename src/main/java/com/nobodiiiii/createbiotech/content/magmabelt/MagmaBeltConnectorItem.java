@@ -7,6 +7,7 @@ import javax.annotation.Nonnull;
 
 import com.simibubi.create.AllBlocks;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlock;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
@@ -51,8 +52,7 @@ public class MagmaBeltConnectorItem extends BlockItem {
 	public InteractionResult useOn(UseOnContext context) {
 		Player playerEntity = context.getPlayer();
 		if (playerEntity != null && playerEntity.isShiftKeyDown()) {
-			context.getItemInHand()
-				.setTag(null);
+			CBItemData.set(context.getItemInHand(), null);
 			return InteractionResult.SUCCESS;
 		}
 
@@ -63,17 +63,16 @@ public class MagmaBeltConnectorItem extends BlockItem {
 		if (world.isClientSide)
 			return validAxis ? InteractionResult.SUCCESS : InteractionResult.FAIL;
 
-		CompoundTag tag = context.getItemInHand()
-			.getOrCreateTag();
+		CompoundTag tag = CBItemData.getOrEmpty(context.getItemInHand());
 		BlockPos firstPulley = null;
 
 		// Remove first if no longer existant or valid
 		if (tag.contains("FirstPulley")) {
-			firstPulley = NbtUtils.readBlockPos(tag.getCompound("FirstPulley"));
-			if (!validateAxis(world, firstPulley) || !firstPulley.closerThan(pos, maxLength() * 2)) {
+			firstPulley = NbtUtils.readBlockPos(tag, "FirstPulley").orElse(null);
+			if (firstPulley == null || !validateAxis(world, firstPulley)
+				|| !firstPulley.closerThan(pos, maxLength() * 2)) {
 				tag.remove("FirstPulley");
-				context.getItemInHand()
-					.setTag(tag);
+				CBItemData.set(context.getItemInHand(), tag);
 			}
 		}
 
@@ -95,8 +94,7 @@ public class MagmaBeltConnectorItem extends BlockItem {
 
 			if (!context.getItemInHand()
 				.isEmpty()) {
-				context.getItemInHand()
-					.setTag(null);
+				CBItemData.set(context.getItemInHand(), null);
 				playerEntity.getCooldowns()
 					.addCooldown(this, 5);
 			}
@@ -104,8 +102,7 @@ public class MagmaBeltConnectorItem extends BlockItem {
 		}
 
 		tag.put("FirstPulley", NbtUtils.writeBlockPos(pos));
-		context.getItemInHand()
-			.setTag(tag);
+		CBItemData.set(context.getItemInHand(), tag);
 		playerEntity.getCooldowns()
 			.addCooldown(this, 5);
 		return InteractionResult.SUCCESS;

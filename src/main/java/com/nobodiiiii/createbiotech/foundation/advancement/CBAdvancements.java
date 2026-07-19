@@ -8,7 +8,7 @@ import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 
-import net.minecraft.advancements.Advancement;
+import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.advancements.AdvancementProgress;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -17,12 +17,12 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.event.entity.player.AdvancementEvent;
-import net.minecraftforge.event.entity.player.PlayerEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.player.AdvancementEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public final class CBAdvancements {
 	public static final ResourceLocation ROOT = CreateBiotech.asResource("root");
 	public static final ResourceLocation BELT_COMPAT = CreateBiotech.asResource("belt_compat");
@@ -55,14 +55,14 @@ public final class CBAdvancements {
 	public static final ResourceLocation LARGE_CARDBOARD_BOX = CreateBiotech.asResource("large_cardboard_box");
 	public static final ResourceLocation BIO_PACKAGER = CreateBiotech.asResource("bio_packager");
 
-	private static final ResourceLocation CREATE_BELT = new ResourceLocation("create", "belt");
-	private static final ResourceLocation CREATE_SHIFTING_GEARS = new ResourceLocation("create", "shifting_gears");
-	private static final ResourceLocation CREATE_CARDBOARD = new ResourceLocation("create", "cardboard");
+	private static final ResourceLocation CREATE_BELT = ResourceLocation.fromNamespaceAndPath("create", "belt");
+	private static final ResourceLocation CREATE_SHIFTING_GEARS = ResourceLocation.fromNamespaceAndPath("create", "shifting_gears");
+	private static final ResourceLocation CREATE_CARDBOARD = ResourceLocation.fromNamespaceAndPath("create", "cardboard");
 
 	private CBAdvancements() {}
 
 	public static boolean award(ServerPlayer player, ResourceLocation advancementId) {
-		Advancement advancement = getAdvancement(player, advancementId);
+		AdvancementHolder advancement = getAdvancement(player, advancementId);
 		if (advancement == null)
 			return false;
 
@@ -78,7 +78,7 @@ public final class CBAdvancements {
 	}
 
 	public static boolean has(ServerPlayer player, ResourceLocation advancementId) {
-		Advancement advancement = getAdvancement(player, advancementId);
+		AdvancementHolder advancement = getAdvancement(player, advancementId);
 		return advancement != null && player.getAdvancements()
 			.getOrStartProgress(advancement)
 			.isDone();
@@ -109,16 +109,16 @@ public final class CBAdvancements {
 	}
 
 	@Nullable
-	private static Advancement getAdvancement(ServerPlayer player, ResourceLocation advancementId) {
+	private static AdvancementHolder getAdvancement(ServerPlayer player, ResourceLocation advancementId) {
 		return player.server.getAdvancements()
-			.getAdvancement(advancementId);
+			.get(advancementId);
 	}
 
 	@SubscribeEvent
 	public static void onAdvancementEarned(AdvancementEvent.AdvancementEarnEvent event) {
 		if (!(event.getEntity() instanceof ServerPlayer player))
 			return;
-		ResourceLocation advancementId = event.getAdvancement().getId();
+		ResourceLocation advancementId = event.getAdvancement().id();
 		if (CREATE_BELT.equals(advancementId)) {
 			award(player, BELT_COMPAT);
 			return;

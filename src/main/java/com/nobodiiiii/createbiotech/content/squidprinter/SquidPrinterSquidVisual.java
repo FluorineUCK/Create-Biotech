@@ -43,7 +43,7 @@ public final class SquidPrinterSquidVisual {
 
 	public static void renderModel(SquidModel<Squid> squidModel, PoseStack ms, MultiBufferSource buffer, int packedLight) {
 		VertexConsumer consumer = buffer.getBuffer(squidModel.renderType(SQUID_TEXTURE));
-		squidModel.renderToBuffer(ms, consumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f, 1.0f);
+		squidModel.renderToBuffer(ms, consumer, packedLight, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
 	}
 
 	private static void resetModelPose(SquidModel<Squid> squidModel) {

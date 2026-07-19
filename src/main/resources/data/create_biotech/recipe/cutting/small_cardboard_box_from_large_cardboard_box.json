@@ -1,0 +1,14 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "create_biotech:large_cardboard_box"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:cardboard_box"
+    }
+  ],
+  "processing_time": 50
+}

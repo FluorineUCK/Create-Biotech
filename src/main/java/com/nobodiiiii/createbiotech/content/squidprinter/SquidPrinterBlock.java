@@ -29,7 +29,7 @@ public class SquidPrinterBlock extends Block implements IWrenchable, IBE<SquidPr
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState state, BlockGetter reader, BlockPos pos, PathComputationType type) {
+	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
 

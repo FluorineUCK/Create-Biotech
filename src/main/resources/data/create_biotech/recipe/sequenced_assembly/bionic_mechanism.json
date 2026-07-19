@@ -1,0 +1,113 @@
+{
+  "type": "create:sequenced_assembly",
+  "ingredient": {
+    "item": "create:brass_sheet"
+  },
+  "loops": 1,
+  "results": [
+    {
+      "id": "create_biotech:bionic_mechanism"
+    }
+  ],
+  "sequence": [
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_bionic_mechanism"
+        },
+        {
+          "tag": "create_biotech:meats"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_bionic_mechanism"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_bionic_mechanism"
+        },
+        {
+          "item": "minecraft:leather"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_bionic_mechanism"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_bionic_mechanism"
+        },
+        {
+          "item": "minecraft:bone"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_bionic_mechanism"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_bionic_mechanism"
+        },
+        {
+          "item": "minecraft:string"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_bionic_mechanism"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_bionic_mechanism"
+        },
+        {
+          "tag": "create_biotech:plants"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_bionic_mechanism"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_bionic_mechanism"
+        },
+        {
+          "item": "minecraft:slime_ball"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_bionic_mechanism"
+        }
+      ]
+    }
+  ],
+  "transitional_item": {
+    "id": "create_biotech:incomplete_bionic_mechanism"
+  }
+}

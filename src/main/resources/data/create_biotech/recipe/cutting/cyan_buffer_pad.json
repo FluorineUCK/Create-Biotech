@@ -1,0 +1,14 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "minecraft:cyan_wool"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:cyan_buffer_pad"
+    }
+  ],
+  "processing_time": 50
+}

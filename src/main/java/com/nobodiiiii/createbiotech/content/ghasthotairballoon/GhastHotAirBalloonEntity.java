@@ -7,13 +7,14 @@ import java.util.UUID;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
-import com.simibubi.create.AllPackets;
 import com.simibubi.create.content.contraptions.OrientedContraptionEntity;
 import com.simibubi.create.content.contraptions.sync.ContraptionSeatMappingPacket;
 
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.math.VecHelper;
+import net.createmod.catnip.platform.CatnipServices;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -30,7 +31,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.network.PacketDistributor;
 
 public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 
@@ -71,9 +71,9 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 	}
 
 	@Override
-	protected void defineSynchedData() {
-		super.defineSynchedData();
-		entityData.define(SYNCED_YAW, 0f);
+	protected void defineSynchedData(SynchedEntityData.Builder builder) {
+		super.defineSynchedData(builder);
+		builder.define(SYNCED_YAW, 0f);
 	}
 
 	@Override
@@ -94,17 +94,13 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 	}
 
 	@Override
-	protected void writeAdditional(CompoundTag compound, boolean spawnPacket) {
-		super.writeAdditional(compound, spawnPacket);
+	protected void writeAdditional(CompoundTag compound, HolderLookup.Provider registries, boolean spawnPacket) {
+		super.writeAdditional(compound, registries, spawnPacket);
 	}
 
 	@Override
-	public double getMyRidingOffset() {
-		Entity vehicle = getVehicle();
-		if (vehicle == null)
-			return 0;
-		return -getCordOffset() - GhastHotAirBalloonSeatEntity.GHAST_PASSENGER_Y_OFFSET
-			- vehicle.getPassengersRidingOffset();
+	public Vec3 getVehicleAttachmentPoint(Entity vehicle) {
+		return new Vec3(0, getCordOffset() + GhastHotAirBalloonSeatEntity.GHAST_PASSENGER_Y_OFFSET, 0);
 	}
 
 	private double getCordOffset() {
@@ -215,7 +211,7 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 		}
 
 		if (changed) {
-			AllPackets.getChannel().send(PacketDistributor.TRACKING_ENTITY.with(() -> this),
+			CatnipServices.NETWORK.sendToClientsTrackingEntity(this,
 				new ContraptionSeatMappingPacket(getId(), seatMapping));
 		}
 	}
@@ -250,7 +246,7 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 		AABB bb = passenger.getBoundingBox();
 		double ySize = bb.getYsize();
 		return toGlobalVector(Vec3.atLowerCornerOf(seat)
-			.add(.5, passenger.getMyRidingOffset() + ySize - .15f, .5), partialTicks)
+			.add(.5, -passenger.getVehicleAttachmentPoint(this).y + ySize - .15f, .5), partialTicks)
 			.add(VecHelper.getCenterOf(BlockPos.ZERO))
 			.subtract(0.5, ySize, 0.5);
 	}

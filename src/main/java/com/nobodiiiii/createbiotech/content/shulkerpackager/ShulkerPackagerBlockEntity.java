@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.shulkerpackager;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -42,9 +44,9 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.ChunkSource;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.ItemHandlerHelper;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 
@@ -52,13 +54,14 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 	ListTag interactionPointTag;
 	boolean updateInteractionPoints;
 	int heldBoxIdleTicks;
+	public final ShulkerPackagerItemHandler shulkerInventory;
 
 	protected ScrollOptionBehaviour<ArmBlockEntity.SelectionMode> selectionMode;
 	protected int lastOutputIndex;
 
 	public ShulkerPackagerBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.SHULKER_PACKAGER.get(), pos, state);
-		inventory = new ShulkerPackagerItemHandler(this);
+		shulkerInventory = new ShulkerPackagerItemHandler(this);
 		outputs = new ArrayList<>();
 		interactionPointTag = new ListTag();
 		updateInteractionPoints = true;
@@ -158,7 +161,7 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 					ItemStack extracted = targetInv.extractItem(slot, initialCount, true);
 					if (extracted.isEmpty())
 						continue;
-					if (requestQueue && !ItemHandlerHelper.canItemStacksStack(extracted, nextRequest.item()))
+					if (requestQueue && !ItemStack.isSameItemSameComponents(extracted, nextRequest.item()))
 						continue;
 
 					boolean bulky = !extracted.getItem()
@@ -460,20 +463,20 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 	}
 
 	@Override
-	public void write(CompoundTag compound, boolean clientPacket) {
-		super.write(compound, clientPacket);
+	public void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(compound, registries, clientPacket);
 		writeInteractionPoints(compound);
 	}
 
 	@Override
-	public void writeSafe(CompoundTag compound) {
-		super.writeSafe(compound);
+	public void writeSafe(CompoundTag compound, HolderLookup.Provider registries) {
+		super.writeSafe(compound, registries);
 		writeInteractionPoints(compound);
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 		interactionPointTag = compound.getList("InteractionPoints", Tag.TAG_COMPOUND);
 		updateInteractionPoints = true;
 	}

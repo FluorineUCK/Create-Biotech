@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.event.TickEvent.ServerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.jetbrains.annotations.Nullable;
 
 public final class AllayPortTargetRegistry {
@@ -105,10 +105,7 @@ public final class AllayPortTargetRegistry {
 		return new ArrayList<>(uniqueNames);
 	}
 
-	public static void onServerTick(ServerTickEvent event) {
-		if (event.phase != net.minecraftforge.event.TickEvent.Phase.END) {
-			return;
-		}
+	public static void onServerTick(ServerTickEvent.Post event) {
 		int currentTick = event.getServer().getTickCount();
 		TARGETS.entrySet().removeIf(levelEntry -> {
 			levelEntry.getValue().entrySet().removeIf(entry -> currentTick - entry.getValue().lastSeenTick > ENTRY_TIMEOUT_TICKS);

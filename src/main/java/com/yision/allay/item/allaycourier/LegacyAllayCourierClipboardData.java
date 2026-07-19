@@ -4,8 +4,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.ItemHandlerHelper;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 final class LegacyAllayCourierClipboardData {
 	// Keep the historical key so clipboard data written by older releases can still be recovered.
@@ -20,7 +20,7 @@ final class LegacyAllayCourierClipboardData {
 		}
 
 		ItemStackHandler legacyInventory = new ItemStackHandler(1);
-		legacyInventory.deserializeNBT(persistentData.getCompound(LEGACY_ROOT_KEY));
+		legacyInventory.deserializeNBT(player.registryAccess(), persistentData.getCompound(LEGACY_ROOT_KEY));
 		ItemStack clipboard = legacyInventory.getStackInSlot(0).copy();
 		persistentData.remove(LEGACY_ROOT_KEY);
 		if (!clipboard.isEmpty()) {

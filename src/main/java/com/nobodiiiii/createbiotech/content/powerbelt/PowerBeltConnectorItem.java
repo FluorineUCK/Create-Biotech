@@ -6,6 +6,7 @@ import java.util.List;
 import javax.annotation.Nonnull;
 
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
 import com.simibubi.create.content.kinetics.belt.BeltSlope;
@@ -48,8 +49,7 @@ public class PowerBeltConnectorItem extends BlockItem {
 	public InteractionResult useOn(UseOnContext context) {
 		Player player = context.getPlayer();
 		if (player != null && player.isShiftKeyDown()) {
-			context.getItemInHand()
-				.setTag(null);
+			CBItemData.set(context.getItemInHand(), null);
 			return InteractionResult.SUCCESS;
 		}
 
@@ -60,16 +60,15 @@ public class PowerBeltConnectorItem extends BlockItem {
 		if (level.isClientSide)
 			return validAxis ? InteractionResult.SUCCESS : InteractionResult.FAIL;
 
-		CompoundTag tag = context.getItemInHand()
-			.getOrCreateTag();
+		CompoundTag tag = CBItemData.getOrEmpty(context.getItemInHand());
 		BlockPos firstPulley = null;
 
 		if (tag.contains("FirstPulley")) {
-			firstPulley = NbtUtils.readBlockPos(tag.getCompound("FirstPulley"));
-			if (!validateAxis(level, firstPulley) || !firstPulley.closerThan(pos, maxLength() * 2)) {
+			firstPulley = NbtUtils.readBlockPos(tag, "FirstPulley").orElse(null);
+			if (firstPulley == null || !validateAxis(level, firstPulley)
+				|| !firstPulley.closerThan(pos, maxLength() * 2)) {
 				tag.remove("FirstPulley");
-				context.getItemInHand()
-					.setTag(tag);
+				CBItemData.set(context.getItemInHand(), tag);
 			}
 		}
 
@@ -89,8 +88,7 @@ public class PowerBeltConnectorItem extends BlockItem {
 
 			if (!context.getItemInHand()
 				.isEmpty()) {
-				context.getItemInHand()
-					.setTag(null);
+				CBItemData.set(context.getItemInHand(), null);
 				player.getCooldowns()
 					.addCooldown(this, 5);
 			}
@@ -98,8 +96,7 @@ public class PowerBeltConnectorItem extends BlockItem {
 		}
 
 		tag.put("FirstPulley", NbtUtils.writeBlockPos(pos));
-		context.getItemInHand()
-			.setTag(tag);
+		CBItemData.set(context.getItemInHand(), tag);
 		player.getCooldowns()
 			.addCooldown(this, 5);
 		return InteractionResult.SUCCESS;

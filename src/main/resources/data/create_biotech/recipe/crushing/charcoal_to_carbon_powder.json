@@ -1,0 +1,15 @@
+{
+  "type": "create:crushing",
+  "ingredients": [
+    {
+      "item": "minecraft:charcoal"
+    }
+  ],
+  "results": [
+    {
+      "chance": 0.1,
+      "id": "create_biotech:carbon_powder"
+    }
+  ],
+  "processing_time": 100
+}

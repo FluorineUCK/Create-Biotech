@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.compat.jei;
 
+import net.minecraft.core.registries.Registries;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.IntStream;
@@ -10,12 +12,12 @@ import com.nobodiiiii.createbiotech.content.squidprinter.EnchantmentBookCopyItem
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.EnchantedBookItem;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
+import net.minecraft.client.Minecraft;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.EnchantmentInstance;
-import net.minecraftforge.registries.ForgeRegistries;
 
 public final class EvokerEnchantingChamberJeiRecipes {
 
@@ -24,19 +26,24 @@ public final class EvokerEnchantingChamberJeiRecipes {
 
 	public static List<EvokerEnchantingChamberJeiRecipe> create() {
 		List<EvokerEnchantingChamberJeiRecipe> recipes = new ArrayList<>();
-		for (ResourceLocation enchId : ForgeRegistries.ENCHANTMENTS.getKeys()
-			.stream()
-			.sorted()
+		if (Minecraft.getInstance().level == null)
+			return recipes;
+		Registry<Enchantment> enchantments = Minecraft.getInstance().level.registryAccess()
+			.registryOrThrow(Registries.ENCHANTMENT);
+		for (Holder.Reference<Enchantment> enchantmentHolder : enchantments.holders()
+			.sorted((left, right) -> left.getKey().location().compareTo(right.getKey().location()))
 			.toList()) {
-			Enchantment enchantment = ForgeRegistries.ENCHANTMENTS.getValue(enchId);
-			if (enchantment == null)
-				continue;
+			ResourceLocation enchId = enchantmentHolder.getKey().location();
+			Enchantment enchantment = enchantmentHolder.value();
 			int maxLevel = Math.max(1, enchantment.getMaxLevel());
 
 			List<ItemStack> outputBooks = IntStream.rangeClosed(1, maxLevel)
 				.mapToObj(level -> {
 					ItemStack book = new ItemStack(Items.ENCHANTED_BOOK);
-					EnchantedBookItem.addEnchantment(book, new EnchantmentInstance(enchantment, level));
+					var mutable = new net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(
+						net.minecraft.world.item.enchantment.ItemEnchantments.EMPTY);
+					mutable.set(enchantmentHolder, level);
+					book.set(net.minecraft.core.component.DataComponents.STORED_ENCHANTMENTS, mutable.toImmutable());
 					return book;
 				})
 				.toList();

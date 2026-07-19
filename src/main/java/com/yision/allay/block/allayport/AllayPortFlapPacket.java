@@ -1,15 +1,17 @@
 package com.yision.allay.block.allayport;
 
 import com.simibubi.create.foundation.networking.BlockEntityDataPacket;
+import com.nobodiiiii.createbiotech.network.CBPackets;
 
-import net.minecraft.network.FriendlyByteBuf;
+import net.createmod.catnip.net.base.BasePacketPayload.PacketTypeProvider;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 
 public class AllayPortFlapPacket extends BlockEntityDataPacket<AllayPortBlockEntity> {
 
 	private final boolean inwards;
 
-	public AllayPortFlapPacket(FriendlyByteBuf buffer) {
-		super(buffer);
+	public AllayPortFlapPacket(RegistryFriendlyByteBuf buffer) {
+		super(buffer.readBlockPos());
 		inwards = buffer.readBoolean();
 	}
 
@@ -18,13 +20,18 @@ public class AllayPortFlapPacket extends BlockEntityDataPacket<AllayPortBlockEnt
 		this.inwards = inwards;
 	}
 
-	@Override
-	protected void writeData(FriendlyByteBuf buffer) {
+	public void write(RegistryFriendlyByteBuf buffer) {
+		buffer.writeBlockPos(pos);
 		buffer.writeBoolean(inwards);
 	}
 
 	@Override
 	protected void handlePacket(AllayPortBlockEntity blockEntity) {
 		blockEntity.flap(inwards);
+	}
+
+	@Override
+	public PacketTypeProvider getTypeProvider() {
+		return CBPackets.clientboundType();
 	}
 }

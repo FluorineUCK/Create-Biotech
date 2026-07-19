@@ -7,7 +7,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Items;
 
 public final class GeneratedPonderAttribution {
-    private static final ResourceLocation TAG = new ResourceLocation("create_biotech", "ponderer_exported");
+    private static final ResourceLocation TAG = ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported");
 
     private GeneratedPonderAttribution() {
     }

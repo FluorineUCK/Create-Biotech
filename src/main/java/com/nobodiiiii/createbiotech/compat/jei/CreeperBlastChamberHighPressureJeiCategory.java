@@ -23,14 +23,16 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeHolder;
+
+import static mezz.jei.api.recipe.RecipeType.createRecipeHolderType;
 
 public class CreeperBlastChamberHighPressureJeiCategory
 	extends CreateRecipeCategory<CreeperBlastChamberHighPressureRecipe> {
 	private static final int OUTPUT_X = 132;
 	private static final int OUTPUT_Y = 51;
-	public static final RecipeType<CreeperBlastChamberHighPressureRecipe> TYPE =
-		RecipeType.create(CreateBiotech.MOD_ID, "creeper_blast_chamber_high_pressure",
-			CreeperBlastChamberHighPressureRecipe.class);
+	public static final RecipeType<RecipeHolder<CreeperBlastChamberHighPressureRecipe>> TYPE =
+		createRecipeHolderType(CreateBiotech.asResource("creeper_blast_chamber_high_pressure"));
 	private static final HighPressureCreeperDrawable HIGH_PRESSURE_CREEPER =
 		new HighPressureCreeperDrawable(46, 42, 1.2f, 1f / 1.8f, 24);
 
@@ -126,11 +128,11 @@ public class CreeperBlastChamberHighPressureJeiCategory
 		for (int i = 0; i < results.size(); i++) {
 			ItemStack candidate = results.get(i)
 				.getStack();
-			if (ItemStack.isSameItemSameTags(displayed, candidate) && displayed.getCount() == candidate.getCount())
+			if (ItemStack.isSameItemSameComponents(displayed, candidate) && displayed.getCount() == candidate.getCount())
 				return i;
 		}
 		for (int i = 0; i < results.size(); i++) {
-			if (ItemStack.isSameItemSameTags(displayed, results.get(i)
+			if (ItemStack.isSameItemSameComponents(displayed, results.get(i)
 				.getStack()))
 				return i;
 		}

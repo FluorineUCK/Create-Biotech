@@ -164,10 +164,6 @@ public class ShulkerTeleporterScreen extends AbstractSimiContainerScreen<Shulker
 	@Override
 	protected void containerTick() {
 		super.containerTick();
-		searchBox.tick();
-		ownAddressBox.tick();
-		if (newAddressBox != null)
-			newAddressBox.tick();
 		updateOwnAddressBoxPosition();
 	}
 
@@ -258,12 +254,12 @@ public class ShulkerTeleporterScreen extends AbstractSimiContainerScreen<Shulker
 	}
 
 	@Override
-	public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
+	public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double scrollY) {
 		if (isWithinCandidateViewport(mouseX, mouseY) || isWithinScrollbar(mouseX, mouseY)) {
-			scrollOffset = Mth.clamp(scrollOffset - delta * 12.0d, 0.0d, getMaxScroll());
+			scrollOffset = Mth.clamp(scrollOffset - scrollY * 12.0d, 0.0d, getMaxScroll());
 			return true;
 		}
-		return super.mouseScrolled(mouseX, mouseY, delta);
+		return super.mouseScrolled(mouseX, mouseY, scrollX, scrollY);
 	}
 
 	@Override

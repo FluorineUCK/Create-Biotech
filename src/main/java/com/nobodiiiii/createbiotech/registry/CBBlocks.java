@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import net.minecraft.core.registries.Registries;
+
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
@@ -40,43 +42,43 @@ import com.simibubi.create.content.decoration.palettes.ConnectedGlassBlock;
 
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.GlassBlock;
+import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.material.MapColor;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+import net.neoforged.neoforge.registries.DeferredHolder;
 import com.tterrag.registrate.util.entry.BlockEntry;
 
 public class CBBlocks {
 
 	public static final DeferredRegister<Block> BLOCKS =
-		DeferredRegister.create(ForgeRegistries.BLOCKS, CreateBiotech.MOD_ID);
+		DeferredRegister.create(Registries.BLOCK, CreateBiotech.MOD_ID);
 
-	public static final RegistryObject<SlimeBeltBlock> SLIME_BELT = BLOCKS.register("slime_belt",
+	public static final DeferredHolder<Block, SlimeBeltBlock> SLIME_BELT = BLOCKS.register("slime_belt",
 		() -> new SlimeBeltBlock(Block.Properties.of()
 			.sound(SoundType.WOOL)
 			.strength(0.8f)
 			.mapColor(MapColor.COLOR_LIGHT_GREEN)
 			.noOcclusion()));
 
-	public static final RegistryObject<MagmaBeltBlock> MAGMA_BELT = BLOCKS.register("magma_belt",
+	public static final DeferredHolder<Block, MagmaBeltBlock> MAGMA_BELT = BLOCKS.register("magma_belt",
 		() -> new MagmaBeltBlock(Block.Properties.of()
 			.sound(SoundType.WOOL)
 			.strength(0.8f)
 			.mapColor(MapColor.COLOR_RED)
 			.noOcclusion()));
 
-	public static final RegistryObject<PowerBeltBlock> POWER_BELT = BLOCKS.register("power_belt",
+	public static final DeferredHolder<Block, PowerBeltBlock> POWER_BELT = BLOCKS.register("power_belt",
 		() -> new PowerBeltBlock(Block.Properties.of()
 			.sound(SoundType.WOOL)
 			.strength(0.8f)
 			.mapColor(MapColor.COLOR_GRAY)
 			.noOcclusion()));
 
-	public static final RegistryObject<EvokerEnchantingChamberBlock> EVOKER_ENCHANTING_CHAMBER =
+	public static final DeferredHolder<Block, EvokerEnchantingChamberBlock> EVOKER_ENCHANTING_CHAMBER =
 		BLOCKS.register("evoker_enchanting_chamber",
 			() -> new EvokerEnchantingChamberBlock(Block.Properties.of()
 				.sound(SoundType.COPPER)
@@ -84,14 +86,14 @@ public class CBBlocks {
 				.mapColor(MapColor.METAL)
 				.noOcclusion()));
 
-	public static final RegistryObject<ExperiencePumpBlock> EXPERIENCE_PUMP = BLOCKS.register("experience_pump",
+	public static final DeferredHolder<Block, ExperiencePumpBlock> EXPERIENCE_PUMP = BLOCKS.register("experience_pump",
 		() -> new ExperiencePumpBlock(Block.Properties.of()
 			.sound(SoundType.COPPER)
 			.strength(2.5f)
 			.mapColor(MapColor.METAL)
 			.noOcclusion()));
 
-	public static final RegistryObject<BuddingExperienceBlock> BUDDING_EXPERIENCE =
+	public static final DeferredHolder<Block, BuddingExperienceBlock> BUDDING_EXPERIENCE =
 		BLOCKS.register("budding_experience",
 			() -> new BuddingExperienceBlock(Block.Properties.of()
 				.sound(SoundType.AMETHYST)
@@ -99,58 +101,58 @@ public class CBBlocks {
 				.mapColor(MapColor.COLOR_PURPLE)
 				.randomTicks()));
 
-	public static final RegistryObject<ExperienceClusterBlock> SMALL_EXPERIENCE_BUD =
+	public static final DeferredHolder<Block, ExperienceClusterBlock> SMALL_EXPERIENCE_BUD =
 		BLOCKS.register("small_experience_bud",
 			() -> new ExperienceClusterBlock(3, 4, ExperienceConstants::smallBudXpValue, clusterProperties()));
 
-	public static final RegistryObject<ExperienceClusterBlock> MEDIUM_EXPERIENCE_BUD =
+	public static final DeferredHolder<Block, ExperienceClusterBlock> MEDIUM_EXPERIENCE_BUD =
 		BLOCKS.register("medium_experience_bud",
 			() -> new ExperienceClusterBlock(4, 3, ExperienceConstants::mediumBudXpValue, clusterProperties()));
 
-	public static final RegistryObject<ExperienceClusterBlock> LARGE_EXPERIENCE_BUD =
+	public static final DeferredHolder<Block, ExperienceClusterBlock> LARGE_EXPERIENCE_BUD =
 		BLOCKS.register("large_experience_bud",
 			() -> new ExperienceClusterBlock(5, 3, ExperienceConstants::largeBudXpValue, clusterProperties()));
 
-	public static final RegistryObject<ExperienceClusterBlock> EXPERIENCE_CLUSTER =
+	public static final DeferredHolder<Block, ExperienceClusterBlock> EXPERIENCE_CLUSTER =
 		BLOCKS.register("experience_cluster",
 			() -> new ExperienceClusterBlock(7, 3, ExperienceConstants::clusterXpValue, clusterProperties()));
 
-	public static final RegistryObject<SquidPrinterBlock> SQUID_PRINTER = BLOCKS.register("squid_printer",
+	public static final DeferredHolder<Block, SquidPrinterBlock> SQUID_PRINTER = BLOCKS.register("squid_printer",
 		() -> new SquidPrinterBlock(Block.Properties.of()
 			.sound(SoundType.COPPER)
 			.strength(2.0f)
 			.mapColor(MapColor.TERRACOTTA_BLUE)
 			.noOcclusion()));
 
-	public static final RegistryObject<PetriDishBlock> PETRI_DISH = BLOCKS.register("petri_dish",
+	public static final DeferredHolder<Block, PetriDishBlock> PETRI_DISH = BLOCKS.register("petri_dish",
 		() -> new PetriDishBlock(Block.Properties.of()
 			.sound(SoundType.GLASS)
 			.strength(1.5f)
 			.mapColor(MapColor.METAL)
 			.noOcclusion()));
 
-	public static final RegistryObject<UniversalJointBlock> UNIVERSAL_JOINT = BLOCKS.register("universal_joint",
+	public static final DeferredHolder<Block, UniversalJointBlock> UNIVERSAL_JOINT = BLOCKS.register("universal_joint",
 		() -> new UniversalJointBlock(Block.Properties.of()
 			.sound(SoundType.STONE)
 			.strength(0.8f)
 			.mapColor(MapColor.METAL)
 			.noOcclusion()));
 
-	public static final RegistryObject<SlimeClutchBlock> SLIME_CLUTCH = BLOCKS.register("slime_clutch",
+	public static final DeferredHolder<Block, SlimeClutchBlock> SLIME_CLUTCH = BLOCKS.register("slime_clutch",
 		() -> new SlimeClutchBlock(Block.Properties.of()
 			.sound(SoundType.WOOD)
 			.strength(0.8f)
 			.mapColor(MapColor.PODZOL)
 			.noOcclusion()));
 
-	public static final RegistryObject<BoneRatchetBlock> BONE_RATCHET = BLOCKS.register("bone_ratchet",
+	public static final DeferredHolder<Block, BoneRatchetBlock> BONE_RATCHET = BLOCKS.register("bone_ratchet",
 		() -> new BoneRatchetBlock(Block.Properties.of()
 			.sound(SoundType.BONE_BLOCK)
 			.strength(0.8f)
 			.mapColor(MapColor.SAND)
 			.noOcclusion()));
 
-	public static final RegistryObject<FixedCarrotFishingRodBlock> FIXED_CARROT_FISHING_ROD =
+	public static final DeferredHolder<Block, FixedCarrotFishingRodBlock> FIXED_CARROT_FISHING_ROD =
 		BLOCKS.register("fixed_carrot_fishing_rod",
 			() -> new FixedCarrotFishingRodBlock(Block.Properties.of()
 				.sound(SoundType.WOOD)
@@ -158,7 +160,7 @@ public class CBBlocks {
 				.mapColor(MapColor.WOOD)
 				.noOcclusion()));
 
-	public static final RegistryObject<GhastHotAirBalloonAssemblyStationBlock> GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION =
+	public static final DeferredHolder<Block, GhastHotAirBalloonAssemblyStationBlock> GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION =
 		BLOCKS.register("ghast_hot_air_balloon_assembly_station",
 			() -> new GhastHotAirBalloonAssemblyStationBlock(Block.Properties.of()
 				.sound(SoundType.WOOD)
@@ -166,14 +168,14 @@ public class CBBlocks {
 				.mapColor(MapColor.WOOD)
 				.noOcclusion()));
 
-	public static final RegistryObject<GhastHelmBlock> GHAST_HELM = BLOCKS.register("ghast_helm",
+	public static final DeferredHolder<Block, GhastHelmBlock> GHAST_HELM = BLOCKS.register("ghast_helm",
 		() -> new GhastHelmBlock(Block.Properties.of()
 			.sound(SoundType.WOOD)
 			.strength(2.0f)
 			.mapColor(MapColor.WOOD)
 			.noOcclusion()));
 
-	public static final RegistryObject<SchrodingersCatBlock> SCHRODINGERS_CAT =
+	public static final DeferredHolder<Block, SchrodingersCatBlock> SCHRODINGERS_CAT =
 		BLOCKS.register("schrodingers_cat",
 			() -> new SchrodingersCatBlock(Block.Properties.of()
 				.sound(SoundType.WOOL)
@@ -181,7 +183,7 @@ public class CBBlocks {
 				.mapColor(MapColor.COLOR_BROWN)
 				.noOcclusion()));
 
-	public static final RegistryObject<SpiderAssemblyTableBlock> SPIDER_ASSEMBLY_TABLE =
+	public static final DeferredHolder<Block, SpiderAssemblyTableBlock> SPIDER_ASSEMBLY_TABLE =
 		BLOCKS.register("spider_assembly_table",
 			() -> new SpiderAssemblyTableBlock(Block.Properties.of()
 				.sound(SoundType.WOOL)
@@ -189,7 +191,7 @@ public class CBBlocks {
 				.mapColor(MapColor.COLOR_BLACK)
 				.noOcclusion()));
 
-	public static final RegistryObject<SpiderAssemblyTableCogBlock> SPIDER_ASSEMBLY_TABLE_COG =
+	public static final DeferredHolder<Block, SpiderAssemblyTableCogBlock> SPIDER_ASSEMBLY_TABLE_COG =
 		BLOCKS.register("spider_assembly_table_cog",
 			() -> new SpiderAssemblyTableCogBlock(Block.Properties.of()
 				.sound(SoundType.WOOL)
@@ -197,7 +199,7 @@ public class CBBlocks {
 				.mapColor(MapColor.COLOR_BLACK)
 				.noOcclusion()));
 
-	public static final RegistryObject<CreeperBlastChamberBlock> CREEPER_BLAST_CHAMBER =
+	public static final DeferredHolder<Block, CreeperBlastChamberBlock> CREEPER_BLAST_CHAMBER =
 		BLOCKS.register("creeper_blast_chamber",
 			() -> new CreeperBlastChamberBlock(Block.Properties.of()
 				.sound(SoundType.NETHERITE_BLOCK)
@@ -206,19 +208,19 @@ public class CBBlocks {
 				.mapColor(MapColor.COLOR_GRAY)
 				.noOcclusion()));
 
-	public static final RegistryObject<CasingBlock> ASURINE_CASING =
+	public static final DeferredHolder<Block, CasingBlock> ASURINE_CASING =
 		BLOCKS.register("asurine_casing",
-			() -> new CasingBlock(Block.Properties.copy(Blocks.ANDESITE)
+			() -> new CasingBlock(Block.Properties.ofFullCopy(Blocks.ANDESITE)
 				.sound(SoundType.WOOD)
 				.mapColor(MapColor.COLOR_LIGHT_BLUE)));
 
-	public static final RegistryObject<CasingBlock> BIOTECH_CASING =
+	public static final DeferredHolder<Block, CasingBlock> BIOTECH_CASING =
 		BLOCKS.register("biotech_casing",
-			() -> new CasingBlock(Block.Properties.copy(Blocks.ANDESITE)
+			() -> new CasingBlock(Block.Properties.ofFullCopy(Blocks.ANDESITE)
 				.sound(SoundType.WOOD)
 				.mapColor(MapColor.COLOR_LIGHT_BLUE)));
 
-	public static final RegistryObject<ExplosionProofCasingBlock> EXPLOSION_PROOF_CASING =
+	public static final DeferredHolder<Block, ExplosionProofCasingBlock> EXPLOSION_PROOF_CASING =
 		BLOCKS.register("explosion_proof_casing",
 			() -> new ExplosionProofCasingBlock(Block.Properties.of()
 				.sound(SoundType.NETHERITE_BLOCK)
@@ -226,18 +228,18 @@ public class CBBlocks {
 				.requiresCorrectToolForDrops()
 				.mapColor(MapColor.COLOR_GRAY)));
 
-	public static final RegistryObject<ExplosionProofItemVaultBlock> EXPLOSION_PROOF_ITEM_VAULT =
+	public static final DeferredHolder<Block, ExplosionProofItemVaultBlock> EXPLOSION_PROOF_ITEM_VAULT =
 		BLOCKS.register("explosion_proof_item_vault",
-			() -> new ExplosionProofItemVaultBlock(Block.Properties.copy(Blocks.GOLD_BLOCK)
+			() -> new ExplosionProofItemVaultBlock(Block.Properties.ofFullCopy(Blocks.GOLD_BLOCK)
 				.mapColor(MapColor.COLOR_GRAY)
 				.sound(SoundType.NETHERITE_BLOCK)
 				.explosionResistance(1200.0f)));
 
-	public static final RegistryObject<GlassBlock> BLAST_PROOF_GLASS =
+	public static final DeferredHolder<Block, TransparentBlock> BLAST_PROOF_GLASS =
 		BLOCKS.register("blast_proof_glass",
-			() -> new GlassBlock(blastProofGlassProperties()));
+			() -> new TransparentBlock(blastProofGlassProperties()));
 
-	public static final RegistryObject<BlastProofChainDriveBlock> BLAST_PROOF_CHAIN_DRIVE =
+	public static final DeferredHolder<Block, BlastProofChainDriveBlock> BLAST_PROOF_CHAIN_DRIVE =
 			BLOCKS.register("blast_proof_chain_drive",
 				() -> new BlastProofChainDriveBlock(Block.Properties.of()
 					.sound(SoundType.NETHERITE_BLOCK)
@@ -246,21 +248,21 @@ public class CBBlocks {
 					.noOcclusion()
 					.mapColor(MapColor.COLOR_GRAY)));
 
-	public static final RegistryObject<BioPackagerBlock> BIO_PACKAGER = BLOCKS.register("bio_packager",
+	public static final DeferredHolder<Block, BioPackagerBlock> BIO_PACKAGER = BLOCKS.register("bio_packager",
 		() -> new BioPackagerBlock(Block.Properties.of()
 			.sound(SoundType.WOOD)
 			.strength(2.0f)
 			.mapColor(MapColor.WOOD)
 			.noOcclusion()));
 
-	public static final RegistryObject<ShulkerPackagerBlock> SHULKER_PACKAGER = BLOCKS.register("shulker_packager",
+	public static final DeferredHolder<Block, ShulkerPackagerBlock> SHULKER_PACKAGER = BLOCKS.register("shulker_packager",
 		() -> new ShulkerPackagerBlock(Block.Properties.of()
 			.sound(SoundType.WOOD)
 			.strength(2.0f)
 			.mapColor(MapColor.WOOD)
 			.noOcclusion()));
 
-	public static final RegistryObject<ShulkerTeleporterBlock> SHULKER_TELEPORTER =
+	public static final DeferredHolder<Block, ShulkerTeleporterBlock> SHULKER_TELEPORTER =
 		BLOCKS.register("shulker_teleporter",
 			() -> new ShulkerTeleporterBlock(Block.Properties.of()
 				.sound(SoundType.STONE)
@@ -268,7 +270,7 @@ public class CBBlocks {
 				.mapColor(MapColor.COLOR_PURPLE)
 				.noOcclusion()));
 
-	public static final RegistryObject<AllayPortBlock> ALLAY_PORT =
+	public static final DeferredHolder<Block, AllayPortBlock> ALLAY_PORT =
 		BLOCKS.register("allay_port",
 			() -> new AllayPortBlock(Block.Properties.of()
 				.sound(SoundType.METAL)
@@ -277,12 +279,12 @@ public class CBBlocks {
 				.requiresCorrectToolForDrops()
 				.noOcclusion()));
 
-	public static final RegistryObject<ConnectedGlassBlock> BLAST_PROOF_FRAMED_GLASS =
+	public static final DeferredHolder<Block, ConnectedGlassBlock> BLAST_PROOF_FRAMED_GLASS =
 		BLOCKS.register("blast_proof_framed_glass",
 			() -> new ConnectedGlassBlock(blastProofGlassProperties()));
 
-	public static final Map<DyeColor, RegistryObject<BufferPadBlock>> BUFFER_PADS = registerBufferPads();
-	public static final RegistryObject<BufferPadBlock> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
+	public static final Map<DyeColor, DeferredHolder<Block, BufferPadBlock>> BUFFER_PADS = registerBufferPads();
+	public static final DeferredHolder<Block, BufferPadBlock> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
 
 	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
 	// here so the project's primary block registry remains the place to inspect mod blocks.
@@ -290,7 +292,7 @@ public class CBBlocks {
 	public static final BlockEntry<ButterCatEngineBlock> BUTTER_CAT_ENGINE = ModBlocks.BUTTER_CAT_ENGINE;
 
 	private static Block.Properties blastProofGlassProperties() {
-		return Block.Properties.copy(Blocks.GLASS)
+		return Block.Properties.ofFullCopy(Blocks.GLASS)
 			.strength(50.0f, 1200.0f);
 	}
 
@@ -303,8 +305,8 @@ public class CBBlocks {
 			.lightLevel(state -> 5);
 	}
 
-	private static Map<DyeColor, RegistryObject<BufferPadBlock>> registerBufferPads() {
-		EnumMap<DyeColor, RegistryObject<BufferPadBlock>> bufferPads = new EnumMap<>(DyeColor.class);
+	private static Map<DyeColor, DeferredHolder<Block, BufferPadBlock>> registerBufferPads() {
+		EnumMap<DyeColor, DeferredHolder<Block, BufferPadBlock>> bufferPads = new EnumMap<>(DyeColor.class);
 		for (DyeColor color : DyeColor.values()) {
 			bufferPads.put(color, BLOCKS.register(bufferPadId(color),
 				() -> new BufferPadBlock(Block.Properties.of()
@@ -320,7 +322,7 @@ public class CBBlocks {
 		return color == DyeColor.RED ? "buffer_pad" : color.getName() + "_buffer_pad";
 	}
 
-	public static Iterable<RegistryObject<BufferPadBlock>> allBufferPads() {
+	public static Iterable<DeferredHolder<Block, BufferPadBlock>> allBufferPads() {
 		return BUFFER_PADS.values();
 	}
 

@@ -14,7 +14,7 @@ import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.math.AngleHelper;
-import net.createmod.catnip.platform.ForgeCatnipServices;
+import net.createmod.catnip.platform.NeoForgeCatnipServices;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
 import net.minecraft.client.Minecraft;
@@ -39,10 +39,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraftforge.client.model.data.ModelData;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.templates.FluidTank;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.client.model.data.ModelData;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 import org.joml.Quaternionf;
 import org.joml.Vector3f;
@@ -107,9 +107,10 @@ public class SpiderAssemblyTableRenderer extends KineticBlockEntityRenderer<Spid
 			.packedLight(light)
 			.render(ms, buffer, (poseStack, buf, lightArg) -> {
 				VertexConsumer spiderBuffer = buf.getBuffer(spiderModel.renderType(SPIDER_TEXTURE));
-				spiderModel.renderToBuffer(poseStack, spiderBuffer, lightArg, OverlayTexture.NO_OVERLAY, 1, 1, 1, 1);
+				spiderModel.renderToBuffer(poseStack, spiderBuffer, lightArg, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
 				VertexConsumer spiderEyesBuffer = buf.getBuffer(RenderType.eyes(SPIDER_EYES_TEXTURE));
-				spiderModel.renderToBuffer(poseStack, spiderEyesBuffer, EYES_LIGHT, OverlayTexture.NO_OVERLAY, 1, 1, 1, 1);
+				spiderModel.renderToBuffer(poseStack, spiderEyesBuffer, EYES_LIGHT, OverlayTexture.NO_OVERLAY,
+					0xFFFFFFFF);
 				renderLegMachines(be, partialTicks, poseStack, buf, lightArg);
 			});
 	}
@@ -464,7 +465,7 @@ public class SpiderAssemblyTableRenderer extends KineticBlockEntityRenderer<Spid
 			ms.translate(0, yOffset, 0);
 		else
 			ms.translate(0, max - min, 0);
-		ForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluid, min, min - yOffset, min, max, min, max, buffer, ms,
+		NeoForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluid, min, min - yOffset, min, max, min, max, buffer, ms,
 			light, false, true);
 		ms.popPose();
 	}

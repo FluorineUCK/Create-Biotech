@@ -18,15 +18,15 @@ public final class GeneratedGhastHelm_b77c337a {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{new ResourceLocation("create_biotech", "ponderer_exported")};
-        var multi = helper.forComponents(java.util.List.of(new ResourceLocation("create_biotech", "ghast_helm")));
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/ghast_hot_air_balloon_assembly_station_base"), GeneratedGhastHelm_b77c337a::storyboard$0, tags);
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/ghast_hot_air_balloon_assembly_station_base"), GeneratedGhastHelm_b77c337a::storyboard$1, tags);
+        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "ghast_helm")));
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/ghast_hot_air_balloon_assembly_station_base"), GeneratedGhastHelm_b77c337a::storyboard$0, tags);
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/ghast_hot_air_balloon_assembly_station_base"), GeneratedGhastHelm_b77c337a::storyboard$1, tags);
     }
 
     public static void registerTags(PonderTagRegistrationHelper<ResourceLocation> helper) {
         ResourceLocation tag = GeneratedPonderAttribution.tag();
-        helper.addTagToComponent(new ResourceLocation("create_biotech", "ghast_helm"), tag);
+        helper.addTagToComponent(ResourceLocation.fromNamespaceAndPath("create_biotech", "ghast_helm"), tag);
     }
 
     private static void storyboard$0(SceneBuilder scene, SceneBuildingUtil util) {
@@ -36,7 +36,7 @@ public final class GeneratedGhastHelm_b77c337a {
         scene.addKeyframe();
         GeneratedPonderSupport.showStructure(scene, context, new BlockPos(0, 0, 0), new BlockPos(9, 0, 9), 0.800000011920929f, null);
         scene.idle(20);
-        GeneratedPonderSupport.showExtraStructure(scene, context, new ResourceLocation("create_biotech", "ponder/generated/ponderer/ghast_hot_air_balloon_assembly_station_rope.nbt"), new BlockPos(4, 9, 0), 0, false, false, false, "none", null, null, null, null, null);
+        GeneratedPonderSupport.showExtraStructure(scene, context, ResourceLocation.fromNamespaceAndPath("create_biotech", "ponder/generated/ponderer/ghast_hot_air_balloon_assembly_station_rope.nbt"), new BlockPos(4, 9, 0), 0, false, false, false, "none", null, null, null, null, null);
         GeneratedPonderSupport.showSectionAndMerge(scene, context, new BlockPos(4, 5, 4), new BlockPos(4, 9, 4), "station", 20, "down", null, null, null, null);
         GeneratedPonderSupport.createEntity(scene, context, "minecraft:ghast", new Vec3(4.5, 7.3, 12.5), null, null, null, "{AbsorptionAmount:0.0f,ArmorDropChances:[0.085f,0.085f,0.085f,0.085f],ArmorItems:[{},{},{},{}],Attributes:[{Base:0.699999988079071d,Name:\"minecraft:generic.movement_speed\"},{Base:0.0d,Name:\"forge:step_height_addition\"}],Brain:{memories:{}},CanPickUpLoot:0b,CanUpdate:1b,ExplosionPower:1b,FallFlying:0b,ForgeData:{create_biotech.previous_liquid_living_slime_vertical_speed:0.0d,create_biotech.was_touching_liquid_living_slime:0b},HandDropChances:[0.085f,0.085f],HandItems:[{},{}],Health:10.0f,HurtByTimestamp:0,Invulnerable:0b,LeftHanded:1b,NoAI:1b,Passengers:[{Air:300s,CachedMotion:[0.0d,0.0d,0.0d],CanUpdate:1b,Contraption:{Actors:[{Data:{},FirstMovement:0b,Motion:[0.0d,0.0d,0.0d],Pos:{X:0,Y:0,Z:0},Position:[-22.5d,-58.26250000298023d,-13.5d],RelativeMotion:[0.0d,0.0d,0.0d],Stall:0b}],Anchor:{X:-23,Y:-59,Z:-14},Blocks:{BlockList:[{Pos:0L,State:0},{Pos:6L,State:1},{Pos:5L,State:1},{Pos:4L,State:1},{Pos:3L,State:1},{Pos:2L,State:1},{Pos:1L,State:2}],Palette:[{Name:\"create_biotech:white_buffer_pad\",Properties:{facing:\"up\"}},{Name:\"create:rope\",Properties:{waterlogged:\"false\"}},{Name:\"create:pulley_magnet\",Properties:{waterlogged:\"false\"}}]},BottomlessSupply:0b,BoundsFront:[0.0f,0.0f,0.0f,1.0f,7.0f,1.0f],CapturedMultiblocks:[],DisabledActors:[],InitialOffset:6,Interactors:[{Pos:{X:0,Y:6,Z:0}},{Pos:{X:0,Y:5,Z:0}},{Pos:{X:0,Y:4,Z:0}},{Pos:{X:0,Y:3,Z:0}},{Pos:{X:0,Y:2,Z:0}},{Pos:{X:0,Y:1,Z:0}}],Passengers:[],Seats:[],Stalled:0b,SubContraptions:[],Superglue:[],Type:\"create_biotech:ghast_hot_air_balloon\"},FallDistance:0.0f,Fire:0s,ForceYaw:-180.0f,InitialOrientation:\"NORTH\",Initialized:1b,Invulnerable:0b,Motion:[0.0d,0.0d,0.0d],OnGround:0b,Pitch:0.0f,Placed:0b,PortalCooldown:0,Pos:[-22.5d,-58.76250000298023d,-13.5d],Rotation:[0.0f,0.0f],Stalled:0b,UUID:[I;702731896,-1663416467,-1507507076,-549988846],Yaw:-180.0f,id:\"create_biotech:ghast_hot_air_balloon\"}],PersistenceRequired:0b}", "ghast", null, null, null);
         GeneratedPonderSupport.modifyEntitiesNbt(scene, context, false, null, "ghast", null, null, null, new Vec3(0.0, 0.0, -8.0), 60, true);

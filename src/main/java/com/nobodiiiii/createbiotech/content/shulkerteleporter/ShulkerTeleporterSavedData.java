@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -28,7 +29,8 @@ public class ShulkerTeleporterSavedData extends SavedData {
 	public static ShulkerTeleporterSavedData get(MinecraftServer server) {
 		return server.overworld()
 			.getDataStorage()
-			.computeIfAbsent(ShulkerTeleporterSavedData::load, ShulkerTeleporterSavedData::new, DATA_NAME);
+			.computeIfAbsent(new SavedData.Factory<>(ShulkerTeleporterSavedData::new,
+				ShulkerTeleporterSavedData::load), DATA_NAME);
 	}
 
 	public void register(Location location, String address) {
@@ -75,7 +77,7 @@ public class ShulkerTeleporterSavedData extends SavedData {
 	}
 
 	@Override
-	public CompoundTag save(CompoundTag tag) {
+	public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
 		ListTag entries = new ListTag();
 		for (Map.Entry<Location, String> entry : addresses.entrySet()) {
 			CompoundTag entryTag = new CompoundTag();
@@ -88,7 +90,7 @@ public class ShulkerTeleporterSavedData extends SavedData {
 		return tag;
 	}
 
-	private static ShulkerTeleporterSavedData load(CompoundTag tag) {
+	private static ShulkerTeleporterSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
 		ShulkerTeleporterSavedData data = new ShulkerTeleporterSavedData();
 		ListTag entries = tag.getList(ENTRIES_TAG, Tag.TAG_COMPOUND);
 		for (Tag rawEntry : entries) {
@@ -97,7 +99,7 @@ public class ShulkerTeleporterSavedData extends SavedData {
 			if (address.isBlank())
 				continue;
 			try {
-				ResourceLocation dimensionId = new ResourceLocation(entryTag.getString("Dimension"));
+				ResourceLocation dimensionId = ResourceLocation.parse(entryTag.getString("Dimension"));
 				ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION, dimensionId);
 				data.addresses.put(new Location(dimension, BlockPos.of(entryTag.getLong("Pos"))), address);
 			} catch (IllegalArgumentException ignored) {}

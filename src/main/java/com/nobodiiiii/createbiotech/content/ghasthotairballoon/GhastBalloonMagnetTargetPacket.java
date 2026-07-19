@@ -9,7 +9,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class GhastBalloonMagnetTargetPacket {
 
@@ -33,8 +32,8 @@ public class GhastBalloonMagnetTargetPacket {
 		buffer.writeLong(targetPacked);
 	}
 
-	public void handle(Context context) {
-		context.enqueueWork(() -> apply(context.getSender()));
+	public void handle(ServerPlayer player) {
+		apply(player);
 	}
 
 	private void apply(ServerPlayer player) {

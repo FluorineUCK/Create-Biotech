@@ -3,10 +3,8 @@ package com.nobodiiiii.createbiotech.content.powerbelt;
 import com.nobodiiiii.createbiotech.client.PowerBeltClientAnimationHandler;
 
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class PowerBeltEntityAnimationPacket {
 
@@ -29,15 +27,11 @@ public class PowerBeltEntityAnimationPacket {
 		buffer.writeFloat(distance);
 	}
 
-	public boolean handle(Context context) {
+	public void handle(LocalPlayer player) {
 		if (!Float.isFinite(distance))
-			return true;
+			return;
 
-		context.enqueueWork(() -> {
-			float clampedDistance = Mth.clamp(distance, 0, MAX_SURFACE_MOVEMENT);
-			DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-				() -> () -> PowerBeltClientAnimationHandler.handleSurfaceMovement(entityId, clampedDistance));
-		});
-		return true;
+		float clampedDistance = Mth.clamp(distance, 0, MAX_SURFACE_MOVEMENT);
+		PowerBeltClientAnimationHandler.handleSurfaceMovement(entityId, clampedDistance);
 	}
 }

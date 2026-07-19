@@ -5,11 +5,12 @@ import com.yision.allay.item.allaycourier.AllayCourierItem;
 import com.yision.allay.logistics.address.AllayAddressRules;
 import com.yision.allay.registry.AllItems;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 
 final class AllayPortInventory {
@@ -251,13 +252,13 @@ final class AllayPortInventory {
 				carrier));
 	}
 
-	void write(CompoundTag tag) {
-		tag.put("CarrierInventory", carrierInventory.serializeNBT());
+	void write(CompoundTag tag, HolderLookup.Provider registries) {
+		tag.put("CarrierInventory", carrierInventory.serializeNBT(registries));
 	}
 
-	void read(CompoundTag tag) {
+	void read(CompoundTag tag, HolderLookup.Provider registries) {
 		if (tag.contains("CarrierInventory")) {
-			carrierInventory.deserializeNBT(tag.getCompound("CarrierInventory"));
+			carrierInventory.deserializeNBT(registries, tag.getCompound("CarrierInventory"));
 		}
 	}
 }

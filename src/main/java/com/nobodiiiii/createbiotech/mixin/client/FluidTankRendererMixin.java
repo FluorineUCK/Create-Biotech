@@ -12,14 +12,14 @@ import com.simibubi.create.content.fluids.tank.FluidTankRenderer;
 
 import net.createmod.catnip.render.FluidRenderHelper;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraftforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 import org.slf4j.Logger;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 
-@Mixin(value = FluidTankRenderer.class, remap = false)
+@Mixin(FluidTankRenderer.class)
 public abstract class FluidTankRendererMixin {
 	@Unique
 	private static final Logger createBiotech$LOGGER = LogUtils.getLogger();
@@ -32,8 +32,7 @@ public abstract class FluidTankRendererMixin {
 		method = "renderSafe",
 		at = @At(value = "INVOKE",
 			target = "Lnet/createmod/catnip/render/FluidRenderHelper;renderFluidBox",
-			remap = false),
-		remap = false)
+			remap = false))
 	private void createBiotech$renderExperienceAsOrbs(FluidRenderHelper fluidRenderer, Object fluidStackObject,
 		float xMin, float yMin, float zMin, float xMax, float yMax, float zMax, MultiBufferSource buffer,
 		PoseStack poseStack, int packedLight, boolean renderBottom, boolean invertGases, Operation<Void> original,

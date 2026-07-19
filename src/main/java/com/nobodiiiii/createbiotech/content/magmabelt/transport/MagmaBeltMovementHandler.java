@@ -22,6 +22,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -148,8 +149,10 @@ public class MagmaBeltMovementHandler {
 			movement = movement.add(centering);
 
 		float step = entityIn.maxUpStep();
-		if (!isPlayer) 
-			entityIn.setMaxUpStep(1);
+		if (!isPlayer && entityIn instanceof LivingEntity livingEntity) {
+			step = (float) livingEntity.getAttributeBaseValue(Attributes.STEP_HEIGHT);
+			livingEntity.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(1.0f);
+		}
 
 		// Entity Collisions
 		if (Math.abs(movementSpeed) < .5f) {
@@ -184,8 +187,8 @@ public class MagmaBeltMovementHandler {
 		
 		entityIn.setOnGround(true);
 
-		if (!isPlayer)
-			entityIn.setMaxUpStep(step);
+		if (!isPlayer && entityIn instanceof LivingEntity livingEntity)
+			livingEntity.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(step);
 
 		boolean movedPastEndingSlope = onSlope && (MagmaBeltBlock.isMagmaBelt(world.getBlockState(entityIn.blockPosition()))
 			|| MagmaBeltBlock.isMagmaBelt(world.getBlockState(entityIn.blockPosition()

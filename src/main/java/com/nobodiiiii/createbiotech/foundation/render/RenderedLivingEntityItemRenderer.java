@@ -19,8 +19,8 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.client.ForgeHooksClient;
-import net.minecraftforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.neoforge.client.ClientHooks;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 
@@ -84,9 +84,9 @@ public class RenderedLivingEntityItemRenderer<T extends LivingEntity> extends Bl
 		PoseStack poseStack = graphics.pose();
 		poseStack.pushPose();
 		poseStack.translate(x + 8.0f, y + 8.0f, 150.0f);
-		poseStack.mulPoseMatrix(new Matrix4f().scaling(1.0f, -1.0f, 1.0f));
+		poseStack.mulPose(new Matrix4f().scaling(1.0f, -1.0f, 1.0f));
 		poseStack.scale(16.0f, 16.0f, 16.0f);
-		ForgeHooksClient.handleCameraTransforms(poseStack, model, ItemDisplayContext.GUI, false);
+		ClientHooks.handleCameraTransforms(poseStack, model, ItemDisplayContext.GUI, false);
 		poseStack.translate(-0.5f, -0.5f, -0.5f);
 		renderEntity(entity, tuning.scaleMultiplier(), tuning.footYOffset(), poseStack, graphics.bufferSource(), 15728880);
 		graphics.flush();
@@ -127,7 +127,7 @@ public class RenderedLivingEntityItemRenderer<T extends LivingEntity> extends Bl
 	}
 
 	public static double getEntityRenderCenterYOffset(LivingEntity entity, float scaleMultiplier, float footYOffset) {
-		return FOOT_GAP + footYOffset + entity.getDimensions(entity.getPose()).height * getEntityRenderScale(entity,
+		return FOOT_GAP + footYOffset + entity.getDimensions(entity.getPose()).height() * getEntityRenderScale(entity,
 			scaleMultiplier) / 2.0d;
 	}
 
@@ -142,7 +142,7 @@ public class RenderedLivingEntityItemRenderer<T extends LivingEntity> extends Bl
 			return Math.max(bounds.largestDimension(), MIN_AUTO_SCALE_DIMENSION);
 
 		EntityDimensions dimensions = entity.getDimensions(entity.getPose());
-		return Math.max(Math.max(dimensions.width, dimensions.height), MIN_AUTO_SCALE_DIMENSION);
+		return Math.max(Math.max(dimensions.width(), dimensions.height()), MIN_AUTO_SCALE_DIMENSION);
 	}
 
 	private static GeometryBounds measureRenderBounds(LivingEntity entity) {
@@ -234,55 +234,34 @@ public class RenderedLivingEntityItemRenderer<T extends LivingEntity> extends Bl
 		}
 
 		@Override
-		public VertexConsumer vertex(double x, double y, double z) {
-			bounds.include(new Vector3f((float) x, (float) y, (float) z));
+		public VertexConsumer addVertex(float x, float y, float z) {
+			bounds.include(new Vector3f(x, y, z));
 			return this;
 		}
 
 		@Override
-		public VertexConsumer vertex(Matrix4f matrix, float x, float y, float z) {
-			return vertex(matrix.transformPosition(x, y, z, new Vector3f()));
-		}
-
-		private VertexConsumer vertex(Vector3f vec) {
-			return vertex(vec.x(), vec.y(), vec.z());
-		}
-
-		@Override
-		public VertexConsumer color(int red, int green, int blue, int alpha) {
+		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
 			return this;
 		}
 
 		@Override
-		public VertexConsumer uv(float u, float v) {
+		public VertexConsumer setUv(float u, float v) {
 			return this;
 		}
 
 		@Override
-		public VertexConsumer overlayCoords(int u, int v) {
+		public VertexConsumer setUv1(int u, int v) {
 			return this;
 		}
 
 		@Override
-		public VertexConsumer uv2(int u, int v) {
+		public VertexConsumer setUv2(int u, int v) {
 			return this;
 		}
 
 		@Override
-		public VertexConsumer normal(float x, float y, float z) {
+		public VertexConsumer setNormal(float x, float y, float z) {
 			return this;
-		}
-
-		@Override
-		public void endVertex() {
-		}
-
-		@Override
-		public void defaultColor(int red, int green, int blue, int alpha) {
-		}
-
-		@Override
-		public void unsetDefaultColor() {
 		}
 	}
 }

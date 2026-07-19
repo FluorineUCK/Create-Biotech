@@ -17,6 +17,7 @@ import net.minecraft.client.renderer.entity.layers.ItemInHandLayer;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
+import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.animal.allay.Allay;
 import net.minecraft.world.item.ItemDisplayContext;
@@ -29,7 +30,8 @@ import org.joml.Vector3f;
  */
 public class AllayCourierEntityRenderer extends AllayRenderer {
 
-	private static final ResourceLocation CARGO_MODEL = CreateAllay.asResource("item/allay_courier_package");
+	private static final ModelResourceLocation CARGO_MODEL =
+		ModelResourceLocation.standalone(CreateAllay.asResource("item/allay_courier_package"));
 
 	public AllayCourierEntityRenderer(EntityRendererProvider.Context context) {
 		super(context);
@@ -73,9 +75,9 @@ public class AllayCourierEntityRenderer extends AllayRenderer {
 
 		@Override
 		public void renderToBuffer(PoseStack poseStack, VertexConsumer buffer, int packedLight, int packedOverlay,
-			float red, float green, float blue, float alpha) {
+			int color) {
 			if (!detachLoadedArms) {
-				super.renderToBuffer(poseStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
+				super.renderToBuffer(poseStack, buffer, packedLight, packedOverlay, color);
 				return;
 			}
 
@@ -83,7 +85,7 @@ public class AllayCourierEntityRenderer extends AllayRenderer {
 			boolean leftArmVisible = leftArm.visible;
 			rightArm.visible = false;
 			leftArm.visible = false;
-			super.renderToBuffer(poseStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
+			super.renderToBuffer(poseStack, buffer, packedLight, packedOverlay, color);
 			rightArm.visible = rightArmVisible;
 			leftArm.visible = leftArmVisible;
 
@@ -91,17 +93,15 @@ public class AllayCourierEntityRenderer extends AllayRenderer {
 				return;
 			}
 			if (rightArmVisible) {
-				renderRotationIndependentArm(rightArm, poseStack, buffer, packedLight, packedOverlay,
-					red, green, blue, alpha);
+				renderRotationIndependentArm(rightArm, poseStack, buffer, packedLight, packedOverlay, color);
 			}
 			if (leftArmVisible) {
-				renderRotationIndependentArm(leftArm, poseStack, buffer, packedLight, packedOverlay,
-					red, green, blue, alpha);
+				renderRotationIndependentArm(leftArm, poseStack, buffer, packedLight, packedOverlay, color);
 			}
 		}
 
 		private void renderRotationIndependentArm(ModelPart arm, PoseStack poseStack, VertexConsumer buffer,
-			int packedLight, int packedOverlay, float red, float green, float blue, float alpha) {
+			int packedLight, int packedOverlay, int color) {
 			Quaternionf bodyRotation = bodyRotation(body);
 			Vector3f rotatedAnchor = new Vector3f(arm.x, arm.y, arm.z).rotate(bodyRotation);
 
@@ -112,7 +112,7 @@ public class AllayCourierEntityRenderer extends AllayRenderer {
 				(rotatedAnchor.x - arm.x) / 16.0f,
 				(rotatedAnchor.y - arm.y) / 16.0f,
 				(rotatedAnchor.z - arm.z) / 16.0f);
-			arm.render(poseStack, buffer, packedLight, packedOverlay, red, green, blue, alpha);
+			arm.render(poseStack, buffer, packedLight, packedOverlay, color);
 			poseStack.popPose();
 		}
 	}

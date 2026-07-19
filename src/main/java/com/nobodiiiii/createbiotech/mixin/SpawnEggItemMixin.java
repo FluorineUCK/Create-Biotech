@@ -9,6 +9,8 @@ import com.llamalad7.mixinextras.sugar.Local;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
@@ -18,6 +20,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.item.component.CustomData;
 
 @Mixin(SpawnEggItem.class)
 public abstract class SpawnEggItemMixin {
@@ -51,14 +54,19 @@ public abstract class SpawnEggItemMixin {
 	private static Entity createBiotech$spawnWithPreparedTag(EntityType<?> entityType, ServerLevel level, ItemStack stack,
 		Player player, BlockPos pos, MobSpawnType spawnType, boolean alignSpawn, boolean invertYOffset,
 		Operation<Entity> original) {
-		var originalTag = stack.getTag();
-		stack.setTag(SlimeMimicHandler.createPreparedSpawnEggTag(stack));
+		CustomData originalData = stack.get(DataComponents.ENTITY_DATA);
+		CompoundTag originalTag = originalData == null ? null : originalData.copyTag();
+		stack.set(DataComponents.ENTITY_DATA,
+			CustomData.of(SlimeMimicHandler.createPreparedEntityTag(originalTag)));
 		try {
 			Entity entity = original.call(entityType, level, stack, player, pos, spawnType, alignSpawn, invertYOffset);
 			SlimeMimicHandler.markSpawnedEntity(entity);
 			return entity;
 		} finally {
-			stack.setTag(originalTag == null ? null : originalTag.copy());
+			if (originalData == null)
+				stack.remove(DataComponents.ENTITY_DATA);
+			else
+				stack.set(DataComponents.ENTITY_DATA, originalData);
 		}
 	}
 }

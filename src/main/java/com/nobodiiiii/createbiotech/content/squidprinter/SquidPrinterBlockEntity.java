@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.squidprinter;
 
+import net.minecraft.core.HolderLookup;
+
 import static com.simibubi.create.content.kinetics.belt.behaviour.BeltProcessingBehaviour.ProcessingResult.HOLD;
 import static com.simibubi.create.content.kinetics.belt.behaviour.BeltProcessingBehaviour.ProcessingResult.PASS;
 
@@ -38,17 +40,13 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler.FluidAction;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.items.wrapper.RecipeWrapper;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
+import net.neoforged.neoforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.wrapper.RecipeWrapper;
 
 public class SquidPrinterBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
-
-	private static final RecipeWrapper RECIPE_WRAPPER = new RecipeWrapper(new ItemStackHandler(1));
 
 	public int processingTicks;
 	public boolean sendSplash;
@@ -189,12 +187,15 @@ public class SquidPrinterBlockEntity extends SmartBlockEntity implements IHaveGo
 		if (!EnchantmentBookCopyItem.hasCopyableEnchantments(template))
 			return Optional.empty();
 
-		RECIPE_WRAPPER.setItem(0, input);
+		ItemStackHandler recipeInventory = new ItemStackHandler(1);
+		recipeInventory.setStackInSlot(0, input.copy());
+		RecipeWrapper recipeWrapper = new RecipeWrapper(recipeInventory);
 		return level.getRecipeManager()
-			.getRecipesFor(com.nobodiiiii.createbiotech.registry.CBRecipeTypes.SQUID_PRINTER_TYPE.get(), RECIPE_WRAPPER,
+			.getRecipesFor(com.nobodiiiii.createbiotech.registry.CBRecipeTypes.SQUID_PRINTER_TYPE.get(), recipeWrapper,
 				level)
 			.stream()
-			.filter(recipe -> recipe.matches(RECIPE_WRAPPER, level))
+			.map(net.minecraft.world.item.crafting.RecipeHolder::value)
+			.filter(recipe -> recipe.matches(recipeWrapper, level))
 			.filter(recipe -> recipe.matchesTemplate(template))
 			.map(recipe -> new PreparedRecipe(recipe, template.copyWithCount(1)))
 			.filter(this::hasRequiredFluid)
@@ -330,12 +331,12 @@ public class SquidPrinterBlockEntity extends SmartBlockEntity implements IHaveGo
 	}
 
 	@Override
-	protected void write(CompoundTag compound, boolean clientPacket) {
-		super.write(compound, clientPacket);
+	protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(compound, registries, clientPacket);
 		compound.putInt("ProcessingTicks", processingTicks);
 		compound.putBoolean("Running", running);
 		if (!processingTemplate.isEmpty())
-			compound.put("ProcessingTemplate", processingTemplate.save(new CompoundTag()));
+			compound.put("ProcessingTemplate", processingTemplate.saveOptional(registries));
 		PlacedByPlayerAdvancementTracker.writeOwner(compound, advancementOwner);
 		if (sendSplash && clientPacket) {
 			compound.putBoolean("Splash", true);
@@ -344,26 +345,25 @@ public class SquidPrinterBlockEntity extends SmartBlockEntity implements IHaveGo
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 		processingTicks = compound.getInt("ProcessingTicks");
 		running = compound.getBoolean("Running");
 		processingTemplate =
-			compound.contains("ProcessingTemplate") ? ItemStack.of(compound.getCompound("ProcessingTemplate"))
+			compound.contains("ProcessingTemplate")
+				? ItemStack.parseOptional(registries, compound.getCompound("ProcessingTemplate"))
 				: ItemStack.EMPTY;
 		advancementOwner = PlacedByPlayerAdvancementTracker.readOwner(compound);
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction side) {
-		if (cap == ForgeCapabilities.FLUID_HANDLER && side != Direction.DOWN)
-			return tank.getCapability().cast();
-		return super.getCapability(cap, side);
+	@Nullable
+	public IFluidHandler getFluidCapability(Direction side) {
+		return side != Direction.DOWN ? tank.getCapability() : null;
 	}
 
 	@Override
 	public boolean addToGoggleTooltip(List<Component> tooltip, boolean isPlayerSneaking) {
-		return containedFluidTooltip(tooltip, isPlayerSneaking, getCapability(ForgeCapabilities.FLUID_HANDLER));
+		return containedFluidTooltip(tooltip, isPlayerSneaking, tank.getCapability());
 	}
 
 	public void spawnSplashIfPending(ServerLevel level) {

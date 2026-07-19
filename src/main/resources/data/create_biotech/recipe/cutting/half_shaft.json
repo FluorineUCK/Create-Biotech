@@ -1,0 +1,15 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "create:shaft"
+    }
+  ],
+  "results": [
+    {
+      "count": 2,
+      "id": "create_biotech:half_shaft"
+    }
+  ],
+  "processing_time": 50
+}

@@ -57,7 +57,7 @@ public abstract class BeltFunnelBlockMixin {
 	}
 
 	@Inject(method = "getShapeForPosition(Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;Z)Lcom/simibubi/create/content/logistics/funnel/BeltFunnelBlock$Shape;",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 	private static void createBiotech$getShapeForPosition(BlockGetter world, BlockPos pos, Direction localFacing,
 		boolean extracting, CallbackInfoReturnable<Shape> cir) {
 		// Two call sites with different state at {@code pos}:
@@ -100,7 +100,7 @@ public abstract class BeltFunnelBlockMixin {
 	 * after the belt is gone — defeating the revert.
 	 */
 	@Inject(method = "isOnValidBelt(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelReader;Lnet/minecraft/core/BlockPos;)Z",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 	private static void createBiotech$isOnValidBelt(BlockState state, LevelReader world, BlockPos pos,
 		CallbackInfoReturnable<Boolean> cir) {
 		Direction attachment = state.getOptionalValue(BeltFunnelStateExtensions.ATTACHMENT_SURFACE).orElse(null);
@@ -131,7 +131,7 @@ public abstract class BeltFunnelBlockMixin {
 	}
 
 	@Inject(method = "onWrenched(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult;",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 	private void createBiotech$onWrenched(BlockState state, UseOnContext context,
 		CallbackInfoReturnable<InteractionResult> cir) {
 		Level world = context.getLevel();

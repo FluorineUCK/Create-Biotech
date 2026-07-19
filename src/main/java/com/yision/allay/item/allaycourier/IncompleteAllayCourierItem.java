@@ -6,9 +6,9 @@ import com.simibubi.create.foundation.item.render.SimpleCustomRenderer;
 import com.yision.allay.client.render.AllayCourierItemRenderer;
 
 import net.minecraft.world.item.Item;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
 public class IncompleteAllayCourierItem extends Item {
 	public IncompleteAllayCourierItem(Properties properties) {

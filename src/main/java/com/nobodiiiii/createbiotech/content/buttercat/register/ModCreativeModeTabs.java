@@ -3,11 +3,11 @@ package com.nobodiiiii.createbiotech.content.buttercat.register;
 import com.nobodiiiii.createbiotech.registry.CBCreativeModeTabs;
 
 import net.minecraft.world.item.CreativeModeTab;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredHolder;
 
 public final class ModCreativeModeTabs {
-	public static final RegistryObject<CreativeModeTab> CBC_TAB = CBCreativeModeTabs.MAIN;
+	public static final DeferredHolder<CreativeModeTab, CreativeModeTab> CBC_TAB = CBCreativeModeTabs.MAIN;
 
 	private ModCreativeModeTabs() {}
 

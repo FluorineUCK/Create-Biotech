@@ -1,0 +1,16 @@
+{
+  "type": "create:mixing",
+  "ingredients": [
+    {
+      "amount": 250,
+      "fluid": "minecraft:milk",
+      "type": "neoforge:single"
+    }
+  ],
+  "results": [
+    {
+      "amount": 250,
+      "id": "create_biotech:cream"
+    }
+  ]
+}

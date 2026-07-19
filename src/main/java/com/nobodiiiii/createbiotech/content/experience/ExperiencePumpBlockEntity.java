@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.experience;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 import java.util.Map.Entry;
 import java.util.UUID;
@@ -34,13 +36,11 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.fluids.capability.IFluidHandler.FluidAction;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	private static final double OPEN_INPUT_HALF_EXTENT = 0.75d;
@@ -51,11 +51,11 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 
 	@Nullable
 	private UUID advancementOwner;
-	private final LazyOptional<IFluidHandler> specialSourceCapability;
+	private final IFluidHandler specialSourceCapability;
 
 	public ExperiencePumpBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.EXPERIENCE_PUMP.get(), pos, state);
-		specialSourceCapability = LazyOptional.of(() -> new SpecialExperienceSourceHandler());
+		specialSourceCapability = new SpecialExperienceSourceHandler();
 	}
 
 	@Override
@@ -89,22 +89,20 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 
 		int rate = getFluidPumpRatePerTick();
 
-		BlockEntity targetBE = level.getBlockEntity(outputPos);
-		if (targetBE == null)
+		IFluidHandler target = level.getCapability(Capabilities.FluidHandler.BLOCK, outputPos,
+			output.getOpposite());
+		if (target == null)
 			return;
-		targetBE.getCapability(ForgeCapabilities.FLUID_HANDLER, output.getOpposite())
-			.ifPresent(target -> {
-				FluidStack offered = ExperienceFluidHelper.experienceStack(rate);
-				int accepted = target.fill(offered, IFluidHandler.FluidAction.SIMULATE);
-				if (accepted <= 0)
-					return;
-				if (hasOpenExperienceSource)
-					attractOpenInputExperienceOrbs(input);
-				FluidStack drained = drainSpecialSource(accepted, IFluidHandler.FluidAction.EXECUTE);
-				if (drained.isEmpty())
-					return;
-				target.fill(drained, IFluidHandler.FluidAction.EXECUTE);
-			});
+		FluidStack offered = ExperienceFluidHelper.experienceStack(rate);
+		int accepted = target.fill(offered, IFluidHandler.FluidAction.SIMULATE);
+		if (accepted <= 0)
+			return;
+		if (hasOpenExperienceSource)
+			attractOpenInputExperienceOrbs(input);
+		FluidStack drained = drainSpecialSource(accepted, IFluidHandler.FluidAction.EXECUTE);
+		if (drained.isEmpty())
+			return;
+		target.fill(drained, IFluidHandler.FluidAction.EXECUTE);
 	}
 
 	@Override
@@ -121,28 +119,20 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 		setChanged();
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, @Nullable Direction side) {
-		if (cap == ForgeCapabilities.FLUID_HANDLER && side != null && canExposeSpecialSource(side))
-			return specialSourceCapability.cast();
-		return super.getCapability(cap, side);
+	@Nullable
+	public IFluidHandler getFluidCapability(@Nullable Direction side) {
+		return side != null && canExposeSpecialSource(side) ? specialSourceCapability : null;
 	}
 
 	@Override
-	public void invalidateCaps() {
-		super.invalidateCaps();
-		specialSourceCapability.invalidate();
-	}
-
-	@Override
-	protected void write(CompoundTag compound, boolean clientPacket) {
-		super.write(compound, clientPacket);
+	protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(compound, registries, clientPacket);
 		PlacedByPlayerAdvancementTracker.writeOwner(compound, advancementOwner);
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 		advancementOwner = PlacedByPlayerAdvancementTracker.readOwner(compound);
 	}
 
@@ -178,11 +168,8 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	private boolean hasExperienceItemEndpoint(Direction input) {
 		if (level == null)
 			return false;
-		BlockEntity blockEntity = level.getBlockEntity(worldPosition.relative(input));
-		if (blockEntity == null)
-			return false;
-		return blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, input.getOpposite())
-			.isPresent();
+		return level.getCapability(Capabilities.ItemHandler.BLOCK, worldPosition.relative(input),
+			input.getOpposite()) != null;
 	}
 
 	private FluidStack drainSpecialSource(int maxAmount, IFluidHandler.FluidAction action) {
@@ -345,11 +332,8 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	private IItemHandler getItemHandler(Direction input) {
 		if (level == null)
 			return null;
-		BlockEntity blockEntity = level.getBlockEntity(worldPosition.relative(input));
-		if (blockEntity == null)
-			return null;
-		return blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, input.getOpposite())
-			.orElse(null);
+		return level.getCapability(Capabilities.ItemHandler.BLOCK, worldPosition.relative(input),
+			input.getOpposite());
 	}
 
 	private int getFluidPumpRatePerTick() {

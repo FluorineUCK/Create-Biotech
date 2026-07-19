@@ -21,6 +21,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.monster.Creeper;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.AABB;
 
 public class CreeperBlastChamberRenderer implements BlockEntityRenderer<CreeperBlastChamberBlockEntity> {
 
@@ -36,6 +37,11 @@ public class CreeperBlastChamberRenderer implements BlockEntityRenderer<CreeperB
 
 	public CreeperBlastChamberRenderer(BlockEntityRendererProvider.Context context) {
 		entityRenderDispatcher = Minecraft.getInstance().getEntityRenderDispatcher();
+	}
+
+	@Override
+	public AABB getRenderBoundingBox(CreeperBlastChamberBlockEntity blockEntity) {
+		return blockEntity.getRenderBoundingBox();
 	}
 
 	@Override

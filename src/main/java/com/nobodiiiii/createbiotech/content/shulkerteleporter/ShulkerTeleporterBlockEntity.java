@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.shulkerteleporter;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -234,7 +236,7 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	}
 
 	@Override
-	protected void write(CompoundTag tag, boolean clientPacket) {
+	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		tag.putString("OwnAddress", ownAddress);
 		tag.putString("TargetAddress", targetAddress);
 		ListTag candidateTags = new ListTag();
@@ -244,12 +246,12 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 		tag.putFloat("ClosingTicks", closingTicks);
 		tag.putInt("SealedHoldTicks", sealedHoldTicks);
 		tag.putBoolean("Closing", closing);
-		super.write(tag, clientPacket);
+		super.write(tag, registries, clientPacket);
 	}
 
 	@Override
-	protected void read(CompoundTag tag, boolean clientPacket) {
-		super.read(tag, clientPacket);
+	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(tag, registries, clientPacket);
 		ownAddress = normalizeAddress(tag.getString("OwnAddress"));
 		targetAddress = normalizeAddress(tag.getString("TargetAddress"));
 		candidateAddresses.clear();

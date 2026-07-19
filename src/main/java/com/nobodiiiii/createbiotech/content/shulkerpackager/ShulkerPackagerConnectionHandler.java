@@ -28,13 +28,13 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public class ShulkerPackagerConnectionHandler {
 
 	static List<ArmInteractionPoint> currentSelection = new ArrayList<>();
@@ -44,9 +44,7 @@ public class ShulkerPackagerConnectionHandler {
 	private ShulkerPackagerConnectionHandler() {}
 
 	@SubscribeEvent
-	public static void onClientTick(TickEvent.ClientTickEvent event) {
-		if (event.phase != TickEvent.Phase.END)
-			return;
+	public static void onClientTick(ClientTickEvent.Post event) {
 		if (Minecraft.getInstance().screen != null)
 			return;
 		tick();
@@ -95,7 +93,6 @@ public class ShulkerPackagerConnectionHandler {
 			return;
 		if (remove(event.getPos()) != null) {
 			event.setCanceled(true);
-			event.setCancellationResult(InteractionResult.SUCCESS);
 		}
 	}
 

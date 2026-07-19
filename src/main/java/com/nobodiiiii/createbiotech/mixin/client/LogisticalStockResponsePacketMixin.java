@@ -17,13 +17,11 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 public abstract class LogisticalStockResponsePacketMixin {
 
 	@WrapOperation(
-		method = "handleClient",
+		method = "handle",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraft/client/multiplayer/ClientLevel;getBlockEntity(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/entity/BlockEntity;",
-			remap = true
-		),
-		remap = false
+			target = "Lnet/minecraft/client/multiplayer/ClientLevel;getBlockEntity(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/entity/BlockEntity;"
+		)
 	)
 	private BlockEntity createBiotech$routeWirelessStockResponse(ClientLevel level, BlockPos targetPos,
 		Operation<BlockEntity> original) {

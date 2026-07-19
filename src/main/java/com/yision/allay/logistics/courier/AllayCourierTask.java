@@ -7,6 +7,7 @@ import com.yision.allay.entity.courier.AllayCourierEntity;
 import com.yision.allay.logistics.courier.hud.AllayCourierHudSync;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -1203,9 +1204,9 @@ public final class AllayCourierTask {
 		return PackageItem.isPackage(box) ? PackageItem.getAddress(box).trim() : "";
 	}
 
-	public CompoundTag save(CompoundTag tag) {
+	public CompoundTag save(HolderLookup.Provider registries, CompoundTag tag) {
 		tag.putUUID("Id", id);
-		tag.put("Box", box.save(new CompoundTag()));
+		tag.put("Box", box.save(registries, new CompoundTag()));
 		tag.putString("CurrentDimension", currentDimension.location().toString());
 		tag.putString("TargetDimension", targetDimension.location().toString());
 		if (sourceDimension != null) tag.putString("SourceDimension", sourceDimension.location().toString());
@@ -1236,17 +1237,17 @@ public final class AllayCourierTask {
 		return tag;
 	}
 
-	public static AllayCourierTask load(CompoundTag tag) {
+	public static AllayCourierTask load(HolderLookup.Provider registries, CompoundTag tag) {
 		UUID id = tag.getUUID("Id");
-		ItemStack box = ItemStack.of(tag.getCompound("Box"));
+		ItemStack box = ItemStack.parseOptional(registries, tag.getCompound("Box"));
 		ResourceKey<Level> currentDimension = dimensionKey(tag.getString("CurrentDimension"));
 		ResourceKey<Level> targetDimension = dimensionKey(tag.getString("TargetDimension"));
 		ResourceKey<Level> sourceDimension = tag.contains("SourceDimension")
 			? dimensionKey(tag.getString("SourceDimension")) : null;
-		BlockPos sourceAllayPort = tag.contains("SourceAllayPortPos")
-			? NbtUtils.readBlockPos(tag.getCompound("SourceAllayPortPos")) : null;
-		BlockPos targetAllayPort = tag.contains("TargetAllayPortPos")
-			? NbtUtils.readBlockPos(tag.getCompound("TargetAllayPortPos")) : null;
+		BlockPos sourceAllayPort = NbtUtils.readBlockPos(tag, "SourceAllayPortPos")
+			.orElse(null);
+		BlockPos targetAllayPort = NbtUtils.readBlockPos(tag, "TargetAllayPortPos")
+			.orElse(null);
 		UUID targetPlayer = tag.hasUUID("TargetPlayer") ? tag.getUUID("TargetPlayer") : null;
 		UUID sourcePlayer = tag.hasUUID("SourcePlayer") ? tag.getUUID("SourcePlayer") : null;
 		AllayCourierReturnMode returnMode = tag.contains("ReturnMode")
@@ -1287,7 +1288,7 @@ public final class AllayCourierTask {
 	}
 
 	private static ResourceKey<Level> dimensionKey(String id) {
-		return ResourceKey.create(Registries.DIMENSION, new ResourceLocation(id));
+		return ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(id));
 	}
 
 	private static CompoundTag vecToTag(Vec3 vector) {

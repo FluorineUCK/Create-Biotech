@@ -16,12 +16,12 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.MagmaCube;
 import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.event.entity.living.LivingDropsEvent;
-import net.minecraftforge.event.entity.living.LivingEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public class SlimeBeltAcquisitionHandler {
 	private static final String HAS_SLIME_BELT_TAG = "HasSlimeBelt";
 	private static final String HAS_MAGMA_BELT_TAG = "HasMagmaBelt";
@@ -30,7 +30,7 @@ public class SlimeBeltAcquisitionHandler {
 	private SlimeBeltAcquisitionHandler() {}
 
 	@SubscribeEvent
-	public static void onLivingTick(LivingEvent.LivingTickEvent event) {
+	public static void onLivingTick(EntityTickEvent.Post event) {
 		if (!(event.getEntity() instanceof Slime slime))
 			return;
 		if (slime.level().isClientSide || slime.tickCount % 10 != 0)

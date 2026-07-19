@@ -13,7 +13,7 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 public class ExperienceOpenPipeEffectHandler implements OpenPipeEffectHandler {
 	private static final Map<Level, LevelOutputs> OUTPUTS = new WeakHashMap<>();

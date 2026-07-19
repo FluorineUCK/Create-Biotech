@@ -71,7 +71,9 @@ public abstract class OversizedBlockItemRenderer<T extends BlockEntity> extends 
 		if (blockEntityRenderer == null)
 			return;
 
-		blockEntityRenderer.render(blockEntity, Minecraft.getInstance().getFrameTime(), ms, buffer, light, overlay);
+		blockEntityRenderer.render(blockEntity,
+			Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(true),
+			ms, buffer, light, overlay);
 	}
 
 	private @Nullable T getOrCreateBlockEntity(@Nullable Level level) {

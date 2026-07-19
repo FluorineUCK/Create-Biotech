@@ -14,6 +14,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
@@ -30,9 +31,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class BioPackagerBlock extends WrenchableDirectionalBlock implements IBE<BioPackagerBlockEntity>, IWrenchable {
 
@@ -45,15 +45,15 @@ public class BioPackagerBlock extends WrenchableDirectionalBlock implements IBE<
 
 	@Override
 	public BlockState getStateForPlacement(BlockPlaceContext context) {
-		Capability<IItemHandler> itemCap = ForgeCapabilities.ITEM_HANDLER;
 		Direction preferredFacing = null;
 		for (Direction face : context.getNearestLookingDirections()) {
+			BlockPos relative = context.getClickedPos().relative(face);
 			BlockEntity be = context.getLevel()
-				.getBlockEntity(context.getClickedPos()
-					.relative(face));
+				.getBlockEntity(relative);
 			if (be instanceof BioPackagerBlockEntity)
 				continue;
-			if (be != null && be.getCapability(itemCap).isPresent()) {
+			if (be != null && context.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+				relative, face.getOpposite()) != null) {
 				preferredFacing = face.getOpposite();
 				break;
 			}
@@ -71,12 +71,24 @@ public class BioPackagerBlock extends WrenchableDirectionalBlock implements IBE<
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level worldIn, BlockPos pos, Player player, InteractionHand handIn,
+	protected ItemInteractionResult useItemOn(ItemStack itemInHand, BlockState state, Level worldIn, BlockPos pos,
+		Player player, InteractionHand handIn, BlockHitResult hit) {
+		InteractionResult result = interact(state, worldIn, pos, player, handIn, itemInHand);
+		return result.consumesAction()
+			? ItemInteractionResult.sidedSuccess(worldIn.isClientSide)
+			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+	}
+
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level worldIn, BlockPos pos, Player player,
 		BlockHitResult hit) {
+		return interact(state, worldIn, pos, player, InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+	}
+
+	private InteractionResult interact(BlockState state, Level worldIn, BlockPos pos, Player player,
+		InteractionHand handIn, ItemStack itemInHand) {
 		if (player == null)
 			return InteractionResult.PASS;
-
-		ItemStack itemInHand = player.getItemInHand(handIn);
 
 		return onBlockEntityUse(worldIn, pos, be -> {
 			if (be.heldBox.isEmpty()) {
@@ -161,7 +173,7 @@ public class BioPackagerBlock extends WrenchableDirectionalBlock implements IBE<
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState pState, BlockGetter pLevel, BlockPos pPos, PathComputationType pType) {
+	protected boolean isPathfindable(BlockState pState, PathComputationType pType) {
 		return false;
 	}
 

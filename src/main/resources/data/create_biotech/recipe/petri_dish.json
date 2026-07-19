@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "   ",
+    "GTG",
+    "ABA"
+  ],
+  "key": {
+    "G": {
+      "item": "minecraft:glass"
+    },
+    "T": {
+      "item": "minecraft:totem_of_undying"
+    },
+    "A": {
+      "item": "create_biotech:asurine_alloy"
+    },
+    "B": {
+      "item": "create_biotech:biotech_casing"
+    }
+  },
+  "result": {
+    "id": "create_biotech:petri_dish"
+  },
+  "show_notification": true
+}

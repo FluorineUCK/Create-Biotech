@@ -13,12 +13,12 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.event.entity.living.LivingDamageEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public class LargeCardboardBoxHandler {
 
 	private LargeCardboardBoxHandler() {}
@@ -56,7 +56,7 @@ public class LargeCardboardBoxHandler {
 	}
 
 	@SubscribeEvent
-	public static void onLivingDamage(LivingDamageEvent event) {
+	public static void onLivingDamage(LivingDamageEvent.Pre event) {
 		if (!CBConfigs.SERVER.cardboardBox.lethalCaptureEnabled.get())
 			return;
 
@@ -67,7 +67,7 @@ public class LargeCardboardBoxHandler {
 			return;
 		if (!canLargeBoxCapture(mobTarget))
 			return;
-		if (target.getHealth() > event.getAmount())
+		if (target.getHealth() > event.getNewDamage())
 			return;
 
 		Player player = getCapturingPlayer(event.getSource());
@@ -82,7 +82,7 @@ public class LargeCardboardBoxHandler {
 		if (!CapturedEntityBoxHelper.captureEntityFromPlayerStack(offhandStack, player, target))
 			return;
 
-		event.setCanceled(true);
+		event.setNewDamage(0);
 		target.discard();
 		CBAdvancements.awardPlayer((net.minecraft.server.level.ServerLevel) player.level(), player.getUUID(),
 			CBAdvancements.LARGE_CARDBOARD_BOX);

@@ -18,14 +18,14 @@ public final class GeneratedMagmaBeltConnector_bce67acc {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{new ResourceLocation("create_biotech", "ponderer_exported")};
-        var multi = helper.forComponents(java.util.List.of(new ResourceLocation("create_biotech", "magma_belt_connector")));
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/magma_belt_connector_base"), GeneratedMagmaBeltConnector_bce67acc::storyboard$0, tags);
+        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "magma_belt_connector")));
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/magma_belt_connector_base"), GeneratedMagmaBeltConnector_bce67acc::storyboard$0, tags);
     }
 
     public static void registerTags(PonderTagRegistrationHelper<ResourceLocation> helper) {
         ResourceLocation tag = GeneratedPonderAttribution.tag();
-        helper.addTagToComponent(new ResourceLocation("create_biotech", "magma_belt_connector"), tag);
+        helper.addTagToComponent(ResourceLocation.fromNamespaceAndPath("create_biotech", "magma_belt_connector"), tag);
     }
 
     private static void storyboard$0(SceneBuilder scene, SceneBuildingUtil util) {

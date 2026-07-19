@@ -21,7 +21,7 @@ public abstract class FunnelVisualMixin {
 
 	@WrapOperation(method = "<init>(Ldev/engine_room/flywheel/api/visualization/VisualizationContext;Lcom/simibubi/create/content/logistics/funnel/FunnelBlockEntity;F)V",
 		at = @At(value = "INVOKE", target = "Lcom/simibubi/create/content/logistics/FlapStuffs;commonTransform(Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;F)Lorg/joml/Matrix4f;"),
-		remap = false)
+		remap = true)
 	private Matrix4f createBiotech$wrapCommonTransform(BlockPos visualPosition, Direction side, float baseZOffset,
 		Operation<Matrix4f> original, @Local FunnelBlockEntity blockEntity) {
 		BeltSurface surface = BeltSurfaceResolver.resolve(blockEntity.getLevel(), blockEntity.getBlockPos());

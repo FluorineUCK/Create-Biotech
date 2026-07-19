@@ -8,36 +8,37 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.player.Player;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.RenderFrameEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
 
-@Mod.EventBusSubscriber(modid = ButterCatModule.MODID, value = Dist.CLIENT)
+@EventBusSubscriber(modid = ButterCatModule.MODID, value = Dist.CLIENT)
 public class RotationHandler {
     static float acceleration = 0;
     static int amplifier = -1;
     @SubscribeEvent
-    public static void onClientTick(TickEvent.ClientTickEvent event) {
+    public static void onClientTick(ClientTickEvent.Post event) {
         Player player = Minecraft.getInstance().player;
         if (player == null ) return;
-        MobEffectInstance effect = player.getEffect(ModEffects.BUTTER_ROTATION_EFFECT.get());
+        MobEffectInstance effect = player.getEffect(ModEffects.BUTTER_ROTATION_EFFECT);
 
         acceleration = Mth.clamp(acceleration+0.1f*(effect!=null?1:-1),0,1);
         if(effect!=null){
-            int amplifier0 = player.getEffect(ModEffects.BUTTER_ROTATION_EFFECT.get()).getAmplifier();
+            int amplifier0 = effect.getAmplifier();
             if(amplifier0 != amplifier)
                 amplifier = amplifier0;
         }
     }
 
     @SubscribeEvent
-    public static void onRender(TickEvent.RenderTickEvent event) {
+    public static void onRender(RenderFrameEvent.Pre event) {
         Player player = Minecraft.getInstance().player;
         if (player == null || acceleration==0) return;
 
-        float pt = event.renderTickTime;
+        float pt = event.getPartialTick().getGameTimeDeltaPartialTick(false);
         float y= player.getYRot()+ getAngle(pt,amplifier);
 
         player.setYRot(y);

@@ -1,0 +1,17 @@
+{
+  "type": "create:item_application",
+  "ingredients": [
+    {
+      "item": "minecraft:enchanting_table"
+    },
+    {
+      "type": "create_biotech:captured_entity_box",
+      "entity": "minecraft:evoker"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:evoker_enchanting_chamber"
+    }
+  ]
+}

@@ -5,6 +5,7 @@ import com.simibubi.create.foundation.blockEntity.CachedRenderBBBlockEntity;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -26,8 +27,9 @@ public abstract class SmartBlockEntityLegacyRefreshMixin extends CachedRenderBBB
 		super(type, pos, state);
 	}
 
-	@Inject(method = "read", at = @At("HEAD"), remap = false)
-	private void createBiotech$markLegacyRefresh(CompoundTag tag, boolean clientPacket, CallbackInfo ci) {
+	@Inject(method = "read", at = @At("HEAD"))
+	private void createBiotech$markLegacyRefresh(CompoundTag tag, HolderLookup.Provider registries,
+		boolean clientPacket, CallbackInfo ci) {
 		createBiotech$pendingLegacyStateRefresh = !clientPacket && isLegacyExperienceMigration(tag);
 	}
 

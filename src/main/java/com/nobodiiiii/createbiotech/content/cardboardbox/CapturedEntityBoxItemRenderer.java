@@ -11,6 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.resources.model.ModelManager;
+import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
@@ -46,7 +47,8 @@ public class CapturedEntityBoxItemRenderer extends CustomRenderedItemModelRender
 	private BakedModel getModel(ResourceLocation location, BakedModel fallback) {
 		ModelManager modelManager = Minecraft.getInstance()
 			.getModelManager();
-		BakedModel model = modelManager.getModel(location);
+		BakedModel model = modelManager.getModel(
+			new ModelResourceLocation(location, ModelResourceLocation.STANDALONE_VARIANT));
 		return model == modelManager.getMissingModel() ? fallback : model;
 	}
 }

@@ -1,15 +1,15 @@
 package com.nobodiiiii.createbiotech.content.buttercat.register;
 
-import net.minecraftforge.common.ForgeConfigSpec;
+import net.neoforged.neoforge.common.ModConfigSpec;
 import org.apache.commons.lang3.tuple.Pair;
 
 public class ModConfigs {
 
     public static class Common {
-        public final ForgeConfigSpec.IntValue maxButterCount;
-        public final ForgeConfigSpec.IntValue maxInfiniteCapacity;
+        public final ModConfigSpec.IntValue maxButterCount;
+        public final ModConfigSpec.IntValue maxInfiniteCapacity;
 
-        Common(ForgeConfigSpec.Builder builder) {
+        Common(ModConfigSpec.Builder builder) {
             builder.comment("ButterCat Mod Configuration")
                     .push("general");
 
@@ -28,11 +28,11 @@ public class ModConfigs {
     }
 
     public static final Common COMMON;
-    public static final ForgeConfigSpec COMMON_SPEC;
+    public static final ModConfigSpec COMMON_SPEC;
 
     static {
-        final Pair<Common, ForgeConfigSpec> commonSpecPair =
-                new ForgeConfigSpec.Builder().configure(Common::new);
+        final Pair<Common, ModConfigSpec> commonSpecPair =
+                new ModConfigSpec.Builder().configure(Common::new);
         COMMON = commonSpecPair.getLeft();
         COMMON_SPEC = commonSpecPair.getRight();
     }

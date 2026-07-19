@@ -9,12 +9,12 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper
 import com.simibubi.create.content.logistics.box.PackageItem;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 @Mixin(PackageItem.class)
 public abstract class PackageItemCardboardBoxMixin {
 
-	@Inject(method = "getContents", at = @At("RETURN"), cancellable = true, remap = false)
+	@Inject(method = "getContents", at = @At("RETURN"), cancellable = true)
 	private static void createBiotech$addVirtualFallbackContents(ItemStack box,
 		CallbackInfoReturnable<ItemStackHandler> cir) {
 		cir.setReturnValue(CapturedEntityBoxHelper.applyVirtualSelfFallbackContents(box, cir.getReturnValue()));

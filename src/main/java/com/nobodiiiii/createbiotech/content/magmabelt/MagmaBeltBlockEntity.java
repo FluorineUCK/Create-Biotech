@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.magmabelt;
 
+import net.minecraft.core.HolderLookup;
+
 import static com.simibubi.create.content.kinetics.belt.BeltPart.MIDDLE;
 import static com.simibubi.create.content.kinetics.belt.BeltSlope.HORIZONTAL;
 import static net.minecraft.core.Direction.AxisDirection.NEGATIVE;
@@ -54,10 +56,8 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-import net.minecraftforge.client.model.data.ModelData;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.client.model.data.ModelData;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	public Map<Entity, TransportedEntityInfo> passengers;
@@ -70,7 +70,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 
 	protected BlockPos controller;
 	protected MagmaBeltInventory inventory;
-	protected LazyOptional<IItemHandler> itemHandler;
+	protected IItemHandler itemHandler;
 	public VersionedInventoryTrackerBehaviour invVersionTracker;
 
 	public CompoundTag trackerUpdateTag;
@@ -78,7 +78,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	public MagmaBeltBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
 		controller = BlockPos.ZERO;
-		itemHandler = LazyOptional.empty();
+		itemHandler = null;
 		casing = CasingType.NONE;
 		color = Optional.empty();
 	}
@@ -199,7 +199,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	}
 
 	protected void initializeItemHandler() {
-		if (level.isClientSide || itemHandler.isPresent())
+		if (level.isClientSide || itemHandler != null)
 			return;
 		if (beltLength == 0 || controller == null)
 			return;
@@ -211,19 +211,15 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		MagmaBeltInventory inventory = ((MagmaBeltBlockEntity) be).getInventory();
 		if (inventory == null)
 			return;
-		IItemHandler handler = new MagmaItemHandlerBeltSegment(inventory, index);
-		itemHandler = LazyOptional.of(() -> handler);
+		itemHandler = new MagmaItemHandlerBeltSegment(inventory, index);
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction side) {
-		if (!isItemHandlerCap(cap))
-			return super.getCapability(cap, side);
+	public IItemHandler getItemCapability(Direction side) {
 		if (!MagmaBeltBlock.canTransportObjects(getBlockState()))
-			return super.getCapability(cap, side);
-		if (!isRemoved() && !itemHandler.isPresent())
+			return null;
+		if (!isRemoved() && itemHandler == null)
 			initializeItemHandler();
-		return itemHandler.cast();
+		return itemHandler;
 	}
 
 	@Override
@@ -236,11 +232,11 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	@Override
 	public void invalidate() {
 		super.invalidate();
-		itemHandler.invalidate();
+		itemHandler = null;
 	}
 
 	@Override
-	public void write(CompoundTag compound, boolean clientPacket) {
+	public void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
 		if (controller != null)
 			compound.put("Controller", NbtUtils.writeBlockPos(controller));
 		compound.putBoolean("IsController", isController());
@@ -253,13 +249,13 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 			NBTHelper.writeEnum(compound, "Dye", color.get());
 
 		if (isController())
-			compound.put("Inventory", getInventory().write());
-		super.write(compound, clientPacket);
+			compound.put("Inventory", getInventory().write(registries));
+		super.write(compound, registries, clientPacket);
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 
 		if (compound.getBoolean("IsController"))
 			controller = worldPosition;
@@ -269,14 +265,14 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 
 		if (!wasMoved) {
 			if (!isController())
-				controller = NbtUtils.readBlockPos(compound.getCompound("Controller"));
+				controller = NbtUtils.readBlockPos(compound, "Controller").orElse(worldPosition);
 			trackerUpdateTag = compound;
 			index = compound.getInt("Index");
 			beltLength = compound.getInt("Length");
 		}
 
 		if (isController())
-			getInventory().read(compound.getCompound("Inventory"));
+			getInventory().read(compound.getCompound("Inventory"), registries);
 
 		CasingType casingBefore = casing;
 		boolean coverBefore = covered;
@@ -601,7 +597,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	}
 
 	public void invalidateItemHandler() {
-		itemHandler.invalidate();
+		itemHandler = null;
 	}
 
 	public boolean shouldRenderNormally() {

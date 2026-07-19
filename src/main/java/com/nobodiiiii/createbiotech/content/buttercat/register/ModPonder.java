@@ -14,7 +14,7 @@ import net.minecraft.resources.ResourceLocation;
 public class ModPonder implements PonderPlugin {
     @Override
     public void registerTags(PonderTagRegistrationHelper<ResourceLocation> helper) {
-        PonderTagRegistrationHelper<RegistryEntry<?>> HELPER = helper.withKeyFunction(RegistryEntry::getId);
+        PonderTagRegistrationHelper<RegistryEntry<?, ?>> HELPER = helper.withKeyFunction(RegistryEntry::getId);
 
         HELPER.addToTag(AllCreatePonderTags.KINETIC_SOURCES)
                 .add(ModBlocks.BUTTER_CAT_ENGINE);
@@ -23,7 +23,7 @@ public class ModPonder implements PonderPlugin {
 
     @Override
     public void registerScenes(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        PonderSceneRegistrationHelper<ItemProviderEntry<?>> HELPER = helper.withKeyFunction(RegistryEntry::getId);
+        PonderSceneRegistrationHelper<ItemProviderEntry<?, ?>> HELPER = helper.withKeyFunction(RegistryEntry::getId);
 
         HELPER.addStoryBoard(ModBlocks.BUTTER_CAT_ENGINE, "butter_cat_engine", ModPonderScenes::butterCatEngine, AllCreatePonderTags.KINETIC_SOURCES);
     }

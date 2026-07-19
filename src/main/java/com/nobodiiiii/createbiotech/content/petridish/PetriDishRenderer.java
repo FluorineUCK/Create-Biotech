@@ -156,12 +156,12 @@ public class PetriDishRenderer extends SmartBlockEntityRenderer<PetriDishBlockEn
 
 	private static float getAdultWidth(LivingEntity previewEntity) {
 		EntityDimensions dimensions = previewEntity.getDimensions(previewEntity.getPose());
-		return Math.max(previewEntity.getBbWidth(), dimensions.width);
+		return Math.max(previewEntity.getBbWidth(), dimensions.width());
 	}
 
 	private static float getAdultHeight(LivingEntity previewEntity) {
 		EntityDimensions dimensions = previewEntity.getDimensions(previewEntity.getPose());
-		return Math.max(previewEntity.getBbHeight(), dimensions.height);
+		return Math.max(previewEntity.getBbHeight(), dimensions.height());
 	}
 
 	private static float getBaseScale(PetriDishBlockEntity be, float partialTicks) {

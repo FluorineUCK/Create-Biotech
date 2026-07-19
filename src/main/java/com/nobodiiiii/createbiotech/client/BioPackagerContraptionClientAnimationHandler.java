@@ -13,12 +13,12 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public final class BioPackagerContraptionClientAnimationHandler {
 
 	private static final Map<AnimationKey, AnimationState> ACTIVE = new HashMap<>();
@@ -39,10 +39,7 @@ public final class BioPackagerContraptionClientAnimationHandler {
 	}
 
 	@SubscribeEvent
-	public static void onClientTick(TickEvent.ClientTickEvent event) {
-		if (event.phase != TickEvent.Phase.END)
-			return;
-
+	public static void onClientTick(ClientTickEvent.Post event) {
 		Minecraft minecraft = Minecraft.getInstance();
 		Level level = minecraft.level;
 		if (level == null) {

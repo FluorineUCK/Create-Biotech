@@ -14,7 +14,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
@@ -23,7 +23,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
 
 @Mixin(BasinBlock.class)
 public abstract class BasinBlockMixin {
@@ -35,11 +35,11 @@ public abstract class BasinBlockMixin {
 			ci.cancel();
 	}
 
-	@Inject(method = "use", at = @At("HEAD"), cancellable = true)
-	private void createBiotech$keepCapturedSlimesOutOfHandOutput(BlockState state, Level level, BlockPos pos,
-		Player player, InteractionHand hand, BlockHitResult hit, CallbackInfoReturnable<InteractionResult> cir) {
-		if (!player.getItemInHand(hand)
-			.isEmpty())
+	@Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true)
+	private void createBiotech$keepCapturedSlimesOutOfHandOutput(ItemStack stack, BlockState state, Level level,
+		BlockPos pos, Player player, InteractionHand hand, BlockHitResult hit,
+		CallbackInfoReturnable<ItemInteractionResult> cir) {
+		if (!stack.isEmpty())
 			return;
 		if (!(level.getBlockEntity(pos) instanceof BasinBlockEntity basin))
 			return;
@@ -55,7 +55,7 @@ public abstract class BasinBlockMixin {
 			basin.onEmptied();
 		}
 
-		cir.setReturnValue(InteractionResult.SUCCESS);
+		cir.setReturnValue(ItemInteractionResult.SUCCESS);
 	}
 
 	private static boolean hasProtectedSlimeItem(BasinBlockEntity basin) {

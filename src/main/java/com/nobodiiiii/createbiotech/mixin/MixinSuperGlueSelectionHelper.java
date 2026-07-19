@@ -7,6 +7,7 @@ import com.simibubi.create.content.contraptions.glue.SuperGlueSelectionHelper;
 import net.minecraft.core.NonNullList;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
 import org.spongepowered.asm.mixin.Mixin;
@@ -18,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class MixinSuperGlueSelectionHelper {
 
 	@Inject(method = "collectGlueFromInventory(Lnet/minecraft/world/entity/player/Player;IZ)Z", at = @At("HEAD"),
-		cancellable = true, remap = false)
+		cancellable = true)
 	private static void createBiotech$excludeSmartGlue(Player player, int requiredAmount, boolean simulate,
 		CallbackInfoReturnable<Boolean> cir) {
 		if (player.getAbilities().instabuild || requiredAmount == 0) {
@@ -36,7 +37,7 @@ public abstract class MixinSuperGlueSelectionHelper {
 
 			int charges = Math.min(requiredAmount, stack.getMaxDamage() - stack.getDamageValue());
 			if (!simulate)
-				stack.hurtAndBreak(charges, player, p -> p.broadcastBreakEvent(InteractionHand.MAIN_HAND));
+				stack.hurtAndBreak(charges, player, LivingEntity.getSlotForHand(InteractionHand.MAIN_HAND));
 
 			requiredAmount -= charges;
 			if (requiredAmount <= 0) {

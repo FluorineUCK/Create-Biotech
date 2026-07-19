@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.schrodingerscat;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 import java.util.Random;
 
@@ -125,16 +127,16 @@ public class SchrodingersCatBlockEntity extends SmartBlockEntity {
 	}
 
 	@Override
-	protected void write(CompoundTag tag, boolean clientPacket) {
+	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		tag.putInt(SIGNAL_STRENGTH_TAG, signalStrength);
 		tag.putInt(TICK_COUNTER_TAG, tickCounter);
 		tag.putInt(PULSE_TICKS_TAG, pulseTicks);
-		super.write(tag, clientPacket);
+		super.write(tag, registries, clientPacket);
 	}
 
 	@Override
-	protected void read(CompoundTag tag, boolean clientPacket) {
-		super.read(tag, clientPacket);
+	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(tag, registries, clientPacket);
 		signalStrength = tag.contains(SIGNAL_STRENGTH_TAG) ? tag.getInt(SIGNAL_STRENGTH_TAG) : 15;
 		tickCounter = tag.getInt(TICK_COUNTER_TAG);
 		pulseTicks = tag.getInt(PULSE_TICKS_TAG);
@@ -199,12 +201,12 @@ public class SchrodingersCatBlockEntity extends SmartBlockEntity {
 		}
 
 		@Override
-		public void write(CompoundTag nbt, boolean clientPacket) {
+		public void write(CompoundTag nbt, HolderLookup.Provider registries, boolean clientPacket) {
 			nbt.putInt(TAG, value);
 		}
 
 		@Override
-		public void read(CompoundTag nbt, boolean clientPacket) {
+		public void read(CompoundTag nbt, HolderLookup.Provider registries, boolean clientPacket) {
 			if (nbt.contains(TAG))
 				value = Mth.clamp(nbt.getInt(TAG), 1, getMaxInterval());
 		}
@@ -282,12 +284,12 @@ public class SchrodingersCatBlockEntity extends SmartBlockEntity {
 		}
 
 		@Override
-		public void write(CompoundTag nbt, boolean clientPacket) {
+		public void write(CompoundTag nbt, HolderLookup.Provider registries, boolean clientPacket) {
 			nbt.putInt(TAG, value);
 		}
 
 		@Override
-		public void read(CompoundTag nbt, boolean clientPacket) {
+		public void read(CompoundTag nbt, HolderLookup.Provider registries, boolean clientPacket) {
 			if (nbt.contains(TAG))
 				value = nbt.getInt(TAG);
 		}

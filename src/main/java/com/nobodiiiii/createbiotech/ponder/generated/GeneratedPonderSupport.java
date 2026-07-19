@@ -2,6 +2,7 @@
 // 由思索者自动生成 — 请勿手动修改；下次导出时会被覆盖。
 package com.nobodiiiii.createbiotech.ponder.generated;
 
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.mojang.logging.LogUtils;
 import net.createmod.catnip.math.Pointing;
 import net.createmod.ponder.api.PonderPalette;
@@ -1704,7 +1705,7 @@ public final class GeneratedPonderSupport {
             try {
                 CompoundTag tag = TagParser.parseTag(finalNbt);
                 if (!tag.isEmpty()) {
-                    stack.setTag(tag);
+                    CBItemData.set(stack, tag);
                 }
             } catch (Exception ignored) {
             }
@@ -1724,7 +1725,9 @@ public final class GeneratedPonderSupport {
             }
         }
         if (!itemPatch.isEmpty()) {
-            copy.getOrCreateTag().merge(itemPatch.copy());
+            CompoundTag itemData = CBItemData.getOrEmpty(copy);
+            itemData.merge(itemPatch.copy());
+            CBItemData.set(copy, itemData);
         }
         return copy;
     }
@@ -1788,7 +1791,7 @@ public final class GeneratedPonderSupport {
             try (InputStream is = resourceOpt.get().open()) {
                 root = NbtIo.read(
                     new DataInputStream(new BufferedInputStream(new GZIPInputStream(is))),
-                    new NbtAccounter(0x20000000L));
+                    NbtAccounter.create(0x20000000L));
             }
         } catch (Exception e) {
             LOGGER.warn("show_extra_structure failed to read {}: {}", structureAssetId, e.getMessage());

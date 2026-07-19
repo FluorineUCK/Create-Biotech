@@ -17,6 +17,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import java.util.Arrays;
 
 public class SquidPrinterJeiCategory extends AbstractRecipeCategory<SquidPrinterJeiRecipe> {
 
@@ -62,7 +63,7 @@ public class SquidPrinterJeiCategory extends AbstractRecipeCategory<SquidPrinter
 		AllGuiTextures.JEI_SHADOW.render(graphics, 62, 57);
 		AllGuiTextures.JEI_DOWN_ARROW.render(graphics, 126, 29);
 		spout.withFluids(recipe.requiredFluid()
-			.getMatchingFluidStacks())
+			.getFluids() == null ? java.util.List.of() : Arrays.asList(recipe.requiredFluid().getFluids()))
 			.draw(graphics, WIDTH / 2 - 13, 22);
 	}
 

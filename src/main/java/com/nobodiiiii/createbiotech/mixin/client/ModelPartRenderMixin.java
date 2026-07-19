@@ -14,10 +14,10 @@ import net.minecraft.client.model.geom.ModelPart;
 @Mixin(ModelPart.class)
 public abstract class ModelPartRenderMixin {
 
-	@Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;IIFFFF)V",
+	@Inject(method = "render(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V",
 		at = @At("HEAD"), cancellable = true)
 	private void createBiotech$redirectSlimeMimicPartRender(PoseStack poseStack, VertexConsumer consumer,
-		int packedLight, int overlay, float red, float green, float blue, float alpha, CallbackInfo ci) {
+		int packedLight, int overlay, int color, CallbackInfo ci) {
 		if (SlimeMimicRenderLayer.interceptModelPart((ModelPart) (Object) this, poseStack, packedLight, overlay))
 			ci.cancel();
 	}

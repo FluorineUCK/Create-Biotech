@@ -19,6 +19,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -78,19 +79,18 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
 
 
     @Override
-    public InteractionResult use(BlockState blockState, Level level, BlockPos pos, Player player, InteractionHand hand, BlockHitResult result) {
-        ItemStack itemStack = player.getItemInHand(hand);
-
+    protected ItemInteractionResult useItemOn(ItemStack itemStack, BlockState blockState, Level level, BlockPos pos,
+                                              Player player, InteractionHand hand, BlockHitResult result) {
         if (hand != InteractionHand.MAIN_HAND || itemStack.is(AllItems.WRENCH.get())) {
-            return InteractionResult.FAIL;
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
         if (player.isCrouching() || !(level.getBlockEntity(pos) instanceof ButterCatEngineBlockEntity be)) {
-            return InteractionResult.PASS;
+            return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
         if (!be.hasBread()) {
-            return InteractionResult.SUCCESS;
+            return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
 
         if (!be.isInfinite() && itemStack.is(ModItems.SUPER_BUTTER.get())) {
@@ -106,7 +106,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
             int butterLevel = ModItems.getButterLevel(itemStack.getItem());
             if (!be.canAcceptButter(butterLevel)) {
                 displayMessage(player, "string.create_biotech.full");
-                return InteractionResult.FAIL;
+                return ItemInteractionResult.FAIL;
             }
             be.addButterCount(butterLevel);
             itemStack.shrink(1);
@@ -115,7 +115,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
             }
         }
 
-        return InteractionResult.SUCCESS;
+        return ItemInteractionResult.sidedSuccess(level.isClientSide);
     }
 
 
@@ -199,7 +199,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
     @SuppressWarnings("deprecation")
     public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
         ItemStack tool = builder.getOptionalParameter(LootContextParams.TOOL);
-        if (preservesWholeBlock(tool))
+        if (preservesWholeBlock(tool, builder.getLevel()))
             return super.getDrops(state, builder);
 
         List<ItemStack> drops = new ArrayList<>();
@@ -214,9 +214,10 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
         return drops;
     }
 
-    private boolean preservesWholeBlock(ItemStack tool) {
+    private boolean preservesWholeBlock(ItemStack tool, ServerLevel level) {
         return tool != null && (tool.is(AllItems.WRENCH.get())
-            || EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, tool) > 0);
+            || EnchantmentHelper.getItemEnchantmentLevel(
+                level.registryAccess().holderOrThrow(Enchantments.SILK_TOUCH), tool) > 0);
     }
 
     private boolean hasBread(BlockState state) {
@@ -234,7 +235,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
         if (cat == null)
             return;
 
-        cat.setVariant(BuiltInRegistries.CAT_VARIANT.get(be.getCatVariant()));
+        BuiltInRegistries.CAT_VARIANT.getHolder(be.getCatVariant()).ifPresent(cat::setVariant);
         cat.moveTo(origin.x, origin.y, origin.z, source == null ? level.random.nextFloat() * 360 : source.getYRot(),
             0);
         cat.setDeltaMovement(0, .15, 0);

@@ -18,15 +18,15 @@ public final class GeneratedEvokerEnchantingChamber_fcd0c16f {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{new ResourceLocation("create_biotech", "ponderer_exported")};
-        var multi = helper.forComponents(java.util.List.of(new ResourceLocation("create_biotech", "evoker_enchanting_chamber")));
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/enchanting_line_base"), GeneratedEvokerEnchantingChamber_fcd0c16f::storyboard$0, tags);
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/enchanting_line_base"), GeneratedEvokerEnchantingChamber_fcd0c16f::storyboard$1, tags);
+        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "evoker_enchanting_chamber")));
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/enchanting_line_base"), GeneratedEvokerEnchantingChamber_fcd0c16f::storyboard$0, tags);
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/enchanting_line_base"), GeneratedEvokerEnchantingChamber_fcd0c16f::storyboard$1, tags);
     }
 
     public static void registerTags(PonderTagRegistrationHelper<ResourceLocation> helper) {
         ResourceLocation tag = GeneratedPonderAttribution.tag();
-        helper.addTagToComponent(new ResourceLocation("create_biotech", "evoker_enchanting_chamber"), tag);
+        helper.addTagToComponent(ResourceLocation.fromNamespaceAndPath("create_biotech", "evoker_enchanting_chamber"), tag);
     }
 
     private static void storyboard$0(SceneBuilder scene, SceneBuildingUtil util) {

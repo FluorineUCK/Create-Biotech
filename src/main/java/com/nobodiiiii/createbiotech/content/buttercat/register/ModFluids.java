@@ -7,7 +7,7 @@ import com.tterrag.registrate.util.entry.FluidEntry;
 
 import net.createmod.catnip.theme.Color;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.BlockSource;
+import net.minecraft.core.dispenser.BlockSource;
 import net.minecraft.core.dispenser.DefaultDispenseItemBehavior;
 import net.minecraft.core.dispenser.DispenseItemBehavior;
 import net.minecraft.resources.ResourceLocation;
@@ -20,8 +20,8 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.MapColor;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.ForgeFlowingFluid;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.BaseFlowingFluid;
 import org.joml.Vector3f;
 
 import static com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule.REGISTRATE;
@@ -30,7 +30,7 @@ public class ModFluids {
     static {
         ButterCatModule.REGISTRATE.setCreativeTab(ModCreativeModeTabs.CBC_TAB);
     }
-    public static final FluidEntry<ForgeFlowingFluid.Flowing> CREAM =
+    public static final FluidEntry<BaseFlowingFluid.Flowing> CREAM =
             REGISTRATE.standardFluid("cream",(p,s,f)->new BaseFluidType(p,s,f,14147267))
                     .properties(b -> b. viscosity(100)
                             .canSwim(false)
@@ -41,7 +41,7 @@ public class ModFluids {
                             .slopeFindDistance(2)
                             .explosionResistance(50))
                     .tag(ModTags.CREAM)
-                    .source(ForgeFlowingFluid.Flowing.Source::new)
+                    .source(BaseFlowingFluid.Flowing.Source::new)
                     .block()
                     .properties(p -> p.mapColor(MapColor.TERRACOTTA_WHITE))
                     .build()
@@ -57,8 +57,8 @@ public class ModFluids {
         @Override
         protected ItemStack execute(BlockSource pSource, ItemStack pStack) {
             DispensibleContainerItem dispensibleContainerItem = (DispensibleContainerItem) pStack.getItem();
-            BlockPos pos = pSource.getPos().relative(pSource.getBlockState().getValue(DispenserBlock.FACING));
-            Level level = pSource.getLevel();
+            BlockPos pos = pSource.pos().relative(pSource.state().getValue(DispenserBlock.FACING));
+            Level level = pSource.level();
             if (dispensibleContainerItem.emptyContents(null, level, pos, null, pStack)) {
                 return new ItemStack(Items.BUCKET);
             }

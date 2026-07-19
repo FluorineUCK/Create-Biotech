@@ -1,5 +1,9 @@
 package com.nobodiiiii.createbiotech.content.cardboardbox;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllPartialModels;
@@ -9,7 +13,7 @@ import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.registries.ForgeRegistries;
+
 
 public class CardboardBoxPartials {
 
@@ -32,7 +36,7 @@ public class CardboardBoxPartials {
 	}
 
 	private static void register(Item item, PartialModel box) {
-		ResourceLocation key = ForgeRegistries.ITEMS.getKey(item);
+		ResourceLocation key = BuiltInRegistries.ITEM.getKey(item);
 		if (key == null || !(item instanceof PackageItem packageItem))
 			return;
 

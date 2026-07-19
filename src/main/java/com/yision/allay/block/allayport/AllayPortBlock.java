@@ -1,13 +1,16 @@
 package com.yision.allay.block.allayport;
 
+import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.foundation.block.IBE;
 import com.yision.allay.registry.AllBlockEntityTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.Block;
@@ -26,6 +29,7 @@ import org.jetbrains.annotations.NotNull;
 
 public class AllayPortBlock extends HorizontalDirectionalBlock implements IWrenchable, IBE<AllayPortBlockEntity> {
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
+	public static final MapCodec<AllayPortBlock> CODEC = simpleCodec(AllayPortBlock::new);
 	private static final VoxelShape SHAPE = Shapes.or(
 		box(0, 0, 0, 16, 4, 16),
 		box(2, 4, 2, 14, 16, 14)
@@ -34,6 +38,11 @@ public class AllayPortBlock extends HorizontalDirectionalBlock implements IWrenc
 	public AllayPortBlock(Properties properties) {
 		super(properties);
 		registerDefaultState(defaultBlockState().setValue(FACING, Direction.NORTH));
+	}
+
+	@Override
+	protected MapCodec<? extends HorizontalDirectionalBlock> codec() {
+		return CODEC;
 	}
 
 	@Override
@@ -48,10 +57,11 @@ public class AllayPortBlock extends HorizontalDirectionalBlock implements IWrenc
 	}
 
 	@Override
-	public @NotNull InteractionResult use(@NotNull BlockState state, @NotNull Level level, @NotNull BlockPos pos,
+	public @NotNull ItemInteractionResult useItemOn(@NotNull ItemStack stack, @NotNull BlockState state,
+		@NotNull Level level, @NotNull BlockPos pos,
 		@NotNull Player player, @NotNull InteractionHand hand,
 		@NotNull BlockHitResult hitResult) {
-		return onBlockEntityUse(level, pos, blockEntity -> blockEntity.use(player));
+		return onBlockEntityUseItemOn(level, pos, blockEntity -> blockEntity.use(player));
 	}
 
 	@Override

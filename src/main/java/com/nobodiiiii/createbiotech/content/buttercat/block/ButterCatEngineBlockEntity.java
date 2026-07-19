@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.buttercat.block;
 
+import net.minecraft.core.HolderLookup;
+
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.nobodiiiii.createbiotech.content.buttercat.register.ModPartialModels;
@@ -14,8 +16,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.animal.CatVariant;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
+import net.neoforged.api.distmarker.Dist;
 
 import java.util.List;
 
@@ -145,8 +146,8 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
 
     ///================serialize================
     @Override
-    protected void write(CompoundTag compound,boolean clientPacket) {
-        super.write(compound,  clientPacket);
+    protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+        super.write(compound, registries, clientPacket);
 
         compound.putBoolean("infinite",infinite);
         compound.putInt("cd",cd);
@@ -156,9 +157,9 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
         compound.putString("catVariant",catVariant.location().toString());
     }
     @Override
-    protected void read(CompoundTag compound, boolean clientPacket) {
+    protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
         float previousSpeed = getSpeed();
-        super.read(compound,clientPacket);
+        super.read(compound, registries, clientPacket);
 
         if(compound.contains("infinite")) infinite = compound.getBoolean("infinite");
         if(compound.contains("cd")) cd = compound.getInt("cd");
@@ -166,13 +167,12 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
         if(compound.contains("overflowCount")) overflowCount = compound.getInt("overflowCount");
 
         if (compound.contains("catVariant"))
-            catVariant = ResourceKey.create(Registries.CAT_VARIANT, new ResourceLocation(compound.getString("catVariant")));
+            catVariant = ResourceKey.create(Registries.CAT_VARIANT, ResourceLocation.parse(compound.getString("catVariant")));
 
         normalizeStoredButter();
 
         if (level != null && level.isClientSide)
-            DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-                () -> () -> ButterCatEngineClientRotation.sync(this, previousSpeed, clientPacket));
+            ButterCatEngineClientRotation.sync(this, previousSpeed, clientPacket);
 
     }
     ///================get models================

@@ -1,0 +1,19 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "key": {
+    "C": {
+      "item": "create:andesite_casing"
+    },
+    "U": {
+      "item": "create_biotech:universal_joint"
+    }
+  },
+  "pattern": [
+    "CU"
+  ],
+  "result": {
+    "id": "create_biotech:slime_clutch"
+  },
+  "show_notification": true
+}

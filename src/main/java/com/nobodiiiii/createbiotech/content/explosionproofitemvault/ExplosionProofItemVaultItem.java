@@ -10,6 +10,8 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
 import net.minecraft.core.Direction.AxisDirection;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.component.DataComponents;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -43,12 +45,14 @@ public class ExplosionProofItemVaultItem extends BlockItem {
 		if (server == null)
 			return false;
 
-		CompoundTag nbt = stack.getTagElement("BlockEntityTag");
-		if (nbt != null) {
+		CustomData blockEntityData = stack.get(DataComponents.BLOCK_ENTITY_DATA);
+		if (blockEntityData != null) {
+			CompoundTag nbt = blockEntityData.copyTag();
 			nbt.remove("Length");
 			nbt.remove("Size");
 			nbt.remove("Controller");
 			nbt.remove("LastKnownPos");
+			stack.set(DataComponents.BLOCK_ENTITY_DATA, CustomData.of(nbt));
 		}
 
 		return super.updateCustomBlockEntityTag(pos, level, player, stack, state);

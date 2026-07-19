@@ -1,12 +1,11 @@
 package com.nobodiiiii.createbiotech.compat.jei;
 
-import com.simibubi.create.foundation.fluid.FluidIngredient;
-
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
 
 import java.util.List;
 
-public record SquidPrinterJeiRecipe(ResourceLocation id, ItemStack inputBook, FluidIngredient requiredFluid,
+public record SquidPrinterJeiRecipe(ResourceLocation id, ItemStack inputBook, SizedFluidIngredient requiredFluid,
 	List<ItemStack> templateBooks, List<ItemStack> outputCopies) {
 }

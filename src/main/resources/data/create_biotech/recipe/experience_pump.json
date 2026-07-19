@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "N",
+    "P",
+    "N"
+  ],
+  "key": {
+    "N": {
+      "item": "create:experience_nugget"
+    },
+    "P": {
+      "item": "create:mechanical_pump"
+    }
+  },
+  "result": {
+    "id": "create_biotech:experience_pump"
+  },
+  "show_notification": true
+}

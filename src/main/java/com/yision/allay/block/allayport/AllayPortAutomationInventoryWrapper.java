@@ -4,7 +4,7 @@ import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.foundation.item.ItemHandlerWrapper;
 import com.yision.allay.logistics.address.AllayAddressRules;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
 
 final class AllayPortAutomationInventoryWrapper extends ItemHandlerWrapper {
 	private final AllayPortBlockEntity port;

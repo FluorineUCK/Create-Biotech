@@ -22,7 +22,7 @@ import net.minecraft.world.phys.Vec3;
 public abstract class FlapStuffsMixin {
 
 	@Inject(method = "renderFlaps(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/createmod/catnip/render/SuperByteBuffer;Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/core/Direction;FFI)V",
-		at = @At("HEAD"), remap = false)
+		at = @At("HEAD"))
 	private static void createBiotech$applySurfaceTilt(PoseStack ms, VertexConsumer vb, SuperByteBuffer flapBuffer,
 		Vec3 pivot, Direction funnelFacing, float flapness, float zOffset, int light, CallbackInfo ci) {
 		BeltSurface surface = BeltSurfaceRenderScope.current();
@@ -33,7 +33,7 @@ public abstract class FlapStuffsMixin {
 	}
 
 	@Inject(method = "renderFlaps(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/createmod/catnip/render/SuperByteBuffer;Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/core/Direction;FFI)V",
-		at = @At("RETURN"), remap = false)
+		at = @At("RETURN"))
 	private static void createBiotech$restoreSurfaceTilt(PoseStack ms, VertexConsumer vb, SuperByteBuffer flapBuffer,
 		Vec3 pivot, Direction funnelFacing, float flapness, float zOffset, int light, CallbackInfo ci) {
 		if (BeltSurfaceRenderScope.current() != null)
@@ -41,7 +41,7 @@ public abstract class FlapStuffsMixin {
 	}
 
 	@Inject(method = "commonTransform(Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;F)Lorg/joml/Matrix4f;",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 	private static void createBiotech$tiltedCommonTransform(BlockPos visualPosition, Direction side, float baseZOffset,
 		CallbackInfoReturnable<Matrix4f> cir) {
 		BeltSurface surface = BeltSurfaceRenderScope.current();

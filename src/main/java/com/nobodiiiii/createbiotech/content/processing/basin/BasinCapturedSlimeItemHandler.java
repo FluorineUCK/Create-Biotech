@@ -3,7 +3,7 @@ package com.nobodiiiii.createbiotech.content.processing.basin;
 import com.simibubi.create.content.processing.basin.BasinBlockEntity;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
 
 public class BasinCapturedSlimeItemHandler implements IItemHandlerModifiable {
 	private final IItemHandlerModifiable wrapped;

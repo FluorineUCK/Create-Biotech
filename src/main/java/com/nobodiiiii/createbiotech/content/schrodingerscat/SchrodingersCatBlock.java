@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.schrodingerscat;
 
+import com.mojang.serialization.MapCodec;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 
 import net.minecraft.core.BlockPos;
@@ -23,6 +24,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class SchrodingersCatBlock extends BaseEntityBlock {
+	public static final MapCodec<SchrodingersCatBlock> CODEC = simpleCodec(SchrodingersCatBlock::new);
 
 	private static final VoxelShape SHAPE = Block.box(2, 0, 2, 14, 12, 14);
 
@@ -31,6 +33,11 @@ public class SchrodingersCatBlock extends BaseEntityBlock {
 	public SchrodingersCatBlock(Properties properties) {
 		super(properties);
 		registerDefaultState(defaultBlockState().setValue(FACING, Direction.NORTH));
+	}
+
+	@Override
+	protected MapCodec<? extends SchrodingersCatBlock> codec() {
+		return CODEC;
 	}
 
 	@Override

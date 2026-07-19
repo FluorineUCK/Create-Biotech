@@ -4,7 +4,7 @@ import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.foundation.item.ItemHelper;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaItemHandlerBeltSegment implements IItemHandler {
 

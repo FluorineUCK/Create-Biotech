@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.universaljoint;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -33,16 +35,16 @@ public class UniversalJointBlockEntity extends KineticBlockEntity {
 	}
 
 	@Override
-	protected void write(CompoundTag compound, boolean clientPacket) {
+	protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
 		if (linkedPos != null)
 			compound.put("LinkedJoint", NbtUtils.writeBlockPos(linkedPos));
-		super.write(compound, clientPacket);
+		super.write(compound, registries, clientPacket);
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
-		linkedPos = compound.contains("LinkedJoint") ? NbtUtils.readBlockPos(compound.getCompound("LinkedJoint")) : null;
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
+		linkedPos = NbtUtils.readBlockPos(compound, "LinkedJoint").orElse(null);
 		invalidateRenderBoundingBox();
 	}
 

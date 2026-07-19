@@ -3,11 +3,9 @@ package com.nobodiiiii.createbiotech.content.biopackager;
 import com.nobodiiiii.createbiotech.client.BioPackagerContraptionClientAnimationHandler;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class BioPackagerContraptionAnimationPacket {
 
@@ -26,22 +24,21 @@ public class BioPackagerContraptionAnimationPacket {
 		this.animationInward = animationInward;
 	}
 
-	public BioPackagerContraptionAnimationPacket(FriendlyByteBuf buffer) {
-		this(buffer.readVarInt(), buffer.readBlockPos(), buffer.readItem(), buffer.readItem(), buffer.readBoolean());
+	public BioPackagerContraptionAnimationPacket(RegistryFriendlyByteBuf buffer) {
+		this(buffer.readVarInt(), buffer.readBlockPos(), ItemStack.OPTIONAL_STREAM_CODEC.decode(buffer),
+			ItemStack.OPTIONAL_STREAM_CODEC.decode(buffer), buffer.readBoolean());
 	}
 
-	public void write(FriendlyByteBuf buffer) {
+	public void write(RegistryFriendlyByteBuf buffer) {
 		buffer.writeVarInt(entityId);
 		buffer.writeBlockPos(localPos);
-		buffer.writeItem(heldBox);
-		buffer.writeItem(previouslyUnwrapped);
+		ItemStack.OPTIONAL_STREAM_CODEC.encode(buffer, heldBox);
+		ItemStack.OPTIONAL_STREAM_CODEC.encode(buffer, previouslyUnwrapped);
 		buffer.writeBoolean(animationInward);
 	}
 
-	public boolean handle(Context context) {
-		context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-			() -> () -> BioPackagerContraptionClientAnimationHandler.startAnimation(entityId, localPos, heldBox,
-				previouslyUnwrapped, animationInward)));
-		return true;
+	public void handle(LocalPlayer player) {
+		BioPackagerContraptionClientAnimationHandler.startAnimation(entityId, localPos, heldBox,
+			previouslyUnwrapped, animationInward);
 	}
 }

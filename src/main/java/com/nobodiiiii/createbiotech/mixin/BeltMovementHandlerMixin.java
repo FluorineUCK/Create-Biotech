@@ -14,7 +14,7 @@ import net.minecraft.world.entity.Entity;
 public abstract class BeltMovementHandlerMixin {
 
 	@Inject(method = "canBeTransported(Lnet/minecraft/world/entity/Entity;)Z",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 	private static void createBiotech$ignoreCapturedSmallSlimes(Entity entity, CallbackInfoReturnable<Boolean> cir) {
 		if (BasinEntityProcessing.isCapturedSmallSlime(entity))
 			cir.setReturnValue(false);

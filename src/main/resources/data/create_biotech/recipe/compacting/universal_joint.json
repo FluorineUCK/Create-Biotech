@@ -1,0 +1,19 @@
+{
+  "type": "create:compacting",
+  "ingredients": [
+    {
+      "item": "create_biotech:half_shaft"
+    },
+    {
+      "item": "create_biotech:half_shaft"
+    },
+    {
+      "item": "create_biotech:captured_small_slime"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:universal_joint"
+    }
+  ]
+}

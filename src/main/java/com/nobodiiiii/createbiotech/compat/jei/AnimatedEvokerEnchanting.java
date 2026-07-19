@@ -9,6 +9,8 @@ import java.util.List;
 import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
@@ -90,7 +92,7 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 
 	private void updatePreviewState(EvokerEnchantingChamberBlockEntity blockEntity) {
 		ItemStack displayedItem = getDisplayedItem(AnimationTickHolder.getRenderTime());
-		boolean casting = !displayedItem.isEmpty() && ItemStack.isSameItemSameTags(displayedItem, inputCopy);
+		boolean casting = !displayedItem.isEmpty() && ItemStack.isSameItemSameComponents(displayedItem, inputCopy);
 		ItemStack heldItem = casting ? displayedItem : ItemStack.EMPTY;
 		ItemStack pendingOutput = casting ? ItemStack.EMPTY : displayedItem;
 		int fluidRemaining = casting ? PREVIEW_FLUID_TOTAL : 0;
@@ -144,13 +146,15 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 		RenderSystem.depthMask(true);
 
 		try {
-			BufferBuilder builder = Tesselator.getInstance().getBuilder();
-			renderType.begin(builder, Minecraft.getInstance().textureManager);
+			BufferBuilder builder = renderType.begin(Tesselator.getInstance(),
+				Minecraft.getInstance().getTextureManager());
 			VertexConsumer transformed = new PoseStackVertexConsumer(builder, graphics.pose().last().pose());
 			float partialTicks = AnimationTickHolder.getPartialTicks();
 			for (Particle particle : activeParticles)
 				particle.render(transformed, camera, partialTicks);
-			renderType.end(Tesselator.getInstance());
+			MeshData mesh = builder.build();
+			if (mesh != null)
+				BufferUploader.drawWithShader(mesh);
 		} finally {
 			RenderSystem.enableCull();
 			RenderSystem.disableBlend();
@@ -209,51 +213,33 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 		}
 
 		@Override
-		public VertexConsumer vertex(double x, double y, double z) {
-			float fx = (float) x;
-			float fy = (float) y;
-			float fz = (float) z;
-			return delegate.vertex(pose, fx, fy, fz);
+		public VertexConsumer addVertex(float x, float y, float z) {
+			return delegate.addVertex(pose, x, y, z);
 		}
 
 		@Override
-		public VertexConsumer color(int red, int green, int blue, int alpha) {
-			return delegate.color(red, green, blue, alpha);
+		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
+			return delegate.setColor(red, green, blue, alpha);
 		}
 
 		@Override
-		public VertexConsumer uv(float u, float v) {
-			return delegate.uv(u, v);
+		public VertexConsumer setUv(float u, float v) {
+			return delegate.setUv(u, v);
 		}
 
 		@Override
-		public VertexConsumer overlayCoords(int u, int v) {
-			return delegate.overlayCoords(u, v);
+		public VertexConsumer setUv1(int u, int v) {
+			return delegate.setUv1(u, v);
 		}
 
 		@Override
-		public VertexConsumer uv2(int u, int v) {
-			return delegate.uv2(u, v);
+		public VertexConsumer setUv2(int u, int v) {
+			return delegate.setUv2(u, v);
 		}
 
 		@Override
-		public VertexConsumer normal(float x, float y, float z) {
-			return delegate.normal(x, y, z);
-		}
-
-		@Override
-		public void endVertex() {
-			delegate.endVertex();
-		}
-
-		@Override
-		public void defaultColor(int red, int green, int blue, int alpha) {
-			delegate.defaultColor(red, green, blue, alpha);
-		}
-
-		@Override
-		public void unsetDefaultColor() {
-			delegate.unsetDefaultColor();
+		public VertexConsumer setNormal(float x, float y, float z) {
+			return delegate.setNormal(x, y, z);
 		}
 	}
 

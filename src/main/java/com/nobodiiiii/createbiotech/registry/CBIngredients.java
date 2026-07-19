@@ -3,22 +3,24 @@ package com.nobodiiiii.createbiotech.registry;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxIngredient;
 
-import net.minecraftforge.common.crafting.CraftingHelper;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber.Bus;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegisterEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.crafting.IngredientType;
+import net.neoforged.neoforge.registries.DeferredHolder;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
-@EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Bus.MOD)
 public class CBIngredients {
+	private static final DeferredRegister<IngredientType<?>> INGREDIENT_TYPES =
+		DeferredRegister.create(NeoForgeRegistries.Keys.INGREDIENT_TYPES, CreateBiotech.MOD_ID);
 
-	@SubscribeEvent
-	public static void register(RegisterEvent event) {
-		if (event.getRegistryKey().equals(ForgeRegistries.Keys.RECIPE_SERIALIZERS))
-			CraftingHelper.register(CreateBiotech.asResource("captured_entity_box"),
-				CapturedEntityBoxIngredient.Serializer.INSTANCE);
+	public static final DeferredHolder<IngredientType<?>, IngredientType<CapturedEntityBoxIngredient>>
+		CAPTURED_ENTITY_BOX = INGREDIENT_TYPES.register("captured_entity_box",
+			() -> new IngredientType<>(CapturedEntityBoxIngredient.CODEC));
+
+	private CBIngredients() {
 	}
 
-	private CBIngredients() {}
+	public static void register(IEventBus modEventBus) {
+		INGREDIENT_TYPES.register(modEventBus);
+	}
 }

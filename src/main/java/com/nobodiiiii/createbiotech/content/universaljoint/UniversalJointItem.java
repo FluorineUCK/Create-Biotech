@@ -4,6 +4,7 @@ import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
@@ -39,7 +40,7 @@ public class UniversalJointItem extends BlockItem {
 	public InteractionResult useOn(UseOnContext context) {
 		Player player = context.getPlayer();
 		if (player != null && player.isShiftKeyDown()) {
-			context.getItemInHand().setTag(null);
+			CBItemData.set(context.getItemInHand(), null);
 			return InteractionResult.SUCCESS;
 		}
 
@@ -51,11 +52,11 @@ public class UniversalJointItem extends BlockItem {
 		if (player == null || clickedEndpoint == null)
 			return InteractionResult.FAIL;
 
-		CompoundTag tag = context.getItemInHand().getOrCreateTag();
+		CompoundTag tag = CBItemData.getOrEmpty(context.getItemInHand());
 		Endpoint firstEndpoint = readFirstEndpoint(level, tag);
 		if (firstEndpoint == null && tag.contains(FIRST_TARGET_KEY)) {
-			context.getItemInHand().setTag(null);
-			tag = context.getItemInHand().getOrCreateTag();
+			CBItemData.set(context.getItemInHand(), null);
+			tag = CBItemData.getOrEmpty(context.getItemInHand());
 		}
 
 		if (firstEndpoint != null) {
@@ -67,7 +68,7 @@ public class UniversalJointItem extends BlockItem {
 			if (!player.isCreative())
 				context.getItemInHand().shrink(1);
 			if (!context.getItemInHand().isEmpty())
-				context.getItemInHand().setTag(null);
+				CBItemData.set(context.getItemInHand(), null);
 			player.getCooldowns().addCooldown(this, getItemCooldownTicks());
 			if (player instanceof ServerPlayer serverPlayer)
 				CBAdvancements.award(serverPlayer, CBAdvancements.UNIVERSAL_JOINT);
@@ -75,7 +76,7 @@ public class UniversalJointItem extends BlockItem {
 		}
 
 		writeFirstEndpoint(tag, clickedEndpoint);
-		context.getItemInHand().setTag(tag);
+		CBItemData.set(context.getItemInHand(), tag);
 		player.getCooldowns().addCooldown(this, getItemCooldownTicks());
 		return InteractionResult.SUCCESS;
 	}
@@ -89,7 +90,9 @@ public class UniversalJointItem extends BlockItem {
 		if (face == null)
 			return null;
 
-		BlockPos target = NbtUtils.readBlockPos(tag.getCompound(FIRST_TARGET_KEY));
+		BlockPos target = NbtUtils.readBlockPos(tag, FIRST_TARGET_KEY).orElse(null);
+		if (target == null)
+			return null;
 		return Endpoint.fromClick(level, target, face);
 	}
 

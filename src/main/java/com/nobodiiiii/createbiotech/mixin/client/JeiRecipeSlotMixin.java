@@ -16,7 +16,7 @@ import net.minecraft.world.item.ItemStack;
 @Pseudo
 @Mixin(targets = "mezz.jei.library.gui.ingredients.RecipeSlot", remap = false)
 public abstract class JeiRecipeSlotMixin {
-	@Inject(method = "drawIngredient", at = @At("HEAD"), cancellable = true, remap = false)
+	@Inject(method = "drawIngredient", at = @At("HEAD"), cancellable = true, remap = true)
 	private <T> void createBiotech$drawCapturedEntityBox(GuiGraphics graphics, ITypedIngredient<T> typedIngredient,
 		int x, int y, CallbackInfo ci) {
 		ItemStack stack = typedIngredient.getIngredient(VanillaTypes.ITEM_STACK)

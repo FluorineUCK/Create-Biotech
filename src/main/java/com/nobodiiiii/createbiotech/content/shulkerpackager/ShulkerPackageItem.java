@@ -2,14 +2,15 @@ package com.nobodiiiii.createbiotech.content.shulkerpackager;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.content.logistics.box.PackageStyles;
 import com.simibubi.create.content.logistics.box.PackageStyles.PackageStyle;
+import com.simibubi.create.foundation.item.ItemHelper;
 
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class ShulkerPackageItem extends PackageItem {
 
@@ -30,9 +31,7 @@ public class ShulkerPackageItem extends PackageItem {
 
 	public static ItemStack containing(ItemStackHandler stacks) {
 		ItemStack box = new ItemStack(CBItems.SHULKER_PACKAGE.get());
-		CompoundTag compound = new CompoundTag();
-		compound.put("Items", stacks.serializeNBT());
-		box.setTag(compound);
+		box.set(AllDataComponents.PACKAGE_CONTENTS, ItemHelper.containerContentsFromHandler(stacks));
 		return box;
 	}
 }

@@ -33,7 +33,7 @@ public class UniversalJointRenderer extends KineticBlockEntityRenderer<Universal
 
 	private static final double MIN_SHAFT_LENGTH = 1.0E-4d;
 	private static final double PERPENDICULAR_EPSILON = 1.0E-7d;
-	private static final ResourceLocation SLIME_TEXTURE = new ResourceLocation("textures/entity/slime/slime.png");
+	private static final ResourceLocation SLIME_TEXTURE = ResourceLocation.parse("textures/entity/slime/slime.png");
 	private static final PartialModel ENDPOINT_SLIME_OVERLAY =
 		PartialModel.of(CreateBiotech.asResource("block/universal_joint_endpoint_slime_overlay"));
 	private static final float SLIME_MODEL_DIAMETER = 8 / 16f;
@@ -146,9 +146,9 @@ public class UniversalJointRenderer extends KineticBlockEntityRenderer<Universal
 			.packedLight(light)
 			.render(ms, buffer, (poseStack, buf, lightArg) -> {
 				innerSlime.renderToBuffer(poseStack, buf.getBuffer(innerSlime.renderType(SLIME_TEXTURE)), lightArg,
-					overlay, 1, 1, 1, 1);
+					overlay, 0xFFFFFFFF);
 				outerSlime.renderToBuffer(poseStack, buf.getBuffer(RenderType.entityTranslucent(SLIME_TEXTURE)), lightArg,
-					overlay, 1, 1, 1, 1);
+					overlay, 0xFFFFFFFF);
 			});
 	}
 

@@ -19,7 +19,7 @@ public abstract class GoggleOverlayRendererMixin {
 
 	@Inject(
 		method = "proxiedOverlayPosition(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/core/BlockPos;",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 	private static void createBiotech$proxyCreeperBlastChamberStructure(Level level, BlockPos pos,
 		CallbackInfoReturnable<BlockPos> cir) {
 		BlockPos controllerPos = CreeperBlastChamberBlockEntity.findGoggleInformationSource(level, pos);

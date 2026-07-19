@@ -1,0 +1,25 @@
+{
+  "type": "create:mixing",
+  "ingredients": [
+    {
+      "item": "minecraft:slime_ball"
+    },
+    {
+      "type": "neoforge:components",
+      "amount": 250,
+      "components": {
+        "create:potion_fluid_bottle_type": "regular",
+        "minecraft:potion_contents": {
+          "potion": "minecraft:regeneration"
+        }
+      },
+      "fluids": "create:potion"
+    }
+  ],
+  "results": [
+    {
+      "amount": 250,
+      "id": "create_biotech:liquid_living_slime"
+    }
+  ]
+}

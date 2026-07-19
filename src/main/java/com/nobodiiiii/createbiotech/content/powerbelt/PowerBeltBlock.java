@@ -39,6 +39,7 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.context.UseOnContext;
@@ -60,7 +61,7 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
-import net.minecraft.world.level.pathfinder.BlockPathTypes;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
@@ -71,16 +72,14 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
+import net.neoforged.api.distmarker.Dist;
 
 public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock {
 
 	public static final Property<BeltSlope> SLOPE = BeltBlock.SLOPE;
 	public static final Property<BeltPart> PART = BeltBlock.PART;
 	public static final BooleanProperty CASING = BeltBlock.CASING;
-	private static final BlockPathTypes POWER_BELT_PATH_TYPE =
-		BlockPathTypes.create("CREATE_BIOTECH_POWER_BELT", 0.0F);
+	private static final PathType POWER_BELT_PATH_TYPE = PathType.RAIL;
 
 	public PowerBeltBlock(Properties properties) {
 		super(properties);
@@ -122,7 +121,7 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 	}
 
 	@Override
-	public ItemStack getCloneItemStack(BlockState state, HitResult target, BlockGetter world, BlockPos pos, Player player) {
+	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader world, BlockPos pos, Player player) {
 		return new ItemStack(CBItems.POWER_BELT_CONNECTOR.get());
 	}
 
@@ -199,8 +198,7 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 		if (level.isClientSide) {
 			if (entity instanceof Player player) {
 				float reportedSpeed = (float) surfaceSpeed;
-				DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-					() -> () -> PowerBeltClientReporter.reportSurfaceMovement(player, pos, reportedSpeed));
+				PowerBeltClientReporter.reportSurfaceMovement(player, pos, reportedSpeed);
 			}
 			return;
 		}
@@ -216,12 +214,25 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level world, BlockPos pos, Player player, InteractionHand hand,
+	protected ItemInteractionResult useItemOn(ItemStack heldItem, BlockState state, Level world, BlockPos pos,
+		Player player, InteractionHand hand, BlockHitResult hit) {
+		InteractionResult result = interact(state, world, pos, player, hand, heldItem, hit);
+		return result.consumesAction()
+			? ItemInteractionResult.sidedSuccess(world.isClientSide)
+			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+	}
+
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player,
 		BlockHitResult hit) {
+		return interact(state, world, pos, player, InteractionHand.MAIN_HAND, ItemStack.EMPTY, hit);
+	}
+
+	private InteractionResult interact(BlockState state, Level world, BlockPos pos, Player player, InteractionHand hand,
+		ItemStack heldItem, BlockHitResult hit) {
 		if (player.isShiftKeyDown() || !player.mayBuild())
 			return InteractionResult.PASS;
 
-		ItemStack heldItem = player.getItemInHand(hand);
 		boolean isWrench = AllItems.WRENCH.isIn(heldItem);
 		boolean isConnector = CBItems.isPowerBeltConnector(heldItem);
 		boolean hasWater = GenericItemEmptying.emptyItem(world, heldItem, true)
@@ -298,7 +309,7 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 	}
 
 	@Override
-	public BlockPathTypes getBlockPathType(BlockState state, BlockGetter world, BlockPos pos, @Nullable Mob entity) {
+	public PathType getBlockPathType(BlockState state, BlockGetter world, BlockPos pos, @Nullable Mob entity) {
 		return POWER_BELT_PATH_TYPE;
 	}
 
@@ -444,7 +455,7 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState state, BlockGetter reader, BlockPos pos, PathComputationType type) {
+	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
 

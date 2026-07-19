@@ -35,6 +35,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -59,7 +60,7 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
-import net.minecraft.world.level.pathfinder.BlockPathTypes;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
@@ -70,8 +71,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.EntityCollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock {
 
@@ -106,7 +106,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 	}
 
 	@Override
-	public ItemStack getCloneItemStack(BlockState state, HitResult target, BlockGetter world, BlockPos pos, Player player) {
+	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader world, BlockPos pos, Player player) {
 		return new ItemStack(CBItems.SLIME_BELT_CONNECTOR.get());
 	}
 
@@ -247,12 +247,25 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level world, BlockPos pos, Player player, InteractionHand hand,
+	protected ItemInteractionResult useItemOn(ItemStack heldItem, BlockState state, Level world, BlockPos pos,
+		Player player, InteractionHand hand, BlockHitResult hit) {
+		InteractionResult result = interact(state, world, pos, player, hand, heldItem, hit);
+		return result.consumesAction()
+			? ItemInteractionResult.sidedSuccess(world.isClientSide)
+			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+	}
+
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player,
 		BlockHitResult hit) {
+		return interact(state, world, pos, player, InteractionHand.MAIN_HAND, ItemStack.EMPTY, hit);
+	}
+
+	private InteractionResult interact(BlockState state, Level world, BlockPos pos, Player player,
+		InteractionHand hand, ItemStack heldItem, BlockHitResult hit) {
 		if (player.isShiftKeyDown() || !player.mayBuild())
 			return InteractionResult.PASS;
 
-		ItemStack heldItem = player.getItemInHand(hand);
 		boolean isWrench = AllItems.WRENCH.isIn(heldItem);
 		boolean isConnector = CBItems.isSlimeBeltConnector(heldItem);
 		boolean isShaft = AllBlocks.SHAFT.isIn(heldItem);
@@ -271,7 +284,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 			return InteractionResult.PASS;
 
 		if (PackageItem.isPackage(heldItem)) {
-			IItemHandler handler = belt.getCapability(ForgeCapabilities.ITEM_HANDLER, Direction.UP).orElse(null);
+			IItemHandler handler = belt.getItemCapability(Direction.UP);
 			if (handler == null)
 				return InteractionResult.PASS;
 			ItemStack remainder = handler.insertItem(0, heldItem.copy(), false);
@@ -348,8 +361,8 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 	}
 
 	@Override
-	public BlockPathTypes getBlockPathType(BlockState state, BlockGetter world, BlockPos pos, net.minecraft.world.entity.Mob entity) {
-		return BlockPathTypes.RAIL;
+	public PathType getBlockPathType(BlockState state, BlockGetter world, BlockPos pos, net.minecraft.world.entity.Mob entity) {
+		return PathType.RAIL;
 	}
 
 	@Override
@@ -531,7 +544,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState state, BlockGetter reader, BlockPos pos, PathComputationType type) {
+	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
 

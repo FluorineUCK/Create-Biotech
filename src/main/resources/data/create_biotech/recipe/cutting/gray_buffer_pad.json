@@ -1,0 +1,14 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "minecraft:gray_wool"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:gray_buffer_pad"
+    }
+  ],
+  "processing_time": 50
+}

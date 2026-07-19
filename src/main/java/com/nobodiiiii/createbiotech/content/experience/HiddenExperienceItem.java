@@ -15,8 +15,8 @@ public class HiddenExperienceItem extends Item {
 	}
 
 	@Override
-	public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
-		super.appendHoverText(stack, level, tooltip, flag);
+	public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+		super.appendHoverText(stack, context, tooltip, flag);
 		tooltip.add(Component.translatable("item.create_biotech.experience.tooltip"));
 	}
 }

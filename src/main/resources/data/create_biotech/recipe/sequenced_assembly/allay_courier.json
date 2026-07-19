@@ -1,0 +1,68 @@
+{
+  "type": "create:sequenced_assembly",
+  "ingredient": {
+    "type": "create_biotech:captured_entity_box",
+    "entity": "minecraft:allay"
+  },
+  "loops": 1,
+  "results": [
+    {
+      "id": "create_biotech:allay_courier"
+    }
+  ],
+  "sequence": [
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_allay_courier"
+        },
+        {
+          "item": "minecraft:firework_rocket"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_allay_courier"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_allay_courier"
+        },
+        {
+          "item": "minecraft:compass"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_allay_courier"
+        }
+      ]
+    },
+    {
+      "type": "create:filling",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_allay_courier"
+        },
+        {
+          "amount": 250,
+          "fluid": "create_biotech:teleportation",
+          "type": "neoforge:single"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_allay_courier"
+        }
+      ]
+    }
+  ],
+  "transitional_item": {
+    "id": "create_biotech:incomplete_allay_courier"
+  }
+}

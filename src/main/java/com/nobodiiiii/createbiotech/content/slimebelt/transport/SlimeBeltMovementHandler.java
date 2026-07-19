@@ -22,6 +22,7 @@ import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -137,8 +138,10 @@ public class SlimeBeltMovementHandler {
 			movement = movement.add(centering);
 
 		float step = entityIn.maxUpStep();
-		if (!isPlayer)
-			entityIn.setMaxUpStep(1);
+		if (!isPlayer && entityIn instanceof LivingEntity living) {
+			step = (float) living.getAttributeBaseValue(Attributes.STEP_HEIGHT);
+			living.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(1.0f);
+		}
 
 		if (Math.abs(movementSpeed) < .5f) {
 			Vec3 checkDistance = movement.normalize().scale(0.5);
@@ -171,8 +174,8 @@ public class SlimeBeltMovementHandler {
 
 		entityIn.setOnGround(true);
 
-		if (!isPlayer)
-			entityIn.setMaxUpStep(step);
+		if (!isPlayer && entityIn instanceof LivingEntity living)
+			living.getAttribute(Attributes.STEP_HEIGHT).setBaseValue(step);
 
 		boolean movedPastEndingSlope = onSlope && (world.getBlockState(entityIn.blockPosition()).is(CBBlocks.SLIME_BELT.get())
 			|| world.getBlockState(entityIn.blockPosition().below()).is(CBBlocks.SLIME_BELT.get()));

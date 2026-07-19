@@ -30,7 +30,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.ForgeMod;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 
 public class SmartSuperGlueSelectionHandler {
 
@@ -86,7 +86,7 @@ public class SmartSuperGlueSelectionHandler {
 
 		selected = null;
 		if (firstPos == null) {
-			double range = player.getAttribute(ForgeMod.BLOCK_REACH.get()).getValue() + 1;
+			double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1;
 			Vec3 traceOrigin = player.getEyePosition();
 			Vec3 traceTarget = RaycastHelper.getTraceTarget(player, range, traceOrigin);
 

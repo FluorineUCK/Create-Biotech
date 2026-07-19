@@ -92,6 +92,7 @@ import net.minecraft.client.gui.screens.MenuScreens;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.item.ItemProperties;
+import net.minecraft.client.resources.model.ModelResourceLocation;
 import net.minecraft.server.packs.resources.ResourceManager;
 import net.minecraft.server.packs.resources.ResourceManagerReloadListener;
 import net.minecraft.world.item.Item;
@@ -99,18 +100,19 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.EntityRenderersEvent;
-import net.minecraftforge.client.event.ModelEvent;
-import net.minecraftforge.client.event.RegisterParticleProvidersEvent;
-import net.minecraftforge.client.event.RegisterClientReloadListenersEvent;
-import net.minecraftforge.client.event.RegisterGuiOverlaysEvent;
-import net.minecraftforge.client.gui.overlay.VanillaGuiOverlay;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.EntityRenderersEvent;
+import net.neoforged.neoforge.client.event.ModelEvent;
+import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
+import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
+import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
+import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.fml.event.lifecycle.FMLClientSetupEvent;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = EventBusSubscriber.Bus.MOD, value = Dist.CLIENT)
 public class CreateBiotechClient {
 
 	@SubscribeEvent
@@ -155,49 +157,67 @@ public class CreateBiotechClient {
 
 	@SubscribeEvent
 	public static void addEntityRenderLayers(EntityRenderersEvent.AddLayers event) {
-		SlimeMimicRenderLayer.registerOnAll(Minecraft.getInstance().getEntityRenderDispatcher());
+		SlimeMimicRenderLayer.registerOnAll(event);
 	}
 
 	@SubscribeEvent
 	public static void registerAdditionalModels(ModelEvent.RegisterAdditional event) {
-		event.register(CreateBiotech.asResource("block/universal_joint_endpoint_slime_overlay"));
-		event.register(CreateBiotech.asResource("block/blast_chamber_display/panel"));
-		event.register(CreateBiotech.asResource("block/blast_chamber_display/dial"));
-		event.register(CreateBiotech.asResource("block/blast_chamber_display/creeper_face"));
-		event.register(BoneRatchetRenderer.COGWHEEL_MODEL_LOCATION);
-		event.register(ExperiencePumpRenderer.COG_MODEL_LOCATION);
-		event.register(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_on"));
-		event.register(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_off"));
-		event.register(CreateBiotech.asResource("block/spider_assembly_table/body"));
-		event.register(CreateBiotech.asResource("block/spider_assembly_table/head"));
-		event.register(CreateBiotech.asResource("block/spider_assembly_table/abdomen"));
-		event.register(CreateBiotech.asResource("block/spider_assembly_table/leg"));
-		event.register(CreateBiotech.asResource("block/ghast_helm/block_open"));
-		event.register(CreateBiotech.asResource("block/ghast_helm/train/cover"));
-		event.register(CreateBiotech.asResource("block/ghast_helm/train/lever"));
-		event.register(CreateBiotech.asResource("block/bio_packager/hatch_open"));
-		event.register(CreateBiotech.asResource("block/bio_packager/hatch_closed"));
-		event.register(CreateBiotech.asResource("block/bio_packager/tray"));
-		event.register(CreateBiotech.asResource("block/shulker_packager/hatch_open"));
-		event.register(CreateBiotech.asResource("block/shulker_packager/hatch_closed"));
-		event.register(CreateBiotech.asResource("block/shulker_packager/tray"));
-		AllayPortRenderer.CURTAIN_MODEL_LOCATIONS.forEach(event::register);
-		event.register(CreateBiotech.asResource("item/shulker_package"));
-		event.register(CreateBiotech.asResource("item/cardboard_box"));
-		event.register(CreateBiotech.asResource("item/small_cardboard_box"));
-		event.register(CreateBiotech.asResource("item/small_cardboard_box_captured"));
-		event.register(CardboardBoxPartials.SMALL_BOX_LOGISTICS_LOCATION);
-		event.register(CreateBiotech.asResource("item/large_cardboard_box"));
-		event.register(CreateBiotech.asResource("item/large_cardboard_box_captured"));
-		event.register(CardboardBoxPartials.LARGE_BOX_LOGISTICS_LOCATION);
-		event.register(CreateBiotech.asResource("item/allay_courier_package"));
+		java.util.function.Consumer<net.minecraft.resources.ResourceLocation> register = location ->
+			event.register(new ModelResourceLocation(location, ModelResourceLocation.STANDALONE_VARIANT));
+		register.accept(CreateBiotech.asResource("block/universal_joint_endpoint_slime_overlay"));
+		register.accept(CreateBiotech.asResource("block/blast_chamber_display/panel"));
+		register.accept(CreateBiotech.asResource("block/blast_chamber_display/dial"));
+		register.accept(CreateBiotech.asResource("block/blast_chamber_display/creeper_face"));
+		register.accept(BoneRatchetRenderer.COGWHEEL_MODEL_LOCATION);
+		register.accept(ExperiencePumpRenderer.COG_MODEL_LOCATION);
+		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_on"));
+		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_off"));
+		register.accept(CreateBiotech.asResource("block/spider_assembly_table/body"));
+		register.accept(CreateBiotech.asResource("block/spider_assembly_table/head"));
+		register.accept(CreateBiotech.asResource("block/spider_assembly_table/abdomen"));
+		register.accept(CreateBiotech.asResource("block/spider_assembly_table/leg"));
+		register.accept(CreateBiotech.asResource("block/ghast_helm/block_open"));
+		register.accept(CreateBiotech.asResource("block/ghast_helm/train/cover"));
+		register.accept(CreateBiotech.asResource("block/ghast_helm/train/lever"));
+		register.accept(CreateBiotech.asResource("block/bio_packager/hatch_open"));
+		register.accept(CreateBiotech.asResource("block/bio_packager/hatch_closed"));
+		register.accept(CreateBiotech.asResource("block/bio_packager/tray"));
+		register.accept(CreateBiotech.asResource("block/shulker_packager/hatch_open"));
+		register.accept(CreateBiotech.asResource("block/shulker_packager/hatch_closed"));
+		register.accept(CreateBiotech.asResource("block/shulker_packager/tray"));
+		AllayPortRenderer.CURTAIN_MODEL_LOCATIONS.forEach(register);
+		register.accept(CreateBiotech.asResource("item/shulker_package"));
+		register.accept(CreateBiotech.asResource("item/cardboard_box"));
+		register.accept(CreateBiotech.asResource("item/small_cardboard_box"));
+		register.accept(CreateBiotech.asResource("item/small_cardboard_box_captured"));
+		register.accept(CardboardBoxPartials.SMALL_BOX_LOGISTICS_LOCATION);
+		register.accept(CreateBiotech.asResource("item/large_cardboard_box"));
+		register.accept(CreateBiotech.asResource("item/large_cardboard_box_captured"));
+		register.accept(CardboardBoxPartials.LARGE_BOX_LOGISTICS_LOCATION);
+		register.accept(CreateBiotech.asResource("item/allay_courier_package"));
 	}
 
 	@SubscribeEvent
-	public static void registerGuiOverlays(RegisterGuiOverlaysEvent event) {
-		event.registerAbove(VanillaGuiOverlay.HOTBAR.id(), "ghast_balloon_magnet_prompt",
+	public static void registerMenuScreens(RegisterMenuScreensEvent event) {
+		event.register(CBMenuTypes.SPIDER_ASSEMBLY_TABLE.get(), SpiderAssemblyTableScreen::new);
+		event.register(CBMenuTypes.ALLAY_PORT.get(), AllayPortScreen::new);
+		event.register(CBMenuTypes.ALLAY_COURIER.get(), AllayCourierScreen::new);
+		event.register(CBMenuTypes.SHULKER_TELEPORTER.get(), ShulkerTeleporterScreen::new);
+		registerWirelessStockKeeperScreen(event);
+	}
+
+	@SuppressWarnings({"rawtypes", "unchecked"})
+	private static void registerWirelessStockKeeperScreen(RegisterMenuScreensEvent event) {
+		event.register((net.minecraft.world.inventory.MenuType) CBMenuTypes.WIRELESS_STOCK_KEEPER_REQUEST.get(),
+			(net.minecraft.client.gui.screens.MenuScreens.ScreenConstructor) (menu, inventory, title) ->
+				new WirelessStockKeeperRequestScreen((WirelessStockKeeperRequestMenu) menu, inventory, title));
+	}
+
+	@SubscribeEvent
+	public static void registerGuiOverlays(RegisterGuiLayersEvent event) {
+		event.registerAbove(VanillaGuiLayers.HOTBAR, CreateBiotech.asResource("ghast_balloon_magnet_prompt"),
 			GhastBalloonMagnetSnapOverlay.INSTANCE);
-		event.registerAbove(VanillaGuiOverlay.HOTBAR.id(), "allay_courier_eta",
+		event.registerAbove(VanillaGuiLayers.HOTBAR, CreateBiotech.asResource("allay_courier_eta"),
 			AllayCourierHudOverlay.INSTANCE);
 	}
 
@@ -278,35 +298,6 @@ public class CreateBiotechClient {
 			ItemBlockRenderTypes.setRenderLayer(CBFluids.TELEPORTATION.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBFluids.TELEPORTATION_FLOWING.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBFluids.TELEPORTATION_BLOCK.get(), RenderType.translucent());
-			MenuScreens.register(CBMenuTypes.SPIDER_ASSEMBLY_TABLE.get(), SpiderAssemblyTableScreen::new);
-			MenuScreens.register(CBMenuTypes.ALLAY_PORT.get(), new MenuScreens.ScreenConstructor() {
-				@Override
-				public net.minecraft.client.gui.screens.Screen create(AbstractContainerMenu menu, Inventory inventory,
-					net.minecraft.network.chat.Component title) {
-					return new AllayPortScreen((AllayPortMenu) menu, inventory, title);
-				}
-			});
-			MenuScreens.register(CBMenuTypes.ALLAY_COURIER.get(), new MenuScreens.ScreenConstructor() {
-				@Override
-				public net.minecraft.client.gui.screens.Screen create(AbstractContainerMenu menu, Inventory inventory,
-					net.minecraft.network.chat.Component title) {
-					return new AllayCourierScreen((AllayCourierMenu) menu, inventory, title);
-				}
-			});
-			MenuScreens.register(CBMenuTypes.SHULKER_TELEPORTER.get(), new MenuScreens.ScreenConstructor() {
-				@Override
-				public net.minecraft.client.gui.screens.Screen create(AbstractContainerMenu menu, Inventory inventory,
-					net.minecraft.network.chat.Component title) {
-					return new ShulkerTeleporterScreen((ShulkerTeleporterMenu) menu, inventory, title);
-				}
-			});
-			MenuScreens.register(CBMenuTypes.WIRELESS_STOCK_KEEPER_REQUEST.get(), new MenuScreens.ScreenConstructor() {
-				@Override
-				public net.minecraft.client.gui.screens.Screen create(AbstractContainerMenu menu, Inventory inventory,
-					net.minecraft.network.chat.Component title) {
-					return new WirelessStockKeeperRequestScreen((WirelessStockKeeperRequestMenu) menu, inventory, title);
-				}
-			});
 			CreateClient.MODEL_SWAPPER.getCustomBlockModels()
 				.register(Create.asResource("andesite_belt_funnel"), SlimeBeltFunnelModel::new);
 			CreateClient.MODEL_SWAPPER.getCustomBlockModels()

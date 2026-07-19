@@ -10,8 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.ForgeMod;
-import net.minecraftforge.network.NetworkEvent.Context;
+import net.minecraft.world.entity.ai.attributes.Attributes;
 
 public class SmartSuperGlueSelectionPacket {
 
@@ -32,16 +31,15 @@ public class SmartSuperGlueSelectionPacket {
 		buffer.writeBlockPos(to);
 	}
 
-	public boolean handle(Context context) {
-		context.enqueueWork(() -> apply(context.getSender()));
-		return true;
+	public void handle(ServerPlayer player) {
+		apply(player);
 	}
 
 	private void apply(ServerPlayer player) {
 		if (player == null)
 			return;
 
-		double range = player.getAttribute(ForgeMod.BLOCK_REACH.get()).getValue() + 2;
+		double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 2;
 		if (player.distanceToSqr(Vec3.atCenterOf(to)) > range * range || !to.closerThan(from, 25))
 			return;
 

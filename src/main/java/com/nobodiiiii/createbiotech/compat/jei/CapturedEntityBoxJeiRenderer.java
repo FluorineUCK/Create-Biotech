@@ -115,7 +115,7 @@ public final class CapturedEntityBoxJeiRenderer {
 		if (level == null)
 			return null;
 		if (cachedEntity instanceof LivingEntity livingEntity && cachedLevel == level && cachedStack != null
-			&& ItemStack.isSameItemSameTags(cachedStack, stack))
+			&& ItemStack.isSameItemSameComponents(cachedStack, stack))
 			return livingEntity;
 
 		Entity entity = CapturedEntityBoxHelper.createCapturedEntity(stack, level);

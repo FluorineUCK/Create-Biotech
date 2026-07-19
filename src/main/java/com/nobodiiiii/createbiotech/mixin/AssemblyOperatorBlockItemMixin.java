@@ -18,7 +18,7 @@ import net.minecraft.world.level.block.state.BlockState;
 @Mixin(AssemblyOperatorBlockItem.class)
 public abstract class AssemblyOperatorBlockItemMixin {
 
-	@Inject(method = "operatesOn", at = @At("HEAD"), cancellable = true, remap = false)
+	@Inject(method = "operatesOn", at = @At("HEAD"), cancellable = true)
 	private void createBiotech$recognizeModBelts(LevelReader world, BlockPos pos, BlockState placedOnState,
 		CallbackInfoReturnable<Boolean> cir) {
 		Block block = placedOnState.getBlock();

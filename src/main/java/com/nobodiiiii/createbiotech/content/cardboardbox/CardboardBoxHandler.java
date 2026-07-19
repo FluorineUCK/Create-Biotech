@@ -1,5 +1,9 @@
 package com.nobodiiiii.createbiotech.content.cardboardbox;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -15,12 +19,12 @@ import net.minecraft.world.entity.monster.MagmaCube;
 import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public class CardboardBoxHandler {
 
 	private CardboardBoxHandler() {}
@@ -65,7 +69,7 @@ public class CardboardBoxHandler {
 		EntityType<?> type = target.getType();
 		if (target instanceof Slime slime && slime.getSize() > 1) return false;
 		if (target instanceof MagmaCube magmaCube && magmaCube.getSize() > 1) return false;
-		ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(type);
+		ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
 		return id != null && CBConfigs.containsResourceLocation(
 			CBConfigs.SERVER.cardboardBox.smallBoxEntityAllowlist.get(), id);
 	}

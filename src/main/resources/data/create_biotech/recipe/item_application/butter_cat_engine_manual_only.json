@@ -1,0 +1,16 @@
+{
+  "type": "create:item_application",
+  "ingredients": [
+    {
+      "item": "create_biotech:cute_cat_on_shaft"
+    },
+    {
+      "item": "minecraft:bread"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:butter_cat_engine"
+    }
+  ]
+}

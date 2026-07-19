@@ -1,8 +1,8 @@
 package com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod;
 
 import net.minecraft.world.entity.animal.Animal;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.entity.EntityJoinLevelEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 
 public class FixedCarrotFishingRodGoalHandler {
 
@@ -11,7 +11,7 @@ public class FixedCarrotFishingRodGoalHandler {
 	private FixedCarrotFishingRodGoalHandler() {}
 
 	public static void register() {
-		MinecraftForge.EVENT_BUS.addListener(FixedCarrotFishingRodGoalHandler::onEntityJoinLevel);
+		NeoForge.EVENT_BUS.addListener(FixedCarrotFishingRodGoalHandler::onEntityJoinLevel);
 	}
 
 	private static void onEntityJoinLevel(EntityJoinLevelEvent event) {

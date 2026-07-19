@@ -6,6 +6,7 @@ import com.simibubi.create.api.registry.CreateBuiltInRegistries;
 import com.simibubi.create.content.kinetics.mechanicalArm.AllArmInteractionPointTypes;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPointType;
+import com.simibubi.create.content.kinetics.mechanicalArm.ArmBlockEntity;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
@@ -44,7 +45,7 @@ public class ModArmInteractions {
 
 
         @Override
-        public ItemStack insert(ItemStack stack, boolean simulate) {
+        public ItemStack insert(ArmBlockEntity armBlockEntity, ItemStack stack, boolean simulate) {
             ItemStack input = stack.copy();
             InteractionResultHolder<ItemStack> holder =
                     ButterCatEngineBlock.armInsert(cachedState, level, pos, input, simulate);

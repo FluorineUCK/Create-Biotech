@@ -18,7 +18,7 @@ public abstract class PressingBehaviourSoundMixin {
 
 	@Redirect(method = "tick", at = @At(value = "INVOKE",
 		target = "Lcom/simibubi/create/AllSoundEvents$SoundEntry;playOnServer(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/Vec3i;)V"),
-		remap = false)
+		remap = true)
 	private void createBiotech$muteChamberPressActivationOnBelt(SoundEntry sound, Level level, Vec3i pos) {
 		if (shouldMuteCurrentPressActivation())
 			return;
@@ -27,7 +27,7 @@ public abstract class PressingBehaviourSoundMixin {
 
 	@Redirect(method = "tick", at = @At(value = "INVOKE",
 		target = "Lcom/simibubi/create/AllSoundEvents$SoundEntry;playOnServer(Lnet/minecraft/world/level/Level;Lnet/minecraft/core/Vec3i;FF)V"),
-		remap = false)
+		remap = true)
 	private void createBiotech$muteChamberPressActivation(SoundEntry sound, Level level, Vec3i pos, float volume,
 		float pitch) {
 		if (shouldMuteCurrentPressActivation())

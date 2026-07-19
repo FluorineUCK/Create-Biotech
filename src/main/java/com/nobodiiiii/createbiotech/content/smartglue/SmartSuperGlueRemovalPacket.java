@@ -9,7 +9,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class SmartSuperGlueRemovalPacket {
 
@@ -33,9 +32,8 @@ public class SmartSuperGlueRemovalPacket {
 		buffer.writeBoolean(removeConnected);
 	}
 
-	public boolean handle(Context context) {
-		context.enqueueWork(() -> apply(context.getSender()));
-		return true;
+	public void handle(ServerPlayer player) {
+		apply(player);
 	}
 
 	private void apply(ServerPlayer player) {

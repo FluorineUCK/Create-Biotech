@@ -3,10 +3,12 @@ package com.yision.allay.item.allaycourier;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.simibubi.create.content.logistics.box.PackageItem;
+import com.simibubi.create.AllDataComponents;
+import com.simibubi.create.foundation.item.ItemHelper;
 import com.yision.allay.registry.AllItems;
 import com.yision.allay.registry.AllMenuTypes;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
@@ -15,10 +17,10 @@ import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.items.SlotItemHandler;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.SlotItemHandler;
 import org.jetbrains.annotations.NotNull;
 
 public class AllayCourierMenu extends AbstractContainerMenu {
@@ -47,15 +49,15 @@ public class AllayCourierMenu extends AbstractContainerMenu {
 	public final InteractionHand hand;
 	public final String initialAddress;
 
-	public AllayCourierMenu(int id, Inventory playerInventory, FriendlyByteBuf extraData) {
+	public AllayCourierMenu(int id, Inventory playerInventory, RegistryFriendlyByteBuf extraData) {
 		this(AllMenuTypes.ALLAY_COURIER.get(), id, playerInventory, extraData);
 	}
 
-	public AllayCourierMenu(MenuType<?> type, int id, Inventory playerInventory, FriendlyByteBuf extraData) {
+	public AllayCourierMenu(MenuType<?> type, int id, Inventory playerInventory, RegistryFriendlyByteBuf extraData) {
 		super(type, id);
 		this.player = playerInventory.player;
 		this.playerInventory = playerInventory;
-		this.openedStack = extraData.readItem();
+		this.openedStack = ItemStack.STREAM_CODEC.decode(extraData);
 		this.hand = extraData.readEnum(InteractionHand.class);
 		this.initialAddress = readInitialContents(openedStack);
 		this.ownerHotbarSlot = hand == InteractionHand.MAIN_HAND ? playerInventory.selected : -1;
@@ -186,8 +188,8 @@ public class AllayCourierMenu extends AbstractContainerMenu {
 		}
 
 		if (PackageItem.isPackage(packageBox)) {
-			CompoundTag tag = packageBox.getOrCreateTag();
-			tag.put("Items", packageInventory.serializeNBT());
+			packageBox.set(AllDataComponents.PACKAGE_CONTENTS,
+				ItemHelper.containerContentsFromHandler(packageInventory));
 			return packageBox;
 		}
 
@@ -258,7 +260,7 @@ public class AllayCourierMenu extends AbstractContainerMenu {
 	}
 
 	@OnlyIn(Dist.CLIENT)
-	public static AllayCourierMenu createOnClient(int id, Inventory playerInventory, FriendlyByteBuf extraData) {
+	public static AllayCourierMenu createOnClient(int id, Inventory playerInventory, RegistryFriendlyByteBuf extraData) {
 		return new AllayCourierMenu(AllMenuTypes.ALLAY_COURIER.get(), id, playerInventory, extraData);
 	}
 }

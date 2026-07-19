@@ -18,9 +18,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
 public abstract class CapturedEntityBoxItem extends PackageItem {
 	private static final int EMPTY_BOX_MAX_STACK_SIZE = 16;
@@ -41,7 +41,8 @@ public abstract class CapturedEntityBoxItem extends PackageItem {
 	}
 
 	@Override
-	public void appendHoverText(ItemStack stack, Level level, List<Component> tooltipComponents, TooltipFlag isAdvanced) {
+	public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents,
+		TooltipFlag isAdvanced) {
 		CapturedEntityBoxHelper.appendHoverText(stack, tooltipComponents);
 	}
 

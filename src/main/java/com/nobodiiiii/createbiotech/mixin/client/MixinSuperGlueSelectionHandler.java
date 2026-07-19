@@ -14,7 +14,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class MixinSuperGlueSelectionHandler {
 
 	@Inject(method = "isGlue(Lnet/minecraft/world/item/ItemStack;)Z", at = @At("HEAD"), cancellable = true,
-		remap = false)
+		remap = true)
 	private void createBiotech$excludeSmartGlue(ItemStack stack, CallbackInfoReturnable<Boolean> cir) {
 		if (stack.getItem() instanceof SmartSuperGlueItem)
 			cir.setReturnValue(false);

@@ -23,7 +23,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
-import net.minecraftforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
 
 public class MagmaBeltTunnelInteractionHandler {
 
@@ -84,7 +84,7 @@ public class MagmaBeltTunnelInteractionHandler {
 					if (!behaviour.canInsertFromSide(d))
 						continue;
 
-					ItemStack toinsert = ItemHandlerHelper.copyStackWithSize(current.stack, 1);
+					ItemStack toinsert = current.stack.copyWithCount(1);
 					if (!behaviour.handleInsertion(toinsert, d, false)
 						.isEmpty())
 						return true;

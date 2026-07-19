@@ -18,14 +18,14 @@ public final class GeneratedSpiderAssemblyTable_f7772189 {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{new ResourceLocation("create_biotech", "ponderer_exported")};
-        var multi = helper.forComponents(java.util.List.of(new ResourceLocation("create_biotech", "spider_assembly_table")));
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/spider_assembly_table_base"), GeneratedSpiderAssemblyTable_f7772189::storyboard$0, tags);
+        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "spider_assembly_table")));
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/spider_assembly_table_base"), GeneratedSpiderAssemblyTable_f7772189::storyboard$0, tags);
     }
 
     public static void registerTags(PonderTagRegistrationHelper<ResourceLocation> helper) {
         ResourceLocation tag = GeneratedPonderAttribution.tag();
-        helper.addTagToComponent(new ResourceLocation("create_biotech", "spider_assembly_table"), tag);
+        helper.addTagToComponent(ResourceLocation.fromNamespaceAndPath("create_biotech", "spider_assembly_table"), tag);
     }
 
     private static void storyboard$0(SceneBuilder scene, SceneBuildingUtil util) {

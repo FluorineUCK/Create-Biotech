@@ -34,7 +34,6 @@
     "PowerBeltWalkAnimationMixin",
     "MixinSuperGlueSelectionHelper",
     "SawBlockEntityMixin",
-    "SequencedRecipeMixin",
     "SmartBlockEntityLegacyRefreshMixin",
     "SpawnEggItemMixin",
     "StockKeeperRequestMenuAccessor",

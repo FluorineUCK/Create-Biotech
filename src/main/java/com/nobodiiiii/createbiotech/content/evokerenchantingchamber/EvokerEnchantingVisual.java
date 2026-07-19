@@ -16,7 +16,7 @@ import net.minecraft.world.entity.monster.SpellcasterIllager;
 public final class EvokerEnchantingVisual {
 
 	public static final ResourceLocation EVOKER_TEXTURE =
-		new ResourceLocation("minecraft", "textures/entity/illager/evoker.png");
+		ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/illager/evoker.png");
 
 	private static final float HEAD_X_ROT = 0.08726646f;
 	private static final float RIGHT_LEG_X_ROT = -1.4137167f;
@@ -60,8 +60,7 @@ public final class EvokerEnchantingVisual {
 	public static <T extends Evoker> void renderModel(IllagerModel<T> evokerModel, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight) {
 		VertexConsumer consumer = buffer.getBuffer(evokerModel.renderType(EVOKER_TEXTURE));
-		evokerModel.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY, 1.0f, 1.0f, 1.0f,
-			1.0f);
+		evokerModel.renderToBuffer(poseStack, consumer, packedLight, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
 	}
 
 	private static void applyArmPose(ModelPart root, boolean casting) {

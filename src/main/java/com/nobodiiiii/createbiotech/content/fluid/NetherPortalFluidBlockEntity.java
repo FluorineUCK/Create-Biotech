@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.fluid;
 
+import net.minecraft.core.HolderLookup;
+
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -16,17 +18,13 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 
 public class NetherPortalFluidBlockEntity extends BlockEntity {
 	public static final int CAPACITY = 250;
 
 	private final PortalFluidHandler fluidHandler = new PortalFluidHandler();
-	private final LazyOptional<IFluidHandler> fluidCapability = LazyOptional.of(() -> fluidHandler);
 	private int remainingFluid = CAPACITY;
 
 	public NetherPortalFluidBlockEntity(BlockPos pos, BlockState state) {
@@ -34,14 +32,14 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 	}
 
 	@Override
-	protected void saveAdditional(CompoundTag tag) {
-		super.saveAdditional(tag);
+	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.saveAdditional(tag, registries);
 		tag.putInt("RemainingFluid", remainingFluid);
 	}
 
 	@Override
-	public void load(CompoundTag tag) {
-		super.load(tag);
+	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.loadAdditional(tag, registries);
 		remainingFluid = tag.contains("RemainingFluid", Tag.TAG_INT)
 			? Mth.clamp(tag.getInt("RemainingFluid"), 0, CAPACITY)
 			: CAPACITY;
@@ -54,17 +52,8 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 		refreshAdjacentCreateFluidNetworks();
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, @Nullable Direction side) {
-		if (cap == ForgeCapabilities.FLUID_HANDLER)
-			return fluidCapability.cast();
-		return super.getCapability(cap, side);
-	}
-
-	@Override
-	public void invalidateCaps() {
-		super.invalidateCaps();
-		fluidCapability.invalidate();
+	public IFluidHandler getFluidCapability(@Nullable Direction side) {
+		return fluidHandler;
 	}
 
 	private FluidStack drain(int requestedAmount, IFluidHandler.FluidAction action) {

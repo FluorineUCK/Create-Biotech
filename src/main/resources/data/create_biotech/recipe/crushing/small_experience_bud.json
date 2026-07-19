@@ -1,0 +1,15 @@
+{
+  "type": "create:crushing",
+  "ingredients": [
+    {
+      "item": "create_biotech:small_experience_bud"
+    }
+  ],
+  "results": [
+    {
+      "count": 8,
+      "id": "create:experience_nugget"
+    }
+  ],
+  "processing_time": 150
+}

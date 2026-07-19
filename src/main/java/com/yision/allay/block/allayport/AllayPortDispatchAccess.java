@@ -8,7 +8,7 @@ import com.yision.allay.logistics.courier.AllayCourierTaskManager;
 import com.yision.allay.logistics.courier.AllayCourierTarget;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;

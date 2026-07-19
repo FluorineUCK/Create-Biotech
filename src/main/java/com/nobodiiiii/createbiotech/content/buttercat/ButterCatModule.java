@@ -21,9 +21,9 @@ import net.createmod.ponder.foundation.PonderIndex;
 import net.minecraft.client.renderer.ItemBlockRenderTypes;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.ModList;
-import net.minecraftforge.registries.RegisterEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModList;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
 public final class ButterCatModule {
 	public static final String MODID = CreateBiotech.MOD_ID;

@@ -21,15 +21,15 @@ public final class GeneratedExperiencePump_e984f13b {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{new ResourceLocation("create_biotech", "ponderer_exported")};
-        var multi = helper.forComponents(java.util.List.of(new ResourceLocation("create_biotech", "experience_pump")));
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/ex_bumper"), GeneratedExperiencePump_e984f13b::storyboard$0, tags);
-        multi.addStoryBoard(new ResourceLocation("create_biotech", "generated/ponderer/ex_bumper"), GeneratedExperiencePump_e984f13b::storyboard$1, tags);
+        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "experience_pump")));
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/ex_bumper"), GeneratedExperiencePump_e984f13b::storyboard$0, tags);
+        multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/ex_bumper"), GeneratedExperiencePump_e984f13b::storyboard$1, tags);
     }
 
     public static void registerTags(PonderTagRegistrationHelper<ResourceLocation> helper) {
         ResourceLocation tag = GeneratedPonderAttribution.tag();
-        helper.addTagToComponent(new ResourceLocation("create_biotech", "experience_pump"), tag);
+        helper.addTagToComponent(ResourceLocation.fromNamespaceAndPath("create_biotech", "experience_pump"), tag);
     }
 
     private static void storyboard$0(SceneBuilder scene, SceneBuildingUtil util) {
@@ -106,9 +106,9 @@ public final class GeneratedExperiencePump_e984f13b {
         GeneratedPonderSupport.showText(scene, "你需要将经验通入经验母岩...", new Vec3(2.5, 1.0, 1.5), 100, null, true);
         GeneratedPonderSupport.setBlock(scene, context, "create_biotech:budding_experience", null, new BlockPos(2, 1, 1), null, "{Face0:0,Face1:0,Face2:0,Face3:0,Face4:0,Face5:0,ForgeCaps:{}}", false, false, "simultaneous", 20, 1, false, null, "down");
         scene.idle(20);
-        GeneratedPonderSupport.showExtraStructure(scene, context, new ResourceLocation("create_biotech", "ponder/generated/ponderer/exp1.nbt"), new BlockPos(1, 1, 0), 0, false, true, false, "none", null, null, null, null, null);
+        GeneratedPonderSupport.showExtraStructure(scene, context, ResourceLocation.fromNamespaceAndPath("create_biotech", "ponder/generated/ponderer/exp1.nbt"), new BlockPos(1, 1, 0), 0, false, true, false, "none", null, null, null, null, null);
         scene.idle(20);
-        GeneratedPonderSupport.showExtraStructure(scene, context, new ResourceLocation("create_biotech", "ponder/generated/ponderer/exp2.nbt"), new BlockPos(1, 1, 0), 0, false, true, false, "none", null, null, null, null, null);
+        GeneratedPonderSupport.showExtraStructure(scene, context, ResourceLocation.fromNamespaceAndPath("create_biotech", "ponder/generated/ponderer/exp2.nbt"), new BlockPos(1, 1, 0), 0, false, true, false, "none", null, null, null, null, null);
         scene.idle(20);
         GeneratedPonderSupport.setBlock(scene, context, "create_biotech:small_experience_bud", Map.ofEntries(Map.entry("waterlogged", "false"), Map.entry("facing", "up")), new BlockPos(2, 2, 1), null, null, true, null, "none", null, null, null, null, null);
         GeneratedPonderSupport.createItemEntity(scene, "create_biotech:experience_cluster", 1, new Vec3(2.5, 2.0, 1.5), new Vec3(0.0, 0.25, 0.0), null);

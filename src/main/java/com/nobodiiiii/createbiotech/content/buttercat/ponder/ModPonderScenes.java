@@ -40,7 +40,7 @@ public class ModPonderScenes {
                c.setPos(catPos.getCenter().x,catPos.getCenter().y-.5,catPos.getCenter().z);
                c.setYRot(180);
                c.setInSittingPose(true);
-               c.setVariant(BuiltInRegistries.CAT_VARIANT.get(CatVariant.TABBY));
+               BuiltInRegistries.CAT_VARIANT.getHolder(CatVariant.TABBY).ifPresent(c::setVariant);
                return c;
         });
 

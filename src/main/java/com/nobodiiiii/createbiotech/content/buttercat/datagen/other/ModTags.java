@@ -11,14 +11,14 @@ import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.level.material.Fluid;
 
 public class ModTags {
-    public static final TagKey<Item> BUTTER = ItemTags.create(new ResourceLocation("c", "butter"));
-    public static final TagKey<Item> BREAD = ItemTags.create(new ResourceLocation("c", "bread"));
-    public static final TagKey<Fluid> CREAM = FluidTags.create(new ResourceLocation("c", "cream"));
-    public static final TagKey<Item> FOOD_BUTTER = ItemTags.create(new ResourceLocation("c", "foods/butter"));
-    public static final TagKey<Item> FOOD_BREAD = ItemTags.create(new ResourceLocation("c", "foods/bread"));
+    public static final TagKey<Item> BUTTER = ItemTags.create(ResourceLocation.fromNamespaceAndPath("c", "butter"));
+    public static final TagKey<Item> BREAD = ItemTags.create(ResourceLocation.fromNamespaceAndPath("c", "bread"));
+    public static final TagKey<Fluid> CREAM = FluidTags.create(ResourceLocation.fromNamespaceAndPath("c", "cream"));
+    public static final TagKey<Item> FOOD_BUTTER = ItemTags.create(ResourceLocation.fromNamespaceAndPath("c", "foods/butter"));
+    public static final TagKey<Item> FOOD_BREAD = ItemTags.create(ResourceLocation.fromNamespaceAndPath("c", "foods/bread"));
 
-    public static final TagKey<Item> WHEAT = ItemTags.create(new ResourceLocation("c", "wheat"));
-    public static final TagKey<Item> FOOD_WHEAT = ItemTags.create(new ResourceLocation("c", "foods/wheat"));
+    public static final TagKey<Item> WHEAT = ItemTags.create(ResourceLocation.fromNamespaceAndPath("c", "wheat"));
+    public static final TagKey<Item> FOOD_WHEAT = ItemTags.create(ResourceLocation.fromNamespaceAndPath("c", "foods/wheat"));
 
 
     public static Ingredient getBreads () {

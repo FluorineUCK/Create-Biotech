@@ -5,7 +5,6 @@ import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class AllayCourierConfirmPacket {
 	private static final int MAX_ADDRESS_LENGTH = 25;
@@ -30,18 +29,14 @@ public class AllayCourierConfirmPacket {
 		buffer.writeUtf(address, MAX_ADDRESS_LENGTH);
 	}
 
-	public void handle(Context context) {
-		context.enqueueWork(() -> {
-			ServerPlayer sender = context.getSender();
-			if (sender == null) {
-				return;
-			}
-			ItemStack heldStack = sender.getItemInHand(hand);
-			if (AllayCourierItem.updateCargoAddress(heldStack, address)) {
-				sender.getInventory().setChanged();
-				sender.containerMenu.broadcastChanges();
-				sender.inventoryMenu.broadcastChanges();
-			}
-		});
+	public void handle(ServerPlayer sender) {
+		if (sender == null)
+			return;
+		ItemStack heldStack = sender.getItemInHand(hand);
+		if (AllayCourierItem.updateCargoAddress(heldStack, address)) {
+			sender.getInventory().setChanged();
+			sender.containerMenu.broadcastChanges();
+			sender.inventoryMenu.broadcastChanges();
+		}
 	}
 }

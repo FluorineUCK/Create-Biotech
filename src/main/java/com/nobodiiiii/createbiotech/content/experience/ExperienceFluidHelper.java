@@ -1,20 +1,24 @@
 package com.nobodiiiii.createbiotech.content.experience;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBFluids;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.material.Fluid;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.neoforge.fluids.FluidStack;
+
 
 public final class ExperienceFluidHelper {
 	private static final ResourceLocation OWN_EXPERIENCE = CreateBiotech.asResource("experience");
 	private static final ResourceLocation OWN_FLOWING_EXPERIENCE = CreateBiotech.asResource("flowing_experience");
 	private static final ResourceLocation CEI_EXPERIENCE =
-		new ResourceLocation("create_enchantment_industry", "experience");
+		ResourceLocation.fromNamespaceAndPath("create_enchantment_industry", "experience");
 	private static final ResourceLocation CEI_FLOWING_EXPERIENCE =
-		new ResourceLocation("create_enchantment_industry", "flowing_experience");
+		ResourceLocation.fromNamespaceAndPath("create_enchantment_industry", "flowing_experience");
 
 	private ExperienceFluidHelper() {
 	}
@@ -30,7 +34,7 @@ public final class ExperienceFluidHelper {
 	}
 
 	public static boolean isExperience(Fluid fluid) {
-		ResourceLocation id = ForgeRegistries.FLUIDS.getKey(fluid);
+		ResourceLocation id = BuiltInRegistries.FLUID.getKey(fluid);
 		return OWN_EXPERIENCE.equals(id)
 			|| OWN_FLOWING_EXPERIENCE.equals(id)
 			|| CEI_EXPERIENCE.equals(id)
@@ -40,7 +44,7 @@ public final class ExperienceFluidHelper {
 	public static boolean isPrimaryExperience(FluidStack stack) {
 		if (stack.isEmpty())
 			return false;
-		ResourceLocation id = ForgeRegistries.FLUIDS.getKey(stack.getFluid());
+		ResourceLocation id = BuiltInRegistries.FLUID.getKey(stack.getFluid());
 		return OWN_EXPERIENCE.equals(id) || OWN_FLOWING_EXPERIENCE.equals(id);
 	}
 

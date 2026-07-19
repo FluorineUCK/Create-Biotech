@@ -16,14 +16,14 @@ import net.minecraft.client.renderer.MultiBufferSource;
 public abstract class FunnelRendererMixin {
 
 	@Inject(method = "renderSafe(Lcom/simibubi/create/content/logistics/funnel/FunnelBlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V",
-		at = @At("HEAD"), remap = false)
+		at = @At("HEAD"))
 	private void createBiotech$pushSurface(FunnelBlockEntity be, float partialTicks, PoseStack ms,
 		MultiBufferSource buffer, int light, int overlay, CallbackInfo ci) {
 		BeltSurfaceRenderScope.push(be.getLevel(), be.getBlockPos());
 	}
 
 	@Inject(method = "renderSafe(Lcom/simibubi/create/content/logistics/funnel/FunnelBlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V",
-		at = @At("RETURN"), remap = false)
+		at = @At("RETURN"))
 	private void createBiotech$popSurface(FunnelBlockEntity be, float partialTicks, PoseStack ms,
 		MultiBufferSource buffer, int light, int overlay, CallbackInfo ci) {
 		BeltSurfaceRenderScope.pop();

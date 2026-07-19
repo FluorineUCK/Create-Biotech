@@ -1,0 +1,15 @@
+{
+  "type": "create:crushing",
+  "ingredients": [
+    {
+      "item": "create_biotech:experience_cluster"
+    }
+  ],
+  "results": [
+    {
+      "count": 64,
+      "id": "create:experience_nugget"
+    }
+  ],
+  "processing_time": 250
+}

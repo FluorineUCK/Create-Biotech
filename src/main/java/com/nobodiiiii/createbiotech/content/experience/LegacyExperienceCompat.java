@@ -2,12 +2,13 @@ package com.nobodiiiii.createbiotech.content.experience;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.core.HolderLookup;
 
 public final class LegacyExperienceCompat {
 	private LegacyExperienceCompat() {
 	}
 
-	public static boolean migrateTankNbt(CompoundTag compound) {
+	public static boolean migrateTankNbt(CompoundTag compound, HolderLookup.Provider registries) {
 		if (!isLegacyExperienceTank(compound))
 			return false;
 
@@ -30,8 +31,7 @@ public final class LegacyExperienceCompat {
 			&& compound.contains("StoredExperience", Tag.TAG_INT)) {
 			int amount = ExperienceFluidHelper.xpToFluidAmount(compound.getInt("StoredExperience"));
 			if (amount > 0) {
-				compound.put("TankContent", ExperienceFluidHelper.experienceStack(amount)
-					.writeToNBT(new CompoundTag()));
+				compound.put("TankContent", ExperienceFluidHelper.experienceStack(amount).save(registries));
 				migrated = true;
 			}
 		}

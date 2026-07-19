@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.evokerenchantingchamber;
 
+import com.mojang.serialization.MapCodec;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 
 import net.minecraft.core.BlockPos;
@@ -11,6 +12,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
@@ -36,6 +38,8 @@ import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
 public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
+	public static final MapCodec<EvokerEnchantingChamberBlock> CODEC =
+		simpleCodec(EvokerEnchantingChamberBlock::new);
 
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 	public static final EnumProperty<DoubleBlockHalf> HALF = BlockStateProperties.DOUBLE_BLOCK_HALF;
@@ -45,6 +49,11 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 		registerDefaultState(defaultBlockState()
 			.setValue(FACING, Direction.NORTH)
 			.setValue(HALF, DoubleBlockHalf.LOWER));
+	}
+
+	@Override
+	protected MapCodec<? extends EvokerEnchantingChamberBlock> codec() {
+		return CODEC;
 	}
 
 	@Override
@@ -95,7 +104,7 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 	}
 
 	@Override
-	public void playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
+	public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
 		if (!level.isClientSide() && state.getValue(HALF) == DoubleBlockHalf.UPPER) {
 			BlockPos lowerPos = pos.below();
 			BlockState lowerState = level.getBlockState(lowerPos);
@@ -112,7 +121,7 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 			}
 		}
 
-		super.playerWillDestroy(level, pos, state, player);
+		return super.playerWillDestroy(level, pos, state, player);
 	}
 
 	@Override
@@ -146,13 +155,26 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand,
+	protected ItemInteractionResult useItemOn(ItemStack heldStack, BlockState state, Level level, BlockPos pos,
+		Player player, InteractionHand hand, BlockHitResult hit) {
+		InteractionResult result = interact(state, level, pos, player, hand, heldStack);
+		return result.consumesAction()
+			? ItemInteractionResult.sidedSuccess(level.isClientSide)
+			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+	}
+
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
 		BlockHitResult hit) {
+		return interact(state, level, pos, player, InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+	}
+
+	private InteractionResult interact(BlockState state, Level level, BlockPos pos, Player player,
+		InteractionHand hand, ItemStack heldStack) {
 		EvokerEnchantingChamberBlockEntity blockEntity = getChamberBlockEntity(level, pos, state);
 		if (blockEntity == null)
 			return InteractionResult.PASS;
 
-		ItemStack heldStack = player.getItemInHand(hand);
 		if (level.isClientSide)
 			return blockEntity.canInteract(heldStack) ? InteractionResult.SUCCESS : InteractionResult.PASS;
 

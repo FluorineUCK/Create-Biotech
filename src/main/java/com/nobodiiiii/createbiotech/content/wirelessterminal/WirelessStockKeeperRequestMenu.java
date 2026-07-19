@@ -11,7 +11,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -20,11 +20,11 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 
 public class WirelessStockKeeperRequestMenu extends StockKeeperRequestMenu {
 
-	public WirelessStockKeeperRequestMenu(int id, Inventory inv, FriendlyByteBuf extraData) {
+	public WirelessStockKeeperRequestMenu(int id, Inventory inv, RegistryFriendlyByteBuf extraData) {
 		this(CBMenuTypes.WIRELESS_STOCK_KEEPER_REQUEST.get(), id, inv, extraData);
 	}
 
-	public WirelessStockKeeperRequestMenu(MenuType<?> type, int id, Inventory inv, FriendlyByteBuf extraData) {
+	public WirelessStockKeeperRequestMenu(MenuType<?> type, int id, Inventory inv, RegistryFriendlyByteBuf extraData) {
 		super(type, id, inv, extraData);
 	}
 
@@ -39,7 +39,7 @@ public class WirelessStockKeeperRequestMenu extends StockKeeperRequestMenu {
 	}
 
 	@Override
-	protected StockTickerBlockEntity createOnClient(FriendlyByteBuf extraData) {
+	protected StockTickerBlockEntity createOnClient(RegistryFriendlyByteBuf extraData) {
 		StockKeeperRequestMenuAccessor accessor = (StockKeeperRequestMenuAccessor) this;
 		accessor.createBiotech$setAdmin(extraData.readBoolean());
 		accessor.createBiotech$setLocked(extraData.readBoolean());
@@ -61,7 +61,7 @@ public class WirelessStockKeeperRequestMenu extends StockKeeperRequestMenu {
 		}
 
 		if (updateTag != null)
-			stockTicker.handleUpdateTag(updateTag);
+			stockTicker.handleUpdateTag(updateTag, level.registryAccess());
 		return stockTicker;
 	}
 

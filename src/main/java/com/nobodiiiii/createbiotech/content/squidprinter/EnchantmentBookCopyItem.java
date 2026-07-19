@@ -3,21 +3,16 @@ package com.nobodiiiii.createbiotech.content.squidprinter;
 import java.util.List;
 
 import net.minecraft.ChatFormatting;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
-import net.minecraft.nbt.Tag;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.world.item.EnchantedBookItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.EnchantmentInstance;
-import net.minecraft.world.level.Level;
+import net.minecraft.world.item.enchantment.ItemEnchantments;
 
 public class EnchantmentBookCopyItem extends Item {
-
-	public static final String STORED_ENCHANTMENTS_TAG = "StoredEnchantments";
 
 	public EnchantmentBookCopyItem(Properties properties) {
 		super(properties);
@@ -34,24 +29,20 @@ public class EnchantmentBookCopyItem extends Item {
 	}
 
 	@Override
-	public void appendHoverText(ItemStack stack, Level level, List<Component> tooltip, TooltipFlag flag) {
-		super.appendHoverText(stack, level, tooltip, flag);
-		ListTag list = getStoredEnchantments(stack);
-		appendEnchantmentLines(list, tooltip);
+	public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+		super.appendHoverText(stack, context, tooltip, flag);
+		appendEnchantmentLines(getStoredEnchantments(stack), tooltip);
 	}
 
-	public static ListTag getStoredEnchantments(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
-		return tag == null ? new ListTag() : tag.getList(STORED_ENCHANTMENTS_TAG, Tag.TAG_COMPOUND);
+	public static ItemEnchantments getStoredEnchantments(ItemStack stack) {
+		return stack.getOrDefault(DataComponents.STORED_ENCHANTMENTS, ItemEnchantments.EMPTY);
 	}
 
-	public static ListTag getCopySourceEnchantments(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
-		if (tag != null && tag.contains(STORED_ENCHANTMENTS_TAG, Tag.TAG_LIST))
-			return tag.getList(STORED_ENCHANTMENTS_TAG, Tag.TAG_COMPOUND)
-				.copy();
-		return EnchantedBookItem.getEnchantments(stack)
-			.copy();
+	public static ItemEnchantments getCopySourceEnchantments(ItemStack stack) {
+		ItemEnchantments stored = stack.getOrDefault(DataComponents.STORED_ENCHANTMENTS, ItemEnchantments.EMPTY);
+		if (!stored.isEmpty())
+			return stored;
+		return stack.getOrDefault(DataComponents.ENCHANTMENTS, ItemEnchantments.EMPTY);
 	}
 
 	public static boolean hasCopyableEnchantments(ItemStack stack) {
@@ -59,22 +50,25 @@ public class EnchantmentBookCopyItem extends Item {
 	}
 
 	public static int sumCopySourceEnchantmentLevels(ItemStack stack) {
+		return sumLevels(getCopySourceEnchantments(stack));
+	}
+
+	public static int sumStoredEnchantmentLevels(ItemStack stack) {
+		return sumLevels(getStoredEnchantments(stack));
+	}
+
+	private static int sumLevels(ItemEnchantments enchantments) {
 		int total = 0;
-		ListTag enchantments = getCopySourceEnchantments(stack);
-		for (int i = 0; i < enchantments.size(); i++) {
-			CompoundTag entry = enchantments.getCompound(i);
-			total += Math.max(1, entry.getShort("lvl"));
-		}
+		for (var entry : enchantments.entrySet())
+			total += Math.max(1, entry.getIntValue());
 		return total;
 	}
 
 	public static ItemStack fromTemplate(ItemStack template, Item copyItem) {
 		ItemStack out = new ItemStack(copyItem);
-		ListTag enchantments = getCopySourceEnchantments(template);
-		if (enchantments.isEmpty())
-			return out;
-		out.getOrCreateTag()
-			.put(STORED_ENCHANTMENTS_TAG, enchantments);
+		ItemEnchantments enchantments = getCopySourceEnchantments(template);
+		if (!enchantments.isEmpty())
+			out.set(DataComponents.STORED_ENCHANTMENTS, enchantments);
 		return out;
 	}
 
@@ -83,20 +77,10 @@ public class EnchantmentBookCopyItem extends Item {
 	}
 
 	public static ItemStack toEnchantedBook(ItemStack copyStack) {
-		ListTag enchantments = getStoredEnchantments(copyStack);
-		ItemStack out = new ItemStack(net.minecraft.world.item.Items.ENCHANTED_BOOK);
-		for (int i = 0; i < enchantments.size(); i++) {
-			CompoundTag entry = enchantments.getCompound(i);
-			net.minecraft.resources.ResourceLocation id =
-				net.minecraft.resources.ResourceLocation.tryParse(entry.getString("id"));
-			if (id == null)
-				continue;
-			Enchantment enchantment = net.minecraftforge.registries.ForgeRegistries.ENCHANTMENTS.getValue(id);
-			if (enchantment == null)
-				continue;
-			int level = entry.getShort("lvl");
-			EnchantedBookItem.addEnchantment(out, new EnchantmentInstance(enchantment, level));
-		}
+		ItemStack out = new ItemStack(Items.ENCHANTED_BOOK);
+		ItemEnchantments enchantments = getStoredEnchantments(copyStack);
+		if (!enchantments.isEmpty())
+			out.set(DataComponents.STORED_ENCHANTMENTS, enchantments);
 		return out;
 	}
 
@@ -104,20 +88,10 @@ public class EnchantmentBookCopyItem extends Item {
 		return !getStoredEnchantments(stack).isEmpty();
 	}
 
-	private static void appendEnchantmentLines(ListTag enchantments, List<Component> tooltip) {
-		for (int i = 0; i < enchantments.size(); i++) {
-			CompoundTag entry = enchantments.getCompound(i);
-			net.minecraft.resources.ResourceLocation id =
-				net.minecraft.resources.ResourceLocation.tryParse(entry.getString("id"));
-			if (id == null)
-				continue;
-			Enchantment enchantment = net.minecraftforge.registries.ForgeRegistries.ENCHANTMENTS.getValue(id);
-			if (enchantment == null)
-				continue;
-			int level = entry.getShort("lvl");
-			tooltip.add(enchantment.getFullname(level)
+	private static void appendEnchantmentLines(ItemEnchantments enchantments, List<Component> tooltip) {
+		for (var entry : enchantments.entrySet())
+			tooltip.add(Enchantment.getFullname(entry.getKey(), entry.getIntValue())
 				.copy()
 				.withStyle(ChatFormatting.GRAY));
-		}
 	}
 }

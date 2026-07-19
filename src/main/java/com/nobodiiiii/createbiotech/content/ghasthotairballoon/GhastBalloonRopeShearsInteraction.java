@@ -11,6 +11,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ShearsItem;
 import net.minecraft.world.level.Level;
@@ -41,7 +42,7 @@ public class GhastBalloonRopeShearsInteraction extends MovingInteractionBehaviou
 			SoundEvents.SHEEP_SHEAR, SoundSource.PLAYERS, 1.0f, 1.0f);
 
 		if (!player.getAbilities().instabuild)
-			heldItem.hurtAndBreak(1, player, p -> p.broadcastBreakEvent(activeHand));
+			heldItem.hurtAndBreak(1, player, LivingEntity.getSlotForHand(activeHand));
 
 		ghastBalloon.disassemble();
 		return true;

@@ -1,5 +1,11 @@
 package com.nobodiiiii.createbiotech.content.petridish;
 
+import net.minecraft.core.HolderLookup;
+
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -43,14 +49,11 @@ import net.minecraft.world.phys.shapes.BooleanOp;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.fluids.capability.IFluidHandler.FluidAction;
-import net.minecraftforge.fluids.capability.templates.FluidTank;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
+import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
 
@@ -100,8 +103,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		}
 	};
 
-	private final LazyOptional<ItemStackHandler> itemCapability = LazyOptional.of(() -> inventory);
-	private final LazyOptional<IFluidHandler> fluidCapability = LazyOptional.of(() -> new PetriDishFluidHandler());
+	private final IFluidHandler fluidCapability = new PetriDishFluidHandler();
 
 	@Nullable
 	private ResourceLocation recordedEntityId;
@@ -381,7 +383,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 			&& clientPreviewEntity.level() == level)
 			return clientPreviewEntity;
 
-		EntityType<?> entityType = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getValue(recordedEntityId);
+		EntityType<?> entityType = BuiltInRegistries.ENTITY_TYPE.get(recordedEntityId);
 		if (entityType == null)
 			return null;
 
@@ -455,7 +457,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		if (required <= 0 || fluidTank.getFluidAmount() < required)
 			return;
 
-		EntityType<?> entityType = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getValue(recordedEntityId);
+		EntityType<?> entityType = BuiltInRegistries.ENTITY_TYPE.get(recordedEntityId);
 		if (entityType == null)
 			return;
 
@@ -491,7 +493,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 			cancelEmergence();
 			return;
 		}
-		EntityType<?> entityType = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getValue(recordedEntityId);
+		EntityType<?> entityType = BuiltInRegistries.ENTITY_TYPE.get(recordedEntityId);
 		if (entityType == null) {
 			cancelEmergence();
 			return;
@@ -513,8 +515,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		}
 
 		float spawnYaw = getSpawnYaw();
-		CompoundTag spawnTag = SlimeMimicHandler.createPreparedEntityTag(null);
-		Entity spawned = entityType.spawn(serverLevel, spawnTag, entity -> {
+		Entity spawned = entityType.spawn(serverLevel, entity -> {
 			entity.moveTo(spawnX, spawnY, spawnZ, spawnYaw, entity.getXRot());
 			SlimeMimicHandler.markSpawnedEntity(entity);
 		}, spawnPos, MobSpawnType.DISPENSER, true, false);
@@ -625,7 +626,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		if (recordedEntityId == null)
 			return false;
 		for (LivingEntity entity : getNearbyLivingEntities()) {
-			ResourceLocation entityId = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+			ResourceLocation entityId = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
 			if (Objects.equals(recordedEntityId, entityId))
 				return true;
 		}
@@ -671,12 +672,12 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		EntityType<?> type = entity.getType();
 		if (type == EntityType.ARMOR_STAND)
 			return false;
-		ResourceLocation entityId = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(type);
+		ResourceLocation entityId = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(type);
 		return entityId != null;
 	}
 
 	private void recordEntity(LivingEntity entity) {
-		ResourceLocation entityId = net.minecraftforge.registries.ForgeRegistries.ENTITY_TYPES.getKey(entity.getType());
+		ResourceLocation entityId = net.minecraft.core.registries.BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
 		if (entityId == null)
 			return;
 		recordedEntityId = entityId;
@@ -721,10 +722,10 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 	}
 
 	@Override
-	protected void write(CompoundTag tag, boolean clientPacket) {
-		super.write(tag, clientPacket);
-		tag.put(INVENTORY_TAG, inventory.serializeNBT());
-		tag.put(TANK_TAG, fluidTank.writeToNBT(new CompoundTag()));
+	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(tag, registries, clientPacket);
+		tag.put(INVENTORY_TAG, inventory.serializeNBT(registries));
+		tag.put(TANK_TAG, fluidTank.writeToNBT(registries, new CompoundTag()));
 		if (recordedEntityId != null)
 			tag.putString(RECORDED_ENTITY_ID_TAG, recordedEntityId.toString());
 		tag.putFloat(RECORDED_MAX_HEALTH_TAG, recordedMaxHealth);
@@ -735,12 +736,12 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 	}
 
 	@Override
-	protected void read(CompoundTag tag, boolean clientPacket) {
-		super.read(tag, clientPacket);
-		inventory.deserializeNBT(tag.getCompound(INVENTORY_TAG));
-		fluidTank.readFromNBT(tag.getCompound(TANK_TAG));
+	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(tag, registries, clientPacket);
+		inventory.deserializeNBT(registries, tag.getCompound(INVENTORY_TAG));
+		fluidTank.readFromNBT(registries, tag.getCompound(TANK_TAG));
 		recordedEntityId =
-			tag.contains(RECORDED_ENTITY_ID_TAG) ? new ResourceLocation(tag.getString(RECORDED_ENTITY_ID_TAG)) : null;
+			tag.contains(RECORDED_ENTITY_ID_TAG) ? ResourceLocation.parse(tag.getString(RECORDED_ENTITY_ID_TAG)) : null;
 		recordedMaxHealth = tag.getFloat(RECORDED_MAX_HEALTH_TAG);
 		scanCooldown = tag.getInt(SCAN_COOLDOWN_TAG);
 		emergenceInProgress = tag.getBoolean(EMERGENCE_IN_PROGRESS_TAG);
@@ -755,17 +756,14 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 	@Override
 	public void invalidate() {
 		super.invalidate();
-		itemCapability.invalidate();
-		fluidCapability.invalidate();
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, @Nullable Direction side) {
-		if (cap == ForgeCapabilities.ITEM_HANDLER)
-			return itemCapability.cast();
-		if (cap == ForgeCapabilities.FLUID_HANDLER)
-			return fluidCapability.cast();
-		return super.getCapability(cap, side);
+	public ItemStackHandler getItemCapability(@Nullable Direction side) {
+		return inventory;
+	}
+
+	public IFluidHandler getFluidCapability(@Nullable Direction side) {
+		return fluidCapability;
 	}
 
 	@Override
@@ -791,7 +789,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 				.withStyle(ChatFormatting.YELLOW));
 		}
 
-		return containedFluidTooltip(tooltip, isPlayerSneaking, getCapability(ForgeCapabilities.FLUID_HANDLER));
+		return containedFluidTooltip(tooltip, isPlayerSneaking, fluidCapability);
 	}
 
 	private static String entityTranslationKey(ResourceLocation entityId) {

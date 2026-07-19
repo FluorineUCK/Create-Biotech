@@ -7,9 +7,9 @@ import com.nobodiiiii.createbiotech.foundation.render.RenderedLivingEntityItemRe
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.Item;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.extensions.common.IClientItemExtensions;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
 public class RenderedLivingEntityItem<T extends LivingEntity> extends Item {
 	private final EntityType<T> entityType;

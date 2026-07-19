@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.ghasthotairballoon;
 
+import com.mojang.serialization.MapCodec;
 import java.util.List;
 
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
@@ -29,11 +30,18 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.AABB;
 
 public class GhastHotAirBalloonAssemblyStationBlock extends BaseEntityBlock {
+	public static final MapCodec<GhastHotAirBalloonAssemblyStationBlock> CODEC =
+		simpleCodec(GhastHotAirBalloonAssemblyStationBlock::new);
 
 	public static final DirectionProperty HORIZONTAL_FACING = BlockStateProperties.HORIZONTAL_FACING;
 	public GhastHotAirBalloonAssemblyStationBlock(Properties properties) {
 		super(properties);
 		registerDefaultState(defaultBlockState().setValue(HORIZONTAL_FACING, Direction.NORTH));
+	}
+
+	@Override
+	protected MapCodec<? extends GhastHotAirBalloonAssemblyStationBlock> codec() {
+		return CODEC;
 	}
 
 	@Override

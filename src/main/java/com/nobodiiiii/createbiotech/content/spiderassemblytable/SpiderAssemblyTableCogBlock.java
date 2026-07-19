@@ -67,18 +67,18 @@ public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand,
+	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
 		BlockHitResult hit) {
 		return InteractionResult.PASS;
 	}
 
 	@Override
-	public void playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
+	public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
 		if (!level.isClientSide && !SpiderAssemblyTableBlock.isRemovingTailFromMain()) {
 			BlockPos mainPos = getMainPos(pos, state);
 			SpiderAssemblyTableBlock.removeMainFromTail(level, mainPos, !player.isCreative(), true);
 		}
-		super.playerWillDestroy(level, pos, state, player);
+		return super.playerWillDestroy(level, pos, state, player);
 	}
 
 	@Override
@@ -106,7 +106,7 @@ public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
 	}
 
 	@Override
-	public ItemStack getCloneItemStack(BlockState state, HitResult target, BlockGetter level, BlockPos pos,
+	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader level, BlockPos pos,
 		Player player) {
 		return new ItemStack(CBItems.SPIDER_ASSEMBLY_TABLE.get());
 	}

@@ -3,8 +3,8 @@ package com.nobodiiiii.createbiotech.content.biopackager;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandlerModifiable;
-import net.minecraftforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
 
 public class BioPackagerItemHandler implements IItemHandlerModifiable {
 
@@ -39,12 +39,12 @@ public class BioPackagerItemHandler implements IItemHandlerModifiable {
 		if (!blockEntity.heldBox.isEmpty() || blockEntity.animationTicks > 0)
 			return stack;
 		if (simulate)
-			return ItemHandlerHelper.copyStackWithSize(stack, stack.getCount() - 1);
+			return stack.copyWithCount(stack.getCount() - 1);
 		ItemStack toInsert = stack.copy();
 		toInsert.setCount(1);
 		if (!blockEntity.startUnpacking(toInsert))
 			return stack;
-		return ItemHandlerHelper.copyStackWithSize(stack, stack.getCount() - 1);
+		return stack.copyWithCount(stack.getCount() - 1);
 	}
 
 	@Override

@@ -17,7 +17,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
-import net.minecraftforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
 
 /**
  * The single funnel-interaction algorithm shared by all belt implementations.
@@ -105,7 +105,7 @@ public final class FunnelInteractionCore {
 			}
 
 			ItemStack remainder = inserting.insert(toInsert);
-			if (toInsert.equals(remainder, false)) {
+			if (ItemStack.matches(toInsert, remainder)) {
 				tracker.awaitNewVersion(inserting);
 				if (blocking)
 					return true;
@@ -117,7 +117,7 @@ public final class FunnelInteractionCore {
 			if (!remainder.isEmpty())
 				remainder.grow(notFilled);
 			else if (notFilled > 0)
-				remainder = ItemHandlerHelper.copyStackWithSize(currentItem.stack, notFilled);
+				remainder = currentItem.stack.copyWithCount(notFilled);
 
 			funnelBE.flap(true);
 			funnelBE.onTransfer(toInsert);

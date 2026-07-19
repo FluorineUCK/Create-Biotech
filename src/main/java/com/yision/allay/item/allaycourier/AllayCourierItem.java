@@ -2,6 +2,7 @@ package com.yision.allay.item.allaycourier;
 
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.foundation.item.render.SimpleCustomRenderer;
+import com.nobodiiiii.createbiotech.registry.CBDataComponents;
 import com.yision.allay.client.render.AllayCourierItemRenderer;
 import com.yision.allay.logistics.courier.AllayCourierDispatchService;
 import com.yision.allay.registry.AllItems;
@@ -21,15 +22,15 @@ import net.minecraft.world.SimpleMenuProvider;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.Item.TooltipContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.extensions.common.IClientItemExtensions;
-import net.minecraftforge.network.NetworkHooks;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 import org.jetbrains.annotations.Nullable;
 
 public class AllayCourierItem extends Item {
@@ -111,11 +112,11 @@ public class AllayCourierItem extends Item {
 	}
 
 	@Override
-	public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltipComponents,
+	public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltipComponents,
 		TooltipFlag tooltipFlag) {
 		ItemStack cargoPackage = copyCargoPackage(stack);
 		if (!cargoPackage.isEmpty()) {
-			cargoPackage.getItem().appendHoverText(cargoPackage, level, tooltipComponents, tooltipFlag);
+			cargoPackage.getItem().appendHoverText(cargoPackage, context, tooltipComponents, tooltipFlag);
 		}
 	}
 
@@ -123,11 +124,11 @@ public class AllayCourierItem extends Item {
 		LegacyAllayCourierClipboardData.recoverClipboard(serverPlayer);
 		stack = isolateCarrierForEditing(serverPlayer, stack, usedHand);
 		ItemStack openedStack = stack;
-		NetworkHooks.openScreen(serverPlayer,
+		serverPlayer.openMenu(
 			new SimpleMenuProvider((id, inv, p) -> AllayCourierMenu.create(id, inv, openedStack, usedHand),
 				Component.translatable("item.create_biotech.allay_courier")),
 			buffer -> {
-				buffer.writeItem(openedStack);
+				ItemStack.STREAM_CODEC.encode(buffer, openedStack);
 				buffer.writeEnum(usedHand);
 			});
 	}
@@ -152,7 +153,7 @@ public class AllayCourierItem extends Item {
 				continue;
 			}
 			ItemStack existing = inventory.getItem(slot);
-			if (existing.isEmpty() || !ItemStack.isSameItemSameTags(existing, remainder)) {
+			if (existing.isEmpty() || !ItemStack.isSameItemSameComponents(existing, remainder)) {
 				continue;
 			}
 			int limit = Math.min(existing.getMaxStackSize(), inventory.getMaxStackSize());
@@ -187,11 +188,11 @@ public class AllayCourierItem extends Item {
 	public static boolean loadCargo(ItemStack allay, ItemStack packageStack) {
 		AllayCourierCargo cargo = new AllayCourierCargo(packageStack);
 		if (!cargo.isValid()) {
-			remove(allay, CARGO_KEY);
+			allay.remove(CBDataComponents.ALLAY_COURIER_CARGO);
 			return false;
 		}
 
-		allay.getOrCreateTag().put(CARGO_KEY, cargo.packageCopy().save(new CompoundTag()));
+		allay.set(CBDataComponents.ALLAY_COURIER_CARGO, cargo);
 		return true;
 	}
 
@@ -213,12 +214,11 @@ public class AllayCourierItem extends Item {
 	}
 
 	public static ItemStack copyCargoPackage(ItemStack allay) {
-		CompoundTag tag = allay.getTag();
-		if (tag == null || !tag.contains(CARGO_KEY, Tag.TAG_COMPOUND)) {
+		AllayCourierCargo cargo = allay.get(CBDataComponents.ALLAY_COURIER_CARGO);
+		if (cargo == null || !cargo.isValid()) {
 			return ItemStack.EMPTY;
 		}
-		ItemStack packageStack = ItemStack.of(tag.getCompound(CARGO_KEY));
-		return PackageItem.isPackage(packageStack) ? packageStack.copy() : ItemStack.EMPTY;
+		return cargo.packageCopy();
 	}
 
 	public static boolean hasCargo(ItemStack allay) {
@@ -231,28 +231,20 @@ public class AllayCourierItem extends Item {
 	}
 
 	public static void clearCargo(ItemStack allay) {
-		remove(allay, CARGO_KEY);
+		allay.remove(CBDataComponents.ALLAY_COURIER_CARGO);
 	}
 
 	public static void setHeadingAngle(ItemStack stack, int headingAngle) {
-		stack.getOrCreateTag().putInt(HEADING_KEY, Math.floorMod(headingAngle, 360));
+		stack.set(CBDataComponents.ALLAY_COURIER_HEADING, Math.floorMod(headingAngle, 360));
 	}
 
 	public static boolean hasHeadingAngle(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
-		return tag != null && tag.contains(HEADING_KEY, Tag.TAG_INT);
+		return stack.has(CBDataComponents.ALLAY_COURIER_HEADING);
 	}
 
 	public static int getHeadingAngle(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
-		return tag == null ? 0 : Math.floorMod(tag.getInt(HEADING_KEY), 360);
-	}
-
-	private static void remove(ItemStack stack, String key) {
-		CompoundTag tag = stack.getTag();
-		if (tag != null) {
-			tag.remove(key);
-		}
+		Integer heading = stack.get(CBDataComponents.ALLAY_COURIER_HEADING);
+		return heading == null ? 0 : Math.floorMod(heading, 360);
 	}
 
 	@SuppressWarnings("removal")

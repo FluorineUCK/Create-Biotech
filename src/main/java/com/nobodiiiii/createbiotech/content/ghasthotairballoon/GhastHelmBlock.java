@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.ghasthotairballoon;
 
+import com.mojang.serialization.MapCodec;
 import com.simibubi.create.AllShapes;
 import com.simibubi.create.content.contraptions.ContraptionWorld;
 import com.simibubi.create.content.contraptions.actors.trainControls.ControlsBlock;
@@ -21,6 +22,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class GhastHelmBlock extends HorizontalDirectionalBlock implements IWrenchable, ProperWaterloggedBlock {
+	public static final MapCodec<GhastHelmBlock> CODEC = simpleCodec(GhastHelmBlock::new);
 
 	public GhastHelmBlock(Properties properties) {
 		super(properties);
@@ -28,6 +30,11 @@ public class GhastHelmBlock extends HorizontalDirectionalBlock implements IWrenc
 			.setValue(WATERLOGGED, false)
 			.setValue(ControlsBlock.VIRTUAL, false)
 			.setValue(FACING, Direction.NORTH));
+	}
+
+	@Override
+	protected MapCodec<? extends GhastHelmBlock> codec() {
+		return CODEC;
 	}
 
 	@Override

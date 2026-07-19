@@ -1,5 +1,6 @@
 package com.yision.allay.logistics.courier;
 
+import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
@@ -19,13 +20,13 @@ public class AllayCourierTaskSavedData extends SavedData {
 
 	public AllayCourierTaskSavedData() {}
 
-	public static AllayCourierTaskSavedData load(CompoundTag tag) {
+	public static AllayCourierTaskSavedData load(CompoundTag tag, HolderLookup.Provider registries) {
 		AllayCourierTaskSavedData data = new AllayCourierTaskSavedData();
 		ListTag list = tag.getList("Tasks", Tag.TAG_COMPOUND);
 		for (int i = 0; i < list.size(); i++) {
 			CompoundTag taskTag = list.getCompound(i);
 			try {
-				AllayCourierTask task = AllayCourierTask.load(taskTag);
+				AllayCourierTask task = AllayCourierTask.load(registries, taskTag);
 				data.tasks.add(task);
 			} catch (Exception e) {
 			}
@@ -34,11 +35,11 @@ public class AllayCourierTaskSavedData extends SavedData {
 	}
 
 	@Override
-	public @NotNull CompoundTag save(CompoundTag tag) {
+	public @NotNull CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
 		ListTag list = new ListTag();
 		for (AllayCourierTask task : tasks) {
 			if (!task.isRemoved()) {
-				list.add(task.save(new CompoundTag()));
+				list.add(task.save(registries, new CompoundTag()));
 			}
 		}
 		tag.put("Tasks", list);
@@ -70,10 +71,10 @@ public class AllayCourierTaskSavedData extends SavedData {
 	public static AllayCourierTaskSavedData getOrCreate(MinecraftServer server) {
 		return server.getLevel(net.minecraft.world.level.Level.OVERWORLD)
 			.getDataStorage()
-			.computeIfAbsent(
-				AllayCourierTaskSavedData::load,
+			.computeIfAbsent(new SavedData.Factory<>(
 				AllayCourierTaskSavedData::new,
-				DATA_NAME
-			);
+				AllayCourierTaskSavedData::load,
+				null
+			), DATA_NAME);
 	}
 }

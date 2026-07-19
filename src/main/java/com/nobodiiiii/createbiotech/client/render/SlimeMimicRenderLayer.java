@@ -43,7 +43,7 @@ import org.slf4j.Logger;
 
 public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel<T>> extends RenderLayer<T, M> {
 	private static final Logger LOGGER = LogUtils.getLogger();
-	private static final ResourceLocation SLIME_TEXTURE = new ResourceLocation("textures/entity/slime/slime.png");
+	private static final ResourceLocation SLIME_TEXTURE = ResourceLocation.parse("textures/entity/slime/slime.png");
 	private static final float SLIME_MODEL_WIDTH = 8.0f;
 	private static final float SLIME_MODEL_CENTER_Y = 20.0f / 16.0f;
 	private static final float OUTER_CUBE_INFLATE_PIXELS = 0.1f;
@@ -93,11 +93,11 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		}
 	}
 
-	public static void registerOnAll(EntityRenderDispatcher dispatcher) {
-		for (EntityRenderer<? extends Player> renderer : dispatcher.getSkinMap().values())
-			registerOn(renderer);
-		for (EntityRenderer<?> renderer : dispatcher.renderers.values())
-			registerOn(renderer);
+	public static void registerOnAll(net.neoforged.neoforge.client.event.EntityRenderersEvent.AddLayers event) {
+		for (net.minecraft.client.resources.PlayerSkin.Model skin : event.getSkins())
+			registerOn(event.getSkin(skin));
+		for (net.minecraft.world.entity.EntityType<?> entityType : event.getEntityTypes())
+			registerOn(event.getRenderer(entityType));
 	}
 
 	@SuppressWarnings({"rawtypes", "unchecked"})
@@ -194,8 +194,8 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			poseStack.translate(centerX, centerY, centerZ);
 			poseStack.scale(width / SLIME_MODEL_WIDTH, height / SLIME_MODEL_WIDTH, depth / SLIME_MODEL_WIDTH);
 			poseStack.translate(0.0f, -SLIME_MODEL_CENTER_Y, 0.0f);
-			innerCube().render(poseStack, innerConsumer, packedLight, overlay, INNER_RED, INNER_GREEN, INNER_BLUE,
-				INNER_ALPHA);
+			innerCube().render(poseStack, innerConsumer, packedLight, overlay,
+				color(INNER_RED, INNER_GREEN, INNER_BLUE, INNER_ALPHA));
 			poseStack.popPose();
 
 			poseStack.pushPose();
@@ -203,8 +203,8 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			poseStack.scale(outerWidth / SLIME_MODEL_WIDTH, outerHeight / SLIME_MODEL_WIDTH,
 				outerDepth / SLIME_MODEL_WIDTH);
 			poseStack.translate(0.0f, -SLIME_MODEL_CENTER_Y, 0.0f);
-			outerCube().render(poseStack, outerConsumer, packedLight, overlay, OUTER_RED, OUTER_GREEN, OUTER_BLUE,
-				OUTER_ALPHA);
+			outerCube().render(poseStack, outerConsumer, packedLight, overlay,
+				color(OUTER_RED, OUTER_GREEN, OUTER_BLUE, OUTER_ALPHA));
 			poseStack.popPose();
 		});
 	}
@@ -221,7 +221,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			.getBuffer(RenderType.entityTranslucent(texture));
 
 		runWithoutPartInterception(() -> {
-			cube.compile(poseStack.last(), baseConsumer, packedLight, overlay, 1.0f, 1.0f, 1.0f, 1.0f);
+			cube.compile(poseStack.last(), baseConsumer, packedLight, overlay, 0xFFFFFFFF);
 			compileCubeWithNormalOffset(cube, poseStack.last(), filterConsumer, packedLight, overlay,
 				OVERLAY_RED, OVERLAY_GREEN, OVERLAY_BLUE, FLAT_CUBE_FILTER_ALPHA, FLAT_CUBE_FILTER_NORMAL_OFFSET);
 		});
@@ -235,8 +235,8 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	private static void renderFallbackOverlay(EntityModel<?> model, LivingEntity entity, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight, int overlay) {
 		VertexConsumer overlayConsumer = buffer.getBuffer(RenderType.entityTranslucent(lookupTextureLocation(entity)));
-		model.renderToBuffer(poseStack, overlayConsumer, packedLight, overlay, OVERLAY_RED, OVERLAY_GREEN, OVERLAY_BLUE,
-			OVERLAY_ALPHA);
+		model.renderToBuffer(poseStack, overlayConsumer, packedLight, overlay,
+			color(OVERLAY_RED, OVERLAY_GREEN, OVERLAY_BLUE, OVERLAY_ALPHA));
 	}
 
 	private static int overlay(LivingEntity entity) {
@@ -415,7 +415,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		int packedLight, int overlay, float red, float green, float blue, float alpha, float normalOffset) {
 		ReflectionAccess access = reflectionAccess();
 		if (access == null) {
-			cube.compile(pose, consumer, packedLight, overlay, red, green, blue, alpha);
+			cube.compile(pose, consumer, packedLight, overlay, color(red, green, blue, alpha));
 			return;
 		}
 
@@ -438,18 +438,29 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 					Vector3f localPos = vertexPos(access, vertex);
 					Vector4f transformedPos = poseMatrix.transform(
 						new Vector4f(localPos.x() / 16.0f, localPos.y() / 16.0f, localPos.z() / 16.0f, 1.0f));
-					consumer.vertex(transformedPos.x() + normalX * normalOffset,
-						transformedPos.y() + normalY * normalOffset,
-						transformedPos.z() + normalZ * normalOffset,
-						red, green, blue, alpha, vertexU(access, vertex), vertexV(access, vertex), overlay, packedLight,
-						normalX, normalY, normalZ);
+					consumer.addVertex(
+							transformedPos.x() + normalX * normalOffset,
+							transformedPos.y() + normalY * normalOffset,
+							transformedPos.z() + normalZ * normalOffset)
+						.setColor(red, green, blue, alpha)
+						.setUv(vertexU(access, vertex), vertexV(access, vertex))
+						.setOverlay(overlay)
+						.setLight(packedLight)
+						.setNormal(normalX, normalY, normalZ);
 				}
 			}
 		} catch (RuntimeException e) {
 			disableReflection("Failed to offset slime mimic flat-cube overlay; falling back to vanilla overlay rendering.",
 				e);
-			cube.compile(pose, consumer, packedLight, overlay, red, green, blue, alpha);
+			cube.compile(pose, consumer, packedLight, overlay, color(red, green, blue, alpha));
 		}
+	}
+
+	private static int color(float red, float green, float blue, float alpha) {
+		return (Math.round(alpha * 255.0f) << 24)
+			| (Math.round(red * 255.0f) << 16)
+			| (Math.round(green * 255.0f) << 8)
+			| Math.round(blue * 255.0f);
 	}
 
 	private static ReflectionAccess reflectionAccess() {

@@ -139,13 +139,13 @@ public class UniversalJointBlock extends KineticBlock implements IBE<UniversalJo
 	}
 
 	@Override
-	public ItemStack getCloneItemStack(BlockState state, HitResult target, BlockGetter level, BlockPos pos,
+	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader level, BlockPos pos,
 		net.minecraft.world.entity.player.Player player) {
 		return new ItemStack(CBItems.UNIVERSAL_JOINT.get());
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState state, BlockGetter level, BlockPos pos, PathComputationType type) {
+	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
 

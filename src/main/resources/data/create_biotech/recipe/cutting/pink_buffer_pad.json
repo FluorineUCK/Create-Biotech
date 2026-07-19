@@ -1,0 +1,14 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "item": "minecraft:pink_wool"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:pink_buffer_pad"
+    }
+  ],
+  "processing_time": 50
+}

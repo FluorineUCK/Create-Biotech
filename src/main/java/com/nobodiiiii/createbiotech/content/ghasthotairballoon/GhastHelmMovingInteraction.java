@@ -14,8 +14,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
+import net.neoforged.api.distmarker.Dist;
 
 public class GhastHelmMovingInteraction extends MovingInteractionBehaviour {
 
@@ -43,11 +42,8 @@ public class GhastHelmMovingInteraction extends MovingInteractionBehaviour {
 
 		contraptionEntity.setControllingPlayer(player.getUUID());
 		if (player.level().isClientSide) {
-			DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-				() -> () -> {
-					ControlsHandler.startControlling(contraptionEntity, localPos);
-					GhastHelmClientHandler.startControlling(ghastBalloon);
-				});
+			ControlsHandler.startControlling(contraptionEntity, localPos);
+			GhastHelmClientHandler.startControlling(ghastBalloon);
 		}
 		return true;
 	}

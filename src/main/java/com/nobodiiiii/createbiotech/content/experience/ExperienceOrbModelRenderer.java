@@ -11,12 +11,11 @@ import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 
-import org.joml.Matrix3f;
 import org.joml.Matrix4f;
 import org.joml.Quaternionf;
 
 public final class ExperienceOrbModelRenderer {
-	private static final ResourceLocation TEXTURE = new ResourceLocation("textures/entity/experience_orb.png");
+	private static final ResourceLocation TEXTURE = ResourceLocation.parse("textures/entity/experience_orb.png");
 	private static final RenderType RENDER_TYPE = RenderType.entityTranslucent(TEXTURE);
 
 	private ExperienceOrbModelRenderer() {}
@@ -47,22 +46,20 @@ public final class ExperienceOrbModelRenderer {
 		VertexConsumer consumer = buffer.getBuffer(RENDER_TYPE);
 		PoseStack.Pose pose = ms.last();
 		Matrix4f matrix = pose.pose();
-		Matrix3f normal = pose.normal();
-		quad(consumer, matrix, normal, -0.5F, -0.25F, red, green, blue, u0, v1, packedLight);
-		quad(consumer, matrix, normal, 0.5F, -0.25F, red, green, blue, u1, v1, packedLight);
-		quad(consumer, matrix, normal, 0.5F, 0.75F, red, green, blue, u1, v0, packedLight);
-		quad(consumer, matrix, normal, -0.5F, 0.75F, red, green, blue, u0, v0, packedLight);
+		quad(consumer, matrix, pose, -0.5F, -0.25F, red, green, blue, u0, v1, packedLight);
+		quad(consumer, matrix, pose, 0.5F, -0.25F, red, green, blue, u1, v1, packedLight);
+		quad(consumer, matrix, pose, 0.5F, 0.75F, red, green, blue, u1, v0, packedLight);
+		quad(consumer, matrix, pose, -0.5F, 0.75F, red, green, blue, u0, v0, packedLight);
 		ms.popPose();
 	}
 
-	private static void quad(VertexConsumer consumer, Matrix4f matrix, Matrix3f normal, float x, float y, int r, int g,
+	private static void quad(VertexConsumer consumer, Matrix4f matrix, PoseStack.Pose pose, float x, float y, int r, int g,
 		int b, float u, float v, int packedLight) {
-		consumer.vertex(matrix, x, y, 0.0F)
-			.color(r, g, b, 128)
-			.uv(u, v)
-			.overlayCoords(OverlayTexture.NO_OVERLAY)
-			.uv2(packedLight)
-			.normal(normal, 0.0F, 1.0F, 0.0F)
-			.endVertex();
+		consumer.addVertex(matrix, x, y, 0.0F)
+			.setColor(r, g, b, 128)
+			.setUv(u, v)
+			.setOverlay(OverlayTexture.NO_OVERLAY)
+			.setLight(packedLight)
+			.setNormal(pose, 0.0F, 1.0F, 0.0F);
 	}
 }

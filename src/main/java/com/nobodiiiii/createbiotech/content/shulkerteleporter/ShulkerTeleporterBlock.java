@@ -13,6 +13,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -37,9 +38,9 @@ import net.minecraft.world.level.block.state.properties.IntegerProperty;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
-import net.minecraftforge.network.NetworkHooks;
 
 public class ShulkerTeleporterBlock extends KineticBlock
 	implements IBE<ShulkerTeleporterBlockEntity>, ICogWheel {
@@ -95,8 +96,21 @@ public class ShulkerTeleporterBlock extends KineticBlock
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player, InteractionHand hand,
+	protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
+		Player player, InteractionHand hand, BlockHitResult hit) {
+		InteractionResult result = interact(state, level, pos, player);
+		return result.consumesAction()
+			? ItemInteractionResult.sidedSuccess(level.isClientSide)
+			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+	}
+
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
 		BlockHitResult hit) {
+		return interact(state, level, pos, player);
+	}
+
+	private InteractionResult interact(BlockState state, Level level, BlockPos pos, Player player) {
 		if (state.getValue(PART) == TOP)
 			return InteractionResult.PASS;
 
@@ -108,7 +122,7 @@ public class ShulkerTeleporterBlock extends KineticBlock
 		BlockEntity blockEntity = level.getBlockEntity(top);
 		if (!(blockEntity instanceof ShulkerTeleporterBlockEntity teleporter))
 			return InteractionResult.PASS;
-		NetworkHooks.openScreen(serverPlayer, teleporter, teleporter::sendToMenu);
+		serverPlayer.openMenu(teleporter, teleporter::sendToMenu);
 		return InteractionResult.SUCCESS;
 	}
 
@@ -164,7 +178,7 @@ public class ShulkerTeleporterBlock extends KineticBlock
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState state, BlockGetter level, BlockPos pos, PathComputationType type) {
+	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
 
@@ -179,7 +193,8 @@ public class ShulkerTeleporterBlock extends KineticBlock
 	}
 
 	@Override
-	public ItemStack getCloneItemStack(BlockGetter level, BlockPos pos, BlockState state) {
+	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader level, BlockPos pos,
+		Player player) {
 		return new ItemStack(CBItems.SHULKER_TELEPORTER.get());
 	}
 

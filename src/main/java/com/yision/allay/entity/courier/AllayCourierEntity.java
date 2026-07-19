@@ -27,7 +27,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Vector3f;
@@ -495,18 +495,18 @@ public class AllayCourierEntity extends Allay implements Container {
 	}
 
 	@Override
-	protected void defineSynchedData() {
-		super.defineSynchedData();
-		entityData.define(DATA_PACKAGE, ItemStack.EMPTY);
-		entityData.define(DATA_PHASE, (byte) Phase.WAITING.id);
-		entityData.define(DATA_LAUNCH_DIRECTION, new Vector3f(0, 0, 1));
-		entityData.define(DATA_MISSION, (byte) Mission.PACKAGE_TO_PLAYER.id);
+	protected void defineSynchedData(SynchedEntityData.Builder builder) {
+		super.defineSynchedData(builder);
+		builder.define(DATA_PACKAGE, ItemStack.EMPTY);
+		builder.define(DATA_PHASE, (byte) Phase.WAITING.id);
+		builder.define(DATA_LAUNCH_DIRECTION, new Vector3f(0, 0, 1));
+		builder.define(DATA_MISSION, (byte) Mission.PACKAGE_TO_PLAYER.id);
 	}
 
 	@Override
 	public void readAdditionalSaveData(@NotNull CompoundTag tag) {
 		super.readAdditionalSaveData(tag);
-		setPackage(ItemStack.of(tag.getCompound("Package")));
+		setPackage(ItemStack.parseOptional(level().registryAccess(), tag.getCompound("Package")));
 		if (tag.contains("LaunchDirection")) {
 			CompoundTag direction = tag.getCompound("LaunchDirection");
 			setLaunchDirection(new Vec3(direction.getDouble("X"), 0, direction.getDouble("Z")));
@@ -521,7 +521,7 @@ public class AllayCourierEntity extends Allay implements Container {
 	@Override
 	public void addAdditionalSaveData(@NotNull CompoundTag tag) {
 		super.addAdditionalSaveData(tag);
-		tag.put("Package", getPackage().save(new CompoundTag()));
+		tag.put("Package", getPackage().save(level().registryAccess(), new CompoundTag()));
 		CompoundTag direction = new CompoundTag();
 		direction.putDouble("X", launchDirection.x);
 		direction.putDouble("Z", launchDirection.z);

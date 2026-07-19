@@ -7,14 +7,14 @@ import com.simibubi.create.foundation.blockEntity.behaviour.fluid.SmartFluidTank
 import com.simibubi.create.foundation.blockEntity.behaviour.fluid.SmartFluidTankBehaviour.TankSegment;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
 
-import net.createmod.catnip.platform.ForgeCatnipServices;
+import net.createmod.catnip.platform.NeoForgeCatnipServices;
 import net.minecraft.client.model.SquidModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.animal.Squid;
-import net.minecraftforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 public class SquidPrinterRenderer extends SafeBlockEntityRenderer<SquidPrinterBlockEntity> {
 
@@ -46,7 +46,7 @@ public class SquidPrinterRenderer extends SafeBlockEntityRenderer<SquidPrinterBl
 				radius = (float) (Math.pow(((2 * processingProgress) - 1), 2) - 1);
 				net.minecraft.world.phys.AABB bb =
 					new net.minecraft.world.phys.AABB(0.5, 0.0, 0.5, 0.5, -1.2, 0.5).inflate(radius / 32f);
-				ForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, (float) bb.minX, (float) bb.minY,
+				NeoForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, (float) bb.minX, (float) bb.minY,
 					(float) bb.minZ, (float) bb.maxX, (float) bb.maxY, (float) bb.maxZ, buffer, ms, light, true, true);
 			}
 		}
@@ -76,7 +76,7 @@ public class SquidPrinterRenderer extends SafeBlockEntityRenderer<SquidPrinterBl
 		else
 			ms.translate(0, max - min, 0);
 
-		ForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, min, min - yOffset, min, max, min, max, buffer,
+		NeoForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, min, min - yOffset, min, max, min, max, buffer,
 			ms, light, false, true);
 
 		ms.popPose();

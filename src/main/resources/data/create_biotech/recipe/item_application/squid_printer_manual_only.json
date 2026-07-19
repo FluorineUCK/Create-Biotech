@@ -1,0 +1,17 @@
+{
+  "type": "create:item_application",
+  "ingredients": [
+    {
+      "item": "create:spout"
+    },
+    {
+      "type": "create_biotech:captured_entity_box",
+      "entity": "minecraft:squid"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:squid_printer"
+    }
+  ]
+}

@@ -29,7 +29,7 @@ import net.minecraft.world.level.block.state.BlockState;
 public class EvokerEnchantingChamberRenderer implements BlockEntityRenderer<EvokerEnchantingChamberBlockEntity> {
 
 	private static final ResourceLocation BOOK_TEXTURE =
-		new ResourceLocation("minecraft", "textures/entity/enchanting_table_book.png");
+		ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/enchanting_table_book.png");
 
 	private static final float ENCHANTING_TABLE_TOP_Y = 14f / 16f;
 	private static final float UPPER_BLOCK_TOP_Y = 1.95f;
@@ -129,7 +129,7 @@ public class EvokerEnchantingChamberRenderer implements BlockEntityRenderer<Evok
 
 		bookModel.setupAnim(time, pageFlutter, pageFlutter, 1.0f);
 		VertexConsumer bookConsumer = buffer.getBuffer(bookModel.renderType(BOOK_TEXTURE));
-		bookModel.renderToBuffer(poseStack, bookConsumer, packedLight, packedOverlay, 1f, 1f, 1f, 1f);
+		bookModel.renderToBuffer(poseStack, bookConsumer, packedLight, packedOverlay, 0xFFFFFFFF);
 		poseStack.popPose();
 	}
 

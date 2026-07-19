@@ -14,7 +14,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -232,11 +232,10 @@ final class AllayPortReturnQueue {
 					pendingReturnCarriers.addLast(PendingReturnCarrier.toPlayer(entry.getUUID("PlayerId"), delay, retry));
 				} else if ("allay_port".equals(type)) {
 					ResourceKey<Level> dim = entry.contains("Dimension")
-						? ResourceKey.create(Registries.DIMENSION, new ResourceLocation(entry.getString("Dimension")))
+						? ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(entry.getString("Dimension")))
 						: null;
-					BlockPos pos = entry.contains("Pos")
-						? NbtUtils.readBlockPos(entry.getCompound("Pos"))
-						: null;
+					BlockPos pos = NbtUtils.readBlockPos(entry, "Pos")
+						.orElse(null);
 					if (dim != null && pos != null) {
 						pendingReturnCarriers.addLast(PendingReturnCarrier.toAllayPort(dim, pos, delay, retry));
 					}

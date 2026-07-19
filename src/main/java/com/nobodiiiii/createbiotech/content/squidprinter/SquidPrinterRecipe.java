@@ -2,17 +2,17 @@ package com.nobodiiiii.createbiotech.content.squidprinter;
 
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.nobodiiiii.createbiotech.registry.CBRecipeTypes;
-import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
-import com.simibubi.create.content.processing.recipe.ProcessingRecipeBuilder.ProcessingRecipeParams;
-import com.simibubi.create.foundation.fluid.FluidIngredient;
+import com.simibubi.create.content.processing.recipe.ProcessingRecipeParams;
+import com.simibubi.create.content.processing.recipe.StandardProcessingRecipe;
 import com.simibubi.create.foundation.recipe.IRecipeTypeInfo;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.items.wrapper.RecipeWrapper;
+import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
+import net.neoforged.neoforge.items.wrapper.RecipeWrapper;
 
-public class SquidPrinterRecipe extends ProcessingRecipe<RecipeWrapper> {
+public class SquidPrinterRecipe extends StandardProcessingRecipe<RecipeWrapper> {
 
 	private static final IRecipeTypeInfo TYPE_INFO = new IRecipeTypeInfo() {
 		@Override
@@ -28,8 +28,10 @@ public class SquidPrinterRecipe extends ProcessingRecipe<RecipeWrapper> {
 
 		@Override
 		@SuppressWarnings("unchecked")
-		public <T extends net.minecraft.world.item.crafting.RecipeType<?>> T getType() {
-			return (T) CBRecipeTypes.SQUID_PRINTER_TYPE.get();
+		public <I extends net.minecraft.world.item.crafting.RecipeInput,
+			R extends net.minecraft.world.item.crafting.Recipe<I>>
+			net.minecraft.world.item.crafting.RecipeType<R> getType() {
+			return (net.minecraft.world.item.crafting.RecipeType<R>) CBRecipeTypes.SQUID_PRINTER_TYPE.get();
 		}
 	};
 
@@ -63,9 +65,9 @@ public class SquidPrinterRecipe extends ProcessingRecipe<RecipeWrapper> {
 		return true;
 	}
 
-	public FluidIngredient getRequiredFluid() {
+	public SizedFluidIngredient getRequiredFluid() {
 		if (fluidIngredients.isEmpty())
-			throw new IllegalStateException("Squid Printer Recipe: " + id + " has no fluid ingredient");
+			throw new IllegalStateException("Squid Printer recipe has no fluid ingredient");
 		return fluidIngredients.get(0);
 	}
 
@@ -78,7 +80,7 @@ public class SquidPrinterRecipe extends ProcessingRecipe<RecipeWrapper> {
 	}
 
 	public int getWaterPerLevel() {
-		return Math.max(1, getRequiredFluid().getRequiredAmount());
+		return Math.max(1, getRequiredFluid().amount());
 	}
 
 	public int getTemplateLevelTotal(ItemStack template) {

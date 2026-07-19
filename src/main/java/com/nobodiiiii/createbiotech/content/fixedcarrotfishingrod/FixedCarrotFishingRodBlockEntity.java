@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod;
 
+import net.minecraft.core.HolderLookup;
+
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
@@ -19,10 +21,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class FixedCarrotFishingRodBlockEntity extends BlockEntity {
 
@@ -43,8 +42,6 @@ public class FixedCarrotFishingRodBlockEntity extends BlockEntity {
 			return 1;
 		}
 	};
-
-	private final LazyOptional<ItemStackHandler> inventoryCap = LazyOptional.of(() -> inventory);
 
 	public FixedCarrotFishingRodBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.FIXED_CARROT_FISHING_ROD.get(), pos, state);
@@ -72,51 +69,40 @@ public class FixedCarrotFishingRodBlockEntity extends BlockEntity {
 		return advancementOwner;
 	}
 
-	@Nonnull
-	@Override
-	public <T> LazyOptional<T> getCapability(@Nonnull Capability<T> cap, @Nullable Direction side) {
-		if (cap == ForgeCapabilities.ITEM_HANDLER)
-			return inventoryCap.cast();
-		return super.getCapability(cap, side);
+	public ItemStackHandler getItemCapability(@Nullable Direction side) {
+		return inventory;
 	}
 
-	@Override
-	public void invalidateCaps() {
-		super.invalidateCaps();
-		inventoryCap.invalidate();
-	}
-
-	@Override
 	public AABB getRenderBoundingBox() {
 		return new AABB(worldPosition).expandTowards(0, -1, 0);
 	}
 
 	@Override
-	protected void saveAdditional(CompoundTag tag) {
-		super.saveAdditional(tag);
-		tag.put("Inventory", inventory.serializeNBT());
+	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.saveAdditional(tag, registries);
+		tag.put("Inventory", inventory.serializeNBT(registries));
 		PlacedByPlayerAdvancementTracker.writeOwner(tag, advancementOwner);
 	}
 
 	@Override
-	public void load(CompoundTag tag) {
-		super.load(tag);
-		inventory.deserializeNBT(tag.getCompound("Inventory"));
+	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.loadAdditional(tag, registries);
+		inventory.deserializeNBT(registries, tag.getCompound("Inventory"));
 		advancementOwner = PlacedByPlayerAdvancementTracker.readOwner(tag);
 	}
 
 	@Override
-	public CompoundTag getUpdateTag() {
-		CompoundTag tag = super.getUpdateTag();
-		tag.put("Inventory", inventory.serializeNBT());
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+		CompoundTag tag = super.getUpdateTag(registries);
+		tag.put("Inventory", inventory.serializeNBT(registries));
 		PlacedByPlayerAdvancementTracker.writeOwner(tag, advancementOwner);
 		return tag;
 	}
 
 	@Override
-	public void handleUpdateTag(CompoundTag tag) {
-		super.handleUpdateTag(tag);
-		inventory.deserializeNBT(tag.getCompound("Inventory"));
+	public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+		super.handleUpdateTag(tag, registries);
+		inventory.deserializeNBT(registries, tag.getCompound("Inventory"));
 		advancementOwner = PlacedByPlayerAdvancementTracker.readOwner(tag);
 	}
 

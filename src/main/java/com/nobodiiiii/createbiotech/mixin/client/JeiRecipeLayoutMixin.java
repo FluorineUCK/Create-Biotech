@@ -17,7 +17,7 @@ import net.minecraft.client.renderer.Rect2i;
 public abstract class JeiRecipeLayoutMixin {
 	@Redirect(method = "drawRecipe", at = @At(value = "INVOKE",
 		target = "Lmezz/jei/api/gui/ingredient/IRecipeSlotDrawable;draw(Lnet/minecraft/client/gui/GuiGraphics;)V"),
-		remap = false)
+		remap = true)
 	private void createBiotech$drawSlotWithHoverContext(IRecipeSlotDrawable slot, GuiGraphics slotGraphics,
 		GuiGraphics methodGraphics, int mouseX, int mouseY) {
 		Rect2i recipeArea = ((IRecipeLayoutDrawable<?>) (Object) this).getRect();

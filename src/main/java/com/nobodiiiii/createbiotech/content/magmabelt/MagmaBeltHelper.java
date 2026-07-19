@@ -19,7 +19,7 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
+import net.neoforged.neoforge.capabilities.Capabilities;
 
 public class MagmaBeltHelper {
 
@@ -30,7 +30,7 @@ public class MagmaBeltHelper {
 		return uprightCache.computeIfAbsent(
 			stack.getItem(),
 			item -> {
-				boolean isFluidHandler = stack.getCapability(ForgeCapabilities.FLUID_HANDLER_ITEM).isPresent();
+				boolean isFluidHandler = stack.getCapability(Capabilities.FluidHandler.ITEM) != null;
 				boolean useUpright = AllItemTags.UPRIGHT_ON_BELT.matches(stack);
 				boolean forceDisableUpright = !AllItemTags.NOT_UPRIGHT_ON_BELT.matches(stack);
 

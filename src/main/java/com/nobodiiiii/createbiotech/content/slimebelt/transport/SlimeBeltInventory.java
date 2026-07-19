@@ -32,6 +32,7 @@ import com.simibubi.create.foundation.utility.BlockHelper;
 import com.simibubi.create.foundation.utility.ServerSpeedProvider;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -267,7 +268,7 @@ public class SlimeBeltInventory {
 					BlockEntityBehaviour.get(world, outputPosition, DirectBeltInputBehaviour.TYPE);
 				if (inputBehaviour != null && inputBehaviour.canInsertFromSide(insertSide)) {
 					ItemStack remainder = inputBehaviour.handleInsertion(currentItem, insertSide, false);
-					if (!remainder.equals(currentItem.stack, false)) {
+					if (!ItemStack.matches(remainder, currentItem.stack)) {
 						currentItem.stack = remainder;
 						if (remainder.isEmpty()) {
 							lazyClientItem = currentItem;
@@ -372,7 +373,7 @@ public class SlimeBeltInventory {
 			return waitAtSideTransferPoint(currentItem, track, movement, candidate);
 
 		ItemStack simulatedRemainder = inputBehaviour.handleInsertion(currentItem.copy(), candidate.insertSide(), true);
-		if (simulatedRemainder.equals(currentItem.stack, false))
+		if (ItemStack.matches(simulatedRemainder, currentItem.stack))
 			return waitAtSideTransferPoint(currentItem, track, movement, candidate);
 
 		if (onClient)
@@ -381,7 +382,7 @@ public class SlimeBeltInventory {
 			return true;
 
 		ItemStack remainder = inputBehaviour.handleInsertion(currentItem, candidate.insertSide(), false);
-		if (remainder.equals(currentItem.stack, false))
+		if (ItemStack.matches(remainder, currentItem.stack))
 			return waitAtSideTransferPoint(currentItem, track, movement, candidate);
 
 		moveItemToSideTransferPoint(currentItem, track, candidate.contactProgress(), movement, candidate.contactParam());
@@ -1075,22 +1076,22 @@ public class SlimeBeltInventory {
 		return null;
 	}
 
-	public void read(CompoundTag nbt) {
+	public void read(CompoundTag nbt, HolderLookup.Provider registries) {
 		items.clear();
 		nbt.getList("Items", Tag.TAG_COMPOUND)
-			.forEach(inbt -> items.add(TransportedItemStack.read((CompoundTag) inbt)));
+			.forEach(inbt -> items.add(TransportedItemStack.read((CompoundTag) inbt, registries)));
 		if (nbt.contains("LazyItem"))
-			lazyClientItem = TransportedItemStack.read(nbt.getCompound("LazyItem"));
+			lazyClientItem = TransportedItemStack.read(nbt.getCompound("LazyItem"), registries);
 		beltMovementPositive = nbt.getBoolean("PositiveOrder");
 	}
 
-	public CompoundTag write() {
+	public CompoundTag write(HolderLookup.Provider registries) {
 		CompoundTag nbt = new CompoundTag();
 		ListTag itemsNBT = new ListTag();
-		items.forEach(stack -> itemsNBT.add(stack.serializeNBT()));
+		items.forEach(stack -> itemsNBT.add(stack.serializeNBT(registries)));
 		nbt.put("Items", itemsNBT);
 		if (lazyClientItem != null)
-			nbt.put("LazyItem", lazyClientItem.serializeNBT());
+			nbt.put("LazyItem", lazyClientItem.serializeNBT(registries));
 		nbt.putBoolean("PositiveOrder", beltMovementPositive);
 		return nbt;
 	}

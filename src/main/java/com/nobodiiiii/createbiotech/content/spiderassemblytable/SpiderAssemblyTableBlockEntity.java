@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.spiderassemblytable;
 
+import net.minecraft.core.HolderLookup;
+
 import static com.simibubi.create.content.kinetics.belt.behaviour.BeltProcessingBehaviour.ProcessingResult.HOLD;
 import static com.simibubi.create.content.kinetics.belt.behaviour.BeltProcessingBehaviour.ProcessingResult.PASS;
 
@@ -17,6 +19,7 @@ import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllRecipeTypes;
+import com.simibubi.create.AllDataComponents;
 import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.api.stress.BlockStressValues;
 import com.simibubi.create.content.fluids.spout.SpoutBlockEntity;
@@ -33,7 +36,6 @@ import com.simibubi.create.content.kinetics.press.PressingRecipe;
 import com.simibubi.create.content.kinetics.saw.CuttingRecipe;
 import com.simibubi.create.content.processing.sequenced.SequencedAssemblyRecipe;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import com.simibubi.create.foundation.fluid.FluidIngredient;
 import com.simibubi.create.foundation.recipe.RecipeApplier;
 
 import net.createmod.catnip.math.VecHelper;
@@ -54,25 +56,27 @@ import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.RecipeHolder;
+import net.minecraft.world.item.crafting.RecipeType;
+import net.minecraft.world.item.crafting.SingleRecipeInput;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.fluids.capability.IFluidHandler.FluidAction;
-import net.minecraftforge.fluids.capability.IFluidHandlerItem;
-import net.minecraftforge.fluids.capability.templates.FluidTank;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.IItemHandlerModifiable;
-import net.minecraftforge.items.ItemHandlerHelper;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.items.wrapper.RecipeWrapper;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.crafting.SizedFluidIngredient;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
+import net.neoforged.neoforge.fluids.capability.IFluidHandlerItem;
+import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.wrapper.RecipeWrapper;
 
 public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implements MenuProvider {
 
@@ -86,8 +90,8 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 	private final ItemStack[] itemLocks = new ItemStack[LEG_COUNT];
 	private final FluidStack[] fluidLocks = new FluidStack[LEG_COUNT];
 	private final boolean[] slotBlocked = new boolean[LEG_COUNT];
-	private final LazyOptional<IItemHandler> itemCapability = LazyOptional.of(() -> new HybridItemWrapper());
-	private final LazyOptional<IFluidHandler> fluidCapability = LazyOptional.of(() -> new SpiderFluidHandler());
+	private final IItemHandler itemCapability = new HybridItemWrapper();
+	private final IFluidHandler fluidCapability = new SpiderFluidHandler();
 
 	private int nextSlot;
 	private int activeSlot = -1;
@@ -141,19 +145,19 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 	}
 
 	@Override
-	protected void write(CompoundTag tag, boolean clientPacket) {
-		tag.put("Inventory", inventory.serializeNBT());
+	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		tag.put("Inventory", inventory.serializeNBT(registries));
 		ListTag fluids = new ListTag();
 		for (FluidTank tank : fluidTanks)
-			fluids.add(tank.writeToNBT(new CompoundTag()));
+			fluids.add(tank.writeToNBT(registries, new CompoundTag()));
 		tag.put("Fluids", fluids);
 		ListTag itemLocksTag = new ListTag();
 		for (ItemStack lock : itemLocks)
-			itemLocksTag.add(lock.save(new CompoundTag()));
+			itemLocksTag.add(lock.saveOptional(registries));
 		tag.put("ItemLocks", itemLocksTag);
 		ListTag fluidLocksTag = new ListTag();
 		for (FluidStack lock : fluidLocks)
-			fluidLocksTag.add(lock.writeToNBT(new CompoundTag()));
+			fluidLocksTag.add(lock.saveOptional(registries));
 		tag.put("FluidLocks", fluidLocksTag);
 		byte[] blockedBytes = new byte[LEG_COUNT];
 		for (int i = 0; i < LEG_COUNT; i++)
@@ -165,31 +169,33 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		tag.putInt("ProcessingTicksRemaining", processingTicksRemaining);
 		tag.putInt("ProcessingTicksTotal", processingTicksTotal);
 		if (!cachedInput.isEmpty())
-			tag.put("CachedInput", cachedInput.serializeNBT());
+			tag.put("CachedInput", cachedInput.saveOptional(registries));
 		PlacedByPlayerAdvancementTracker.writeOwner(tag, advancementOwner);
 		if (clientPacket && impactPending) {
 			tag.putBoolean("Impact", true);
 			if (!impactDisplayItem.isEmpty())
-				tag.put("ImpactItem", impactDisplayItem.serializeNBT());
+				tag.put("ImpactItem", impactDisplayItem.saveOptional(registries));
 			impactPending = false;
 			impactDisplayItem = ItemStack.EMPTY;
 		}
-		super.write(tag, clientPacket);
+		super.write(tag, registries, clientPacket);
 	}
 
 	@Override
-	protected void read(CompoundTag tag, boolean clientPacket) {
-		inventory.deserializeNBT(tag.getCompound("Inventory"));
+	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		inventory.deserializeNBT(registries, tag.getCompound("Inventory"));
 		ListTag fluids = tag.getList("Fluids", Tag.TAG_COMPOUND);
 		for (int i = 0; i < fluidTanks.length && i < fluids.size(); i++)
-			fluidTanks[i].readFromNBT(fluids.getCompound(i));
+			fluidTanks[i].readFromNBT(registries, fluids.getCompound(i));
 		ListTag itemLocksTag = tag.getList("ItemLocks", Tag.TAG_COMPOUND);
 		for (int i = 0; i < itemLocks.length; i++)
-			itemLocks[i] = i < itemLocksTag.size() ? ItemStack.of(itemLocksTag.getCompound(i)) : ItemStack.EMPTY;
+			itemLocks[i] = i < itemLocksTag.size()
+				? ItemStack.parseOptional(registries, itemLocksTag.getCompound(i))
+				: ItemStack.EMPTY;
 		ListTag fluidLocksTag = tag.getList("FluidLocks", Tag.TAG_COMPOUND);
 		for (int i = 0; i < fluidLocks.length; i++)
 			fluidLocks[i] = i < fluidLocksTag.size()
-				? FluidStack.loadFluidStackFromNBT(fluidLocksTag.getCompound(i))
+				? FluidStack.parseOptional(registries, fluidLocksTag.getCompound(i))
 				: FluidStack.EMPTY;
 		byte[] blockedBytes = tag.getByteArray("BlockedSlots");
 		for (int i = 0; i < LEG_COUNT; i++)
@@ -202,13 +208,15 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 			: null;
 		processingTicksRemaining = tag.getInt("ProcessingTicksRemaining");
 		processingTicksTotal = tag.getInt("ProcessingTicksTotal");
-		cachedInput = tag.contains("CachedInput") ? ItemStack.of(tag.getCompound("CachedInput")) : ItemStack.EMPTY;
+		cachedInput = tag.contains("CachedInput")
+			? ItemStack.parseOptional(registries, tag.getCompound("CachedInput"))
+			: ItemStack.EMPTY;
 		advancementOwner = PlacedByPlayerAdvancementTracker.readOwner(tag);
-		super.read(tag, clientPacket);
+		super.read(tag, registries, clientPacket);
 
 		if (clientPacket && tag.getBoolean("Impact")) {
 			ItemStack item = tag.contains("ImpactItem")
-				? ItemStack.of(tag.getCompound("ImpactItem"))
+				? ItemStack.parseOptional(registries, tag.getCompound("ImpactItem"))
 				: ItemStack.EMPTY;
 			spawnImpactParticles(activeMachine, item);
 		}
@@ -270,21 +278,12 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		return new AABB(worldPosition).inflate(1);
 	}
 
-	@Nonnull
-	@Override
-	public <T> LazyOptional<T> getCapability(@Nonnull Capability<T> cap, @Nullable Direction side) {
-		if (cap == ForgeCapabilities.ITEM_HANDLER)
-			return itemCapability.cast();
-		if (cap == ForgeCapabilities.FLUID_HANDLER)
-			return fluidCapability.cast();
-		return super.getCapability(cap, side);
+	public IItemHandler getItemCapability(@Nullable Direction side) {
+		return itemCapability;
 	}
 
-	@Override
-	public void invalidateCaps() {
-		super.invalidateCaps();
-		itemCapability.invalidate();
-		fluidCapability.invalidate();
+	public IFluidHandler getFluidCapability(@Nullable Direction side) {
+		return fluidCapability;
 	}
 
 	public boolean isHybridSlotItemOnly(int hybridIndex) {
@@ -330,7 +329,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		if (!fluidLocks[hybridIndex].isEmpty())
 			return false;
 		ItemStack lock = itemLocks[hybridIndex];
-		if (!lock.isEmpty() && !ItemStack.isSameItemSameTags(lock, stack))
+		if (!lock.isEmpty() && !ItemStack.isSameItemSameComponents(lock, stack))
 			return false;
 		return true;
 	}
@@ -357,7 +356,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 			return;
 
 		if (!carried.isEmpty()) {
-			IFluidHandlerItem fluidHandler = carried.getCapability(ForgeCapabilities.FLUID_HANDLER_ITEM).orElse(null);
+			IFluidHandlerItem fluidHandler = carried.getCapability(Capabilities.FluidHandler.ITEM);
 			FluidStack containerFluid = fluidHandler != null && fluidHandler.getTanks() > 0
 				? fluidHandler.getFluidInTank(0)
 				: FluidStack.EMPTY;
@@ -376,7 +375,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 				if (!fluidTanks[hybridIndex].getFluid().isEmpty())
 					return;
 				ItemStack slotItem = inventory.getStackInSlot(HYBRID_SLOT_START + hybridIndex);
-				if (!slotItem.isEmpty() && !ItemStack.isSameItemSameTags(slotItem, carried))
+				if (!slotItem.isEmpty() && !ItemStack.isSameItemSameComponents(slotItem, carried))
 					return;
 				ItemStack lock = carried.copy();
 				lock.setCount(1);
@@ -481,7 +480,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		if (!slotItem.isEmpty())
 			return FluidExchangeResult.failure();
 
-		IFluidHandlerItem itemHandler = singleItem.getCapability(ForgeCapabilities.FLUID_HANDLER_ITEM).orElse(null);
+		IFluidHandlerItem itemHandler = singleItem.getCapability(Capabilities.FluidHandler.ITEM);
 		if (itemHandler == null)
 			return FluidExchangeResult.failure();
 
@@ -743,11 +742,12 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 
 	private Optional<PressingRecipe> findPressingRecipe(ItemStack input) {
 		return SequencedAssemblyRecipe.getRecipe(level, input, AllRecipeTypes.PRESSING.getType(),
-			PressingRecipe.class);
+			PressingRecipe.class).map(RecipeHolder::value);
 	}
 
 	private Optional<CuttingRecipe> findCuttingRecipe(ItemStack input) {
-		return SequencedAssemblyRecipe.getRecipe(level, input, AllRecipeTypes.CUTTING.getType(), CuttingRecipe.class);
+		return SequencedAssemblyRecipe.getRecipe(level, input, AllRecipeTypes.CUTTING.getType(), CuttingRecipe.class)
+			.map(RecipeHolder::value);
 	}
 
 	private Optional<DeployerApplicationRecipe> findDeployingRecipe(int slot, ItemStack input) {
@@ -760,7 +760,8 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		recipeInventory.setStackInSlot(1, held.copy());
 		RecipeWrapper wrapper = new RecipeWrapper(recipeInventory);
 		return SequencedAssemblyRecipe.getRecipe(level, wrapper, AllRecipeTypes.DEPLOYING.getType(),
-			DeployerApplicationRecipe.class, recipe -> recipe.matches(wrapper, level));
+			DeployerApplicationRecipe.class, recipe -> recipe.value().matches(wrapper, level))
+			.map(RecipeHolder::value);
 	}
 
 	private Optional<FillingRecipe> findFillingRecipe(int slot, ItemStack input) {
@@ -768,11 +769,11 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		if (fluid.isEmpty())
 			return Optional.empty();
 
-		ItemStackHandler recipeInventory = new ItemStackHandler(1);
-		recipeInventory.setStackInSlot(0, input.copy());
-		RecipeWrapper wrapper = new RecipeWrapper(recipeInventory);
-		return SequencedAssemblyRecipe.getRecipe(level, wrapper, AllRecipeTypes.FILLING.getType(), FillingRecipe.class,
-			recipe -> recipe.matches(wrapper, level) && recipe.getRequiredFluid().test(fluid));
+		SingleRecipeInput recipeInput = new SingleRecipeInput(input.copy());
+		return SequencedAssemblyRecipe.getRecipe(level, recipeInput, AllRecipeTypes.FILLING.getType(),
+			FillingRecipe.class,
+			recipe -> recipe.value().matches(recipeInput, level) && recipe.value().getRequiredFluid().test(fluid))
+			.map(RecipeHolder::value);
 	}
 
 	private List<ItemStack> processPressing(ItemStack input) {
@@ -801,12 +802,12 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		if (recipeOpt.isEmpty())
 			return List.of();
 		FillingRecipe recipe = recipeOpt.get();
-		FluidIngredient requiredFluid = recipe.getRequiredFluid();
+		SizedFluidIngredient requiredFluid = recipe.getRequiredFluid();
 		FluidStack available = fluidTanks[slot].getFluid();
 		if (!requiredFluid.test(available))
 			return List.of();
-		fluidTanks[slot].drain(requiredFluid.getRequiredAmount(), FluidAction.EXECUTE);
-		return recipe.rollResults();
+		fluidTanks[slot].drain(requiredFluid.amount(), FluidAction.EXECUTE);
+		return recipe.rollResults(level.random);
 	}
 
 	private void consumeDeployingItem(int slot, DeployerApplicationRecipe recipe) {
@@ -844,7 +845,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 				inventory.setStackInSlot(slot, stack);
 				return;
 			}
-			if (ItemHandlerHelper.canItemStacksStack(existing, stack)) {
+			if (ItemStack.isSameItemSameComponents(existing, stack)) {
 				int moved = Math.min(existing.getMaxStackSize() - existing.getCount(), stack.getCount());
 				existing.grow(moved);
 				stack.shrink(moved);
@@ -884,7 +885,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		for (ItemStack output : outputs) {
 			if (output.isEmpty())
 				continue;
-			if (!output.hasTag() || !output.getTag().contains("SequencedAssembly"))
+			if (!output.has(AllDataComponents.SEQUENCED_ASSEMBLY))
 				return true;
 		}
 		return false;

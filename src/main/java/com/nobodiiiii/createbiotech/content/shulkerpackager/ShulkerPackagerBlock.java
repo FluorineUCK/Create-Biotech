@@ -16,6 +16,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -33,10 +34,9 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.BlockHitResult;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.FakePlayer;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.common.util.FakePlayer;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 	implements IBE<ShulkerPackagerBlockEntity>, IWrenchable {
@@ -58,7 +58,6 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 
 	@Override
 	public BlockState getStateForPlacement(BlockPlaceContext context) {
-		Capability<IItemHandler> itemCap = ForgeCapabilities.ITEM_HANDLER;
 		Direction preferredFacing = null;
 		for (Direction face : context.getNearestLookingDirections()) {
 			BlockEntity be = context.getLevel()
@@ -66,8 +65,8 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 					.relative(face));
 			if (be instanceof ShulkerPackagerBlockEntity)
 				continue;
-			if (be != null && be.getCapability(itemCap)
-				.isPresent()) {
+			if (be != null && context.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+				context.getClickedPos().relative(face), face.getOpposite()) != null) {
 				preferredFacing = face.getOpposite();
 				break;
 			}
@@ -96,12 +95,22 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level worldIn, BlockPos pos, Player player, InteractionHand handIn,
-		BlockHitResult hit) {
-		if (player == null)
-			return InteractionResult.PASS;
+	protected ItemInteractionResult useItemOn(ItemStack itemInHand, BlockState state, Level worldIn, BlockPos pos,
+		Player player, InteractionHand handIn, BlockHitResult hit) {
+		InteractionResult result = interact(state, worldIn, pos, player, handIn, itemInHand);
+		return result.consumesAction()
+			? ItemInteractionResult.sidedSuccess(worldIn.isClientSide)
+			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+	}
 
-		ItemStack itemInHand = player.getItemInHand(handIn);
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level worldIn, BlockPos pos, Player player,
+		BlockHitResult hit) {
+		return interact(state, worldIn, pos, player, InteractionHand.MAIN_HAND, ItemStack.EMPTY);
+	}
+
+	private InteractionResult interact(BlockState state, Level worldIn, BlockPos pos, Player player,
+		InteractionHand handIn, ItemStack itemInHand) {
 		if (AllItems.WRENCH.isIn(itemInHand))
 			return InteractionResult.PASS;
 		if (AllBlocks.FACTORY_GAUGE.isIn(itemInHand))
@@ -199,7 +208,7 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState state, BlockGetter level, BlockPos pos, PathComputationType type) {
+	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
 

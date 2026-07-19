@@ -1,12 +1,16 @@
 package com.nobodiiiii.createbiotech.content.shulkerpackager;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllPartialModels;
 
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraftforge.registries.ForgeRegistries;
+
 
 public class ShulkerPackagePartials {
 
@@ -16,7 +20,7 @@ public class ShulkerPackagePartials {
 	private ShulkerPackagePartials() {}
 
 	public static void register() {
-		ResourceLocation key = ForgeRegistries.ITEMS.getKey(CBItems.SHULKER_PACKAGE.get());
+		ResourceLocation key = BuiltInRegistries.ITEM.getKey(CBItems.SHULKER_PACKAGE.get());
 		if (key == null)
 			return;
 

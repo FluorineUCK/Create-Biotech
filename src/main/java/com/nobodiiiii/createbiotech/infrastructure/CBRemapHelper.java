@@ -1,81 +1,45 @@
 package com.nobodiiiii.createbiotech.infrastructure;
 
-import com.mojang.logging.LogUtils;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllBlockEntityTypes;
 import com.simibubi.create.AllBlocks;
 
+import net.minecraft.core.Registry;
 import net.minecraft.core.registries.Registries;
-import net.minecraft.world.item.Item;
-import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.registries.MissingMappingsEvent;
-import net.minecraftforge.registries.MissingMappingsEvent.Mapping;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
-import org.slf4j.Logger;
-
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public class CBRemapHelper {
-	private static final Logger LOGGER = LogUtils.getLogger();
-
 	private CBRemapHelper() {
 	}
 
 	@SubscribeEvent
-	public static void remapBlocks(MissingMappingsEvent event) {
-		for (Mapping<Block> mapping : event.getMappings(Registries.BLOCK, CreateBiotech.MOD_ID)) {
-			Block remapped = switch (mapping.getKey()
-				.getPath()) {
-				case "experience_pipe" -> AllBlocks.FLUID_PIPE.get();
-				case "encased_experience_pipe" -> AllBlocks.ENCASED_FLUID_PIPE.get();
-				case "experience_tank" -> AllBlocks.FLUID_TANK.get();
-				default -> null;
-			};
-			remap(mapping, remapped);
-		}
-	}
+	public static void remap(RegisterEvent event) {
+		Registry<?> registry = event.getRegistry();
 
-	@SubscribeEvent
-	public static void remapItems(MissingMappingsEvent event) {
-		for (Mapping<Item> mapping : event.getMappings(Registries.ITEM, CreateBiotech.MOD_ID)) {
-			Item remapped = switch (mapping.getKey()
-				.getPath()) {
-				case "experience_pipe", "encased_experience_pipe" -> AllBlocks.FLUID_PIPE.asItem();
-				case "experience_tank" -> AllBlocks.FLUID_TANK.asItem();
-				case "mini_allay" -> CBItems.ALLAY_COURIER.get();
-				case "incomplete_mini_allay" -> CBItems.INCOMPLETE_ALLAY_COURIER.get();
-				default -> null;
-			};
-			remap(mapping, remapped);
+		if (registry == Registries.BLOCK) {
+			registry.addAlias(CreateBiotech.asResource("experience_pipe"), AllBlocks.FLUID_PIPE.getId());
+			registry.addAlias(CreateBiotech.asResource("encased_experience_pipe"), AllBlocks.ENCASED_FLUID_PIPE.getId());
+			registry.addAlias(CreateBiotech.asResource("experience_tank"), AllBlocks.FLUID_TANK.getId());
 		}
-	}
 
-	@SubscribeEvent
-	public static void remapBlockEntities(MissingMappingsEvent event) {
-		for (Mapping<BlockEntityType<?>> mapping : event.getMappings(Registries.BLOCK_ENTITY_TYPE,
-			CreateBiotech.MOD_ID)) {
-			BlockEntityType<?> remapped = switch (mapping.getKey()
-				.getPath()) {
-				case "experience_pipe" -> AllBlockEntityTypes.FLUID_PIPE.get();
-				case "encased_experience_pipe" -> AllBlockEntityTypes.ENCASED_FLUID_PIPE.get();
-				case "experience_tank" -> AllBlockEntityTypes.FLUID_TANK.get();
-				default -> null;
-			};
-			remap(mapping, remapped);
+		if (registry == Registries.ITEM) {
+			registry.addAlias(CreateBiotech.asResource("experience_pipe"), AllBlocks.FLUID_PIPE.getId());
+			registry.addAlias(CreateBiotech.asResource("encased_experience_pipe"), AllBlocks.ENCASED_FLUID_PIPE.getId());
+			registry.addAlias(CreateBiotech.asResource("experience_tank"), AllBlocks.FLUID_TANK.getId());
+			registry.addAlias(CreateBiotech.asResource("mini_allay"), CBItems.ALLAY_COURIER.getId());
+			registry.addAlias(CreateBiotech.asResource("incomplete_mini_allay"),
+				CBItems.INCOMPLETE_ALLAY_COURIER.getId());
 		}
-	}
 
-	private static <T> void remap(Mapping<T> mapping, T remapped) {
-		if (remapped == null)
-			return;
-		try {
-			LOGGER.warn("Remapping legacy Create Biotech entry '{}' to '{}'", mapping.getKey(), remapped);
-			mapping.remap(remapped);
-		} catch (Throwable t) {
-			LOGGER.warn("Failed to remap legacy Create Biotech entry '{}'", mapping.getKey(), t);
+		if (registry == Registries.BLOCK_ENTITY_TYPE) {
+			registry.addAlias(CreateBiotech.asResource("experience_pipe"), AllBlockEntityTypes.FLUID_PIPE.getId());
+			registry.addAlias(CreateBiotech.asResource("encased_experience_pipe"),
+				AllBlockEntityTypes.ENCASED_FLUID_PIPE.getId());
+			registry.addAlias(CreateBiotech.asResource("experience_tank"), AllBlockEntityTypes.FLUID_TANK.getId());
 		}
 	}
 }

@@ -16,17 +16,17 @@ import net.minecraft.world.entity.MoverType;
 import net.minecraft.world.level.BlockAndTintGetter;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
-import net.minecraftforge.common.ForgeMod;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.FluidType;
+import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
+import net.neoforged.neoforge.common.NeoForgeMod;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidType;
 
 public class LiquidLivingSlimeFluidType extends FluidType {
 
 	private static final ResourceLocation STILL_TEXTURE =
-		new ResourceLocation("create_biotech", "fluid/liquid_living_slime_still");
+		ResourceLocation.fromNamespaceAndPath("create_biotech", "fluid/liquid_living_slime_still");
 	private static final ResourceLocation FLOWING_TEXTURE =
-		new ResourceLocation("create_biotech", "fluid/liquid_living_slime_flow");
+		ResourceLocation.fromNamespaceAndPath("create_biotech", "fluid/liquid_living_slime_flow");
 	private static final Vector3f SUBMERGED_FOG_COLOR = new Vector3f(0.48F, 0.86F, 0.42F);
 	private static final float FOG_DISTANCE_MODIFIER = 1F / 10F;
 	private static final float MOVE_SCALE = 0.011F;
@@ -43,7 +43,7 @@ public class LiquidLivingSlimeFluidType extends FluidType {
 	public boolean move(FluidState state, LivingEntity entity, Vec3 movementVector, double gravity) {
 		double startY = entity.getY();
 		float horizontalDrag = entity.isSprinting() ? SPRINT_DRAG : BASE_DRAG;
-		float movementScale = MOVE_SCALE * (float) entity.getAttributeValue(ForgeMod.SWIM_SPEED.get());
+		float movementScale = MOVE_SCALE * (float) entity.getAttributeValue(NeoForgeMod.SWIM_SPEED);
 
 		entity.moveRelative(movementScale, movementVector);
 		entity.move(MoverType.SELF, entity.getDeltaMovement());

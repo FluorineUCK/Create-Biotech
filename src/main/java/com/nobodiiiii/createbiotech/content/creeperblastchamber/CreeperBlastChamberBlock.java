@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.creeperblastchamber;
 
+import com.mojang.serialization.MapCodec;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 
@@ -22,12 +23,18 @@ import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.phys.BlockHitResult;
 
 public class CreeperBlastChamberBlock extends BaseEntityBlock implements IWrenchable {
+	public static final MapCodec<CreeperBlastChamberBlock> CODEC = simpleCodec(CreeperBlastChamberBlock::new);
 
 	public static final BooleanProperty FORMED = BooleanProperty.create("formed");
 
 	public CreeperBlastChamberBlock(Properties properties) {
 		super(properties);
 		registerDefaultState(defaultBlockState().setValue(FORMED, false));
+	}
+
+	@Override
+	protected MapCodec<? extends CreeperBlastChamberBlock> codec() {
+		return CODEC;
 	}
 
 	@Override
@@ -58,8 +65,8 @@ public class CreeperBlastChamberBlock extends BaseEntityBlock implements IWrench
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level level, BlockPos pos, Player player,
-								  InteractionHand hand, BlockHitResult hit) {
+	protected InteractionResult useWithoutItem(BlockState state, Level level, BlockPos pos, Player player,
+											   BlockHitResult hit) {
 		if (level.isClientSide)
 			return InteractionResult.SUCCESS;
 

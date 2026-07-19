@@ -1,47 +1,51 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import java.util.List;
 
 import org.apache.commons.lang3.tuple.Pair;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
-import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.neoforge.common.ModConfigSpec;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.config.ModConfig;
+
 
 public class CBConfigs {
 	public static final Client CLIENT;
-	public static final ForgeConfigSpec CLIENT_SPEC;
+	public static final ModConfigSpec CLIENT_SPEC;
 	public static final Common COMMON;
-	public static final ForgeConfigSpec COMMON_SPEC;
+	public static final ModConfigSpec COMMON_SPEC;
 	public static final Server SERVER;
-	public static final ForgeConfigSpec SERVER_SPEC;
+	public static final ModConfigSpec SERVER_SPEC;
 
 	static {
-		Pair<Client, ForgeConfigSpec> clientSpecPair =
-			new ForgeConfigSpec.Builder().configure(Client::new);
+		Pair<Client, ModConfigSpec> clientSpecPair =
+			new ModConfigSpec.Builder().configure(Client::new);
 		CLIENT = clientSpecPair.getLeft();
 		CLIENT_SPEC = clientSpecPair.getRight();
 
-		Pair<Common, ForgeConfigSpec> commonSpecPair =
-			new ForgeConfigSpec.Builder().configure(Common::new);
+		Pair<Common, ModConfigSpec> commonSpecPair =
+			new ModConfigSpec.Builder().configure(Common::new);
 		COMMON = commonSpecPair.getLeft();
 		COMMON_SPEC = commonSpecPair.getRight();
 
-		Pair<Server, ForgeConfigSpec> serverSpecPair =
-			new ForgeConfigSpec.Builder().configure(Server::new);
+		Pair<Server, ModConfigSpec> serverSpecPair =
+			new ModConfigSpec.Builder().configure(Server::new);
 		SERVER = serverSpecPair.getLeft();
 		SERVER_SPEC = serverSpecPair.getRight();
 	}
 
 	private CBConfigs() {}
 
-	public static void register() {
-		ModLoadingContext.get().registerConfig(ModConfig.Type.CLIENT, CLIENT_SPEC);
-		ModLoadingContext.get().registerConfig(ModConfig.Type.COMMON, COMMON_SPEC);
-		ModLoadingContext.get().registerConfig(ModConfig.Type.SERVER, SERVER_SPEC);
+	public static void register(ModContainer modContainer) {
+		modContainer.registerConfig(ModConfig.Type.CLIENT, CLIENT_SPEC);
+		modContainer.registerConfig(ModConfig.Type.COMMON, COMMON_SPEC);
+		modContainer.registerConfig(ModConfig.Type.SERVER, SERVER_SPEC);
 	}
 
 	public enum EntityListMode {
@@ -51,18 +55,18 @@ public class CBConfigs {
 	}
 
 	public static class Common {
-		Common(ForgeConfigSpec.Builder builder) {
+		Common(ModConfigSpec.Builder builder) {
 		}
 	}
 
 	public static class Client {
-		public final ForgeConfigSpec.BooleanValue enableShulkerTeleporterCameraOffset;
-		public final ForgeConfigSpec.BooleanValue enableShulkerTeleporterPlayerClipping;
+		public final ModConfigSpec.BooleanValue enableShulkerTeleporterCameraOffset;
+		public final ModConfigSpec.BooleanValue enableShulkerTeleporterPlayerClipping;
 		public final ClientCreeperBlastChamber creeperBlastChamber;
 		public final ClientUniversalJoint universalJoint;
 		public final BeltParticles beltParticles;
 
-		Client(ForgeConfigSpec.Builder builder) {
+		Client(ModConfigSpec.Builder builder) {
 			enableShulkerTeleporterCameraOffset = builder.define("enableShulkerTeleporterCameraOffset", true);
 			enableShulkerTeleporterPlayerClipping = builder.define("enableShulkerTeleporterPlayerClipping", true);
 			creeperBlastChamber = new ClientCreeperBlastChamber(builder);
@@ -94,7 +98,7 @@ public class CBConfigs {
 		public final BufferPad bufferPad;
 		public final ShulkerPackager shulkerPackager;
 
-		Server(ForgeConfigSpec.Builder builder) {
+		Server(ModConfigSpec.Builder builder) {
 			experience = new Experience(builder);
 			creeperBlastChamber = new CreeperBlastChamber(builder);
 			powerBelt = new PowerBelt(builder);
@@ -120,16 +124,16 @@ public class CBConfigs {
 	}
 
 	public static class Experience {
-		public final ForgeConfigSpec.IntValue xpPerNugget;
-		public final ForgeConfigSpec.IntValue clusterXpValue;
-		public final ForgeConfigSpec.IntValue largeBudXpValue;
-		public final ForgeConfigSpec.IntValue mediumBudXpValue;
-		public final ForgeConfigSpec.IntValue smallBudXpValue;
-		public final ForgeConfigSpec.IntValue buddingGrowthChance;
-		public final ForgeConfigSpec.IntValue clusterMaxOrbsPerPinch;
-		public final ForgeConfigSpec.IntValue clusterMinXpPerSplitOrb;
+		public final ModConfigSpec.IntValue xpPerNugget;
+		public final ModConfigSpec.IntValue clusterXpValue;
+		public final ModConfigSpec.IntValue largeBudXpValue;
+		public final ModConfigSpec.IntValue mediumBudXpValue;
+		public final ModConfigSpec.IntValue smallBudXpValue;
+		public final ModConfigSpec.IntValue buddingGrowthChance;
+		public final ModConfigSpec.IntValue clusterMaxOrbsPerPinch;
+		public final ModConfigSpec.IntValue clusterMinXpPerSplitOrb;
 
-		Experience(ForgeConfigSpec.Builder builder) {
+		Experience(ModConfigSpec.Builder builder) {
 			builder.push("experience");
 			xpPerNugget = builder.defineInRange("xpPerNugget", 3, 1, Integer.MAX_VALUE);
 			clusterXpValue = builder.defineInRange("clusterXpValue", 128, 1, Integer.MAX_VALUE);
@@ -144,18 +148,18 @@ public class CBConfigs {
 	}
 
 	public static class CreeperBlastChamber {
-		public final ForgeConfigSpec.IntValue minSize;
-		public final ForgeConfigSpec.IntValue maxSize;
-		public final ForgeConfigSpec.IntValue overloadThresholdRpm;
-		public final ForgeConfigSpec.IntValue overloadPointsCap;
-		public final ForgeConfigSpec.IntValue overloadDecayPointsPerSecond;
-		public final ForgeConfigSpec.IntValue overloadTntEquivalentPerCreeper;
-		public final ForgeConfigSpec.IntValue chargedCreeperEquivalentMultiplier;
-		public final ForgeConfigSpec.DoubleValue tntExplosionPower;
-		public final ForgeConfigSpec.IntValue readyOutputTimeout;
-		public final ForgeConfigSpec.BooleanValue enableOverloadExplosions;
+		public final ModConfigSpec.IntValue minSize;
+		public final ModConfigSpec.IntValue maxSize;
+		public final ModConfigSpec.IntValue overloadThresholdRpm;
+		public final ModConfigSpec.IntValue overloadPointsCap;
+		public final ModConfigSpec.IntValue overloadDecayPointsPerSecond;
+		public final ModConfigSpec.IntValue overloadTntEquivalentPerCreeper;
+		public final ModConfigSpec.IntValue chargedCreeperEquivalentMultiplier;
+		public final ModConfigSpec.DoubleValue tntExplosionPower;
+		public final ModConfigSpec.IntValue readyOutputTimeout;
+		public final ModConfigSpec.BooleanValue enableOverloadExplosions;
 
-		CreeperBlastChamber(ForgeConfigSpec.Builder builder) {
+		CreeperBlastChamber(ModConfigSpec.Builder builder) {
 			builder.push("creeperBlastChamber");
 			minSize = builder.defineInRange("minSize", 3, 1, 16);
 			maxSize = builder.defineInRange("maxSize", 5, 1, 32);
@@ -172,9 +176,9 @@ public class CBConfigs {
 	}
 
 	public static class ClientCreeperBlastChamber {
-		public final ForgeConfigSpec.BooleanValue enableExplosionParticles;
+		public final ModConfigSpec.BooleanValue enableExplosionParticles;
 
-		ClientCreeperBlastChamber(ForgeConfigSpec.Builder builder) {
+		ClientCreeperBlastChamber(ModConfigSpec.Builder builder) {
 			builder.push("creeperBlastChamber");
 			enableExplosionParticles = builder.define("enableExplosionParticles", true);
 			builder.pop();
@@ -182,14 +186,14 @@ public class CBConfigs {
 	}
 
 	public static class PowerBelt {
-		public final ForgeConfigSpec.DoubleValue surfaceMetersPerSecondToRpm;
-		public final ForgeConfigSpec.DoubleValue maxGeneratedRpm;
-		public final ForgeConfigSpec.DoubleValue stressCapacityPerRpm;
-		public final ForgeConfigSpec.DoubleValue maxStressCapacityPerSegment;
-		public final ForgeConfigSpec.IntValue surfaceSpeedDetectionInterval;
-		public final ForgeConfigSpec.DoubleValue maxPlayerSurfaceSpeed;
+		public final ModConfigSpec.DoubleValue surfaceMetersPerSecondToRpm;
+		public final ModConfigSpec.DoubleValue maxGeneratedRpm;
+		public final ModConfigSpec.DoubleValue stressCapacityPerRpm;
+		public final ModConfigSpec.DoubleValue maxStressCapacityPerSegment;
+		public final ModConfigSpec.IntValue surfaceSpeedDetectionInterval;
+		public final ModConfigSpec.DoubleValue maxPlayerSurfaceSpeed;
 
-		PowerBelt(ForgeConfigSpec.Builder builder) {
+		PowerBelt(ModConfigSpec.Builder builder) {
 			builder.push("powerBelt");
 			surfaceMetersPerSecondToRpm = builder.defineInRange("surfaceMetersPerSecondToRpm", 24.0d, 0.0d, Double.MAX_VALUE);
 			maxGeneratedRpm = builder.defineInRange("maxGeneratedRpm", 256.0d, 0.0d, Double.MAX_VALUE);
@@ -202,13 +206,13 @@ public class CBConfigs {
 	}
 
 	public static class PetriDish {
-		public final ForgeConfigSpec.IntValue scanInterval;
-		public final ForgeConfigSpec.IntValue scanRadius;
-		public final ForgeConfigSpec.IntValue fluidPerHealth;
-		public final ForgeConfigSpec.IntValue tankCapacity;
-		public final ForgeConfigSpec.BooleanValue requireNearbyMatchingEntity;
+		public final ModConfigSpec.IntValue scanInterval;
+		public final ModConfigSpec.IntValue scanRadius;
+		public final ModConfigSpec.IntValue fluidPerHealth;
+		public final ModConfigSpec.IntValue tankCapacity;
+		public final ModConfigSpec.BooleanValue requireNearbyMatchingEntity;
 
-		PetriDish(ForgeConfigSpec.Builder builder) {
+		PetriDish(ModConfigSpec.Builder builder) {
 			builder.push("petriDish");
 			scanInterval = builder.defineInRange("scanInterval", 20, 1, Integer.MAX_VALUE);
 			scanRadius = builder.defineInRange("scanRadius", 2, 0, 64);
@@ -220,12 +224,12 @@ public class CBConfigs {
 	}
 
 	public static class SpiderAssemblyTable {
-		public final ForgeConfigSpec.IntValue fluidCapacityPerLeg;
-		public final ForgeConfigSpec.DoubleValue deployerBaseDuration;
-		public final ForgeConfigSpec.IntValue sawFallbackDuration;
-		public final ForgeConfigSpec.DoubleValue sawSpeedDivisor;
+		public final ModConfigSpec.IntValue fluidCapacityPerLeg;
+		public final ModConfigSpec.DoubleValue deployerBaseDuration;
+		public final ModConfigSpec.IntValue sawFallbackDuration;
+		public final ModConfigSpec.DoubleValue sawSpeedDivisor;
 
-		SpiderAssemblyTable(ForgeConfigSpec.Builder builder) {
+		SpiderAssemblyTable(ModConfigSpec.Builder builder) {
 			builder.push("spiderAssemblyTable");
 			fluidCapacityPerLeg = builder.defineInRange("fluidCapacityPerLeg", 1000, 1, Integer.MAX_VALUE);
 			deployerBaseDuration = builder.defineInRange("deployerBaseDuration", 2000.0d, 1.0d, Double.MAX_VALUE);
@@ -236,14 +240,14 @@ public class CBConfigs {
 	}
 
 	public static class CardboardBox {
-		public final ForgeConfigSpec.ConfigValue<List<? extends String>> smallBoxEntityAllowlist;
-		public final ForgeConfigSpec.BooleanValue largeBoxCreativeOnly;
-		public final ForgeConfigSpec.BooleanValue lethalCaptureEnabled;
-		public final ForgeConfigSpec.EnumValue<EntityListMode> largeBoxEntityListMode;
-		public final ForgeConfigSpec.ConfigValue<List<? extends String>> largeBoxEntityAllowlist;
-		public final ForgeConfigSpec.ConfigValue<List<? extends String>> largeBoxEntityDenylist;
+		public final ModConfigSpec.ConfigValue<List<? extends String>> smallBoxEntityAllowlist;
+		public final ModConfigSpec.BooleanValue largeBoxCreativeOnly;
+		public final ModConfigSpec.BooleanValue lethalCaptureEnabled;
+		public final ModConfigSpec.EnumValue<EntityListMode> largeBoxEntityListMode;
+		public final ModConfigSpec.ConfigValue<List<? extends String>> largeBoxEntityAllowlist;
+		public final ModConfigSpec.ConfigValue<List<? extends String>> largeBoxEntityDenylist;
 
-		CardboardBox(ForgeConfigSpec.Builder builder) {
+		CardboardBox(ModConfigSpec.Builder builder) {
 			builder.push("cardboardBox");
 			smallBoxEntityAllowlist = defineResourceLocationList(builder, "smallBoxEntityAllowlist", List.of(
 				"minecraft:slime",
@@ -270,17 +274,17 @@ public class CBConfigs {
 	}
 
 	public static class SlimeMimic {
-		public final ForgeConfigSpec.IntValue hauntCycleTicks;
-		public final ForgeConfigSpec.BooleanValue replaceDropsWithSlime;
-		public final ForgeConfigSpec.BooleanValue rewriteVillagerTrades;
-		public final ForgeConfigSpec.IntValue villagerTradeMinSlimeBalls;
-		public final ForgeConfigSpec.IntValue villagerTradeMaxSlimeBalls;
-		public final ForgeConfigSpec.BooleanValue allowSpawnInjection;
-		public final ForgeConfigSpec.EnumValue<EntityListMode> entityListMode;
-		public final ForgeConfigSpec.ConfigValue<List<? extends String>> entityAllowlist;
-		public final ForgeConfigSpec.ConfigValue<List<? extends String>> entityDenylist;
+		public final ModConfigSpec.IntValue hauntCycleTicks;
+		public final ModConfigSpec.BooleanValue replaceDropsWithSlime;
+		public final ModConfigSpec.BooleanValue rewriteVillagerTrades;
+		public final ModConfigSpec.IntValue villagerTradeMinSlimeBalls;
+		public final ModConfigSpec.IntValue villagerTradeMaxSlimeBalls;
+		public final ModConfigSpec.BooleanValue allowSpawnInjection;
+		public final ModConfigSpec.EnumValue<EntityListMode> entityListMode;
+		public final ModConfigSpec.ConfigValue<List<? extends String>> entityAllowlist;
+		public final ModConfigSpec.ConfigValue<List<? extends String>> entityDenylist;
 
-		SlimeMimic(ForgeConfigSpec.Builder builder) {
+		SlimeMimic(ModConfigSpec.Builder builder) {
 			builder.push("slimeMimic");
 			hauntCycleTicks = builder.defineInRange("hauntCycleTicks", 100, 1, Integer.MAX_VALUE);
 			replaceDropsWithSlime = builder.define("replaceDropsWithSlime", true);
@@ -296,26 +300,26 @@ public class CBConfigs {
 	}
 
 	public static class GhastHotAirBalloon {
-		public final ForgeConfigSpec.DoubleValue forwardAcceleration;
-		public final ForgeConfigSpec.DoubleValue backwardAcceleration;
-		public final ForgeConfigSpec.DoubleValue verticalAcceleration;
-		public final ForgeConfigSpec.DoubleValue horizontalDrag;
-		public final ForgeConfigSpec.DoubleValue verticalDrag;
-		public final ForgeConfigSpec.DoubleValue maxHorizontalSpeed;
-		public final ForgeConfigSpec.DoubleValue maxVerticalSpeed;
-		public final ForgeConfigSpec.DoubleValue turnAcceleration;
-		public final ForgeConfigSpec.DoubleValue turnBrake;
-		public final ForgeConfigSpec.DoubleValue turnDirectionChangeBrake;
-		public final ForgeConfigSpec.DoubleValue maxTurnSpeed;
-		public final ForgeConfigSpec.IntValue inputTimeoutTicks;
-		public final ForgeConfigSpec.IntValue magnetTimeoutTicks;
-		public final ForgeConfigSpec.DoubleValue magnetBrakeDistance;
-		public final ForgeConfigSpec.DoubleValue magnetMaxDistance;
-		public final ForgeConfigSpec.DoubleValue assemblyStationSpeed;
-		public final ForgeConfigSpec.IntValue attractPeriodTicks;
-		public final ForgeConfigSpec.DoubleValue maxVelocityForAttractSqr;
+		public final ModConfigSpec.DoubleValue forwardAcceleration;
+		public final ModConfigSpec.DoubleValue backwardAcceleration;
+		public final ModConfigSpec.DoubleValue verticalAcceleration;
+		public final ModConfigSpec.DoubleValue horizontalDrag;
+		public final ModConfigSpec.DoubleValue verticalDrag;
+		public final ModConfigSpec.DoubleValue maxHorizontalSpeed;
+		public final ModConfigSpec.DoubleValue maxVerticalSpeed;
+		public final ModConfigSpec.DoubleValue turnAcceleration;
+		public final ModConfigSpec.DoubleValue turnBrake;
+		public final ModConfigSpec.DoubleValue turnDirectionChangeBrake;
+		public final ModConfigSpec.DoubleValue maxTurnSpeed;
+		public final ModConfigSpec.IntValue inputTimeoutTicks;
+		public final ModConfigSpec.IntValue magnetTimeoutTicks;
+		public final ModConfigSpec.DoubleValue magnetBrakeDistance;
+		public final ModConfigSpec.DoubleValue magnetMaxDistance;
+		public final ModConfigSpec.DoubleValue assemblyStationSpeed;
+		public final ModConfigSpec.IntValue attractPeriodTicks;
+		public final ModConfigSpec.DoubleValue maxVelocityForAttractSqr;
 
-		GhastHotAirBalloon(ForgeConfigSpec.Builder builder) {
+		GhastHotAirBalloon(ModConfigSpec.Builder builder) {
 			builder.push("ghastHotAirBalloon");
 			forwardAcceleration = builder.defineInRange("forwardAcceleration", 0.04d, 0.0d, Double.MAX_VALUE);
 			backwardAcceleration = builder.defineInRange("backwardAcceleration", 0.02d, 0.0d, Double.MAX_VALUE);
@@ -340,28 +344,28 @@ public class CBConfigs {
 	}
 
 	public static class ButterCat {
-		public final ForgeConfigSpec.IntValue maxButterCount;
-		public final ForgeConfigSpec.IntValue butterDecayTicks;
-		public final ForgeConfigSpec.IntValue butterForMaxRpm;
-		public final ForgeConfigSpec.DoubleValue rpmPerButter;
-		public final ForgeConfigSpec.DoubleValue maxGeneratedRpm;
-		public final ForgeConfigSpec.DoubleValue stressCapacityPerRpm;
-		public final ForgeConfigSpec.DoubleValue maxStressCapacity;
-		public final ForgeConfigSpec.DoubleValue rotationAngularSpeed;
-		public final ForgeConfigSpec.IntValue butterNutrition;
-		public final ForgeConfigSpec.DoubleValue butterSaturation;
-		public final ForgeConfigSpec.IntValue superButterNutrition;
-		public final ForgeConfigSpec.DoubleValue superButterSaturation;
-		public final ForgeConfigSpec.IntValue superButterRotationDuration;
-		public final ForgeConfigSpec.IntValue superButterRotationAmplifier;
-		public final ForgeConfigSpec.IntValue superButterLevitationDuration;
-		public final ForgeConfigSpec.IntValue superButterLevitationAmplifier;
-		public final ForgeConfigSpec.IntValue incompleteSuperButterNutrition;
-		public final ForgeConfigSpec.DoubleValue incompleteSuperButterSaturation;
-		public final ForgeConfigSpec.IntValue incompleteSuperButterRotationDuration;
-		public final ForgeConfigSpec.IntValue incompleteSuperButterRotationAmplifier;
+		public final ModConfigSpec.IntValue maxButterCount;
+		public final ModConfigSpec.IntValue butterDecayTicks;
+		public final ModConfigSpec.IntValue butterForMaxRpm;
+		public final ModConfigSpec.DoubleValue rpmPerButter;
+		public final ModConfigSpec.DoubleValue maxGeneratedRpm;
+		public final ModConfigSpec.DoubleValue stressCapacityPerRpm;
+		public final ModConfigSpec.DoubleValue maxStressCapacity;
+		public final ModConfigSpec.DoubleValue rotationAngularSpeed;
+		public final ModConfigSpec.IntValue butterNutrition;
+		public final ModConfigSpec.DoubleValue butterSaturation;
+		public final ModConfigSpec.IntValue superButterNutrition;
+		public final ModConfigSpec.DoubleValue superButterSaturation;
+		public final ModConfigSpec.IntValue superButterRotationDuration;
+		public final ModConfigSpec.IntValue superButterRotationAmplifier;
+		public final ModConfigSpec.IntValue superButterLevitationDuration;
+		public final ModConfigSpec.IntValue superButterLevitationAmplifier;
+		public final ModConfigSpec.IntValue incompleteSuperButterNutrition;
+		public final ModConfigSpec.DoubleValue incompleteSuperButterSaturation;
+		public final ModConfigSpec.IntValue incompleteSuperButterRotationDuration;
+		public final ModConfigSpec.IntValue incompleteSuperButterRotationAmplifier;
 
-		ButterCat(ForgeConfigSpec.Builder builder) {
+		ButterCat(ModConfigSpec.Builder builder) {
 			builder.push("butterCat");
 			maxButterCount = builder.defineInRange("maxButterCount", 16, 1, 8192);
 			butterDecayTicks = builder.defineInRange("butterDecayTicks", 20 * 16, 1, Integer.MAX_VALUE);
@@ -390,17 +394,17 @@ public class CBConfigs {
 	}
 
 	public static class Automation {
-		Automation(ForgeConfigSpec.Builder builder) {
+		Automation(ModConfigSpec.Builder builder) {
 			builder.push("automation");
 			builder.pop();
 		}
 	}
 
 	public static class UniversalJoint {
-		public final ForgeConfigSpec.IntValue maxConnectionRange;
-		public final ForgeConfigSpec.IntValue itemCooldownTicks;
+		public final ModConfigSpec.IntValue maxConnectionRange;
+		public final ModConfigSpec.IntValue itemCooldownTicks;
 
-		UniversalJoint(ForgeConfigSpec.Builder builder) {
+		UniversalJoint(ModConfigSpec.Builder builder) {
 			builder.push("universalJoint");
 			maxConnectionRange = builder.defineInRange("maxConnectionRange", 2, 0, 64);
 			itemCooldownTicks = builder.defineInRange("itemCooldownTicks", 5, 0, Integer.MAX_VALUE);
@@ -409,9 +413,9 @@ public class CBConfigs {
 	}
 
 	public static class ClientUniversalJoint {
-		public final ForgeConfigSpec.IntValue previewRange;
+		public final ModConfigSpec.IntValue previewRange;
 
-		ClientUniversalJoint(ForgeConfigSpec.Builder builder) {
+		ClientUniversalJoint(ModConfigSpec.Builder builder) {
 			builder.push("universalJoint");
 			previewRange = builder.defineInRange("previewRange", 16, 0, 256);
 			builder.pop();
@@ -419,12 +423,12 @@ public class CBConfigs {
 	}
 
 	public static class SquidPrinter {
-		public final ForgeConfigSpec.IntValue cycleTicks;
-		public final ForgeConfigSpec.IntValue cycleWaterCost;
-		public final ForgeConfigSpec.IntValue tankCapacity;
-		public final ForgeConfigSpec.IntValue finishingTicks;
+		public final ModConfigSpec.IntValue cycleTicks;
+		public final ModConfigSpec.IntValue cycleWaterCost;
+		public final ModConfigSpec.IntValue tankCapacity;
+		public final ModConfigSpec.IntValue finishingTicks;
 
-		SquidPrinter(ForgeConfigSpec.Builder builder) {
+		SquidPrinter(ModConfigSpec.Builder builder) {
 			builder.push("squidPrinter");
 			cycleTicks = builder.defineInRange("cycleTicks", 20, 1, Integer.MAX_VALUE);
 			cycleWaterCost = builder.defineInRange("cycleWaterCost", 50, 0, Integer.MAX_VALUE);
@@ -435,11 +439,11 @@ public class CBConfigs {
 	}
 
 	public static class EvokerEnchantingChamber {
-		public final ForgeConfigSpec.IntValue castDurationTicksPerLevel;
-		public final ForgeConfigSpec.IntValue fluidPerLevel;
-		public final ForgeConfigSpec.IntValue cacheCapacity;
+		public final ModConfigSpec.IntValue castDurationTicksPerLevel;
+		public final ModConfigSpec.IntValue fluidPerLevel;
+		public final ModConfigSpec.IntValue cacheCapacity;
 
-		EvokerEnchantingChamber(ForgeConfigSpec.Builder builder) {
+		EvokerEnchantingChamber(ModConfigSpec.Builder builder) {
 			builder.push("evokerEnchantingChamber");
 			castDurationTicksPerLevel = builder.defineInRange("castDurationTicksPerLevel", 40, 1, Integer.MAX_VALUE);
 			fluidPerLevel = builder.defineInRange("fluidPerLevel", 1000, 1, Integer.MAX_VALUE);
@@ -449,11 +453,11 @@ public class CBConfigs {
 	}
 
 	public static class SchrodingersCat {
-		public final ForgeConfigSpec.IntValue defaultInterval;
-		public final ForgeConfigSpec.IntValue maxInterval;
-		public final ForgeConfigSpec.DoubleValue highSignalChance;
+		public final ModConfigSpec.IntValue defaultInterval;
+		public final ModConfigSpec.IntValue maxInterval;
+		public final ModConfigSpec.DoubleValue highSignalChance;
 
-		SchrodingersCat(ForgeConfigSpec.Builder builder) {
+		SchrodingersCat(ModConfigSpec.Builder builder) {
 			builder.push("schrodingersCat");
 			defaultInterval = builder.defineInRange("defaultInterval", 20, 1, Integer.MAX_VALUE);
 			maxInterval = builder.defineInRange("maxInterval", 60 * 20 * 60, 1, Integer.MAX_VALUE);
@@ -463,10 +467,10 @@ public class CBConfigs {
 	}
 
 	public static class BoneRatchet {
-		public final ForgeConfigSpec.DoubleValue fallbackJamStressImpact;
-		public final ForgeConfigSpec.DoubleValue creativeMotorMargin;
+		public final ModConfigSpec.DoubleValue fallbackJamStressImpact;
+		public final ModConfigSpec.DoubleValue creativeMotorMargin;
 
-		BoneRatchet(ForgeConfigSpec.Builder builder) {
+		BoneRatchet(ModConfigSpec.Builder builder) {
 			builder.push("boneRatchet");
 			fallbackJamStressImpact = builder.defineInRange("fallbackJamStressImpact", 20000.0d, 0.0d, Double.MAX_VALUE);
 			creativeMotorMargin = builder.defineInRange("creativeMotorMargin", 1024.0d, 0.0d, Double.MAX_VALUE);
@@ -475,9 +479,9 @@ public class CBConfigs {
 	}
 
 	public static class BasinEntityProcessing {
-		public final ForgeConfigSpec.DoubleValue entityScanHeight;
+		public final ModConfigSpec.DoubleValue entityScanHeight;
 
-		BasinEntityProcessing(ForgeConfigSpec.Builder builder) {
+		BasinEntityProcessing(ModConfigSpec.Builder builder) {
 			builder.push("basinEntityProcessing");
 			entityScanHeight = builder.defineInRange("entityScanHeight", 1.25d, 0.0d, 16.0d);
 			builder.pop();
@@ -485,11 +489,11 @@ public class CBConfigs {
 	}
 
 	public static class SlimeClutch {
-		public final ForgeConfigSpec.IntValue recheckPeriod;
-		public final ForgeConfigSpec.IntValue maxWalk;
-		public final ForgeConfigSpec.BooleanValue enableSoftOverloadCheck;
+		public final ModConfigSpec.IntValue recheckPeriod;
+		public final ModConfigSpec.IntValue maxWalk;
+		public final ModConfigSpec.BooleanValue enableSoftOverloadCheck;
 
-		SlimeClutch(ForgeConfigSpec.Builder builder) {
+		SlimeClutch(ModConfigSpec.Builder builder) {
 			builder.push("slimeClutch");
 			recheckPeriod = builder.defineInRange("recheckPeriod", 20, 1, Integer.MAX_VALUE);
 			maxWalk = builder.defineInRange("maxWalk", 1024, 1, Integer.MAX_VALUE);
@@ -499,10 +503,10 @@ public class CBConfigs {
 	}
 
 	public static class LiquidLivingSlime {
-		public final ForgeConfigSpec.IntValue sourceHitsToBreak;
-		public final ForgeConfigSpec.BooleanValue dropSlimeBallWhenSourceBreaks;
+		public final ModConfigSpec.IntValue sourceHitsToBreak;
+		public final ModConfigSpec.BooleanValue dropSlimeBallWhenSourceBreaks;
 
-		LiquidLivingSlime(ForgeConfigSpec.Builder builder) {
+		LiquidLivingSlime(ModConfigSpec.Builder builder) {
 			builder.push("liquidLivingSlime");
 			sourceHitsToBreak = builder.defineInRange("sourceHitsToBreak", 4, 1, 64);
 			dropSlimeBallWhenSourceBreaks = builder.define("dropSlimeBallWhenSourceBreaks", true);
@@ -511,13 +515,13 @@ public class CBConfigs {
 	}
 
 	public static class FixedCarrotFishingRod {
-		public final ForgeConfigSpec.DoubleValue searchRange;
-		public final ForgeConfigSpec.DoubleValue speedModifier;
-		public final ForgeConfigSpec.DoubleValue stopDistance;
-		public final ForgeConfigSpec.IntValue searchCooldown;
-		public final ForgeConfigSpec.IntValue stopCooldown;
+		public final ModConfigSpec.DoubleValue searchRange;
+		public final ModConfigSpec.DoubleValue speedModifier;
+		public final ModConfigSpec.DoubleValue stopDistance;
+		public final ModConfigSpec.IntValue searchCooldown;
+		public final ModConfigSpec.IntValue stopCooldown;
 
-		FixedCarrotFishingRod(ForgeConfigSpec.Builder builder) {
+		FixedCarrotFishingRod(ModConfigSpec.Builder builder) {
 			builder.push("fixedCarrotFishingRod");
 			searchRange = builder.defineInRange("searchRange", 10.0d, 0.0d, 128.0d);
 			speedModifier = builder.defineInRange("speedModifier", 1.2d, 0.0d, Double.MAX_VALUE);
@@ -529,15 +533,15 @@ public class CBConfigs {
 	}
 
 	public static class BeltParticles {
-		public final ForgeConfigSpec.DoubleValue slimeBeltBaseChance;
-		public final ForgeConfigSpec.DoubleValue slimeBeltLengthChance;
-		public final ForgeConfigSpec.DoubleValue slimeBeltSpeedChance;
-		public final ForgeConfigSpec.DoubleValue slimeBeltMaxChance;
-		public final ForgeConfigSpec.DoubleValue magmaBeltBaseChance;
-		public final ForgeConfigSpec.DoubleValue magmaBeltLengthChance;
-		public final ForgeConfigSpec.DoubleValue magmaBeltMaxChance;
+		public final ModConfigSpec.DoubleValue slimeBeltBaseChance;
+		public final ModConfigSpec.DoubleValue slimeBeltLengthChance;
+		public final ModConfigSpec.DoubleValue slimeBeltSpeedChance;
+		public final ModConfigSpec.DoubleValue slimeBeltMaxChance;
+		public final ModConfigSpec.DoubleValue magmaBeltBaseChance;
+		public final ModConfigSpec.DoubleValue magmaBeltLengthChance;
+		public final ModConfigSpec.DoubleValue magmaBeltMaxChance;
 
-		BeltParticles(ForgeConfigSpec.Builder builder) {
+		BeltParticles(ModConfigSpec.Builder builder) {
 			builder.push("beltParticles");
 			slimeBeltBaseChance = builder.defineInRange("slimeBeltBaseChance", 0.035d, 0.0d, 1.0d);
 			slimeBeltLengthChance = builder.defineInRange("slimeBeltLengthChance", 0.008d, 0.0d, 1.0d);
@@ -551,10 +555,10 @@ public class CBConfigs {
 	}
 
 	public static class BufferPad {
-		public final ForgeConfigSpec.DoubleValue escapePushSpeed;
-		public final ForgeConfigSpec.DoubleValue movementEpsilon;
+		public final ModConfigSpec.DoubleValue escapePushSpeed;
+		public final ModConfigSpec.DoubleValue movementEpsilon;
 
-		BufferPad(ForgeConfigSpec.Builder builder) {
+		BufferPad(ModConfigSpec.Builder builder) {
 			builder.push("bufferPad");
 			escapePushSpeed = builder.defineInRange("escapePushSpeed", 0.05d, 0.0d, Double.MAX_VALUE);
 			movementEpsilon = builder.defineInRange("movementEpsilon", 1.0E-4d, 0.0d, 1.0d);
@@ -563,10 +567,10 @@ public class CBConfigs {
 	}
 
 	public static class ShulkerPackager {
-		public final ForgeConfigSpec.IntValue transferDelay;
-		public final ForgeConfigSpec.IntValue connectionRange;
+		public final ModConfigSpec.IntValue transferDelay;
+		public final ModConfigSpec.IntValue connectionRange;
 
-		ShulkerPackager(ForgeConfigSpec.Builder builder) {
+		ShulkerPackager(ModConfigSpec.Builder builder) {
 			builder.push("shulkerPackager");
 			transferDelay = builder.defineInRange("transferDelay", 8, 1, Integer.MAX_VALUE);
 			connectionRange = builder.defineInRange("connectionRange", 5, 0, 64);
@@ -574,15 +578,15 @@ public class CBConfigs {
 		}
 	}
 
-	private static ForgeConfigSpec.ConfigValue<List<? extends String>> defineResourceLocationList(
-		ForgeConfigSpec.Builder builder, String path, List<? extends String> defaults) {
+	private static ModConfigSpec.ConfigValue<List<? extends String>> defineResourceLocationList(
+		ModConfigSpec.Builder builder, String path, List<? extends String> defaults) {
 		return builder.defineListAllowEmpty(path, defaults, value -> value instanceof String string
 			&& ResourceLocation.tryParse(string) != null);
 	}
 
 	public static boolean isEntityTypeAllowed(EntityType<?> type, EntityListMode mode,
 		List<? extends String> allowlist, List<? extends String> denylist) {
-		ResourceLocation id = ForgeRegistries.ENTITY_TYPES.getKey(type);
+		ResourceLocation id = BuiltInRegistries.ENTITY_TYPE.getKey(type);
 		if (id == null)
 			return mode == EntityListMode.ALLOW_ALL;
 		return switch (mode) {

@@ -1,5 +1,9 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import java.util.function.Consumer;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
@@ -27,39 +31,40 @@ import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.level.material.Fluid;
-import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.common.SoundActions;
-import net.minecraftforge.fluids.FluidType;
-import net.minecraftforge.fluids.ForgeFlowingFluid;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.SoundActions;
+import net.neoforged.neoforge.fluids.FluidType;
+import net.neoforged.neoforge.fluids.BaseFlowingFluid;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.NeoForgeRegistries;
+
+import net.neoforged.neoforge.registries.DeferredHolder;
 
 public class CBFluids {
 
 	public static final DeferredRegister<FluidType> FLUID_TYPES =
-		DeferredRegister.create(ForgeRegistries.Keys.FLUID_TYPES, CreateBiotech.MOD_ID);
+		DeferredRegister.create(NeoForgeRegistries.Keys.FLUID_TYPES, CreateBiotech.MOD_ID);
 
 	public static final DeferredRegister<Fluid> FLUIDS =
-		DeferredRegister.create(ForgeRegistries.FLUIDS, CreateBiotech.MOD_ID);
+		DeferredRegister.create(BuiltInRegistries.FLUID, CreateBiotech.MOD_ID);
 
 	public static final DeferredRegister<Block> FLUID_BLOCKS =
-		DeferredRegister.create(ForgeRegistries.BLOCKS, CreateBiotech.MOD_ID);
+		DeferredRegister.create(Registries.BLOCK, CreateBiotech.MOD_ID);
 
 	public static final DeferredRegister<Item> FLUID_ITEMS =
-		DeferredRegister.create(ForgeRegistries.ITEMS, CreateBiotech.MOD_ID);
+		DeferredRegister.create(BuiltInRegistries.ITEM, CreateBiotech.MOD_ID);
 
 	private static final ResourceLocation EXPERIENCE_STILL_TEXTURE =
 		CreateBiotech.asResource("fluid/experience_still");
 	private static final ResourceLocation EXPERIENCE_FLOW_TEXTURE =
 		CreateBiotech.asResource("fluid/experience_flow");
 	private static final ResourceLocation NETHER_PORTAL_TEXTURE =
-		new ResourceLocation("minecraft", "block/nether_portal");
+		ResourceLocation.fromNamespaceAndPath("minecraft", "block/nether_portal");
 	private static final Vector3f TELEPORTATION_SUBMERGED_FOG_COLOR = new Vector3f(0.72F, 0.48F, 0.86F);
 	private static final float TELEPORTATION_FOG_DISTANCE_MODIFIER = 1F / 10F;
 
-	public static final RegistryObject<FluidType> EXPERIENCE_TYPE =
+	public static final DeferredHolder<FluidType, FluidType> EXPERIENCE_TYPE =
 		FLUID_TYPES.register("experience",
 			() -> new FluidType(FluidType.Properties.create()
 				.lightLevel(15)) {
@@ -79,13 +84,13 @@ public class CBFluids {
 				}
 			});
 
-	public static final RegistryObject<VirtualFluid> EXPERIENCE =
+	public static final DeferredHolder<Fluid, VirtualFluid> EXPERIENCE =
 		FLUIDS.register("experience", () -> VirtualFluid.createSource(experienceProperties()));
 
-	public static final RegistryObject<VirtualFluid> EXPERIENCE_FLOWING =
+	public static final DeferredHolder<Fluid, VirtualFluid> EXPERIENCE_FLOWING =
 		FLUIDS.register("flowing_experience", () -> VirtualFluid.createFlowing(experienceProperties()));
 
-	public static final RegistryObject<FluidType> TELEPORTATION_TYPE =
+	public static final DeferredHolder<FluidType, FluidType> TELEPORTATION_TYPE =
 		FLUID_TYPES.register("teleportation",
 			() -> new FluidType(FluidType.Properties.create()
 				.sound(SoundActions.BUCKET_FILL, SoundEvents.BUCKET_FILL_LAVA)
@@ -123,15 +128,15 @@ public class CBFluids {
 				}
 			});
 
-	public static final RegistryObject<TeleportationFluid.Source> TELEPORTATION =
+	public static final DeferredHolder<Fluid, TeleportationFluid.Source> TELEPORTATION =
 		FLUIDS.register("teleportation", () -> new TeleportationFluid.Source(teleportationProperties()));
 
-	public static final RegistryObject<TeleportationFluid.Flowing> TELEPORTATION_FLOWING =
+	public static final DeferredHolder<Fluid, TeleportationFluid.Flowing> TELEPORTATION_FLOWING =
 		FLUIDS.register("flowing_teleportation", () -> new TeleportationFluid.Flowing(teleportationProperties()));
 
-	public static final RegistryObject<TeleportationLiquidBlock> TELEPORTATION_BLOCK =
+	public static final DeferredHolder<Block, TeleportationLiquidBlock> TELEPORTATION_BLOCK =
 		FLUID_BLOCKS.register("teleportation",
-			() -> new TeleportationLiquidBlock(TELEPORTATION, Block.Properties.of()
+			() -> new TeleportationLiquidBlock(TELEPORTATION.get(), Block.Properties.of()
 				.mapColor(MapColor.COLOR_PURPLE)
 				.replaceable()
 				.noCollission()
@@ -142,13 +147,13 @@ public class CBFluids {
 				.liquid()
 				.sound(SoundType.EMPTY)));
 
-	public static final RegistryObject<BucketItem> TELEPORTATION_BUCKET =
+	public static final DeferredHolder<Item, BucketItem> TELEPORTATION_BUCKET =
 		FLUID_ITEMS.register("teleportation_bucket",
-			() -> new BucketItem(TELEPORTATION, new Item.Properties()
+			() -> new BucketItem(TELEPORTATION.get(), new Item.Properties()
 				.craftRemainder(Items.BUCKET)
 				.stacksTo(1)));
 
-	public static final RegistryObject<LiquidLivingSlimeFluidType> LIQUID_LIVING_SLIME_TYPE =
+	public static final DeferredHolder<FluidType, LiquidLivingSlimeFluidType> LIQUID_LIVING_SLIME_TYPE =
 		FLUID_TYPES.register("liquid_living_slime",
 			() -> new LiquidLivingSlimeFluidType(FluidType.Properties.create()
 				.motionScale(0.004D)
@@ -158,39 +163,40 @@ public class CBFluids {
 				.viscosity(5000)
 				.density(1400)));
 
-	public static final RegistryObject<ForgeFlowingFluid.Source> LIQUID_LIVING_SLIME =
+	public static final DeferredHolder<Fluid, BaseFlowingFluid.Source> LIQUID_LIVING_SLIME =
 		FLUIDS.register("liquid_living_slime",
-			() -> new ForgeFlowingFluid.Source(CBFluids.liquidLivingSlimeProperties()));
+			() -> new BaseFlowingFluid.Source(CBFluids.liquidLivingSlimeProperties()));
 
-	public static final RegistryObject<ForgeFlowingFluid.Flowing> LIQUID_LIVING_SLIME_FLOWING =
+	public static final DeferredHolder<Fluid, BaseFlowingFluid.Flowing> LIQUID_LIVING_SLIME_FLOWING =
 		FLUIDS.register("liquid_living_slime_flowing",
-			() -> new ForgeFlowingFluid.Flowing(CBFluids.liquidLivingSlimeProperties()));
+			() -> new BaseFlowingFluid.Flowing(CBFluids.liquidLivingSlimeProperties()));
 
-	public static final RegistryObject<LiquidBlock> LIQUID_LIVING_SLIME_BLOCK =
+	public static final DeferredHolder<Block, LiquidBlock> LIQUID_LIVING_SLIME_BLOCK =
 		FLUID_BLOCKS.register("liquid_living_slime",
-			() -> new LiquidBlock(LIQUID_LIVING_SLIME, Block.Properties.of()
+			() -> new LiquidBlock((net.minecraft.world.level.material.FlowingFluid) LIQUID_LIVING_SLIME.get(),
+				Block.Properties.of()
 				.noCollission()
 				.sound(SoundType.SLIME_BLOCK)
 				.strength(100f)
 				.noLootTable()
 				.liquid()));
 
-	public static final RegistryObject<BucketItem> LIQUID_LIVING_SLIME_BUCKET =
+	public static final DeferredHolder<Item, BucketItem> LIQUID_LIVING_SLIME_BUCKET =
 		FLUID_ITEMS.register("liquid_living_slime_bucket",
-			() -> new BucketItem(LIQUID_LIVING_SLIME, new Item.Properties()
+			() -> new BucketItem(LIQUID_LIVING_SLIME.get(), new Item.Properties()
 				.craftRemainder(Items.BUCKET)
 				.stacksTo(1)));
 
 	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
 	// here so the project's primary fluid registry remains the place to inspect mod fluids.
-	public static final FluidEntry<ForgeFlowingFluid.Flowing> CREAM = ModFluids.CREAM;
+	public static final FluidEntry<BaseFlowingFluid.Flowing> CREAM = ModFluids.CREAM;
 
-	private static ForgeFlowingFluid.Properties experienceProperties() {
-		return new ForgeFlowingFluid.Properties(EXPERIENCE_TYPE, EXPERIENCE, EXPERIENCE_FLOWING);
+	private static BaseFlowingFluid.Properties experienceProperties() {
+		return new BaseFlowingFluid.Properties(EXPERIENCE_TYPE, EXPERIENCE, EXPERIENCE_FLOWING);
 	}
 
-	private static ForgeFlowingFluid.Properties teleportationProperties() {
-		return new ForgeFlowingFluid.Properties(TELEPORTATION_TYPE, TELEPORTATION, TELEPORTATION_FLOWING)
+	private static BaseFlowingFluid.Properties teleportationProperties() {
+		return new BaseFlowingFluid.Properties(TELEPORTATION_TYPE, TELEPORTATION, TELEPORTATION_FLOWING)
 			.bucket(TELEPORTATION_BUCKET)
 			.block(TELEPORTATION_BLOCK)
 			.levelDecreasePerBlock(2)
@@ -199,8 +205,8 @@ public class CBFluids {
 			.explosionResistance(100f);
 	}
 
-	private static ForgeFlowingFluid.Properties liquidLivingSlimeProperties() {
-		return new ForgeFlowingFluid.Properties(
+	private static BaseFlowingFluid.Properties liquidLivingSlimeProperties() {
+		return new BaseFlowingFluid.Properties(
 			LIQUID_LIVING_SLIME_TYPE,
 			LIQUID_LIVING_SLIME,
 			LIQUID_LIVING_SLIME_FLOWING)

@@ -31,7 +31,7 @@ public abstract class GameRendererMixin {
 		if (entity == null || minecraft.level == null || minecraft.player == null)
 			return;
 
-		double reach = minecraft.player.getBlockReach();
+		double reach = minecraft.player.blockInteractionRange();
 		Vec3 start = entity.getEyePosition(partialTicks);
 		Vec3 direction = entity.getViewVector(1.0F);
 		Vec3 end = start.add(direction.scale(reach));

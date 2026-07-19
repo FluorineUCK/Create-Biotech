@@ -6,13 +6,13 @@ import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.material.FluidState;
-import net.minecraftforge.fluids.ForgeFlowingFluid;
+import net.neoforged.neoforge.fluids.BaseFlowingFluid;
 
 /**
  * A Forge fluid whose world-spreading behavior always matches vanilla lava in
  * a normal (non-ultra-warm) dimension.
  */
-public abstract class TeleportationFluid extends ForgeFlowingFluid {
+public abstract class TeleportationFluid extends BaseFlowingFluid {
 
 	protected TeleportationFluid(Properties properties) {
 		super(properties);

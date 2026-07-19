@@ -1,10 +1,8 @@
 package com.yision.allay.logistics.courier.hud;
 
 import com.yision.allay.client.gui.hud.AllayCourierHudOverlay;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.network.FriendlyByteBuf;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -48,8 +46,7 @@ public class AllayCourierHudPacket {
 		}
 	}
 
-	public void handle(Context context) {
-		context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-			() -> () -> AllayCourierHudOverlay.update(entries)));
+	public void handle(LocalPlayer player) {
+		AllayCourierHudOverlay.update(entries);
 	}
 }

@@ -13,7 +13,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
-import net.minecraftforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
 
 public class MagmaBeltCrusherInteractionHandler {
 
@@ -54,14 +54,14 @@ public class MagmaBeltCrusherInteractionHandler {
 			ItemStack toInsert = currentItem.stack.copy();
 
 			ItemStack remainder = ItemHandlerHelper.insertItemStacked(crusherBE.inventory, toInsert, false);
-			if (toInsert.equals(remainder, false))
+			if (ItemStack.matches(toInsert, remainder))
 				return true;
 
 			int notFilled = currentItem.stack.getCount() - toInsert.getCount();
 			if (!remainder.isEmpty()) {
 				remainder.grow(notFilled);
 			} else if (notFilled > 0)
-				remainder = ItemHandlerHelper.copyStackWithSize(currentItem.stack, notFilled);
+				remainder = currentItem.stack.copyWithCount(notFilled);
 
 			currentItem.stack = remainder;
 			beltInventory.belt.notifyUpdate();

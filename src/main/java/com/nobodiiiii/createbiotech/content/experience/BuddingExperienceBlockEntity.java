@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.experience;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -25,17 +27,14 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.Fluids;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.registries.DeferredHolder;
 
 public class BuddingExperienceBlockEntity extends BlockEntity implements IHaveGoggleInformation {
 
 	private final int[] faceFluidAmounts = new int[6];
-	private final LazyOptional<IFluidHandler> fluidHandlerCap = LazyOptional.of(() -> new ExperienceInputFluidHandler());
+	private final IFluidHandler fluidHandler = new ExperienceInputFluidHandler();
 
 	public BuddingExperienceBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.BUDDING_EXPERIENCE.get(), pos, state);
@@ -124,7 +123,7 @@ public class BuddingExperienceBlockEntity extends BlockEntity implements IHaveGo
 			return state.isAir() || state.getFluidState()
 				.getType() == Fluids.WATER;
 		}
-		RegistryObject<? extends Block> expected = blockForStage(currentStage);
+		DeferredHolder<Block, ? extends Block> expected = blockForStage(currentStage);
 		return expected != null && state.is(expected.get()) && state.hasProperty(ExperienceClusterBlock.FACING)
 			&& state.getValue(ExperienceClusterBlock.FACING) == face;
 	}
@@ -138,7 +137,7 @@ public class BuddingExperienceBlockEntity extends BlockEntity implements IHaveGo
 				return true;
 			return state.getValue(ExperienceClusterBlock.FACING) != face;
 		}
-		RegistryObject<? extends Block> expected = blockForStage(stage);
+		DeferredHolder<Block, ? extends Block> expected = blockForStage(stage);
 		if (expected == null)
 			return false;
 		return state.is(expected.get()) && state.hasProperty(ExperienceClusterBlock.FACING)
@@ -161,7 +160,7 @@ public class BuddingExperienceBlockEntity extends BlockEntity implements IHaveGo
 	}
 
 	private void placeStageBlock(ServerLevel serverLevel, Direction face, int stage) {
-		RegistryObject<? extends Block> blockRef = blockForStage(stage);
+		DeferredHolder<Block, ? extends Block> blockRef = blockForStage(stage);
 		if (blockRef == null)
 			return;
 		BlockPos adjacent = worldPosition.relative(face);
@@ -222,7 +221,7 @@ public class BuddingExperienceBlockEntity extends BlockEntity implements IHaveGo
 		};
 	}
 
-	private static RegistryObject<? extends Block> blockForStage(int stage) {
+	private static DeferredHolder<Block, ? extends Block> blockForStage(int stage) {
 		return switch (stage) {
 			case 1 -> CBBlocks.SMALL_EXPERIENCE_BUD;
 			case 2 -> CBBlocks.MEDIUM_EXPERIENCE_BUD;
@@ -269,22 +268,22 @@ public class BuddingExperienceBlockEntity extends BlockEntity implements IHaveGo
 	}
 
 	@Override
-	protected void saveAdditional(CompoundTag tag) {
-		super.saveAdditional(tag);
+	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.saveAdditional(tag, registries);
 		for (int i = 0; i < 6; i++)
 			tag.putInt("Face" + i, faceFluidAmounts[i]);
 	}
 
 	@Override
-	public void load(CompoundTag tag) {
-		super.load(tag);
+	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.loadAdditional(tag, registries);
 		for (int i = 0; i < 6; i++)
 			faceFluidAmounts[i] = tag.getInt("Face" + i);
 	}
 
 	@Override
-	public CompoundTag getUpdateTag() {
-		return saveWithoutMetadata();
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+		return saveWithoutMetadata(registries);
 	}
 
 	@Override
@@ -300,17 +299,8 @@ public class BuddingExperienceBlockEntity extends BlockEntity implements IHaveGo
 		level.sendBlockUpdated(worldPosition, state, state, 3);
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction side) {
-		if (cap == ForgeCapabilities.FLUID_HANDLER)
-			return fluidHandlerCap.cast();
-		return super.getCapability(cap, side);
-	}
-
-	@Override
-	public void invalidateCaps() {
-		super.invalidateCaps();
-		fluidHandlerCap.invalidate();
+	public IFluidHandler getFluidCapability(Direction side) {
+		return fluidHandler;
 	}
 
 	private class ExperienceInputFluidHandler implements IFluidHandler {

@@ -149,7 +149,8 @@ public class ExperienceClusterBlock extends Block implements ProperWaterloggedBl
 		ItemStack tool = builder.getOptionalParameter(LootContextParams.TOOL);
 		Entity entity = builder.getOptionalParameter(LootContextParams.THIS_ENTITY);
 		boolean silkTouch = tool != null
-			&& EnchantmentHelper.getItemEnchantmentLevel(Enchantments.SILK_TOUCH, tool) > 0;
+			&& EnchantmentHelper.getItemEnchantmentLevel(
+				builder.getLevel().registryAccess().holderOrThrow(Enchantments.SILK_TOUCH), tool) > 0;
 		if (silkTouch)
 			return super.getDrops(state, builder);
 		if (!(entity instanceof Player)) {
@@ -163,9 +164,10 @@ public class ExperienceClusterBlock extends Block implements ProperWaterloggedBl
 	}
 
 	@Override
-	public int getExpDrop(BlockState state, LevelReader level, RandomSource random, BlockPos pos, int fortuneLevel,
-		int silkTouchLevel) {
-		if (silkTouchLevel > 0)
+	public int getExpDrop(BlockState state, LevelAccessor level, BlockPos pos, BlockEntity blockEntity,
+		Entity breaker, ItemStack tool) {
+		if (EnchantmentHelper.getItemEnchantmentLevel(
+			level.registryAccess().holderOrThrow(Enchantments.SILK_TOUCH), tool) > 0)
 			return 0;
 		return getXpValue();
 	}

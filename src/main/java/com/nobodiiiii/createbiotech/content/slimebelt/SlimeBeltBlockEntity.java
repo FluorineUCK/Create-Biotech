@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.slimebelt;
 
+import net.minecraft.core.HolderLookup;
+
 import static com.simibubi.create.content.kinetics.belt.BeltPart.MIDDLE;
 import static com.simibubi.create.content.kinetics.belt.BeltSlope.HORIZONTAL;
 import static net.minecraft.core.Direction.AxisDirection.NEGATIVE;
@@ -53,9 +55,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost {
 
@@ -67,14 +67,14 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	public VersionedInventoryTrackerBehaviour invVersionTracker;
 	public CompoundTag trackerUpdateTag;
 
-	private final Map<Direction, LazyOptional<IItemHandler>> sidedHandlers;
-	private LazyOptional<IItemHandler> nullSideHandler;
+	private final Map<Direction, IItemHandler> sidedHandlers;
+	private IItemHandler nullSideHandler;
 
 	public SlimeBeltBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
 		controller = BlockPos.ZERO;
 		sidedHandlers = new EnumMap<>(Direction.class);
-		nullSideHandler = LazyOptional.empty();
+		nullSideHandler = null;
 	}
 
 	public SlimeBeltBlockEntity(BlockPos pos, BlockState state) {
@@ -144,13 +144,10 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		return isController() ? super.createRenderBoundingBox().inflate(beltLength + 1) : super.createRenderBoundingBox();
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction side) {
-		if (!isItemHandlerCap(cap))
-			return super.getCapability(cap, side);
+	public IItemHandler getItemCapability(Direction side) {
 		if (!SlimeBeltBlock.canTransportObjects(getBlockState()))
-			return super.getCapability(cap, side);
-		return getItemHandler(side).cast();
+			return null;
+		return getItemHandler(side);
 	}
 
 	@Override
@@ -167,7 +164,7 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	}
 
 	@Override
-	public void write(CompoundTag compound, boolean clientPacket) {
+	public void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
 		if (controller != null)
 			compound.put("Controller", NbtUtils.writeBlockPos(controller));
 		compound.putBoolean("IsController", isController());
@@ -175,28 +172,28 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		compound.putInt("Index", index);
 
 		if (isController())
-			compound.put("Inventory", getInventory().write());
+			compound.put("Inventory", getInventory().write(registries));
 
-		super.write(compound, clientPacket);
+		super.write(compound, registries, clientPacket);
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 
 		if (compound.getBoolean("IsController"))
 			controller = worldPosition;
 
 		if (!wasMoved) {
 			if (!isController())
-				controller = NbtUtils.readBlockPos(compound.getCompound("Controller"));
+				controller = NbtUtils.readBlockPos(compound, "Controller").orElse(worldPosition);
 			trackerUpdateTag = compound;
 			index = compound.getInt("Index");
 			beltLength = compound.getInt("Length");
 		}
 
 		if (isController())
-			getInventory().read(compound.getCompound("Inventory"));
+			getInventory().read(compound.getCompound("Inventory"), registries);
 	}
 
 	@Override
@@ -348,30 +345,27 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	}
 
 	public void invalidateItemHandlers() {
-		sidedHandlers.values()
-			.forEach(LazyOptional::invalidate);
 		sidedHandlers.clear();
-		nullSideHandler.invalidate();
-		nullSideHandler = LazyOptional.empty();
+		nullSideHandler = null;
 	}
 
-	private LazyOptional<IItemHandler> getItemHandler(Direction side) {
+	private IItemHandler getItemHandler(Direction side) {
 		// Don't construct (and cache) a handler before the controller's inventory is ready — otherwise
-		// the LazyOptional.of(supplier) below would resolve to a SlimeItemHandlerBeltSegment whose
+		// constructing a handler too early would create a SlimeItemHandlerBeltSegment whose
 		// beltInventory field is null, and subsequent getStackInSlot/insertItem/extractItem calls would NPE.
 		// This happens at world-load time when a neighbouring funnel ticks before the belt chain is wired up.
 		// Note: this preserves the per-side (FRONT/BACK track) routing — once the inventory is ready, the
 		// cached handler still holds a stable inventory ref, and `side` keeps directing each request to its track.
 		SlimeBeltInventory inv = getInventory();
 		if (inv == null)
-			return LazyOptional.empty();
+			return null;
 		if (side == null) {
-			if (!nullSideHandler.isPresent())
-				nullSideHandler = LazyOptional.of(() -> new SlimeItemHandlerBeltSegment(inv, index, Direction.UP));
+			if (nullSideHandler == null)
+				nullSideHandler = new SlimeItemHandlerBeltSegment(inv, index, Direction.UP);
 			return nullSideHandler;
 		}
 		return sidedHandlers.computeIfAbsent(side,
-			dir -> LazyOptional.of(() -> new SlimeItemHandlerBeltSegment(inv, index, dir)));
+			dir -> new SlimeItemHandlerBeltSegment(inv, index, dir));
 	}
 
 	private boolean canInsertFrom(Direction side) {

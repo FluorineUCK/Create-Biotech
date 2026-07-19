@@ -3,13 +3,10 @@ package com.nobodiiiii.createbiotech.content.shulkerteleporter;
 import java.util.ArrayList;
 import java.util.List;
 
-import java.util.function.Supplier;
-
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class ShulkerTeleporterConfigPacket {
 
@@ -46,16 +43,13 @@ public class ShulkerTeleporterConfigPacket {
 			buffer.writeUtf(candidateAddress, ShulkerTeleporterBlockEntity.MAX_ADDRESS_LENGTH);
 	}
 
-	public void handle(Context context) {
-		ServerPlayer player = context.getSender();
+	public void handle(ServerPlayer player) {
 		if (player == null)
 			return;
-		context.enqueueWork(() -> {
-			if (player.distanceToSqr(pos.getX() + 0.5d, pos.getY() + 1.0d, pos.getZ() + 0.5d) > 64.0d)
-				return;
-			BlockEntity blockEntity = player.level().getBlockEntity(pos);
-			if (blockEntity instanceof ShulkerTeleporterBlockEntity teleporter)
-				teleporter.setConfiguration(ownAddress, targetAddress, candidateAddresses);
-		});
+		if (player.distanceToSqr(pos.getX() + 0.5d, pos.getY() + 1.0d, pos.getZ() + 0.5d) > 64.0d)
+			return;
+		BlockEntity blockEntity = player.level().getBlockEntity(pos);
+		if (blockEntity instanceof ShulkerTeleporterBlockEntity teleporter)
+			teleporter.setConfiguration(ownAddress, targetAddress, candidateAddresses);
 	}
 }

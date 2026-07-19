@@ -1,0 +1,23 @@
+{
+  "type": "create:cutting",
+  "ingredients": [
+    {
+      "type": "neoforge:compound",
+      "ingredients": [
+        {
+          "item": "create:cardboard_block"
+        },
+        {
+          "item": "create:bound_cardboard_block"
+        }
+      ]
+    }
+  ],
+  "results": [
+    {
+      "count": 2,
+      "id": "create_biotech:cardboard_box"
+    }
+  ],
+  "processing_time": 50
+}

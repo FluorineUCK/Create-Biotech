@@ -1,0 +1,15 @@
+{
+  "type": "create:mixing",
+  "ingredients": [
+    {
+      "item": "create_biotech:carbon_powder"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:graphite"
+    }
+  ],
+  "processing_time": 200,
+  "heat_requirement": "superheated"
+}

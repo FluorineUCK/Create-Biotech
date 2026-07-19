@@ -29,7 +29,7 @@ public class ModBlocks {
             }))
             .onRegister(block -> BlockStressValues.RPM.register(block,
                     new BlockStressValues.GeneratedRpm(
-                            (int) Math.round(CBConfigs.SERVER.butterCat.maxGeneratedRpm.get()),
+                            (int) Math.round(CBConfigs.SERVER.butterCat.maxGeneratedRpm.getDefault()),
                             true)))
             .item()
             .model((c, p) -> p.blockItem(c, "/item"))
@@ -48,7 +48,7 @@ public class ModBlocks {
             }))
             .onRegister(block -> BlockStressValues.RPM.register(block,
                     new BlockStressValues.GeneratedRpm(
-                            (int) Math.round(CBConfigs.SERVER.butterCat.maxGeneratedRpm.get()),
+                            (int) Math.round(CBConfigs.SERVER.butterCat.maxGeneratedRpm.getDefault()),
                             true)))
             .item()
             .model((c, p) -> p.blockItem(c, "/item_with_bread"))

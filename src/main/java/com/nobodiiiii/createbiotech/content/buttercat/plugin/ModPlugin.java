@@ -13,7 +13,7 @@ import snownee.jade.api.WailaPlugin;
 @WailaPlugin
 public class ModPlugin implements IWailaPlugin {
     public static final String ID = ButterCatModule.MODID;
-    public static final ResourceLocation BUTTER_CAT_ENGINE = new ResourceLocation(ID, "butter_cat_engine");
+    public static final ResourceLocation BUTTER_CAT_ENGINE = ResourceLocation.fromNamespaceAndPath(ID, "butter_cat_engine");
 
     @Override
     public void register(IWailaCommonRegistration registration) {

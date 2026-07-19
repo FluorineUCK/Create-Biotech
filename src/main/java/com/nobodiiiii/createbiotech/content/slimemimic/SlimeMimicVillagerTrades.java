@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.slimemimic;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.world.entity.npc.AbstractVillager;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -31,13 +32,14 @@ public final class SlimeMimicVillagerTrades {
 		ListTag originalResults = data.contains(ORIGINAL_RESULTS_TAG, Tag.TAG_LIST)
 			? data.getList(ORIGINAL_RESULTS_TAG, Tag.TAG_COMPOUND)
 			: new ListTag();
-		syncOriginalResults(originalResults, offers);
+		HolderLookup.Provider registries = villager.level().registryAccess();
+		syncOriginalResults(originalResults, offers, registries);
 		data.put(ORIGINAL_RESULTS_TAG, originalResults);
 
-		if (hasOnlySlimeBallResults(offers, originalResults))
+		if (hasOnlySlimeBallResults(offers, originalResults, registries))
 			return;
 
-		setOffersField(villager, rewriteOffers(villager, offers, originalResults));
+		setOffersField(villager, rewriteOffers(villager, offers, originalResults, registries));
 	}
 
 	public static void restoreOriginalOffers(AbstractVillager villager) {
@@ -48,7 +50,8 @@ public final class SlimeMimicVillagerTrades {
 		ListTag originalResults = data.getList(ORIGINAL_RESULTS_TAG, Tag.TAG_COMPOUND);
 		MerchantOffers currentOffers = getOffersField(villager);
 		if (currentOffers != null && !currentOffers.isEmpty())
-			setOffersField(villager, restoreOffers(currentOffers, originalResults));
+			setOffersField(villager,
+				restoreOffers(currentOffers, originalResults, villager.level().registryAccess()));
 		data.remove(ORIGINAL_RESULTS_TAG);
 	}
 
@@ -56,25 +59,29 @@ public final class SlimeMimicVillagerTrades {
 		villager.getPersistentData().remove(ORIGINAL_RESULTS_TAG);
 	}
 
-	private static void syncOriginalResults(ListTag originalResults, MerchantOffers offers) {
+	private static void syncOriginalResults(ListTag originalResults, MerchantOffers offers,
+		HolderLookup.Provider registries) {
 		for (int i = originalResults.size(); i < offers.size(); i++)
-			originalResults.add(offers.get(i).getResult().save(new CompoundTag()));
+			originalResults.add(offers.get(i).getResult().save(registries, new CompoundTag()));
 	}
 
-	private static boolean hasOnlySlimeBallResults(MerchantOffers offers, ListTag originalResults) {
+	private static boolean hasOnlySlimeBallResults(MerchantOffers offers, ListTag originalResults,
+		HolderLookup.Provider registries) {
 		for (int i = 0; i < offers.size(); i++) {
 			MerchantOffer offer = offers.get(i);
-			if (isOriginalResult(offer.getResult(), originalResults, i) || !isSlimeBallResult(offer.getResult()))
+			if (isOriginalResult(offer.getResult(), originalResults, i, registries)
+				|| !isSlimeBallResult(offer.getResult()))
 				return false;
 		}
 		return true;
 	}
 
-	private static MerchantOffers rewriteOffers(AbstractVillager villager, MerchantOffers currentOffers, ListTag originalResults) {
+	private static MerchantOffers rewriteOffers(AbstractVillager villager, MerchantOffers currentOffers,
+		ListTag originalResults, HolderLookup.Provider registries) {
 		MerchantOffers rewrittenOffers = new MerchantOffers();
 		for (int i = 0; i < currentOffers.size(); i++) {
 			MerchantOffer offer = currentOffers.get(i);
-			ItemStack result = isOriginalResult(offer.getResult(), originalResults, i)
+			ItemStack result = isOriginalResult(offer.getResult(), originalResults, i, registries)
 				? new ItemStack(Items.SLIME_BALL, getRandomSlimeBallTradeCount(villager))
 				: offer.getResult().copy();
 			rewrittenOffers.add(copyOfferWithResult(offer, result));
@@ -82,26 +89,31 @@ public final class SlimeMimicVillagerTrades {
 		return rewrittenOffers;
 	}
 
-	private static MerchantOffers restoreOffers(MerchantOffers currentOffers, ListTag originalResults) {
+	private static MerchantOffers restoreOffers(MerchantOffers currentOffers, ListTag originalResults,
+		HolderLookup.Provider registries) {
 		MerchantOffers restoredOffers = new MerchantOffers();
 		for (int i = 0; i < currentOffers.size(); i++) {
 			ItemStack result =
-				i < originalResults.size() ? ItemStack.of(originalResults.getCompound(i)) : currentOffers.get(i).getResult().copy();
+				i < originalResults.size() ? ItemStack.parseOptional(registries, originalResults.getCompound(i))
+					: currentOffers.get(i).getResult().copy();
 			restoredOffers.add(copyOfferWithResult(currentOffers.get(i), result));
 		}
 		return restoredOffers;
 	}
 
 	private static MerchantOffer copyOfferWithResult(MerchantOffer sourceOffer, ItemStack result) {
-		CompoundTag offerTag = sourceOffer.createTag();
-		offerTag.put(SELL_TAG, result.save(new CompoundTag()));
-		return new MerchantOffer(offerTag);
+		MerchantOffer copy = new MerchantOffer(sourceOffer.getItemCostA(), sourceOffer.getItemCostB(), result,
+			sourceOffer.getUses(), sourceOffer.getMaxUses(), sourceOffer.getXp(),
+			sourceOffer.getPriceMultiplier(), sourceOffer.getDemand());
+		copy.setSpecialPriceDiff(sourceOffer.getSpecialPriceDiff());
+		return copy;
 	}
 
-	private static boolean isOriginalResult(ItemStack result, ListTag originalResults, int index) {
+	private static boolean isOriginalResult(ItemStack result, ListTag originalResults, int index,
+		HolderLookup.Provider registries) {
 		if (index >= originalResults.size())
 			return false;
-		return result.save(new CompoundTag()).equals(originalResults.getCompound(index));
+		return result.save(registries, new CompoundTag()).equals(originalResults.getCompound(index));
 	}
 
 	private static boolean isSlimeBallResult(ItemStack result) {

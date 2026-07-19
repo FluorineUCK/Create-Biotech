@@ -1,0 +1,24 @@
+{
+  "type": "create:mixing",
+  "ingredients": [
+    {
+      "item": "create:crushed_raw_gold"
+    },
+    {
+      "item": "create:crushed_raw_gold"
+    },
+    {
+      "item": "minecraft:stone"
+    },
+    {
+      "item": "minecraft:stone"
+    }
+  ],
+  "results": [
+    {
+      "count": 2,
+      "id": "create:ochrum"
+    }
+  ],
+  "heat_requirement": "superheated"
+}

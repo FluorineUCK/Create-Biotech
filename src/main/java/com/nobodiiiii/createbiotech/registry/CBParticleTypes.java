@@ -1,21 +1,24 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import net.minecraft.core.registries.Registries;
+
 import com.nobodiiiii.createbiotech.CreateBiotech;
 
 import net.minecraft.core.particles.SimpleParticleType;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegistryObject;
+import net.minecraft.core.particles.ParticleType;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+import net.neoforged.neoforge.registries.DeferredHolder;
 
 public class CBParticleTypes {
 
 	public static final DeferredRegister<net.minecraft.core.particles.ParticleType<?>> PARTICLE_TYPES =
-		DeferredRegister.create(ForgeRegistries.PARTICLE_TYPES, CreateBiotech.MOD_ID);
+		DeferredRegister.create(Registries.PARTICLE_TYPE, CreateBiotech.MOD_ID);
 
-	public static final RegistryObject<SimpleParticleType> STRAIGHT_ENCHANT =
+	public static final DeferredHolder<ParticleType<?>, SimpleParticleType> STRAIGHT_ENCHANT =
 		PARTICLE_TYPES.register("straight_enchant", () -> new SimpleParticleType(false));
-	public static final RegistryObject<SimpleParticleType> ALLAY_COURIER_NOTE =
+	public static final DeferredHolder<ParticleType<?>, SimpleParticleType> ALLAY_COURIER_NOTE =
 		PARTICLE_TYPES.register("allay_courier_note", () -> new SimpleParticleType(false));
 
 	private CBParticleTypes() {

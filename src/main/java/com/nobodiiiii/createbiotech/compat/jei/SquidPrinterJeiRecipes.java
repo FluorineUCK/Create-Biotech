@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.compat.jei;
 
+import net.minecraft.core.registries.Registries;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -11,13 +13,13 @@ import com.nobodiiiii.createbiotech.registry.CBRecipeTypes;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
+import net.minecraft.core.Holder;
+import net.minecraft.core.Registry;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.world.item.EnchantedBookItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantment;
-import net.minecraft.world.item.enchantment.EnchantmentInstance;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.minecraft.world.item.crafting.RecipeHolder;
 
 public final class SquidPrinterJeiRecipes {
 
@@ -28,16 +30,17 @@ public final class SquidPrinterJeiRecipes {
 	}
 
 	public static List<SquidPrinterJeiRecipe> create() {
-		List<SquidPrinterRecipe> recipes = getRecipes();
+		List<RecipeHolder<SquidPrinterRecipe>> recipes = getRecipes();
 		if (recipes.isEmpty())
 			return List.of();
 
 		List<EnchantmentEntry> entries = createEnchantmentEntries();
 		List<SquidPrinterJeiRecipe> displays = new ArrayList<>(recipes.size() * entries.size());
-		for (SquidPrinterRecipe recipe : recipes) {
+		for (RecipeHolder<SquidPrinterRecipe> holder : recipes) {
+			SquidPrinterRecipe recipe = holder.value();
 			for (EnchantmentEntry entry : entries) {
-				ResourceLocation id = new ResourceLocation(recipe.getId().getNamespace(),
-					recipe.getId().getPath() + "/" + entry.idSegment());
+				ResourceLocation id = ResourceLocation.fromNamespaceAndPath(holder.id().getNamespace(),
+					holder.id().getPath() + "/" + entry.idSegment());
 				displays.add(new SquidPrinterJeiRecipe(id, new ItemStack(Items.BOOK), recipe.getRequiredFluid(),
 					entry.templateBooks(), entry.outputCopies()));
 			}
@@ -57,7 +60,7 @@ public final class SquidPrinterJeiRecipes {
 				.startsWith(SPOUT_FILLING_PREFIX);
 	}
 
-	private static List<SquidPrinterRecipe> getRecipes() {
+	private static List<RecipeHolder<SquidPrinterRecipe>> getRecipes() {
 		ClientPacketListener connection = Minecraft.getInstance()
 			.getConnection();
 		if (connection == null)
@@ -68,18 +71,23 @@ public final class SquidPrinterJeiRecipes {
 
 	private static List<EnchantmentEntry> createEnchantmentEntries() {
 		List<EnchantmentEntry> entries = new ArrayList<>();
-		for (ResourceLocation enchantmentId : ForgeRegistries.ENCHANTMENTS.getKeys()
-			.stream()
-			.sorted()
+		if (Minecraft.getInstance().level == null)
+			return entries;
+		Registry<Enchantment> enchantments = Minecraft.getInstance().level.registryAccess()
+			.registryOrThrow(Registries.ENCHANTMENT);
+		for (Holder.Reference<Enchantment> enchantmentHolder : enchantments.holders()
+			.sorted((left, right) -> left.getKey().location().compareTo(right.getKey().location()))
 			.toList()) {
-			Enchantment enchantment = ForgeRegistries.ENCHANTMENTS.getValue(enchantmentId);
-			if (enchantment == null)
-				continue;
+			ResourceLocation enchantmentId = enchantmentHolder.getKey().location();
+			Enchantment enchantment = enchantmentHolder.value();
 			int maxLevel = Math.max(1, enchantment.getMaxLevel());
 			List<ItemStack> templates = new ArrayList<>(maxLevel);
 			for (int level = 1; level <= maxLevel; level++) {
 				ItemStack template = new ItemStack(Items.ENCHANTED_BOOK);
-				EnchantedBookItem.addEnchantment(template, new EnchantmentInstance(enchantment, level));
+				var mutable = new net.minecraft.world.item.enchantment.ItemEnchantments.Mutable(
+					net.minecraft.world.item.enchantment.ItemEnchantments.EMPTY);
+				mutable.set(enchantmentHolder, level);
+				template.set(net.minecraft.core.component.DataComponents.STORED_ENCHANTMENTS, mutable.toImmutable());
 				templates.add(template);
 			}
 			List<ItemStack> outputs = templates.stream()

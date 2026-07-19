@@ -23,7 +23,7 @@ import net.minecraft.world.level.block.state.BlockState;
 public abstract class MagmaBeltFunnelBlockMixin {
 
 	@Inject(method = "getShapeForPosition(Lnet/minecraft/world/level/BlockGetter;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/Direction;Z)Lcom/simibubi/create/content/logistics/funnel/BeltFunnelBlock$Shape;",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 		private static void createBiotech$magmaGetShapeForPosition(BlockGetter world, BlockPos pos, Direction facing,
 		boolean extracting, CallbackInfoReturnable<Shape> cir) {
 		BlockState stateBelow = world.getBlockState(pos.below());
@@ -39,7 +39,7 @@ public abstract class MagmaBeltFunnelBlockMixin {
 	}
 
 	@Inject(method = "onWrenched(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult;",
-		at = @At("HEAD"), cancellable = true, remap = false)
+		at = @At("HEAD"), cancellable = true)
 	private void createBiotech$magmaOnWrenched(BlockState state, UseOnContext context,
 		CallbackInfoReturnable<InteractionResult> cir) {
 		Level world = context.getLevel();

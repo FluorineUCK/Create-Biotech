@@ -1,0 +1,88 @@
+{
+  "type": "create:sequenced_assembly",
+  "ingredient": {
+    "item": "create_biotech:butter"
+  },
+  "loops": 3,
+  "results": [
+    {
+      "id": "create_biotech:super_butter"
+    }
+  ],
+  "sequence": [
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_super_butter"
+        },
+        {
+          "type": "neoforge:compound",
+          "ingredients": [
+            {
+              "item": "minecraft:chorus_fruit"
+            },
+            {
+              "item": "minecraft:popped_chorus_fruit"
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_super_butter"
+        }
+      ]
+    },
+    {
+      "type": "create:deploying",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_super_butter"
+        },
+        {
+          "item": "minecraft:nether_star"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_super_butter"
+        }
+      ]
+    },
+    {
+      "type": "create:filling",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_super_butter"
+        },
+        {
+          "amount": 250,
+          "fluid": "create:honey",
+          "type": "neoforge:single"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_super_butter"
+        }
+      ]
+    },
+    {
+      "type": "create:pressing",
+      "ingredients": [
+        {
+          "item": "create_biotech:incomplete_super_butter"
+        }
+      ],
+      "results": [
+        {
+          "id": "create_biotech:incomplete_super_butter"
+        }
+      ]
+    }
+  ],
+  "transitional_item": {
+    "id": "create_biotech:incomplete_super_butter"
+  }
+}

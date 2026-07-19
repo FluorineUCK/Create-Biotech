@@ -7,6 +7,7 @@ import java.util.List;
 import com.google.common.collect.ImmutableList;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.DefaultVertexFormat;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexFormat;
@@ -30,16 +31,16 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.inventory.InventoryMenu;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.client.extensions.common.IClientFluidTypeExtensions;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.templates.FluidTank;
+import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
 
 import org.joml.Matrix4f;
 
 public class SpiderAssemblyTableScreen extends AbstractSimiContainerScreen<SpiderAssemblyTableMenu> {
 
 	private static final ResourceLocation BACKGROUND =
-		new ResourceLocation(CreateBiotech.MOD_ID, "textures/gui/spider_assembly_table.png");
+		ResourceLocation.fromNamespaceAndPath(CreateBiotech.MOD_ID, "textures/gui/spider_assembly_table.png");
 	private static final int BG_WIDTH = 216;
 	private static final int BG_HEIGHT = 113;
 	private static final int BOTTOM_BUTTON_Y = BG_HEIGHT - 24;
@@ -217,14 +218,13 @@ public class SpiderAssemblyTableScreen extends AbstractSimiContainerScreen<Spide
 		float vMinAdjusted = vMin + (maskTop / 16f) * (vMax - vMin);
 
 		Tesselator tessellator = Tesselator.getInstance();
-		BufferBuilder buffer = tessellator.getBuilder();
-		buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+		BufferBuilder buffer = tessellator.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
 		float zLevel = 100f;
-		buffer.vertex(matrix, x, y + 16, zLevel).uv(uMin, vMax).endVertex();
-		buffer.vertex(matrix, x + 16, y + 16, zLevel).uv(uMax, vMax).endVertex();
-		buffer.vertex(matrix, x + 16, y + maskTop, zLevel).uv(uMax, vMinAdjusted).endVertex();
-		buffer.vertex(matrix, x, y + maskTop, zLevel).uv(uMin, vMinAdjusted).endVertex();
-		tessellator.end();
+		buffer.addVertex(matrix, x, y + 16, zLevel).setUv(uMin, vMax);
+		buffer.addVertex(matrix, x + 16, y + 16, zLevel).setUv(uMax, vMax);
+		buffer.addVertex(matrix, x + 16, y + maskTop, zLevel).setUv(uMax, vMinAdjusted);
+		buffer.addVertex(matrix, x, y + maskTop, zLevel).setUv(uMin, vMinAdjusted);
+		BufferUploader.drawWithShader(buffer.buildOrThrow());
 
 		RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
 	}

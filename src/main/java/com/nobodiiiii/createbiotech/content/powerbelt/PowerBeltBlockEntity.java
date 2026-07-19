@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.powerbelt;
 
+import net.minecraft.core.HolderLookup;
+
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -22,7 +24,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 
-import net.minecraftforge.client.model.data.ModelData;
+import net.neoforged.neoforge.client.model.data.ModelData;
 
 public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 
@@ -290,7 +292,7 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 	}
 
 	@Override
-	public void write(CompoundTag compound, boolean clientPacket) {
+	public void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
 		if (controller != null)
 			compound.put("Controller", NbtUtils.writeBlockPos(controller));
 		compound.putBoolean("IsController", isController());
@@ -302,19 +304,19 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 			compound.putFloat("GeneratedSpeed", generatedSpeed);
 			compound.putFloat("GeneratedCapacity", generatedCapacity);
 		}
-		super.write(compound, clientPacket);
+		super.write(compound, registries, clientPacket);
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 
 		if (compound.getBoolean("IsController"))
 			controller = worldPosition;
 
 		if (!wasMoved) {
 			if (!isController() && compound.contains("Controller"))
-				controller = NbtUtils.readBlockPos(compound.getCompound("Controller"));
+				controller = NbtUtils.readBlockPos(compound, "Controller").orElse(worldPosition);
 			index = compound.getInt("Index");
 			beltLength = compound.getInt("Length");
 		}

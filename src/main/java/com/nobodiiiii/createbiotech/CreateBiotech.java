@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech;
 
+import net.minecraft.core.registries.Registries;
+
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodGoalHandler;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerArmInteractions;
 import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
@@ -12,12 +14,15 @@ import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmMovement
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.registry.CBCapabilities;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBContraptionTypes;
 import com.nobodiiiii.createbiotech.registry.CBCreativeModeTabs;
+import com.nobodiiiii.createbiotech.registry.CBDataComponents;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBFluids;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.nobodiiiii.createbiotech.registry.CBIngredients;
 import com.nobodiiiii.createbiotech.registry.CBMenuTypes;
 import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
 import com.nobodiiiii.createbiotech.registry.CBPoiTypes;
@@ -30,27 +35,29 @@ import com.yision.allay.logistics.courier.AllayCourierTaskManager;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.DyeColor;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.event.lifecycle.FMLCommonSetupEvent;
-import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
-import net.minecraftforge.registries.RegisterEvent;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.Mod;
+import net.neoforged.fml.event.lifecycle.FMLCommonSetupEvent;
+import net.neoforged.neoforge.registries.RegisterEvent;
 
 @Mod(CreateBiotech.MOD_ID)
 public class CreateBiotech {
 	public static final String MOD_ID = "create_biotech";
 
-	public CreateBiotech() {
-		IEventBus modEventBus = FMLJavaModLoadingContext.get().getModEventBus();
-		CBConfigs.register();
+	public CreateBiotech(IEventBus modEventBus, ModContainer modContainer) {
+		CBConfigs.register(modContainer);
 		CBBlocks.register(modEventBus);
+		CBDataComponents.register(modEventBus);
 		CBItems.register(modEventBus);
+		CBIngredients.register(modEventBus);
 		CBFluids.register(modEventBus);
 		CBPoiTypes.register(modEventBus);
 		CBCreativeModeTabs.register(modEventBus);
 		CBBlockEntityTypes.register(modEventBus);
+		modEventBus.addListener(CBCapabilities::register);
 		CBEntityTypes.register(modEventBus);
 		CBMenuTypes.register(modEventBus);
 		CBParticleTypes.register(modEventBus);
@@ -64,9 +71,9 @@ public class CreateBiotech {
 	}
 
 	private static void registerAllayEvents() {
-		MinecraftForge.EVENT_BUS.addListener(AllayCourierTaskManager::onServerTick);
-		MinecraftForge.EVENT_BUS.addListener(AllayPortTargetRegistry::onServerTick);
-		MinecraftForge.EVENT_BUS.addListener((ServerStartingEvent event) ->
+		NeoForge.EVENT_BUS.addListener(AllayCourierTaskManager::onServerTick);
+		NeoForge.EVENT_BUS.addListener(AllayPortTargetRegistry::onServerTick);
+		NeoForge.EVENT_BUS.addListener((ServerStartingEvent event) ->
 			AllayCourierTaskManager.onServerStarting(event.getServer()));
 	}
 
@@ -91,6 +98,6 @@ public class CreateBiotech {
 	}
 
 	public static ResourceLocation asResource(String path) {
-		return new ResourceLocation(MOD_ID, path);
+		return ResourceLocation.fromNamespaceAndPath(MOD_ID, path);
 	}
 }

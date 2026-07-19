@@ -1,5 +1,11 @@
 package com.nobodiiiii.createbiotech.content.creeperblastchamber;
 
+import net.minecraft.core.HolderLookup;
+
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,6 +28,7 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlock;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlockEntity;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.nobodiiiii.createbiotech.mixin.MobAccessor;
 import com.nobodiiiii.createbiotech.mixin.client.CreeperAccessor;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -37,6 +44,7 @@ import com.simibubi.create.content.kinetics.chainDrive.ChainDriveBlock;
 import com.simibubi.create.content.kinetics.press.MechanicalPressBlockEntity;
 import com.simibubi.create.content.kinetics.press.PressingBehaviour;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
+import com.simibubi.create.content.processing.recipe.StandardProcessingRecipe;
 import com.simibubi.create.foundation.blockEntity.SyncedBlockEntity;
 import com.simibubi.create.foundation.item.ItemHelper;
 import com.simibubi.create.foundation.utility.CreateLang;
@@ -66,6 +74,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -74,16 +83,12 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.ItemHandlerHelper;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.items.wrapper.RecipeWrapper;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.wrapper.RecipeWrapper;
+import net.neoforged.api.distmarker.Dist;
+
 
 public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements IHaveGoggleInformation {
 
@@ -116,8 +121,10 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private static final double CLIENT_RETURN_EXTRA_EXPLOSION_RADIUS = 1d;
 	private static final double CLIENT_RETURN_EXPLOSION_SIZE_PARAM_MIN = 0.15d;
 	private static final double CLIENT_RETURN_EXPLOSION_SIZE_PARAM_MAX = 0.95d;
-	private static final RecipeWrapper CRUSHING_RECIPE_WRAPPER = new RecipeWrapper(new ItemStackHandler(1));
-	private static final RecipeWrapper HIGH_PRESSURE_RECIPE_WRAPPER = new RecipeWrapper(new ItemStackHandler(1));
+	private static final ItemStackHandler CRUSHING_RECIPE_INVENTORY = new ItemStackHandler(1);
+	private static final RecipeWrapper CRUSHING_RECIPE_WRAPPER = new RecipeWrapper(CRUSHING_RECIPE_INVENTORY);
+	private static final ItemStackHandler HIGH_PRESSURE_RECIPE_INVENTORY = new ItemStackHandler(1);
+	private static final RecipeWrapper HIGH_PRESSURE_RECIPE_WRAPPER = new RecipeWrapper(HIGH_PRESSURE_RECIPE_INVENTORY);
 	private static final Map<UUID, ClientTrackedCreeper> CLIENT_TRACKED_CREEPERS = new HashMap<>();
 	private static final Map<Long, BlockPos> CLIENT_PRESS_CONTROLLERS = new HashMap<>();
 
@@ -148,7 +155,6 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private final Set<UUID> clientTrackedCreeperUuids = new HashSet<>();
 	private final Set<Long> clientTrackedPressPositions = new HashSet<>();
 	private final ChamberInputHandler inputHandler = new ChamberInputHandler();
-	private final LazyOptional<IItemHandler> itemCapability = LazyOptional.of(() -> inputHandler);
 
 	public CreeperBlastChamberBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.CREEPER_BLAST_CHAMBER.get(), pos, state);
@@ -191,27 +197,15 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		be.tryDetectStructure();
 	}
 
-	@Override
 	public AABB getRenderBoundingBox() {
 		if (structureValid && structureOrigin != null)
-			return new AABB(structureOrigin, structureOrigin.offset(structureSize, 4, structureSize)).inflate(1);
+			return AABB.encapsulatingFullBlocks(structureOrigin,
+				structureOrigin.offset(structureSize - 1, 3, structureSize - 1)).inflate(1);
 		return new AABB(worldPosition).inflate(1);
 	}
 
-	@Nonnull
-	@Override
-	public <T> LazyOptional<T> getCapability(@Nonnull Capability<T> cap, @Nullable Direction side) {
-		if (cap == ForgeCapabilities.ITEM_HANDLER)
-			return itemCapability.cast();
-		return super.getCapability(cap, side);
-	}
-
-	@Override
-	public void invalidateCaps() {
-		clearClientTrackedCreepers();
-		clearClientTrackedPresses();
-		super.invalidateCaps();
-		itemCapability.invalidate();
+	public IItemHandler getItemCapability(@Nullable Direction side) {
+		return inputHandler;
 	}
 
 	@Override
@@ -769,17 +763,17 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	}
 
 	@Override
-	protected void saveAdditional(CompoundTag tag) {
-		super.saveAdditional(tag);
+	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.saveAdditional(tag, registries);
 		tag.putBoolean("StructureValid", structureValid);
 		tag.putInt("StructureSize", structureSize);
 		ListTag pendingList = new ListTag();
 		for (PendingUnpack pending : pendingUnpacks)
-			pendingList.add(pending.write());
+			pendingList.add(pending.write(registries));
 		tag.put(PENDING_UNPACKS_TAG, pendingList);
 		ListTag pendingPackagingList = new ListTag();
 		for (PendingPackaging pending : pendingPackagings)
-			pendingPackagingList.add(pending.write());
+			pendingPackagingList.add(pending.write(registries));
 		tag.put(PENDING_PACKAGINGS_TAG, pendingPackagingList);
 		ListTag pendingAppearanceList = new ListTag();
 		for (PendingAppearance pending : pendingAppearances)
@@ -787,7 +781,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		tag.put(PENDING_APPEARANCES_TAG, pendingAppearanceList);
 		ListTag readyOutputList = new ListTag();
 		for (ReadyOutput readyOutput : readyOutputs)
-			readyOutputList.add(readyOutput.write());
+			readyOutputList.add(readyOutput.write(registries));
 		tag.put(READY_OUTPUTS_TAG, readyOutputList);
 		ListTag markedCreeperList = new ListTag();
 		for (Map.Entry<UUID, BlockPos> entry : syncedMarkedCreepers.entrySet())
@@ -814,23 +808,23 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	}
 
 	@Override
-	public void load(CompoundTag tag) {
-		super.load(tag);
+	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.loadAdditional(tag, registries);
 		structureValid = tag.getBoolean("StructureValid");
 		structureSize = tag.getInt("StructureSize");
 		pausedByUnloadedChunks = false;
 		pendingUnpacks.clear();
 		for (Tag pendingTag : tag.getList(PENDING_UNPACKS_TAG, Tag.TAG_COMPOUND))
-			pendingUnpacks.add(PendingUnpack.read((CompoundTag) pendingTag));
+			pendingUnpacks.add(PendingUnpack.read((CompoundTag) pendingTag, registries));
 		pendingPackagings.clear();
 		for (Tag pendingTag : tag.getList(PENDING_PACKAGINGS_TAG, Tag.TAG_COMPOUND))
-			pendingPackagings.add(PendingPackaging.read((CompoundTag) pendingTag));
+			pendingPackagings.add(PendingPackaging.read((CompoundTag) pendingTag, registries));
 		pendingAppearances.clear();
 		for (Tag pendingTag : tag.getList(PENDING_APPEARANCES_TAG, Tag.TAG_COMPOUND))
 			pendingAppearances.add(PendingAppearance.read((CompoundTag) pendingTag));
 		readyOutputs.clear();
 		for (Tag readyOutputTag : tag.getList(READY_OUTPUTS_TAG, Tag.TAG_COMPOUND))
-			readyOutputs.add(ReadyOutput.read((CompoundTag) readyOutputTag));
+			readyOutputs.add(ReadyOutput.read((CompoundTag) readyOutputTag, registries));
 		syncedMarkedCreepers.clear();
 		for (Tag markedCreeperTag : tag.getList(MARKED_CREEPERS_TAG, Tag.TAG_COMPOUND)) {
 			TrackedMarkedCreeper tracked = TrackedMarkedCreeper.read((CompoundTag) markedCreeperTag);
@@ -1130,7 +1124,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 
 	private ProcessingAttemptResult processVaultStack(IItemHandler inputHandler, IItemHandler outputHandler, int slot,
 		ItemStack stackToProcess) {
-		Optional<ProcessingRecipe<RecipeWrapper>> recipe = findCrushingRecipe(stackToProcess);
+		Optional<ProcessingRecipe<RecipeWrapper, ?>> recipe = findCrushingRecipe(stackToProcess);
 		if (recipe.isEmpty()) {
 			inputHandler.extractItem(slot, stackToProcess.getCount(), false);
 			return ProcessingAttemptResult.PROCESSED;
@@ -1170,22 +1164,23 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		return ProcessingAttemptResult.PROCESSED;
 	}
 
-	private Optional<ProcessingRecipe<RecipeWrapper>> findCrushingRecipe(ItemStack stack) {
+	private Optional<ProcessingRecipe<RecipeWrapper, ?>> findCrushingRecipe(ItemStack stack) {
 		Level level = getLevel();
 		if (level == null || stack.isEmpty())
 			return Optional.empty();
 
-		CRUSHING_RECIPE_WRAPPER.setItem(0, stack);
-		Optional<ProcessingRecipe<RecipeWrapper>> recipe = AllRecipeTypes.CRUSHING.find(CRUSHING_RECIPE_WRAPPER, level);
+		CRUSHING_RECIPE_INVENTORY.setStackInSlot(0, stack);
+		Optional<RecipeHolder<StandardProcessingRecipe<RecipeWrapper>>> recipe =
+			AllRecipeTypes.CRUSHING.find(CRUSHING_RECIPE_WRAPPER, level);
 		if (recipe.isEmpty())
 			recipe = AllRecipeTypes.MILLING.find(CRUSHING_RECIPE_WRAPPER, level);
-		return recipe;
+		return recipe.<ProcessingRecipe<RecipeWrapper, ?>>map(RecipeHolder::value);
 	}
 
-	private List<ItemStack> rollProcessingResults(ItemStack input, ProcessingRecipe<RecipeWrapper> recipe) {
+	private List<ItemStack> rollProcessingResults(ItemStack input, ProcessingRecipe<RecipeWrapper, ?> recipe) {
 		List<ItemStack> outputs = new ArrayList<>();
 		for (int roll = 0; roll < input.getCount(); roll++) {
-			for (ItemStack rolledResult : recipe.rollResults())
+			for (ItemStack rolledResult : recipe.rollResults(level.random))
 				ItemHelper.addToList(rolledResult, outputs);
 		}
 		if (input.hasCraftingRemainingItem())
@@ -1198,10 +1193,11 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		if (level == null || stack.isEmpty())
 			return Optional.empty();
 
-		HIGH_PRESSURE_RECIPE_WRAPPER.setItem(0, stack);
+		HIGH_PRESSURE_RECIPE_INVENTORY.setStackInSlot(0, stack);
 		return level.getRecipeManager()
 			.getRecipeFor(CBRecipeTypes.CREEPER_BLAST_CHAMBER_HIGH_PRESSURE_TYPE.get(), HIGH_PRESSURE_RECIPE_WRAPPER,
-				level);
+				level)
+			.map(RecipeHolder::value);
 	}
 
 	private boolean canFullyInsertAll(IItemHandler outputHandler, List<ItemStack> outputs) {
@@ -1226,7 +1222,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 					continue;
 				}
 
-				if (!ItemHandlerHelper.canItemStacksStack(simulatedStack, remainder))
+				if (!ItemStack.isSameItemSameComponents(simulatedStack, remainder))
 					continue;
 
 				int space = Math.min(slotLimit, simulatedStack.getMaxStackSize()) - simulatedStack.getCount();
@@ -1260,8 +1256,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		BlockEntity blockEntity = level.getBlockEntity(controllerPos);
 		if (!(blockEntity instanceof ExplosionProofItemVaultBlockEntity vault))
 			return null;
-		return vault.getCapability(ForgeCapabilities.ITEM_HANDLER, null)
-			.orElse(null);
+		return vault.getItemCapability(null);
 	}
 
 	@Nullable
@@ -1732,9 +1727,8 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		double centerY = structureOrigin.getY() + CLIENT_RETURN_EFFECT_Y_OFFSET;
 		double centerZ = structureOrigin.getZ() + structureSize / 2d;
 		double firstOffset = -((innerSize - 1) / 2d);
-		DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-			() -> () -> CreeperBlastChamberClientSoundHandler.stopManagedPrimedSound());
-		level.playLocalSound(centerX, centerY, centerZ, SoundEvents.GENERIC_EXPLODE, SoundSource.BLOCKS, 0.45f, 1.15f,
+		CreeperBlastChamberClientSoundHandler.stopManagedPrimedSound();
+		level.playLocalSound(centerX, centerY, centerZ, SoundEvents.GENERIC_EXPLODE.value(), SoundSource.BLOCKS, 0.45f, 1.15f,
 			false);
 
 		for (int xIndex = 0; xIndex < innerSize; xIndex++) {
@@ -1981,13 +1975,13 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 				return getCreeperKind(creeper);
 		}
 
-		CompoundTag boxTag = stack.getTag();
+		CompoundTag boxTag = CBItemData.get(stack);
 		if (boxTag == null || !boxTag.contains("CapturedEntity", Tag.TAG_COMPOUND))
 			return ChamberCreeperKind.NONE;
 
 		CompoundTag entityData = boxTag.getCompound("CapturedEntity");
 		ResourceLocation entityId = ResourceLocation.tryParse(entityData.getString("id"));
-		if (entityId == null || !entityId.equals(ForgeRegistries.ENTITY_TYPES.getKey(EntityType.CREEPER)))
+		if (entityId == null || !entityId.equals(BuiltInRegistries.ENTITY_TYPE.getKey(EntityType.CREEPER)))
 			return ChamberCreeperKind.NONE;
 		return entityData.getBoolean("powered") ? ChamberCreeperKind.CHARGED : ChamberCreeperKind.NORMAL;
 	}
@@ -2109,19 +2103,19 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		if (!CapturedEntityBoxHelper.captureEntity(box, creeper))
 			return null;
 
-		CompoundTag boxTag = box.getTag();
-		if (boxTag == null || !boxTag.contains("CapturedEntity", Tag.TAG_COMPOUND))
-			return box;
-
-		CompoundTag entityData = boxTag.getCompound("CapturedEntity");
-		entityData.remove("NoAI");
-		entityData.remove("PersistenceRequired");
-		if (entityData.contains("ForgeData", Tag.TAG_COMPOUND)) {
-			CompoundTag forgeData = entityData.getCompound("ForgeData");
-			forgeData.remove(DATA_ROOT);
-			if (forgeData.isEmpty())
-				entityData.remove("ForgeData");
-		}
+		CBItemData.edit(box, boxTag -> {
+			if (!boxTag.contains("CapturedEntity", Tag.TAG_COMPOUND))
+				return;
+			CompoundTag entityData = boxTag.getCompound("CapturedEntity");
+			entityData.remove("NoAI");
+			entityData.remove("PersistenceRequired");
+			if (entityData.contains("ForgeData", Tag.TAG_COMPOUND)) {
+				CompoundTag forgeData = entityData.getCompound("ForgeData");
+				forgeData.remove(DATA_ROOT);
+				if (forgeData.isEmpty())
+					entityData.remove("ForgeData");
+			}
+		});
 		return box;
 	}
 
@@ -2178,7 +2172,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			restorePendingPackaging(pending, true);
 		}
 
-		AABB searchBounds = new AABB(origin, origin.offset(size, 4, size)).inflate(32);
+		AABB searchBounds = AABB.encapsulatingFullBlocks(origin, origin.offset(size - 1, 3, size - 1)).inflate(32);
 		for (Creeper creeper : level.getEntitiesOfClass(Creeper.class, searchBounds,
 			entity -> entity.isAlive() && isMarkedCreeperForThisChamber(entity, null))) {
 			releaseManagedCreeper(creeper);
@@ -2604,7 +2598,8 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private AABB getMarkedCreeperSearchBounds() {
 		if (structureOrigin == null)
 			return new AABB(getBlockPos()).inflate(32);
-		return new AABB(structureOrigin, structureOrigin.offset(structureSize, 4, structureSize)).inflate(32);
+		return AABB.encapsulatingFullBlocks(structureOrigin,
+			structureOrigin.offset(structureSize - 1, 3, structureSize - 1)).inflate(32);
 	}
 
 	private boolean isMarkedCreeperForThisChamber(Creeper creeper, @Nullable BlockPos packagerPos) {
@@ -2912,20 +2907,20 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			this.returnBox = returnBox;
 		}
 
-		private CompoundTag write() {
+		private CompoundTag write(HolderLookup.Provider registries) {
 			CompoundTag tag = new CompoundTag();
 			tag.putLong("PackagerPos", packagerPos.asLong());
-			tag.put("Box", boxStack.serializeNBT());
+			tag.put("Box", boxStack.save(registries));
 			tag.putInt("TicksRemaining", ticksRemaining);
 			tag.putBoolean("Transitioned", transitioned);
 			tag.putBoolean("ReturnBox", returnBox);
 			return tag;
 		}
 
-		private static PendingUnpack read(CompoundTag tag) {
+		private static PendingUnpack read(CompoundTag tag, HolderLookup.Provider registries) {
 			return new PendingUnpack(
 				BlockPos.of(tag.getLong("PackagerPos")),
-				ItemStack.of(tag.getCompound("Box")),
+				ItemStack.parseOptional(registries, tag.getCompound("Box")),
 				tag.getInt("TicksRemaining"),
 				tag.getBoolean("Transitioned"),
 				tag.getBoolean("ReturnBox"));
@@ -2983,20 +2978,20 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			this.transitioned = transitioned;
 		}
 
-		private CompoundTag write() {
+		private CompoundTag write(HolderLookup.Provider registries) {
 			CompoundTag tag = new CompoundTag();
 			tag.putLong("PackagerPos", packagerPos.asLong());
-			tag.put("Box", boxStack.serializeNBT());
+			tag.put("Box", boxStack.save(registries));
 			tag.putUUID("CreeperUuid", creeperUuid);
 			tag.putInt("TicksRemaining", ticksRemaining);
 			tag.putBoolean("Transitioned", transitioned);
 			return tag;
 		}
 
-		private static PendingPackaging read(CompoundTag tag) {
+		private static PendingPackaging read(CompoundTag tag, HolderLookup.Provider registries) {
 			return new PendingPackaging(
 				BlockPos.of(tag.getLong("PackagerPos")),
-				ItemStack.of(tag.getCompound("Box")),
+				ItemStack.parseOptional(registries, tag.getCompound("Box")),
 				tag.getUUID("CreeperUuid"),
 				tag.getInt("TicksRemaining"),
 				tag.getBoolean("Transitioned"));
@@ -3014,18 +3009,18 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			this.ticksRemaining = ticksRemaining;
 		}
 
-		private CompoundTag write() {
+		private CompoundTag write(HolderLookup.Provider registries) {
 			CompoundTag tag = new CompoundTag();
 			tag.putLong("PackagerPos", packagerPos.asLong());
-			tag.put("Box", boxStack.serializeNBT());
+			tag.put("Box", boxStack.save(registries));
 			tag.putInt("TicksRemaining", ticksRemaining);
 			return tag;
 		}
 
-		private static ReadyOutput read(CompoundTag tag) {
+		private static ReadyOutput read(CompoundTag tag, HolderLookup.Provider registries) {
 			return new ReadyOutput(
 				BlockPos.of(tag.getLong("PackagerPos")),
-				ItemStack.of(tag.getCompound("Box")),
+				ItemStack.parseOptional(registries, tag.getCompound("Box")),
 				tag.getInt("TicksRemaining"));
 		}
 	}

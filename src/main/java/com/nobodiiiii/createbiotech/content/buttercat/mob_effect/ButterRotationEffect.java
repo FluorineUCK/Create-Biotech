@@ -12,20 +12,19 @@ public class ButterRotationEffect extends MobEffect {
     }
 
     @Override
-    public void applyEffectTick(LivingEntity entity, int amplifier) {
-        if(entity.level().isClientSide) return;
+    public boolean applyEffectTick(LivingEntity entity, int amplifier) {
+        if(entity.level().isClientSide) return true;
         float rotationSpeed = getRotationAngularSpeed() * (6 * amplifier + 1);
         float newYaw = entity.getYRot() + rotationSpeed;
 
         entity.setYRot(newYaw);
         entity.setYHeadRot(newYaw);
         entity.setYBodyRot(newYaw);
-
-
+        return true;
     }
 
     @Override
-    public boolean isDurationEffectTick(int p_19455_, int p_19456_) {
+    public boolean shouldApplyEffectTickThisTick(int duration, int amplifier) {
         return true;
     }
 

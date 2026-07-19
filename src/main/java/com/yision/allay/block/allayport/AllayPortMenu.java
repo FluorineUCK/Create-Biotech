@@ -6,24 +6,24 @@ import com.yision.allay.registry.AllMenuTypes;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.items.SlotItemHandler;
+import net.neoforged.neoforge.items.SlotItemHandler;
 import org.jetbrains.annotations.NotNull;
 
 public class AllayPortMenu extends PackagePortMenu {
 	private static final int UI_X_OFFSET = 8;
 
-	public AllayPortMenu(int id, Inventory inv, FriendlyByteBuf extraData) {
+	public AllayPortMenu(int id, Inventory inv, RegistryFriendlyByteBuf extraData) {
 		this(AllMenuTypes.ALLAY_PORT.get(), id, inv, extraData);
 	}
 
-	public AllayPortMenu(MenuType<?> type, int id, Inventory inv, FriendlyByteBuf extraData) {
+	public AllayPortMenu(MenuType<?> type, int id, Inventory inv, RegistryFriendlyByteBuf extraData) {
 		super(type, id, inv, extraData);
 	}
 
@@ -32,7 +32,7 @@ public class AllayPortMenu extends PackagePortMenu {
 	}
 
 	@Override
-	protected AllayPortBlockEntity createOnClient(FriendlyByteBuf extraData) {
+	protected AllayPortBlockEntity createOnClient(RegistryFriendlyByteBuf extraData) {
 		BlockPos readBlockPos = extraData.readBlockPos();
 		ClientLevel world = Minecraft.getInstance().level;
 		BlockEntity blockEntity = world != null ? world.getBlockEntity(readBlockPos) : null;

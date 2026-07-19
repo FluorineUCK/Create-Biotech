@@ -7,8 +7,8 @@ import com.yision.allay.logistics.address.AllayAddressRules;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
 import org.jetbrains.annotations.Nullable;
 
 final class AllayPortAutomation {
@@ -65,6 +65,7 @@ final class AllayPortAutomation {
 		if (blockEntity == null || blockEntity instanceof AllayPortBlockEntity) {
 			return null;
 		}
-		return blockEntity.getCapability(ForgeCapabilities.ITEM_HANDLER, side.getOpposite()).orElse(null);
+		return blockEntity.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
+			blockEntity.getBlockPos(), side.getOpposite());
 	}
 }

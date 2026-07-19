@@ -1,0 +1,24 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    "T",
+    "E",
+    "A"
+  ],
+  "key": {
+    "T": {
+      "item": "create:transmitter"
+    },
+    "E": {
+      "item": "minecraft:ender_pearl"
+    },
+    "A": {
+      "item": "create:andesite_casing"
+    }
+  },
+  "result": {
+    "id": "create_biotech:wireless_terminal"
+  },
+  "show_notification": true
+}

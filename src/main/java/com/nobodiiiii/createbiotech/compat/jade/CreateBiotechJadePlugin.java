@@ -15,7 +15,7 @@ import snownee.jade.api.ITooltip;
 import snownee.jade.api.IWailaClientRegistration;
 import snownee.jade.api.IWailaCommonRegistration;
 import snownee.jade.api.IWailaPlugin;
-import snownee.jade.api.Identifiers;
+import snownee.jade.api.JadeIds;
 import snownee.jade.api.WailaPlugin;
 import snownee.jade.api.config.IPluginConfig;
 import snownee.jade.api.theme.IThemeHelper;
@@ -49,13 +49,13 @@ public class CreateBiotechJadePlugin implements IWailaPlugin {
 			Entity entity = accessor.getEntity();
 			if (!SlimeMimicHandler.isSlimeMimic(entity))
 				return;
-			if (tooltip.get(Identifiers.CORE_OBJECT_NAME).isEmpty())
+			if (tooltip.get(JadeIds.CORE_OBJECT_NAME).isEmpty())
 				return;
 
 			MutableComponent prefixedName = Component.translatable(BIONIC_NAME_PREFIX_KEY)
 				.append(entity.getDisplayName());
-			tooltip.remove(Identifiers.CORE_OBJECT_NAME);
-			tooltip.add(0, IThemeHelper.get().title(prefixedName), Identifiers.CORE_OBJECT_NAME);
+			tooltip.remove(JadeIds.CORE_OBJECT_NAME);
+			tooltip.add(0, IThemeHelper.get().title(prefixedName), JadeIds.CORE_OBJECT_NAME);
 		}
 
 		@Override

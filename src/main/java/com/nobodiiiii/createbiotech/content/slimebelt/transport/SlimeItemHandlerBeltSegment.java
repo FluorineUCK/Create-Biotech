@@ -6,7 +6,7 @@ import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeItemHandlerBeltSegment implements IItemHandler {
 

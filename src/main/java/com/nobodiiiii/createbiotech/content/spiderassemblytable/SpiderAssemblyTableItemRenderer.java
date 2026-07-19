@@ -94,9 +94,9 @@ public class SpiderAssemblyTableItemRenderer extends CustomRenderedItemModelRend
 			return;
 		prepareSpiderModel(spider);
 		VertexConsumer spiderBuffer = buffer.getBuffer(spiderModel.renderType(SPIDER_TEXTURE));
-		spiderModel.renderToBuffer(ms, spiderBuffer, packedLight, OverlayTexture.NO_OVERLAY, 1, 1, 1, 1);
+		spiderModel.renderToBuffer(ms, spiderBuffer, packedLight, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
 		VertexConsumer spiderEyesBuffer = buffer.getBuffer(net.minecraft.client.renderer.RenderType.eyes(SPIDER_EYES_TEXTURE));
-		spiderModel.renderToBuffer(ms, spiderEyesBuffer, EYES_LIGHT, OverlayTexture.NO_OVERLAY, 1, 1, 1, 1);
+		spiderModel.renderToBuffer(ms, spiderEyesBuffer, EYES_LIGHT, OverlayTexture.NO_OVERLAY, 0xFFFFFFFF);
 	}
 
 	private @Nullable SpiderModel<RenderSpider> getSpiderModel() {

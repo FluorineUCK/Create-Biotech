@@ -22,11 +22,11 @@ public class ModItems {
             .item("butter", properties -> new ConfigurableButterFoodItem(properties, ButterFoodProperties.Variant.BUTTER))
             .tag(ModTags.BUTTER)
             .tag(ModTags.FOOD_BUTTER)
-            .properties(p -> p.food(ButterFoodProperties.create(ButterFoodProperties.Variant.BUTTER)))
+            .properties(p -> p.food(ButterFoodProperties.createDefault(ButterFoodProperties.Variant.BUTTER)))
             .register();
     public static final ItemEntry<ConfigurableButterFoodItem> SUPER_BUTTER = REGISTRATE
             .item("super_butter", properties -> new ConfigurableButterFoodItem(properties, ButterFoodProperties.Variant.SUPER_BUTTER))
-            .properties(p -> p.food(ButterFoodProperties.create(ButterFoodProperties.Variant.SUPER_BUTTER)).rarity(Rarity.EPIC))
+            .properties(p -> p.food(ButterFoodProperties.createDefault(ButterFoodProperties.Variant.SUPER_BUTTER)).rarity(Rarity.EPIC))
             .register();
 
     public static final ItemEntry<ConfigurableButterSequencedAssemblyItem> INCOMPLETE_SUPER_BUTTER =  REGISTRATE
@@ -34,7 +34,7 @@ public class ModItems {
                     new ConfigurableButterSequencedAssemblyItem(properties, ButterFoodProperties.Variant.INCOMPLETE_SUPER_BUTTER))
             .tag(ModTags.BUTTER)
             .tag(ModTags.FOOD_BUTTER)
-            .properties(p -> p.food(ButterFoodProperties.create(ButterFoodProperties.Variant.INCOMPLETE_SUPER_BUTTER)))
+            .properties(p -> p.food(ButterFoodProperties.createDefault(ButterFoodProperties.Variant.INCOMPLETE_SUPER_BUTTER)))
             .register();
 
     private static final IdentityHashMap<Item, Integer> BUTTER_LEVEL_MAP = new IdentityHashMap<>();

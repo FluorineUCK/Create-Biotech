@@ -5,7 +5,7 @@ import com.yision.allay.logistics.courier.hud.AllayCourierHudSync;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraftforge.event.TickEvent.ServerTickEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayList;
@@ -32,10 +32,7 @@ public final class AllayCourierTaskManager {
 		savedData = AllayCourierTaskSavedData.getOrCreate(server);
 	}
 
-	public static void onServerTick(ServerTickEvent event) {
-		if (event.phase != net.minecraftforge.event.TickEvent.Phase.END) {
-			return;
-		}
+	public static void onServerTick(ServerTickEvent.Post event) {
 		MinecraftServer server = event.getServer();
 		if (savedData == null) {
 			savedData = AllayCourierTaskSavedData.getOrCreate(server);

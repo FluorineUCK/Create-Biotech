@@ -21,11 +21,11 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.RenderLivingEvent;
-import net.minecraftforge.client.event.RenderPlayerEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod.EventBusSubscriber;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.RenderLivingEvent;
+import net.neoforged.neoforge.client.event.RenderPlayerEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
@@ -188,7 +188,7 @@ public class ShulkerTeleporterClientEvents {
 		}
 
 		@Override
-		public VertexConsumer vertex(double x, double y, double z) {
+		public VertexConsumer addVertex(float x, float y, float z) {
 			current = new ClippedVertex();
 			current.x = x;
 			current.y = y;
@@ -197,16 +197,7 @@ public class ShulkerTeleporterClientEvents {
 		}
 
 		@Override
-		public VertexConsumer vertex(Matrix4f matrix, float x, float y, float z) {
-			return vertex(matrix.transformPosition(x, y, z, new org.joml.Vector3f()));
-		}
-
-		private VertexConsumer vertex(Vector3f vec) {
-			return vertex(vec.x(), vec.y(), vec.z());
-		}
-
-		@Override
-		public VertexConsumer color(int red, int green, int blue, int alpha) {
+		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
 			current.red = red;
 			current.green = green;
 			current.blue = blue;
@@ -215,49 +206,35 @@ public class ShulkerTeleporterClientEvents {
 		}
 
 		@Override
-		public VertexConsumer uv(float u, float v) {
+		public VertexConsumer setUv(float u, float v) {
 			current.u = u;
 			current.v = v;
 			return this;
 		}
 
 		@Override
-		public VertexConsumer overlayCoords(int u, int v) {
+		public VertexConsumer setUv1(int u, int v) {
 			current.overlay = u | v << 16;
 			return this;
 		}
 
 		@Override
-		public VertexConsumer uv2(int u, int v) {
+		public VertexConsumer setUv2(int u, int v) {
 			current.light = u | v << 16;
 			return this;
 		}
 
 		@Override
-		public VertexConsumer normal(float x, float y, float z) {
+		public VertexConsumer setNormal(float x, float y, float z) {
 			current.normalX = x;
 			current.normalY = y;
 			current.normalZ = z;
-			return this;
-		}
-
-		@Override
-		public void endVertex() {
 			quad.add(current.copy());
 			if (quad.size() < 4)
-				return;
+				return this;
 			emitClippedQuad(quad);
 			quad.clear();
-		}
-
-		@Override
-		public void defaultColor(int red, int green, int blue, int alpha) {
-			wrapped.defaultColor(red, green, blue, alpha);
-		}
-
-		@Override
-		public void unsetDefaultColor() {
-			wrapped.unsetDefaultColor();
+			return this;
 		}
 
 		private void emitClippedQuad(List<ClippedVertex> source) {
@@ -299,13 +276,12 @@ public class ShulkerTeleporterClientEvents {
 		}
 
 		private void emit(ClippedVertex vertex) {
-			wrapped.vertex(vertex.x, vertex.y, vertex.z)
-				.color(vertex.red, vertex.green, vertex.blue, vertex.alpha)
-				.uv(vertex.u, vertex.v)
-				.overlayCoords(vertex.overlay)
-				.uv2(vertex.light)
-				.normal(vertex.normalX, vertex.normalY, vertex.normalZ)
-				.endVertex();
+			wrapped.addVertex((float) vertex.x, (float) vertex.y, (float) vertex.z)
+				.setColor(vertex.red, vertex.green, vertex.blue, vertex.alpha)
+				.setUv(vertex.u, vertex.v)
+				.setOverlay(vertex.overlay)
+				.setLight(vertex.light)
+				.setNormal(vertex.normalX, vertex.normalY, vertex.normalZ);
 		}
 	}
 

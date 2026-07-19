@@ -412,7 +412,7 @@ public final class BufferPadCollisionHelper {
 
 		horizontalNormal = horizontalNormal.normalize();
 
-		CompoundTag nbt = furnaceCart.serializeNBT();
+		CompoundTag nbt = furnaceCart.serializeNBT(furnaceCart.level().registryAccess());
 		Vec3 push = new Vec3(nbt.getDouble("PushX"), 0, nbt.getDouble("PushZ"));
 		Vec3 adjustedPush = adjustMotionAgainstCollision(push, horizontalNormal, escapeFromBlock);
 		if (adjustedPush.equals(push))
@@ -420,7 +420,7 @@ public final class BufferPadCollisionHelper {
 
 		nbt.putDouble("PushX", adjustedPush.x);
 		nbt.putDouble("PushZ", adjustedPush.z);
-		furnaceCart.deserializeNBT(nbt);
+		furnaceCart.deserializeNBT(furnaceCart.level().registryAccess(), nbt);
 	}
 
 	private static void trimFurnacePush(MinecartFurnace furnaceCart, Vec3 collisionNormal) {
@@ -430,7 +430,7 @@ public final class BufferPadCollisionHelper {
 
 		horizontalNormal = horizontalNormal.normalize();
 
-		CompoundTag nbt = furnaceCart.serializeNBT();
+		CompoundTag nbt = furnaceCart.serializeNBT(furnaceCart.level().registryAccess());
 		Vec3 push = new Vec3(nbt.getDouble("PushX"), 0, nbt.getDouble("PushZ"));
 		Vec3 trimmedPush = removeEscapeVelocityContribution(push, horizontalNormal);
 		if (trimmedPush.equals(push))
@@ -438,7 +438,7 @@ public final class BufferPadCollisionHelper {
 
 		nbt.putDouble("PushX", trimmedPush.x);
 		nbt.putDouble("PushZ", trimmedPush.z);
-		furnaceCart.deserializeNBT(nbt);
+		furnaceCart.deserializeNBT(furnaceCart.level().registryAccess(), nbt);
 	}
 
 	private static double getTrainReferenceSpeed(Train train) {

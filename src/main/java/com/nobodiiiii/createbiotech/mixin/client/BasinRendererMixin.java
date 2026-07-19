@@ -9,18 +9,16 @@ import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessi
 import com.simibubi.create.content.processing.basin.BasinRenderer;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
 
-@Mixin(value = BasinRenderer.class, remap = false)
+@Mixin(BasinRenderer.class)
 public abstract class BasinRendererMixin {
 
 	@WrapOperation(
 		method = "renderSafe(Lcom/simibubi/create/content/processing/basin/BasinBlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V",
 		at = @At(
 			value = "INVOKE",
-			target = "Lnet/minecraftforge/items/IItemHandlerModifiable;getStackInSlot(I)Lnet/minecraft/world/item/ItemStack;",
-			remap = false),
-		remap = false)
+			target = "Lnet/neoforged/neoforge/items/IItemHandlerModifiable;getStackInSlot(I)Lnet/minecraft/world/item/ItemStack;"))
 	private ItemStack createBiotech$hideCapturedSmallSlimeItemsInBasin(IItemHandlerModifiable inventory, int slot,
 		Operation<ItemStack> original) {
 		ItemStack stack = original.call(inventory, slot);

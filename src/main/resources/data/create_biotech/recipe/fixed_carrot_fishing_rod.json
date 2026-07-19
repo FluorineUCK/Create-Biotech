@@ -1,0 +1,17 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "pattern": [
+    "AF"
+  ],
+  "key": {
+    "A": {
+      "item": "create:andesite_alloy"
+    },
+    "F": {
+      "item": "minecraft:fishing_rod"
+    }
+  },
+  "result": {
+    "id": "create_biotech:fixed_carrot_fishing_rod"
+  }
+}

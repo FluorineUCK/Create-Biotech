@@ -53,6 +53,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
@@ -80,7 +81,7 @@ import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.material.Fluids;
-import net.minecraft.world.level.pathfinder.BlockPathTypes;
+import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
@@ -93,11 +94,10 @@ import net.minecraft.world.phys.shapes.EntityCollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.extensions.common.IClientBlockExtensions;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaBeltBlock extends HorizontalKineticBlock
 	implements IBE<MagmaBeltBlockEntity>, SpecialBlockItemRequirement, TransformableBlock, ProperWaterloggedBlock {
@@ -143,7 +143,7 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 	}
 
 	@Override
-	public ItemStack getCloneItemStack(BlockState state, HitResult target, BlockGetter world, BlockPos pos,
+	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader world, BlockPos pos,
 									   Player player) {
 		return new ItemStack(CBItems.MAGMA_BELT_CONNECTOR.get());
 	}
@@ -220,8 +220,7 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 			if (MagmaBeltTunnelInteractionHandler.getTunnelOnPosition(worldIn, pos) != null)
 				return;
 			withBlockEntityDo(worldIn, pos, be -> {
-				IItemHandler handler = be.getCapability(ForgeCapabilities.ITEM_HANDLER)
-					.orElse(null);
+				IItemHandler handler = be.getItemCapability(null);
 				if (handler == null)
 					return;
 				ItemStack remainder = handler.insertItem(0, asItem, false);
@@ -258,11 +257,24 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 	}
 
 	@Override
-	public InteractionResult use(BlockState state, Level world, BlockPos pos, Player player, InteractionHand handIn,
-								 BlockHitResult hit) {
+	protected ItemInteractionResult useItemOn(ItemStack heldItem, BlockState state, Level world, BlockPos pos,
+		Player player, InteractionHand handIn, BlockHitResult hit) {
+		InteractionResult result = interact(state, world, pos, player, handIn, heldItem, hit);
+		return result.consumesAction()
+			? ItemInteractionResult.sidedSuccess(world.isClientSide)
+			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+	}
+
+	@Override
+	protected InteractionResult useWithoutItem(BlockState state, Level world, BlockPos pos, Player player,
+		BlockHitResult hit) {
+		return interact(state, world, pos, player, InteractionHand.MAIN_HAND, ItemStack.EMPTY, hit);
+	}
+
+	private InteractionResult interact(BlockState state, Level world, BlockPos pos, Player player,
+		InteractionHand handIn, ItemStack heldItem, BlockHitResult hit) {
 		if (player.isShiftKeyDown() || !player.mayBuild())
 			return InteractionResult.PASS;
-		ItemStack heldItem = player.getItemInHand(handIn);
 
 		boolean isWrench = AllItems.WRENCH.isIn(heldItem);
 		boolean isConnector = heldItem.is(CBItems.MAGMA_BELT_CONNECTOR.get());
@@ -287,8 +299,7 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 
 		if (PackageItem.isPackage(heldItem)) {
 			ItemStack toInsert = heldItem.copy();
-			IItemHandler handler = belt.getCapability(ForgeCapabilities.ITEM_HANDLER)
-				.orElse(null);
+			IItemHandler handler = belt.getItemCapability(null);
 			if (handler == null)
 				return InteractionResult.PASS;
 			ItemStack remainder = handler.insertItem(0, toInsert, false);
@@ -388,8 +399,8 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 	}
 
 	@Override
-	public BlockPathTypes getBlockPathType(BlockState state, BlockGetter world, BlockPos pos, Mob entity) {
-		return BlockPathTypes.RAIL;
+	public PathType getBlockPathType(BlockState state, BlockGetter world, BlockPos pos, Mob entity) {
+		return PathType.RAIL;
 	}
 
 	@Override
@@ -744,7 +755,7 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 	}
 
 	@Override
-	public boolean isPathfindable(BlockState state, BlockGetter reader, BlockPos pos, PathComputationType type) {
+	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
 

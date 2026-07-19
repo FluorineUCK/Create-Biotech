@@ -1,0 +1,24 @@
+{
+  "type": "create_biotech:creeper_blast_chamber_high_pressure",
+  "ingredients": [
+    {
+      "item": "create:experience_block"
+    }
+  ],
+  "result_count_ranges": [
+    {
+      "index": 0,
+      "min": 1,
+      "max": 3
+    }
+  ],
+  "results": [
+    {
+      "count": 3,
+      "id": "create:experience_nugget"
+    },
+    {
+      "id": "create_biotech:budding_experience"
+    }
+  ]
+}

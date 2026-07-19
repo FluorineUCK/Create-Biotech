@@ -1,5 +1,9 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import java.util.Collections;
 import java.util.EnumMap;
 import java.util.Map;
@@ -35,170 +39,170 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.ForgeRegistries;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredRegister;
+
+import net.neoforged.neoforge.registries.DeferredHolder;
 import com.tterrag.registrate.util.entry.ItemEntry;
 
 public class CBItems {
 
 	public static final DeferredRegister<Item> ITEMS =
-		DeferredRegister.create(ForgeRegistries.ITEMS, CreateBiotech.MOD_ID);
+		DeferredRegister.create(BuiltInRegistries.ITEM, CreateBiotech.MOD_ID);
 
-	public static final RegistryObject<Item> EVOKER_ENCHANTING_CHAMBER = ITEMS.register("evoker_enchanting_chamber",
+	public static final DeferredHolder<Item, Item> EVOKER_ENCHANTING_CHAMBER = ITEMS.register("evoker_enchanting_chamber",
 		() -> new EvokerEnchantingChamberItem(CBBlocks.EVOKER_ENCHANTING_CHAMBER.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> EXPERIENCE_PUMP = ITEMS.register("experience_pump",
+	public static final DeferredHolder<Item, Item> EXPERIENCE_PUMP = ITEMS.register("experience_pump",
 		() -> new BlockItem(CBBlocks.EXPERIENCE_PUMP.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> BUDDING_EXPERIENCE = ITEMS.register("budding_experience",
+	public static final DeferredHolder<Item, Item> BUDDING_EXPERIENCE = ITEMS.register("budding_experience",
 		() -> new BlockItem(CBBlocks.BUDDING_EXPERIENCE.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> SMALL_EXPERIENCE_BUD = ITEMS.register("small_experience_bud",
+	public static final DeferredHolder<Item, Item> SMALL_EXPERIENCE_BUD = ITEMS.register("small_experience_bud",
 		() -> new ExperienceClusterBlockItem(CBBlocks.SMALL_EXPERIENCE_BUD.get(),
 			ExperienceConstants::smallBudXpValue, new Item.Properties()));
 
-	public static final RegistryObject<Item> MEDIUM_EXPERIENCE_BUD = ITEMS.register("medium_experience_bud",
+	public static final DeferredHolder<Item, Item> MEDIUM_EXPERIENCE_BUD = ITEMS.register("medium_experience_bud",
 		() -> new ExperienceClusterBlockItem(CBBlocks.MEDIUM_EXPERIENCE_BUD.get(),
 			ExperienceConstants::mediumBudXpValue, new Item.Properties()));
 
-	public static final RegistryObject<Item> LARGE_EXPERIENCE_BUD = ITEMS.register("large_experience_bud",
+	public static final DeferredHolder<Item, Item> LARGE_EXPERIENCE_BUD = ITEMS.register("large_experience_bud",
 		() -> new ExperienceClusterBlockItem(CBBlocks.LARGE_EXPERIENCE_BUD.get(),
 			ExperienceConstants::largeBudXpValue, new Item.Properties()));
 
-	public static final RegistryObject<Item> EXPERIENCE_CLUSTER = ITEMS.register("experience_cluster",
+	public static final DeferredHolder<Item, Item> EXPERIENCE_CLUSTER = ITEMS.register("experience_cluster",
 		() -> new ExperienceClusterBlockItem(CBBlocks.EXPERIENCE_CLUSTER.get(),
 			ExperienceConstants::clusterXpValue, new Item.Properties()));
 
-	public static final RegistryObject<Item> EXPERIENCE = ITEMS.register("experience",
+	public static final DeferredHolder<Item, Item> EXPERIENCE = ITEMS.register("experience",
 		() -> new HiddenExperienceItem(new Item.Properties()));
 
-	public static final RegistryObject<Item> SQUID_PRINTER = ITEMS.register("squid_printer",
+	public static final DeferredHolder<Item, Item> SQUID_PRINTER = ITEMS.register("squid_printer",
 		() -> new SquidPrinterItem(CBBlocks.SQUID_PRINTER.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> PETRI_DISH = ITEMS.register("petri_dish",
+	public static final DeferredHolder<Item, Item> PETRI_DISH = ITEMS.register("petri_dish",
 		() -> new BlockItem(CBBlocks.PETRI_DISH.get(), new Item.Properties()));
 
-	public static final RegistryObject<EnchantmentBookCopyItem> ENCHANTMENT_BOOK_COPY =
+	public static final DeferredHolder<Item, EnchantmentBookCopyItem> ENCHANTMENT_BOOK_COPY =
 		ITEMS.register("enchantment_book_copy", () -> new EnchantmentBookCopyItem(new Item.Properties()));
 
-	public static final RegistryObject<Item> SLIME_BELT_CONNECTOR = ITEMS.register("slime_belt_connector",
+	public static final DeferredHolder<Item, Item> SLIME_BELT_CONNECTOR = ITEMS.register("slime_belt_connector",
 		() -> new SlimeBeltConnectorItem(new Item.Properties()));
 
-	public static final RegistryObject<Item> MAGMA_BELT_CONNECTOR = ITEMS.register("magma_belt_connector",
+	public static final DeferredHolder<Item, Item> MAGMA_BELT_CONNECTOR = ITEMS.register("magma_belt_connector",
 		() -> new MagmaBeltConnectorItem(new Item.Properties()));
 
-	public static final RegistryObject<Item> POWER_BELT_CONNECTOR = ITEMS.register("power_belt_connector",
+	public static final DeferredHolder<Item, Item> POWER_BELT_CONNECTOR = ITEMS.register("power_belt_connector",
 		() -> new PowerBeltConnectorItem(new Item.Properties()));
 
-	public static final RegistryObject<Item> SMART_SUPER_GLUE = ITEMS.register("smart_super_glue",
+	public static final DeferredHolder<Item, Item> SMART_SUPER_GLUE = ITEMS.register("smart_super_glue",
 		() -> new SmartSuperGlueItem(new Item.Properties().stacksTo(1).durability(99)));
 
-	public static final RegistryObject<Item> WIRELESS_TERMINAL = ITEMS.register("wireless_terminal",
+	public static final DeferredHolder<Item, Item> WIRELESS_TERMINAL = ITEMS.register("wireless_terminal",
 		() -> new WirelessTerminalItem(new Item.Properties().stacksTo(1)));
 
-	public static final RegistryObject<Item> HALF_SHAFT = ITEMS.register("half_shaft",
+	public static final DeferredHolder<Item, Item> HALF_SHAFT = ITEMS.register("half_shaft",
 		() -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> CAPTURED_SMALL_SLIME = ITEMS.register("captured_small_slime",
+	public static final DeferredHolder<Item, Item> CAPTURED_SMALL_SLIME = ITEMS.register("captured_small_slime",
 		() -> new CapturedSmallSlimeItem(new Item.Properties().stacksTo(4)));
 
-	public static final RegistryObject<Item> UNIVERSAL_JOINT = ITEMS.register("universal_joint",
+	public static final DeferredHolder<Item, Item> UNIVERSAL_JOINT = ITEMS.register("universal_joint",
 		() -> new UniversalJointItem(new Item.Properties()));
 
-	public static final RegistryObject<Item> SLIME_CLUTCH = ITEMS.register("slime_clutch",
+	public static final DeferredHolder<Item, Item> SLIME_CLUTCH = ITEMS.register("slime_clutch",
 		() -> new BlockItem(CBBlocks.SLIME_CLUTCH.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> BONE_RATCHET = ITEMS.register("bone_ratchet",
+	public static final DeferredHolder<Item, Item> BONE_RATCHET = ITEMS.register("bone_ratchet",
 		() -> new BlockItem(CBBlocks.BONE_RATCHET.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> CARDBOARD_BOX = ITEMS.register("cardboard_box",
+	public static final DeferredHolder<Item, Item> CARDBOARD_BOX = ITEMS.register("cardboard_box",
 		() -> new CardboardBoxItem(new Item.Properties().stacksTo(16)));
 
-	public static final RegistryObject<Item> LARGE_CARDBOARD_BOX = ITEMS.register("large_cardboard_box",
+	public static final DeferredHolder<Item, Item> LARGE_CARDBOARD_BOX = ITEMS.register("large_cardboard_box",
 		() -> new LargeCardboardBoxItem(new Item.Properties().stacksTo(16)));
 
-	public static final RegistryObject<Item> SCHRODINGERS_CAT = ITEMS.register("schrodingers_cat",
+	public static final DeferredHolder<Item, Item> SCHRODINGERS_CAT = ITEMS.register("schrodingers_cat",
 		() -> new BlockItem(CBBlocks.SCHRODINGERS_CAT.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> SPIDER_ASSEMBLY_TABLE = ITEMS.register("spider_assembly_table",
+	public static final DeferredHolder<Item, Item> SPIDER_ASSEMBLY_TABLE = ITEMS.register("spider_assembly_table",
 		() -> new SpiderAssemblyTableItem(CBBlocks.SPIDER_ASSEMBLY_TABLE.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> FIXED_CARROT_FISHING_ROD = ITEMS.register("fixed_carrot_fishing_rod",
+	public static final DeferredHolder<Item, Item> FIXED_CARROT_FISHING_ROD = ITEMS.register("fixed_carrot_fishing_rod",
 		() -> new BlockItem(CBBlocks.FIXED_CARROT_FISHING_ROD.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION =
+	public static final DeferredHolder<Item, Item> GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION =
 		ITEMS.register("ghast_hot_air_balloon_assembly_station",
 			() -> new BlockItem(CBBlocks.GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> GHAST_HELM = ITEMS.register("ghast_helm",
+	public static final DeferredHolder<Item, Item> GHAST_HELM = ITEMS.register("ghast_helm",
 		() -> new BlockItem(CBBlocks.GHAST_HELM.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> CREEPER_BLAST_CHAMBER = ITEMS.register("creeper_blast_chamber",
+	public static final DeferredHolder<Item, Item> CREEPER_BLAST_CHAMBER = ITEMS.register("creeper_blast_chamber",
 		() -> new BlockItem(CBBlocks.CREEPER_BLAST_CHAMBER.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> BIO_PACKAGER = ITEMS.register("bio_packager",
+	public static final DeferredHolder<Item, Item> BIO_PACKAGER = ITEMS.register("bio_packager",
 		() -> new BlockItem(CBBlocks.BIO_PACKAGER.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> SHULKER_PACKAGER = ITEMS.register("shulker_packager",
+	public static final DeferredHolder<Item, Item> SHULKER_PACKAGER = ITEMS.register("shulker_packager",
 		() -> new ShulkerPackagerItem(CBBlocks.SHULKER_PACKAGER.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> SHULKER_PACKAGE = ITEMS.register("shulker_package",
+	public static final DeferredHolder<Item, Item> SHULKER_PACKAGE = ITEMS.register("shulker_package",
 		() -> new ShulkerPackageItem(new Item.Properties().stacksTo(1)));
 
-	public static final RegistryObject<Item> SHULKER_TELEPORTER = ITEMS.register("shulker_teleporter",
+	public static final DeferredHolder<Item, Item> SHULKER_TELEPORTER = ITEMS.register("shulker_teleporter",
 		() -> new BlockItem(CBBlocks.SHULKER_TELEPORTER.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> ALLAY_PORT = ITEMS.register("allay_port",
+	public static final DeferredHolder<Item, Item> ALLAY_PORT = ITEMS.register("allay_port",
 		() -> new AllayPortItem(CBBlocks.ALLAY_PORT.get(), new Item.Properties()));
 
-	public static final RegistryObject<AllayCourierItem> ALLAY_COURIER = ITEMS.register("allay_courier",
+	public static final DeferredHolder<Item, AllayCourierItem> ALLAY_COURIER = ITEMS.register("allay_courier",
 		() -> new AllayCourierItem(new Item.Properties()));
-	public static final RegistryObject<IncompleteAllayCourierItem> INCOMPLETE_ALLAY_COURIER =
+	public static final DeferredHolder<Item, IncompleteAllayCourierItem> INCOMPLETE_ALLAY_COURIER =
 		ITEMS.register("incomplete_allay_courier", () -> new IncompleteAllayCourierItem(new Item.Properties()));
 
-	public static final RegistryObject<Item> INCOMPLETE_CREEPER_BLAST_CHAMBER =
+	public static final DeferredHolder<Item, Item> INCOMPLETE_CREEPER_BLAST_CHAMBER =
 		ITEMS.register("incomplete_creeper_blast_chamber", () -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> BIONIC_MECHANISM = ITEMS.register("bionic_mechanism",
+	public static final DeferredHolder<Item, Item> BIONIC_MECHANISM = ITEMS.register("bionic_mechanism",
 		() -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> ASURINE_ALLOY = ITEMS.register("asurine_alloy",
+	public static final DeferredHolder<Item, Item> ASURINE_ALLOY = ITEMS.register("asurine_alloy",
 		() -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> CARBON_POWDER = ITEMS.register("carbon_powder",
+	public static final DeferredHolder<Item, Item> CARBON_POWDER = ITEMS.register("carbon_powder",
 		() -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> GRAPHITE = ITEMS.register("graphite",
+	public static final DeferredHolder<Item, Item> GRAPHITE = ITEMS.register("graphite",
 		() -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> ZINC_SHEET = ITEMS.register("zinc_sheet",
+	public static final DeferredHolder<Item, Item> ZINC_SHEET = ITEMS.register("zinc_sheet",
 		() -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> INCOMPLETE_BIONIC_MECHANISM =
+	public static final DeferredHolder<Item, Item> INCOMPLETE_BIONIC_MECHANISM =
 		ITEMS.register("incomplete_bionic_mechanism", () -> new Item(new Item.Properties()));
 
-	public static final RegistryObject<Item> ASURINE_CASING = ITEMS.register("asurine_casing",
+	public static final DeferredHolder<Item, Item> ASURINE_CASING = ITEMS.register("asurine_casing",
 		() -> new BlockItem(CBBlocks.ASURINE_CASING.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> BIOTECH_CASING = ITEMS.register("biotech_casing",
+	public static final DeferredHolder<Item, Item> BIOTECH_CASING = ITEMS.register("biotech_casing",
 		() -> new BlockItem(CBBlocks.BIOTECH_CASING.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> EXPLOSION_PROOF_CASING = ITEMS.register("explosion_proof_casing",
+	public static final DeferredHolder<Item, Item> EXPLOSION_PROOF_CASING = ITEMS.register("explosion_proof_casing",
 		() -> new BlockItem(CBBlocks.EXPLOSION_PROOF_CASING.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> EXPLOSION_PROOF_ITEM_VAULT = ITEMS.register("explosion_proof_item_vault",
+	public static final DeferredHolder<Item, Item> EXPLOSION_PROOF_ITEM_VAULT = ITEMS.register("explosion_proof_item_vault",
 		() -> new ExplosionProofItemVaultItem(CBBlocks.EXPLOSION_PROOF_ITEM_VAULT.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> BLAST_PROOF_GLASS = ITEMS.register("blast_proof_glass",
+	public static final DeferredHolder<Item, Item> BLAST_PROOF_GLASS = ITEMS.register("blast_proof_glass",
 		() -> new BlockItem(CBBlocks.BLAST_PROOF_GLASS.get(), new Item.Properties()));
 
-	public static final RegistryObject<Item> BLAST_PROOF_FRAMED_GLASS = ITEMS.register("blast_proof_framed_glass",
+	public static final DeferredHolder<Item, Item> BLAST_PROOF_FRAMED_GLASS = ITEMS.register("blast_proof_framed_glass",
 		() -> new BlockItem(CBBlocks.BLAST_PROOF_FRAMED_GLASS.get(), new Item.Properties()));
 
-	public static final Map<DyeColor, RegistryObject<Item>> BUFFER_PADS = registerBufferPads();
-	public static final RegistryObject<Item> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
+	public static final Map<DyeColor, DeferredHolder<Item, Item>> BUFFER_PADS = registerBufferPads();
+	public static final DeferredHolder<Item, Item> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
 
 	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
 	// here so the project's primary item registry remains the place to inspect mod items.
@@ -229,8 +233,8 @@ public class CBItems {
 		return isSlimeBeltConnector(stack) || isMagmaBeltConnector(stack) || isPowerBeltConnector(stack);
 	}
 
-	private static Map<DyeColor, RegistryObject<Item>> registerBufferPads() {
-		EnumMap<DyeColor, RegistryObject<Item>> bufferPads = new EnumMap<>(DyeColor.class);
+	private static Map<DyeColor, DeferredHolder<Item, Item>> registerBufferPads() {
+		EnumMap<DyeColor, DeferredHolder<Item, Item>> bufferPads = new EnumMap<>(DyeColor.class);
 		for (DyeColor color : DyeColor.values()) {
 			String id = CBBlocks.bufferPadId(color);
 			bufferPads.put(color, ITEMS.register(id,

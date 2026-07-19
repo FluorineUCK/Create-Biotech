@@ -2,37 +2,29 @@ package com.nobodiiiii.createbiotech.content.creeperblastchamber;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Function;
 
-import com.google.gson.JsonArray;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonSyntaxException;
-import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxIngredient;
+import com.mojang.serialization.Codec;
+import com.mojang.serialization.MapCodec;
+import com.mojang.serialization.codecs.RecordCodecBuilder;
 import com.nobodiiiii.createbiotech.registry.CBRecipeTypes;
-import com.simibubi.create.content.processing.recipe.HeatCondition;
 import com.simibubi.create.content.processing.recipe.ProcessingOutput;
 import com.simibubi.create.content.processing.recipe.ProcessingRecipe;
-import com.simibubi.create.content.processing.recipe.ProcessingRecipeBuilder;
-import com.simibubi.create.content.processing.recipe.ProcessingRecipeBuilder.ProcessingRecipeParams;
-import com.simibubi.create.content.processing.recipe.ProcessingRecipeSerializer;
-import com.simibubi.create.foundation.fluid.FluidHelper;
-import com.simibubi.create.foundation.fluid.FluidIngredient;
+import com.simibubi.create.content.processing.recipe.ProcessingRecipeParams;
 import com.simibubi.create.foundation.recipe.IRecipeTypeInfo;
 
-import net.minecraft.core.NonNullList;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.util.GsonHelper;
 import net.minecraft.util.RandomSource;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.crafting.Ingredient;
+import net.minecraft.world.item.crafting.RecipeSerializer;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.items.wrapper.RecipeWrapper;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.neoforge.items.wrapper.RecipeWrapper;
 
-public class CreeperBlastChamberHighPressureRecipe extends ProcessingRecipe<RecipeWrapper> {
+public class CreeperBlastChamberHighPressureRecipe
+	extends ProcessingRecipe<RecipeWrapper, CreeperBlastChamberHighPressureRecipe.Params> {
 
 	private static final IRecipeTypeInfo TYPE_INFO = new IRecipeTypeInfo() {
 		@Override
@@ -41,32 +33,44 @@ public class CreeperBlastChamberHighPressureRecipe extends ProcessingRecipe<Reci
 		}
 
 		@Override
-		public <T extends net.minecraft.world.item.crafting.RecipeSerializer<?>> T getSerializer() {
+		@SuppressWarnings("unchecked")
+		public <T extends RecipeSerializer<?>> T getSerializer() {
 			return (T) CBRecipeTypes.CREEPER_BLAST_CHAMBER_HIGH_PRESSURE_SERIALIZER.get();
 		}
 
 		@Override
-		public <T extends net.minecraft.world.item.crafting.RecipeType<?>> T getType() {
-			return (T) CBRecipeTypes.CREEPER_BLAST_CHAMBER_HIGH_PRESSURE_TYPE.get();
+		@SuppressWarnings("unchecked")
+		public <I extends net.minecraft.world.item.crafting.RecipeInput,
+			R extends net.minecraft.world.item.crafting.Recipe<I>>
+			net.minecraft.world.item.crafting.RecipeType<R> getType() {
+			return (net.minecraft.world.item.crafting.RecipeType<R>)
+				CBRecipeTypes.CREEPER_BLAST_CHAMBER_HIGH_PRESSURE_TYPE.get();
 		}
 	};
 
 	private static final RandomSource RANDOM = RandomSource.create();
 
-	private final List<ResultCountRange> resultCountRanges = new ArrayList<>();
-	private boolean exclusiveResults;
+	private final List<ResultCountRange> resultCountRanges;
+	private final List<IndexedResultCountRange> indexedResultCountRanges;
+	private final boolean exclusiveResults;
 
-	public CreeperBlastChamberHighPressureRecipe(ProcessingRecipeParams params) {
+	public CreeperBlastChamberHighPressureRecipe(Params params) {
 		super(TYPE_INFO, params);
+		exclusiveResults = params.exclusiveResults;
+		indexedResultCountRanges = List.copyOf(params.resultCountRanges);
+		resultCountRanges = new ArrayList<>();
+		for (int i = 0; i < results.size(); i++)
+			resultCountRanges.add(null);
+		for (IndexedResultCountRange indexedRange : indexedResultCountRanges) {
+			if (indexedRange.index() >= 0 && indexedRange.index() < resultCountRanges.size())
+				resultCountRanges.set(indexedRange.index(),
+					new ResultCountRange(indexedRange.min(), indexedRange.max()));
+		}
 	}
 
 	@Override
-	public boolean matches(RecipeWrapper inv, Level worldIn) {
-		if (inv.isEmpty())
-			return false;
-
-		ItemStack stack = inv.getItem(0);
-		return !ingredients.isEmpty() && ingredients.get(0).test(stack);
+	public boolean matches(RecipeWrapper inv, Level level) {
+		return !inv.isEmpty() && !ingredients.isEmpty() && ingredients.getFirst().test(inv.getItem(0));
 	}
 
 	@Override
@@ -85,14 +89,25 @@ public class CreeperBlastChamberHighPressureRecipe extends ProcessingRecipe<Reci
 	}
 
 	@Override
+	public List<String> validate() {
+		List<String> errors = super.validate();
+		for (IndexedResultCountRange range : indexedResultCountRanges) {
+			if (range.index() < 0 || range.index() >= results.size())
+				errors.add("Result count range index is outside the result list: " + range.index());
+			if (range.min() <= 0 || range.max() < range.min())
+				errors.add("Invalid result count range: " + range.min() + "-" + range.max());
+		}
+		return errors;
+	}
+
 	public List<ItemStack> rollResults() {
-		return rollResults(getRollableResults());
+		return rollResults(getRollableResults(), RANDOM);
 	}
 
 	@Override
-	public List<ItemStack> rollResults(List<ProcessingOutput> rollableResults) {
+	public List<ItemStack> rollResults(List<ProcessingOutput> rollableResults, RandomSource random) {
 		if (exclusiveResults)
-			return rollExclusiveResult(rollableResults);
+			return rollExclusiveResult(rollableResults, random);
 
 		List<ItemStack> rolledResults = new ArrayList<>();
 		for (int i = 0; i < rollableResults.size(); i++) {
@@ -101,12 +116,12 @@ public class CreeperBlastChamberHighPressureRecipe extends ProcessingRecipe<Reci
 
 			ItemStack stack;
 			if (range == null) {
-				stack = output.rollOutput();
+				stack = output.rollOutput(random);
 			} else {
-				if (RANDOM.nextFloat() > output.getChance())
+				if (random.nextFloat() > output.getChance())
 					continue;
 				stack = output.getStack().copy();
-				stack.setCount(range.roll(RANDOM));
+				stack.setCount(range.roll(random));
 			}
 
 			if (!stack.isEmpty())
@@ -115,14 +130,14 @@ public class CreeperBlastChamberHighPressureRecipe extends ProcessingRecipe<Reci
 		return rolledResults;
 	}
 
-	private List<ItemStack> rollExclusiveResult(List<ProcessingOutput> rollableResults) {
+	private List<ItemStack> rollExclusiveResult(List<ProcessingOutput> rollableResults, RandomSource random) {
 		float totalWeight = 0;
 		for (ProcessingOutput output : rollableResults)
 			totalWeight += Math.max(0, output.getChance());
 		if (totalWeight <= 0)
 			return List.of();
 
-		float selectedWeight = RANDOM.nextFloat() * totalWeight;
+		float selectedWeight = random.nextFloat() * totalWeight;
 		for (int i = 0; i < rollableResults.size(); i++) {
 			ProcessingOutput output = rollableResults.get(i);
 			float weight = Math.max(0, output.getChance());
@@ -134,82 +149,10 @@ public class CreeperBlastChamberHighPressureRecipe extends ProcessingRecipe<Reci
 			ItemStack stack = output.getStack().copy();
 			ResultCountRange range = getResultCountRange(i);
 			if (range != null)
-				stack.setCount(range.roll(RANDOM));
+				stack.setCount(range.roll(random));
 			return stack.isEmpty() ? List.of() : List.of(stack);
 		}
 		return List.of();
-	}
-
-	@Override
-	public void readAdditional(JsonObject json) {
-		exclusiveResults = GsonHelper.getAsBoolean(json, "exclusiveResults", false);
-		resultCountRanges.clear();
-		JsonArray resultsJson = GsonHelper.getAsJsonArray(json, "results");
-		for (JsonElement resultElement : resultsJson) {
-			JsonObject resultObject = GsonHelper.convertToJsonObject(resultElement, "result");
-			if (GsonHelper.isValidNode(resultObject, "fluid"))
-				continue;
-
-			int countMin = GsonHelper.getAsInt(resultObject, "count_min",
-				GsonHelper.getAsInt(resultObject, "count", 1));
-			int countMax = GsonHelper.getAsInt(resultObject, "count_max", countMin);
-			if (!GsonHelper.isValidNode(resultObject, "count_min") && !GsonHelper.isValidNode(resultObject, "count_max")) {
-				resultCountRanges.add(null);
-				continue;
-			}
-			if (countMin <= 0 || countMax < countMin)
-				throw new JsonSyntaxException("Invalid count range for recipe " + id + ": " + countMin + "-" + countMax);
-			resultCountRanges.add(new ResultCountRange(countMin, countMax));
-		}
-	}
-
-	@Override
-	public void writeAdditional(JsonObject json) {
-		if (!json.has("results"))
-			return;
-		if (exclusiveResults)
-			json.addProperty("exclusiveResults", true);
-
-		JsonArray resultsJson = json.getAsJsonArray("results");
-		int itemResultIndex = 0;
-		for (JsonElement resultElement : resultsJson) {
-			JsonObject resultObject = resultElement.getAsJsonObject();
-			if (GsonHelper.isValidNode(resultObject, "fluid"))
-				continue;
-			ResultCountRange range = getResultCountRange(itemResultIndex++);
-			if (range == null)
-				continue;
-			resultObject.addProperty("count_min", range.min());
-			resultObject.addProperty("count_max", range.max());
-		}
-	}
-
-	@Override
-	public void readAdditional(FriendlyByteBuf buffer) {
-		resultCountRanges.clear();
-		int rangeCount = buffer.readVarInt();
-		for (int i = 0; i < rangeCount; i++) {
-			if (!buffer.readBoolean()) {
-				resultCountRanges.add(null);
-				continue;
-			}
-			resultCountRanges.add(new ResultCountRange(buffer.readVarInt(), buffer.readVarInt()));
-		}
-		exclusiveResults = buffer.readBoolean();
-	}
-
-	@Override
-	public void writeAdditional(FriendlyByteBuf buffer) {
-		buffer.writeVarInt(results.size());
-		for (int i = 0; i < results.size(); i++) {
-			ResultCountRange range = getResultCountRange(i);
-			buffer.writeBoolean(range != null);
-			if (range != null) {
-				buffer.writeVarInt(range.min());
-				buffer.writeVarInt(range.max());
-			}
-		}
-		buffer.writeBoolean(exclusiveResults);
 	}
 
 	public ResultCountRange getResultCountRange(int index) {
@@ -220,60 +163,76 @@ public class CreeperBlastChamberHighPressureRecipe extends ProcessingRecipe<Reci
 		return exclusiveResults;
 	}
 
-	public static class Serializer extends ProcessingRecipeSerializer<CreeperBlastChamberHighPressureRecipe> {
+	public static class Params extends ProcessingRecipeParams {
+		public static final MapCodec<Params> CODEC = RecordCodecBuilder.mapCodec(instance -> instance.group(
+			codec(Params::new).forGetter(Function.identity()),
+			Codec.BOOL.optionalFieldOf("exclusiveResults", false).forGetter(params -> params.exclusiveResults),
+			IndexedResultCountRange.CODEC.listOf().optionalFieldOf("result_count_ranges", List.of())
+				.forGetter(params -> params.resultCountRanges)
+		).apply(instance, (params, exclusiveResults, resultCountRanges) -> {
+			params.exclusiveResults = exclusiveResults;
+			params.resultCountRanges = resultCountRanges;
+			return params;
+		}));
+		public static final StreamCodec<RegistryFriendlyByteBuf, Params> STREAM_CODEC = streamCodec(Params::new);
 
-		public Serializer() {
-			super(CreeperBlastChamberHighPressureRecipe::new);
+		private boolean exclusiveResults;
+		private List<IndexedResultCountRange> resultCountRanges = List.of();
+
+		@Override
+		protected void encode(RegistryFriendlyByteBuf buffer) {
+			super.encode(buffer);
+			ByteBufCodecs.BOOL.encode(buffer, exclusiveResults);
+			buffer.writeVarInt(resultCountRanges.size());
+			resultCountRanges.forEach(range -> IndexedResultCountRange.STREAM_CODEC.encode(buffer, range));
 		}
 
 		@Override
-		protected CreeperBlastChamberHighPressureRecipe readFromJson(ResourceLocation recipeId, JsonObject json) {
-			ProcessingRecipeBuilder<CreeperBlastChamberHighPressureRecipe> builder =
-				new ProcessingRecipeBuilder<>(CreeperBlastChamberHighPressureRecipe::new, recipeId);
-			NonNullList<Ingredient> ingredients = NonNullList.create();
-			NonNullList<FluidIngredient> fluidIngredients = NonNullList.create();
-			NonNullList<ProcessingOutput> results = NonNullList.create();
-			NonNullList<FluidStack> fluidResults = NonNullList.create();
-
-			if (GsonHelper.isValidNode(json, "ingredients")) {
-				for (JsonElement ingredientElement : GsonHelper.getAsJsonArray(json, "ingredients")) {
-					if (FluidIngredient.isFluidIngredient(ingredientElement))
-						fluidIngredients.add(FluidIngredient.deserialize(ingredientElement));
-					else
-						ingredients.add(Ingredient.fromJson(ingredientElement));
-				}
-			} else if (GsonHelper.isValidNode(json, "captured_entity")) {
-				ResourceLocation entityId = new ResourceLocation(GsonHelper.getAsString(json, "captured_entity"));
-				EntityType<?> entityType = ForgeRegistries.ENTITY_TYPES.getValue(entityId);
-				if (entityType == null)
-					throw new JsonSyntaxException("Unknown captured_entity: " + entityId);
-				ingredients.add(CapturedEntityBoxIngredient.of(entityType));
-			} else {
-				throw new JsonSyntaxException("High-pressure implosion recipes require either ingredients or captured_entity");
-			}
-
-			for (JsonElement resultElement : GsonHelper.getAsJsonArray(json, "results")) {
-				JsonObject resultObject = resultElement.getAsJsonObject();
-				if (GsonHelper.isValidNode(resultObject, "fluid"))
-					fluidResults.add(FluidHelper.deserializeFluidStack(resultObject));
-				else
-					results.add(ProcessingOutput.deserialize(resultElement));
-			}
-
-			builder.withItemIngredients(ingredients)
-				.withItemOutputs(results)
-				.withFluidIngredients(fluidIngredients)
-				.withFluidOutputs(fluidResults);
-
-			if (GsonHelper.isValidNode(json, "processingTime"))
-				builder.duration(GsonHelper.getAsInt(json, "processingTime"));
-			if (GsonHelper.isValidNode(json, "heatRequirement"))
-				builder.requiresHeat(HeatCondition.deserialize(GsonHelper.getAsString(json, "heatRequirement")));
-
-			CreeperBlastChamberHighPressureRecipe recipe = builder.build();
-			recipe.readAdditional(json);
-			return recipe;
+		protected void decode(RegistryFriendlyByteBuf buffer) {
+			super.decode(buffer);
+			exclusiveResults = ByteBufCodecs.BOOL.decode(buffer);
+			int size = buffer.readVarInt();
+			List<IndexedResultCountRange> ranges = new ArrayList<>(size);
+			for (int i = 0; i < size; i++)
+				ranges.add(IndexedResultCountRange.STREAM_CODEC.decode(buffer));
+			resultCountRanges = ranges;
 		}
+	}
+
+	public static class Serializer implements RecipeSerializer<CreeperBlastChamberHighPressureRecipe> {
+		private final MapCodec<CreeperBlastChamberHighPressureRecipe> codec =
+			ProcessingRecipe.codec(CreeperBlastChamberHighPressureRecipe::new, Params.CODEC);
+		private final StreamCodec<RegistryFriendlyByteBuf, CreeperBlastChamberHighPressureRecipe> streamCodec =
+			ProcessingRecipe.streamCodec(CreeperBlastChamberHighPressureRecipe::new, Params.STREAM_CODEC);
+
+		@Override
+		public MapCodec<CreeperBlastChamberHighPressureRecipe> codec() {
+			return codec;
+		}
+
+		@Override
+		public StreamCodec<RegistryFriendlyByteBuf, CreeperBlastChamberHighPressureRecipe> streamCodec() {
+			return streamCodec;
+		}
+	}
+
+	public record IndexedResultCountRange(int index, int min, int max) {
+		public static final Codec<IndexedResultCountRange> CODEC = RecordCodecBuilder.create(instance -> instance.group(
+			Codec.INT.fieldOf("index").forGetter(IndexedResultCountRange::index),
+			Codec.INT.fieldOf("min").forGetter(IndexedResultCountRange::min),
+			Codec.INT.fieldOf("max").forGetter(IndexedResultCountRange::max)
+		).apply(instance, IndexedResultCountRange::new));
+		public static final StreamCodec<RegistryFriendlyByteBuf, IndexedResultCountRange> STREAM_CODEC =
+			StreamCodec.of(
+				(buffer, range) -> {
+					buffer.writeVarInt(range.index());
+					buffer.writeVarInt(range.min());
+					buffer.writeVarInt(range.max());
+				},
+				buffer -> new IndexedResultCountRange(
+					buffer.readVarInt(),
+					buffer.readVarInt(),
+					buffer.readVarInt()));
 	}
 
 	public record ResultCountRange(int min, int max) {

@@ -6,7 +6,7 @@ import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.simibubi.create.compat.jei.category.CreateRecipeCategory;
 import com.simibubi.create.foundation.gui.AllGuiTextures;
 
-import mezz.jei.api.forge.ForgeTypes;
+import mezz.jei.api.neoforge.NeoForgeTypes;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.builder.IRecipeSlotBuilder;
 import mezz.jei.api.gui.ingredient.IRecipeSlotView;
@@ -46,13 +46,15 @@ public class EvokerEnchantingChamberJeiCategory extends AbstractRecipeCategory<E
 
 	@Override
 	public void setRecipe(IRecipeLayoutBuilder builder, EvokerEnchantingChamberJeiRecipe recipe, IFocusGroup focuses) {
-		IRecipeSlotBuilder fluidSlot = CreateRecipeCategory.addFluidSlot(builder, FLUID_X, FLUID_Y,
-				RecipeIngredientRole.INPUT)
-			.addIngredients(ForgeTypes.FLUID_STACK, recipe.fluidAmounts()
+		IRecipeSlotBuilder fluidSlot = builder.addSlot(RecipeIngredientRole.INPUT, FLUID_X, FLUID_Y)
+			.setBackground(CreateRecipeCategory.getRenderedSlot(), -1, -1)
+			.addIngredients(NeoForgeTypes.FLUID_STACK, recipe.fluidAmounts()
 				.stream()
 				.map(ExperienceFluidHelper::experienceStack)
 				.filter(stack -> !stack.isEmpty())
-				.toList());
+				.toList())
+			.setFluidRenderer(recipe.fluidAmounts().stream().mapToInt(Integer::intValue).max().orElse(1),
+				false, 16, 16);
 
 		IRecipeSlotBuilder inputSlot = builder.addSlot(RecipeIngredientRole.INPUT, INPUT_X, INPUT_Y)
 			.setBackground(CreateRecipeCategory.getRenderedSlot(), -1, -1)
@@ -88,7 +90,7 @@ public class EvokerEnchantingChamberJeiCategory extends AbstractRecipeCategory<E
 		if (shown.isEmpty())
 			return recipe.outputBooks().size() - 1;
 		for (int i = 0; i < recipe.outputBooks().size(); i++) {
-			if (ItemStack.isSameItemSameTags(shown, recipe.outputBooks().get(i)))
+			if (ItemStack.isSameItemSameComponents(shown, recipe.outputBooks().get(i)))
 				return i;
 		}
 		return recipe.outputBooks().size() - 1;

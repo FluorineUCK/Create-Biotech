@@ -1,5 +1,7 @@
 package com.yision.allay.block.allayport;
 
+import net.minecraft.core.HolderLookup;
+
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.simibubi.create.AllSoundEvents;
@@ -17,6 +19,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -25,11 +28,8 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.ItemStackHandler;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.HashSet;
@@ -49,7 +49,7 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 
 	public AllayPortBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
-		itemHandler = LazyOptional.of(() -> new AllayPortAutomationInventoryWrapper(inventory, this));
+		itemHandler = new AllayPortAutomationInventoryWrapper(inventory, this);
 		portInventory = new AllayPortInventory(this);
 		dispatchAccess = new AllayPortDispatchAccess(this, portInventory);
 		automation = new AllayPortAutomation(this, portInventory);
@@ -98,7 +98,7 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 	}
 
 	@Nullable IItemHandler getAutomationItemHandler() {
-		return itemHandler.orElse(null);
+		return itemHandler;
 	}
 
 	public Direction getLaunchSide() {
@@ -222,7 +222,8 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 			return;
 		}
 		if (!level.isClientSide()) {
-			CBPackets.send(packetTarget(), new AllayPortFlapPacket(this, inward));
+			if (level instanceof net.minecraft.server.level.ServerLevel serverLevel)
+				CBPackets.sendToTrackingChunk(new AllayPortFlapPacket(this, inward), serverLevel, worldPosition);
 		} else {
 			flap.setValue(inward ? -1 : 1);
 			AllSoundEvents.FUNNEL_FLAP.playAt(level, worldPosition, 1, 1, true);
@@ -252,7 +253,7 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 	}
 
 	@Override
-	public InteractionResult use(Player player) {
+	public ItemInteractionResult use(Player player) {
 		return super.use(player);
 	}
 
@@ -262,38 +263,27 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 	}
 
 	@Override
-	protected void write(CompoundTag tag, boolean clientPacket) {
-		super.write(tag, clientPacket);
+	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(tag, registries, clientPacket);
 		if (clientPacket) {
 			tag.putBoolean("CourierWaving", courierWaving);
 		}
 		tag.putString("ReturnMode", returnMode.serializedName());
-		portInventory.write(tag);
+		portInventory.write(tag, registries);
 		returnQueue.write(tag);
 	}
 
 	@Override
-	protected void read(CompoundTag tag, boolean clientPacket) {
-		super.read(tag, clientPacket);
+	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(tag, registries, clientPacket);
 		if (clientPacket) {
 			courierWaving = tag.getBoolean("CourierWaving");
 		}
 		returnMode = tag.contains("ReturnMode")
 			? AllayCourierReturnMode.byName(tag.getString("ReturnMode"))
 			: AllayCourierReturnMode.DEFAULT_FOR_PORT;
-		portInventory.read(tag);
+		portInventory.read(tag, registries);
 		returnQueue.read(tag);
-	}
-
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, @Nullable Direction side) {
-		if (cap == ForgeCapabilities.ITEM_HANDLER) {
-			IItemHandler handler = getItemHandler(side);
-			if (handler != null) {
-				return LazyOptional.of(() -> handler).cast();
-			}
-		}
-		return super.getCapability(cap, side);
 	}
 
 	@Override

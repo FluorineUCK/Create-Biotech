@@ -1,5 +1,9 @@
 package com.nobodiiiii.createbiotech.content.cardboardbox;
 
+import net.minecraft.core.registries.Registries;
+
+import net.minecraft.core.registries.BuiltInRegistries;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Function;
@@ -10,6 +14,7 @@ import com.simibubi.create.content.logistics.box.PackageItem;
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
@@ -20,12 +25,13 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.items.ItemStackHandler;
-import net.minecraftforge.registries.ForgeRegistries;
+import net.neoforged.neoforge.items.ItemStackHandler;
+
 
 public class CapturedEntityBoxHelper {
 	private static final String CAPTURED_ENTITY_TAG = "CapturedEntity";
@@ -34,7 +40,7 @@ public class CapturedEntityBoxHelper {
 	private static final String DATA_ROOT = CreateBiotech.MOD_ID;
 	private static final String AI_DISABLED_BY_MOD_TAG = "AiDisabledByMod";
 	private static final String NO_AI_TAG = "NoAI";
-	private static final String FORGE_DATA_TAG = "ForgeData";
+	private static final String NEOFORGE_DATA_TAG = "NeoForgeData";
 
 	private CapturedEntityBoxHelper() {}
 
@@ -84,17 +90,18 @@ public class CapturedEntityBoxHelper {
 		CompoundTag entityData = new CompoundTag();
 		target.saveWithoutId(entityData);
 
-		ResourceLocation entityId = ForgeRegistries.ENTITY_TYPES.getKey(target.getType());
+		ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(target.getType());
 		if (entityId == null)
 			return false;
 
 		entityData.putString("id", entityId.toString());
 		restoreAiInSavedEntityData(entityData);
 
-		CompoundTag stackTag = stack.getOrCreateTag();
+		CompoundTag stackTag = getCustomData(stack);
 		stackTag.put(CAPTURED_ENTITY_TAG, entityData);
 		stackTag.putString(CAPTURED_ENTITY_DESC_ID_TAG, target.getType().getDescriptionId());
 		stackTag.putFloat(CAPTURED_ENTITY_HEALTH_TAG, target.getHealth());
+		setCustomData(stack, stackTag);
 		return true;
 	}
 
@@ -113,25 +120,25 @@ public class CapturedEntityBoxHelper {
 	}
 
 	private static void restoreAiInSavedEntityData(CompoundTag entityData) {
-		if (!entityData.contains(FORGE_DATA_TAG, Tag.TAG_COMPOUND))
+		if (!entityData.contains(NEOFORGE_DATA_TAG, Tag.TAG_COMPOUND))
 			return;
-		CompoundTag forgeData = entityData.getCompound(FORGE_DATA_TAG);
-		if (!forgeData.contains(DATA_ROOT, Tag.TAG_COMPOUND))
+		CompoundTag neoForgeData = entityData.getCompound(NEOFORGE_DATA_TAG);
+		if (!neoForgeData.contains(DATA_ROOT, Tag.TAG_COMPOUND))
 			return;
-		CompoundTag modData = forgeData.getCompound(DATA_ROOT);
+		CompoundTag modData = neoForgeData.getCompound(DATA_ROOT);
 		if (!modData.getBoolean(AI_DISABLED_BY_MOD_TAG))
 			return;
 
 		entityData.remove(NO_AI_TAG);
 		modData.remove(AI_DISABLED_BY_MOD_TAG);
 		if (modData.isEmpty())
-			forgeData.remove(DATA_ROOT);
+			neoForgeData.remove(DATA_ROOT);
 		else
-			forgeData.put(DATA_ROOT, modData);
-		if (forgeData.isEmpty())
-			entityData.remove(FORGE_DATA_TAG);
+			neoForgeData.put(DATA_ROOT, modData);
+		if (neoForgeData.isEmpty())
+			entityData.remove(NEOFORGE_DATA_TAG);
 		else
-			entityData.put(FORGE_DATA_TAG, forgeData);
+			entityData.put(NEOFORGE_DATA_TAG, neoForgeData);
 	}
 
 	public static boolean releaseCapturedEntity(UseOnContext context) {
@@ -141,8 +148,8 @@ public class CapturedEntityBoxHelper {
 		if (entity == null)
 			return false;
 
-		CompoundTag stackTag = stack.getTag();
-		if (stackTag == null)
+		CompoundTag stackTag = getCustomData(stack);
+		if (stackTag.isEmpty())
 			return false;
 
 		BlockPos clickedPos = context.getClickedPos();
@@ -182,7 +189,7 @@ public class CapturedEntityBoxHelper {
 		if (entityData == null)
 			return false;
 
-		ResourceLocation entityId = ForgeRegistries.ENTITY_TYPES.getKey(entityType);
+		ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
 		return entityId != null && entityId.toString()
 			.equals(entityData.getString("id"));
 	}
@@ -196,8 +203,8 @@ public class CapturedEntityBoxHelper {
 		if (entity == null)
 			return null;
 
-		CompoundTag stackTag = stack.getTag();
-		if (entity instanceof LivingEntity living && stackTag != null
+		CompoundTag stackTag = getCustomData(stack);
+		if (entity instanceof LivingEntity living
 			&& stackTag.contains(CAPTURED_ENTITY_HEALTH_TAG, Tag.TAG_ANY_NUMERIC))
 			living.setHealth(Math.min(living.getMaxHealth(), stackTag.getFloat(CAPTURED_ENTITY_HEALTH_TAG)));
 
@@ -205,20 +212,16 @@ public class CapturedEntityBoxHelper {
 	}
 
 	public static void clearCapturedEntity(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
-		if (tag == null)
-			return;
+		CompoundTag tag = getCustomData(stack);
 
 		tag.remove(CAPTURED_ENTITY_TAG);
 		tag.remove(CAPTURED_ENTITY_DESC_ID_TAG);
 		tag.remove(CAPTURED_ENTITY_HEALTH_TAG);
-		if (tag.isEmpty())
-			stack.setTag(null);
+		setCustomData(stack, tag);
 	}
 
 	public static boolean hasCapturedEntity(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
-		return tag != null && tag.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND);
+		return getCustomData(stack).contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND);
 	}
 
 	public static ItemStackHandler applyVirtualSelfFallbackContents(ItemStack box, ItemStackHandler contents) {
@@ -239,18 +242,25 @@ public class CapturedEntityBoxHelper {
 	}
 
 	private static ItemStackHandler readPackageContentsWithoutMutation(ItemStack box) {
-		ItemStackHandler contents = new ItemStackHandler(PackageItem.SLOTS);
-		CompoundTag tag = box.getTag();
-		if (tag != null && tag.contains("Items", Tag.TAG_COMPOUND))
-			contents.deserializeNBT(tag.getCompound("Items"));
-		return applyVirtualSelfFallbackContents(box, contents);
+		return applyVirtualSelfFallbackContents(box, PackageItem.getContents(box));
 	}
 
 	private static CompoundTag getCapturedEntityData(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
-		if (tag == null || !tag.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND))
+		CompoundTag tag = getCustomData(stack);
+		if (!tag.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND))
 			return null;
 		return tag.getCompound(CAPTURED_ENTITY_TAG);
+	}
+
+	private static CompoundTag getCustomData(ItemStack stack) {
+		return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
+	}
+
+	private static void setCustomData(ItemStack stack, CompoundTag tag) {
+		if (tag.isEmpty())
+			stack.remove(DataComponents.CUSTOM_DATA);
+		else
+			stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
 	}
 
 	private static boolean hasAnyPackageContents(ItemStackHandler contents) {
@@ -270,7 +280,7 @@ public class CapturedEntityBoxHelper {
 			ItemStack stack = contents.getStackInSlot(slot);
 			if (stack.isEmpty())
 				continue;
-			if (!ItemStack.isSameItemSameTags(normalizedBox, stack.copyWithCount(1)))
+			if (!ItemStack.isSameItemSameComponents(normalizedBox, stack.copyWithCount(1)))
 				return false;
 			nonEmptyStacks++;
 		}
@@ -323,8 +333,8 @@ public class CapturedEntityBoxHelper {
 	}
 
 	private static void collectCapturedEntityEntry(ItemStack stack, List<TooltipEntry> entries) {
-		CompoundTag tag = stack.getTag();
-		if (tag == null || !tag.contains(CAPTURED_ENTITY_DESC_ID_TAG, Tag.TAG_STRING))
+		CompoundTag tag = getCustomData(stack);
+		if (!tag.contains(CAPTURED_ENTITY_DESC_ID_TAG, Tag.TAG_STRING))
 			return;
 
 		String entityDescId = tag.getString(CAPTURED_ENTITY_DESC_ID_TAG);

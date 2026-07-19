@@ -17,7 +17,7 @@ import net.minecraft.world.level.Level;
 public abstract class BlockBreakingMovementBehaviourMixin {
 
 	@Inject(method = "damageEntities(Lcom/simibubi/create/content/contraptions/behaviour/MovementContext;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/Level;)V",
-		at = @At("HEAD"), remap = false)
+		at = @At("HEAD"))
 	private void createBiotech$beginTrackingContraptionDamage(MovementContext context, BlockPos pos, Level world,
 		CallbackInfo ci) {
 		AbstractContraptionEntity contraptionEntity = context.contraption.entity;
@@ -27,7 +27,7 @@ public abstract class BlockBreakingMovementBehaviourMixin {
 	}
 
 	@Inject(method = "damageEntities(Lcom/simibubi/create/content/contraptions/behaviour/MovementContext;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/Level;)V",
-		at = @At("RETURN"), remap = false)
+		at = @At("RETURN"))
 	private void createBiotech$endTrackingContraptionDamage(MovementContext context, BlockPos pos, Level world,
 		CallbackInfo ci) {
 		AbstractContraptionEntity contraptionEntity = context.contraption.entity;

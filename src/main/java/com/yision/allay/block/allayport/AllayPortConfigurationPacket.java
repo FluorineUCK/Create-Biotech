@@ -1,9 +1,12 @@
 package com.yision.allay.block.allayport;
 
 import com.simibubi.create.foundation.networking.BlockEntityConfigurationPacket;
+import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.yision.allay.logistics.courier.AllayCourierReturnMode;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
+import net.createmod.catnip.net.base.BasePacketPayload.PacketTypeProvider;
 
 public class AllayPortConfigurationPacket extends BlockEntityConfigurationPacket<AllayPortBlockEntity> {
 
@@ -19,26 +22,30 @@ public class AllayPortConfigurationPacket extends BlockEntityConfigurationPacket
 		this.returnMode = returnMode == null ? AllayCourierReturnMode.DEFAULT_FOR_PORT : returnMode;
 	}
 
-	public AllayPortConfigurationPacket(FriendlyByteBuf buffer) {
-		super(buffer);
+	public AllayPortConfigurationPacket(RegistryFriendlyByteBuf buffer) {
+		super(buffer.readBlockPos());
+		readSettings(buffer);
 	}
 
-	@Override
-	protected void writeSettings(FriendlyByteBuf buffer) {
+	public void write(RegistryFriendlyByteBuf buffer) {
+		buffer.writeBlockPos(pos);
+		writeSettings(buffer);
+	}
+
+	protected void writeSettings(RegistryFriendlyByteBuf buffer) {
 		buffer.writeBoolean(acceptPackages);
 		buffer.writeUtf(newFilter);
 		buffer.writeVarInt(returnMode.id());
 	}
 
-	@Override
-	protected void readSettings(FriendlyByteBuf buffer) {
+	protected void readSettings(RegistryFriendlyByteBuf buffer) {
 		acceptPackages = buffer.readBoolean();
 		newFilter = buffer.readUtf();
 		returnMode = AllayCourierReturnMode.byId(buffer.readVarInt());
 	}
 
 	@Override
-	protected void applySettings(AllayPortBlockEntity be) {
+	protected void applySettings(ServerPlayer player, AllayPortBlockEntity be) {
 		boolean filterChanged = !be.addressFilter.equals(newFilter) || be.acceptsPackages != acceptPackages;
 		boolean modeChanged = be.getReturnMode() != returnMode;
 		if (!filterChanged && !modeChanged) {
@@ -54,5 +61,10 @@ public class AllayPortConfigurationPacket extends BlockEntityConfigurationPacket
 			be.setReturnMode(returnMode);
 		}
 		be.notifyUpdate();
+	}
+
+	@Override
+	public PacketTypeProvider getTypeProvider() {
+		return CBPackets.serverboundType();
 	}
 }

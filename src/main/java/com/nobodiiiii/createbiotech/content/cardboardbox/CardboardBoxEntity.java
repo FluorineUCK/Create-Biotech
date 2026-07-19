@@ -12,8 +12,8 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.network.PlayMessages.SpawnEntity;
 
 public class CardboardBoxEntity extends PackageEntity {
 
@@ -60,14 +60,6 @@ public class CardboardBoxEntity extends PackageEntity {
 		return boxEntity;
 	}
 
-	public static CardboardBoxEntity spawn(SpawnEntity spawnEntity, Level level) {
-		CardboardBoxEntity boxEntity =
-			new CardboardBoxEntity(level, spawnEntity.getPosX(), spawnEntity.getPosY(), spawnEntity.getPosZ());
-		boxEntity.setDeltaMovement(spawnEntity.getVelX(), spawnEntity.getVelY(), spawnEntity.getVelZ());
-		boxEntity.clientPosition = boxEntity.position();
-		return boxEntity;
-	}
-
 	@Override
 	protected void verifyInitialEntity() {
 		Entity source = originalEntity;
@@ -84,11 +76,10 @@ public class CardboardBoxEntity extends PackageEntity {
 	}
 
 	@Override
-	protected void dropAllDeathLoot(DamageSource damageSource) {
-		if (!level().isClientSide
-			&& CapturedEntityBoxHelper.releaseCapturedEntity(box, level(), position(), getDeltaMovement()))
+	protected void dropAllDeathLoot(ServerLevel level, DamageSource damageSource) {
+		if (CapturedEntityBoxHelper.releaseCapturedEntity(box, level, position(), getDeltaMovement()))
 			return;
 
-		super.dropAllDeathLoot(damageSource);
+		super.dropAllDeathLoot(level, damageSource);
 	}
 }

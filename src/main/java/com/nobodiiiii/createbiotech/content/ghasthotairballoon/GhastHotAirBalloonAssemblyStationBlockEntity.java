@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.ghasthotairballoon;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 import java.util.UUID;
 
@@ -301,9 +303,9 @@ public class GhastHotAirBalloonAssemblyStationBlockEntity extends BlockEntity {
 	}
 
 	@Override
-	public CompoundTag getUpdateTag() {
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
 		CompoundTag tag = new CompoundTag();
-		saveAdditional(tag);
+		saveAdditional(tag, registries);
 		return tag;
 	}
 
@@ -313,21 +315,13 @@ public class GhastHotAirBalloonAssemblyStationBlockEntity extends BlockEntity {
 	}
 
 	@Override
-	public void onDataPacket(Connection net, ClientboundBlockEntityDataPacket packet) {
-		super.onDataPacket(net, packet);
-		CompoundTag tag = packet.getTag();
-		if (tag != null)
-			load(tag);
+	public void handleUpdateTag(CompoundTag tag, HolderLookup.Provider registries) {
+		super.handleUpdateTag(tag, registries);
 	}
 
 	@Override
-	public void handleUpdateTag(CompoundTag tag) {
-		load(tag);
-	}
-
-	@Override
-	protected void saveAdditional(CompoundTag tag) {
-		super.saveAdditional(tag);
+	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.saveAdditional(tag, registries);
 		tag.putBoolean("WasPowered", wasPowered);
 		tag.putBoolean("Extending", extending);
 		tag.putBoolean("Retracting", retracting);
@@ -337,8 +331,8 @@ public class GhastHotAirBalloonAssemblyStationBlockEntity extends BlockEntity {
 	}
 
 	@Override
-	public void load(CompoundTag tag) {
-		super.load(tag);
+	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.loadAdditional(tag, registries);
 		wasPowered = tag.getBoolean("WasPowered");
 		boolean wasExtending = extending;
 		boolean wasRetracting = retracting;

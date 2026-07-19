@@ -16,27 +16,27 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate.StructureBlockInfo;
-import net.minecraftforge.event.entity.EntityLeaveLevelEvent;
-import net.minecraftforge.event.entity.living.LivingDamageEvent;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.EventPriority;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.EntityLeaveLevelEvent;
+import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
+import net.neoforged.bus.api.EventPriority;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public class BioPackagerContraptionCaptureHandler {
 
 	private BioPackagerContraptionCaptureHandler() {}
 
 	@SubscribeEvent(priority = EventPriority.LOW)
-	public static void onLivingDamage(LivingDamageEvent event) {
+	public static void onLivingDamage(LivingDamageEvent.Pre event) {
 		LivingEntity target = event.getEntity();
 		Level level = target.level();
 		if (level.isClientSide)
 			return;
 		if (!(target instanceof Mob mob))
 			return;
-		if (mob.getHealth() > event.getAmount())
+		if (mob.getHealth() > event.getNewDamage())
 			return;
 
 		AbstractContraptionEntity contraptionEntity =
@@ -65,15 +65,13 @@ public class BioPackagerContraptionCaptureHandler {
 
 		BioPackagerContraptionTracker.startServerCapture(contraptionEntity, freePackagerLocal, filledBox);
 
-		event.setCanceled(true);
+		event.setNewDamage(0);
 		target.discard();
 		CBAdvancements.awardNearby(level, target.blockPosition(), 16, CBAdvancements.BIO_PACKAGER);
 	}
 
 	@SubscribeEvent
-	public static void onServerTick(TickEvent.ServerTickEvent event) {
-		if (event.phase != TickEvent.Phase.END)
-			return;
+	public static void onServerTick(ServerTickEvent.Post event) {
 		event.getServer().getAllLevels().forEach(BioPackagerContraptionTracker::tickAll);
 	}
 

@@ -5,16 +5,16 @@ import com.yision.allay.logistics.courier.hud.AllayCourierHudEntry;
 import com.yision.allay.logistics.courier.hud.AllayCourierHudPacket;
 import com.yision.allay.logistics.courier.hud.AllayCourierHudStatus;
 import net.minecraft.Util;
+import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.LayeredDraw;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.api.distmarker.OnlyIn;
-import net.minecraftforge.client.gui.overlay.ForgeGui;
-import net.minecraftforge.client.gui.overlay.IGuiOverlay;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -23,7 +23,7 @@ import java.util.Set;
 import java.util.UUID;
 
 @OnlyIn(Dist.CLIENT)
-public final class AllayCourierHudOverlay implements IGuiOverlay {
+public final class AllayCourierHudOverlay implements LayeredDraw.Layer {
 	public static final AllayCourierHudOverlay INSTANCE = new AllayCourierHudOverlay();
 
 	private static final ResourceLocation ALLAY_PORT_GUI =
@@ -85,7 +85,7 @@ public final class AllayCourierHudOverlay implements IGuiOverlay {
 	}
 
 	@Override
-	public void render(ForgeGui gui, GuiGraphics graphics, float partialTicks, int width, int height) {
+	public void render(GuiGraphics graphics, DeltaTracker deltaTracker) {
 		Minecraft minecraft = Minecraft.getInstance();
 		if (activeConnection != minecraft.getConnection()) {
 			animatedEntries.clear();
@@ -135,7 +135,7 @@ public final class AllayCourierHudOverlay implements IGuiOverlay {
 			}
 			int naturalLabelWidth = labelWidth(minecraft, text);
 			int renderedLabelWidth = animatedEntry.labelWidth(naturalLabelWidth);
-			renderLabel(graphics, minecraft, text, width, y, animatedEntry.visibility(now),
+			renderLabel(graphics, minecraft, text, graphics.guiWidth(), y, animatedEntry.visibility(now),
 				renderedLabelWidth, textColor);
 			y += LABEL_HEIGHT + LINE_GAP;
 			renderedCount++;

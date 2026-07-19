@@ -4,10 +4,10 @@ import java.util.Map;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.network.CBPackets;
-import com.simibubi.create.AllPackets;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.actors.trainControls.ControlsHandler;
 import com.simibubi.create.content.contraptions.actors.trainControls.ControlsInputPacket;
+import net.createmod.catnip.platform.CatnipServices;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -18,12 +18,12 @@ import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public class GhastHelmClientHandler {
 
 	private static final double DETECT_RADIUS = 16d;
@@ -55,10 +55,7 @@ public class GhastHelmClientHandler {
 	}
 
 	@SubscribeEvent
-	public static void onClientTick(TickEvent.ClientTickEvent event) {
-		if (event.phase != TickEvent.Phase.END)
-			return;
-
+	public static void onClientTick(ClientTickEvent.Post event) {
 		if (!controllingGhastBalloon)
 			return;
 
@@ -79,7 +76,7 @@ public class GhastHelmClientHandler {
 		boolean sprintDown = minecraft.options.keySprint.isDown();
 		if (sprintDown && !previousSprintDown) {
 			disengageIfEngaged(contraption);
-			AllPackets.getChannel().sendToServer(
+			CatnipServices.NETWORK.sendToServer(
 				new ControlsInputPacket(ControlsHandler.currentlyPressed, false, contraption.getId(), controlsPos, true));
 			ControlsHandler.stopControlling();
 			reset();

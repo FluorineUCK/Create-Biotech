@@ -11,7 +11,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.phys.Vec2;
 import snownee.jade.api.BlockAccessor;
-import snownee.jade.api.Identifiers;
+import snownee.jade.api.JadeIds;
 import snownee.jade.api.IBlockComponentProvider;
 import snownee.jade.api.IServerDataProvider;
 import snownee.jade.api.ITooltip;
@@ -69,21 +69,21 @@ public enum  BCEComponentProvider implements IBlockComponentProvider, IServerDat
             {
                 iTooltip.add(clock);
                 iTooltip.append(Component.translatable("string.create_biotech.remaining"));
-                iTooltip.append(IThemeHelper.get().seconds(compound.getInt(REMAINING)));
+                iTooltip.append(IThemeHelper.get().seconds(compound.getInt(REMAINING), 20.0f));
             }
         }
 
     }
 
     private static void replaceTitle(ITooltip tooltip, BlockAccessor accessor) {
-        if (tooltip.get(Identifiers.CORE_OBJECT_NAME).isEmpty())
+        if (tooltip.get(JadeIds.CORE_OBJECT_NAME).isEmpty())
             return;
 
         MutableComponent title = Component.translatable(ModBlocks.BUTTER_CAT_ENGINE.has(accessor.getBlockState())
                 ? "block.create_biotech.butter_cat_engine"
                 : "block.create_biotech.cute_cat_on_shaft");
-        tooltip.remove(Identifiers.CORE_OBJECT_NAME);
-        tooltip.add(0, IThemeHelper.get().title(title), Identifiers.CORE_OBJECT_NAME);
+        tooltip.remove(JadeIds.CORE_OBJECT_NAME);
+        tooltip.add(0, IThemeHelper.get().title(title), JadeIds.CORE_OBJECT_NAME);
     }
 
     @Override

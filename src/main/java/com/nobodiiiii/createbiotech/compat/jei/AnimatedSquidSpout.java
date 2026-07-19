@@ -9,7 +9,10 @@ import com.mojang.blaze3d.platform.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlockEntity;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterSquidVisual;
@@ -18,7 +21,7 @@ import com.simibubi.create.AllBlocks;
 
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.gui.UIRenderHelper;
-import net.createmod.catnip.platform.ForgeCatnipServices;
+import net.createmod.catnip.platform.NeoForgeCatnipServices;
 import net.minecraft.client.Camera;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -28,11 +31,10 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.GameRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.MultiBufferSource.BufferSource;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.ParticleTypes;
-import net.minecraftforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.FluidStack;
 import org.joml.Quaternionf;
 
 public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
@@ -83,20 +85,17 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 			.render(graphics);
 
 		DEFAULT_LIGHTING.applyLighting();
-		BufferSource buffer = MultiBufferSource.immediate(Tesselator.getInstance()
-			.getBuilder());
 		matrixStack.pushPose();
 		UIRenderHelper.flipForGuiRender(matrixStack);
 		matrixStack.scale(16, 16, 16);
 		float from = 3f / 16f;
 		float to = 17f / 16f;
 		FluidStack fluidStack = fluids.get(0);
-		ForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, from, from, from, to, to, to,
+		NeoForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, from, from, from, to, to, to,
 			graphics.bufferSource(), matrixStack, LightTexture.FULL_BRIGHT, false, true);
 		matrixStack.popPose();
 
 		renderInkParticles(graphics);
-		buffer.endBatch();
 		Lighting.setupFor3DItems();
 
 		matrixStack.popPose();
@@ -120,10 +119,6 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 		ParticleRenderType renderType = ParticleRenderType.PARTICLE_SHEET_TRANSLUCENT;
 		LightTexture lightTexture = Minecraft.getInstance().gameRenderer.lightTexture();
 		lightTexture.turnOnLightLayer();
-		PoseStack modelView = RenderSystem.getModelViewStack();
-		modelView.pushPose();
-		modelView.mulPoseMatrix(poseStack.last().pose());
-		RenderSystem.applyModelViewMatrix();
 		RenderSystem.setShaderTexture(0, TextureAtlas.LOCATION_PARTICLES);
 		RenderSystem.disableCull();
 		RenderSystem.enableDepthTest();
@@ -132,22 +127,62 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 		RenderSystem.depthMask(true);
 
 		try {
-			BufferBuilder builder = Tesselator.getInstance().getBuilder();
-			RenderSystem.setShader(GameRenderer::getParticleShader);
-			renderType.begin(builder, Minecraft.getInstance().textureManager);
+			BufferBuilder builder = renderType.begin(Tesselator.getInstance(),
+				Minecraft.getInstance().getTextureManager());
+			VertexConsumer transformed = new PoseStackVertexConsumer(builder, poseStack.last().pose());
 			float partialTicks = AnimationTickHolder.getPartialTicks();
 			for (Particle particle : activeParticles)
-				particle.render(builder, camera, partialTicks);
-			renderType.end(Tesselator.getInstance());
+				particle.render(transformed, camera, partialTicks);
+			MeshData mesh = builder.build();
+			if (mesh != null)
+				BufferUploader.drawWithShader(mesh);
 		} finally {
-			modelView.popPose();
-			RenderSystem.applyModelViewMatrix();
 			RenderSystem.enableCull();
 			RenderSystem.disableBlend();
 			lightTexture.turnOffLightLayer();
 		}
 
 		poseStack.popPose();
+	}
+
+	private static class PoseStackVertexConsumer implements VertexConsumer {
+		private final VertexConsumer delegate;
+		private final org.joml.Matrix4f pose;
+
+		private PoseStackVertexConsumer(VertexConsumer delegate, org.joml.Matrix4f pose) {
+			this.delegate = delegate;
+			this.pose = new org.joml.Matrix4f(pose);
+		}
+
+		@Override
+		public VertexConsumer addVertex(float x, float y, float z) {
+			return delegate.addVertex(pose, x, y, z);
+		}
+
+		@Override
+		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
+			return delegate.setColor(red, green, blue, alpha);
+		}
+
+		@Override
+		public VertexConsumer setUv(float u, float v) {
+			return delegate.setUv(u, v);
+		}
+
+		@Override
+		public VertexConsumer setUv1(int u, int v) {
+			return delegate.setUv1(u, v);
+		}
+
+		@Override
+		public VertexConsumer setUv2(int u, int v) {
+			return delegate.setUv2(u, v);
+		}
+
+		@Override
+		public VertexConsumer setNormal(float x, float y, float z) {
+			return delegate.setNormal(x, y, z);
+		}
 	}
 
 	private void syncInkParticles(ClientLevel level) {

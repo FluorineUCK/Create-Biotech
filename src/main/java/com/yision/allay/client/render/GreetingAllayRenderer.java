@@ -14,7 +14,7 @@ import net.minecraft.util.Mth;
 final class GreetingAllayRenderer {
 
 	private static final ResourceLocation ALLAY_TEXTURE =
-		new ResourceLocation("textures/entity/allay/allay.png");
+		ResourceLocation.parse("textures/entity/allay/allay.png");
 	private static final double ALLAY_POSITION_Y = 1.0d - 2.0d / 16.0d;
 	private static final float LIVING_ENTITY_MODEL_Y_OFFSET = -1.501f;
 	private static final float ALLAY_SCALE = 1.0f;
@@ -42,10 +42,7 @@ final class GreetingAllayRenderer {
 					modelBuffer.getBuffer(allayModel.renderType(ALLAY_TEXTURE)),
 					modelLight,
 					OverlayTexture.NO_OVERLAY,
-					1.0f,
-					1.0f,
-					1.0f,
-					1.0f);
+					-1);
 				renderLogisticsHat(modelPose, modelBuffer, modelLight);
 			});
 	}

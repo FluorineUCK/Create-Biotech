@@ -5,8 +5,9 @@ import com.nobodiiiii.createbiotech.content.experience.LegacyExperienceCompat;
 import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity;
 
 import net.minecraft.nbt.CompoundTag;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.fluids.capability.templates.FluidTank;
+import net.minecraft.core.HolderLookup;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,15 +27,17 @@ public abstract class FluidTankBlockEntityMixin {
 	@Unique
 	private int createBiotech$legacyStoredExperience;
 
-	@Inject(method = "read(Lnet/minecraft/nbt/CompoundTag;Z)V", at = @At("HEAD"), remap = false)
-	private void createBiotech$migrateLegacyExperienceTankNbt(CompoundTag compound, boolean clientPacket,
+	@Inject(method = "read(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/core/HolderLookup$Provider;Z)V", at = @At("HEAD"))
+	private void createBiotech$migrateLegacyExperienceTankNbt(CompoundTag compound,
+		HolderLookup.Provider registries, boolean clientPacket,
 		CallbackInfo ci) {
 		createBiotech$legacyStoredExperience = compound.getInt("StoredExperience");
-		LegacyExperienceCompat.migrateTankNbt(compound);
+		LegacyExperienceCompat.migrateTankNbt(compound, registries);
 	}
 
-	@Inject(method = "read(Lnet/minecraft/nbt/CompoundTag;Z)V", at = @At("TAIL"), remap = false)
-	private void createBiotech$restoreLegacyExperienceContents(CompoundTag compound, boolean clientPacket,
+	@Inject(method = "read(Lnet/minecraft/nbt/CompoundTag;Lnet/minecraft/core/HolderLookup$Provider;Z)V", at = @At("TAIL"))
+	private void createBiotech$restoreLegacyExperienceContents(CompoundTag compound,
+		HolderLookup.Provider registries, boolean clientPacket,
 		CallbackInfo ci) {
 		if (clientPacket || createBiotech$legacyStoredExperience <= 0 || !isController()) {
 			createBiotech$legacyStoredExperience = 0;

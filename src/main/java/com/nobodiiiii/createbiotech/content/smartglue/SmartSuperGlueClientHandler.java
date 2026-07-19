@@ -4,14 +4,14 @@ import com.nobodiiiii.createbiotech.CreateBiotech;
 
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.client.event.InputEvent;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.event.level.LevelEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.InputEvent;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.event.level.LevelEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public class SmartSuperGlueClientHandler {
 
 	private static final SmartSuperGlueSelectionHandler HANDLER = new SmartSuperGlueSelectionHandler();
@@ -19,10 +19,7 @@ public class SmartSuperGlueClientHandler {
 	private SmartSuperGlueClientHandler() {}
 
 	@SubscribeEvent
-	public static void onClientTick(TickEvent.ClientTickEvent event) {
-		if (event.phase != TickEvent.Phase.END)
-			return;
-
+	public static void onClientTick(ClientTickEvent.Post event) {
 		HANDLER.tick();
 	}
 

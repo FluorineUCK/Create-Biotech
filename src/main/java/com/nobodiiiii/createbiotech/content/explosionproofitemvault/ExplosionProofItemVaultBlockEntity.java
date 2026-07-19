@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.explosionproofitemvault;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 import java.util.Objects;
 
@@ -12,6 +14,7 @@ import com.simibubi.create.api.connectivity.ConnectivityHandler;
 import com.simibubi.create.api.packager.InventoryIdentifier;
 import com.simibubi.create.content.logistics.vault.ItemVaultBlock;
 import com.simibubi.create.content.logistics.vault.ItemVaultBlockEntity;
+import com.simibubi.create.foundation.ICapabilityProvider;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.blockEntity.behaviour.CenteredSideValueBoxTransform;
 import com.simibubi.create.foundation.blockEntity.behaviour.scrollValue.ScrollOptionBehaviour;
@@ -26,11 +29,9 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.IItemHandlerModifiable;
-import net.minecraftforge.items.ItemStackHandler;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.IItemHandlerModifiable;
+import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 
@@ -69,13 +70,10 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 		return invId;
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction side) {
-		if (isItemHandlerCap(cap)) {
-			initExplosionProofCapability();
-			return itemCapability.cast();
-		}
-		return super.getCapability(cap, side);
+	@Nullable
+	public IItemHandler getItemCapability(Direction side) {
+		initExplosionProofCapability();
+		return itemCapability == null ? null : itemCapability.getCapability();
 	}
 
 	@Override
@@ -93,7 +91,8 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 			getLevel().setBlock(worldPosition, state, 22);
 		}
 
-		itemCapability.invalidate();
+		itemCapability = null;
+		invalidateCapabilities();
 		setChanged();
 		sendData();
 	}
@@ -104,7 +103,8 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 		if (ExplosionProofItemVaultBlock.isVault(state)) {
 			level.setBlock(getBlockPos(), state.setValue(ItemVaultBlock.LARGE, radius > 2), 6);
 		}
-		itemCapability.invalidate();
+		itemCapability = null;
+		invalidateCapabilities();
 		setChanged();
 	}
 
@@ -126,7 +126,7 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 	}
 
 	private void initExplosionProofCapability() {
-		if (itemCapability.isPresent())
+		if (itemCapability != null && itemCapability.getCapability() != null)
 			return;
 
 		if (!isController()) {
@@ -135,7 +135,11 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 				return;
 
 			explosionProofController.initExplosionProofCapability();
-			itemCapability = explosionProofController.itemCapability;
+			itemCapability = ICapabilityProvider.of(() -> {
+				if (explosionProofController.isRemoved() || explosionProofController.itemCapability == null)
+					return null;
+				return explosionProofController.itemCapability.getCapability();
+			});
 			invId = explosionProofController.invId;
 			return;
 		}
@@ -156,7 +160,7 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 		}
 
 		IItemHandler itemHandler = new VersionedInventoryWrapper(SameSizeCombinedInvWrapper.create(invs));
-		itemCapability = LazyOptional.of(() -> itemHandler);
+		itemCapability = ICapabilityProvider.of(itemHandler);
 
 		BlockPos farCorner = alongZ ? worldPosition.offset(radius, radius, length)
 			: worldPosition.offset(length, radius, radius);
@@ -165,8 +169,8 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 	}
 
 	@Override
-	protected void write(CompoundTag compound, boolean clientPacket) {
-		super.write(compound, clientPacket);
+	protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(compound, registries, clientPacket);
 		if (blastChamberController != null)
 			compound.putLong(BLAST_CHAMBER_CONTROLLER_TAG, blastChamberController.asLong());
 		if (blastChamberRole != null)
@@ -174,8 +178,8 @@ public class ExplosionProofItemVaultBlockEntity extends ItemVaultBlockEntity {
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 		blastChamberController = compound.contains(BLAST_CHAMBER_CONTROLLER_TAG)
 			? BlockPos.of(compound.getLong(BLAST_CHAMBER_CONTROLLER_TAG))
 			: null;

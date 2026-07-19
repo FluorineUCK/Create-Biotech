@@ -10,12 +10,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.fml.DistExecutor;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class ShulkerPackagerPlacementPacket {
 
@@ -47,18 +45,15 @@ public class ShulkerPackagerPlacementPacket {
 		buffer.writeBlockPos(pos);
 	}
 
-	public void handle(Context context) {
-		context.enqueueWork(() -> {
-			ServerPlayer player = context.getSender();
-			if (player == null)
-				return;
-			Level world = player.level();
-			if (world == null || !world.isLoaded(pos))
-				return;
-			BlockEntity blockEntity = world.getBlockEntity(pos);
-			if (blockEntity instanceof ShulkerPackagerBlockEntity packager)
-				packager.setInteractionPointTag(receivedTag);
-		});
+	public void handle(ServerPlayer player) {
+		if (player == null)
+			return;
+		Level world = player.level();
+		if (world == null || !world.isLoaded(pos))
+			return;
+		BlockEntity blockEntity = world.getBlockEntity(pos);
+		if (blockEntity instanceof ShulkerPackagerBlockEntity packager)
+			packager.setInteractionPointTag(receivedTag);
 	}
 
 	public static class ClientBoundRequest {
@@ -77,9 +72,8 @@ public class ShulkerPackagerPlacementPacket {
 			buffer.writeBlockPos(pos);
 		}
 
-		public void handle(Context context) {
-			context.enqueueWork(() -> DistExecutor.unsafeRunWhenOn(Dist.CLIENT,
-				() -> () -> ShulkerPackagerConnectionHandler.flushSettings(pos)));
+		public void handle(LocalPlayer player) {
+			ShulkerPackagerConnectionHandler.flushSettings(pos);
 		}
 	}
 }

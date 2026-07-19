@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.client;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointItem;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -16,21 +17,18 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public class UniversalJointConnectorHandler {
 
 	private UniversalJointConnectorHandler() {}
 
 	@SubscribeEvent
-	public static void onClientTick(TickEvent.ClientTickEvent event) {
-		if (event.phase != TickEvent.Phase.END)
-			return;
-
+	public static void onClientTick(ClientTickEvent.Post event) {
 		Minecraft minecraft = Minecraft.getInstance();
 		Player player = minecraft.player;
 		Level level = minecraft.level;
@@ -42,10 +40,10 @@ public class UniversalJointConnectorHandler {
 
 		for (InteractionHand hand : InteractionHand.values()) {
 			ItemStack heldItem = player.getItemInHand(hand);
-			if (!heldItem.is(CBItems.UNIVERSAL_JOINT.get()) || !heldItem.hasTag())
+			if (!heldItem.is(CBItems.UNIVERSAL_JOINT.get()) || !CBItemData.has(heldItem))
 				continue;
 
-			CompoundTag tag = heldItem.getTag();
+			CompoundTag tag = CBItemData.get(heldItem);
 			if (tag == null || !tag.contains(UniversalJointItem.FIRST_TARGET_KEY)
 				|| !tag.contains(UniversalJointItem.FIRST_FACE_KEY))
 				continue;
@@ -54,7 +52,9 @@ public class UniversalJointConnectorHandler {
 			if (firstFace == null)
 				continue;
 
-			BlockPos firstTarget = NbtUtils.readBlockPos(tag.getCompound(UniversalJointItem.FIRST_TARGET_KEY));
+			BlockPos firstTarget = NbtUtils.readBlockPos(tag, UniversalJointItem.FIRST_TARGET_KEY).orElse(null);
+			if (firstTarget == null)
+				continue;
 			BlockPos firstJoint = UniversalJointItem.getJointPos(firstTarget, firstFace);
 			HitResult hitResult = minecraft.hitResult;
 

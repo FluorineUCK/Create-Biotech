@@ -7,7 +7,6 @@ import org.jetbrains.annotations.Nullable;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
-import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlockEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -47,7 +46,7 @@ public final class CuteCatOnShaftJeiRenderer {
 	private CuteCatOnShaftJeiRenderer() {}
 
 	public static @Nullable PreviewKind getPreviewKind(ItemApplicationRecipe recipe, IRecipeSlotsView recipeSlotsView) {
-		if (recipe.getId().equals(CreateBiotech.asResource("item_application/cute_cat_on_shaft_manual_only")))
+		if (recipe.getProcessedItem().test(new ItemStack(AllBlocks.SHAFT.get())))
 			return PreviewKind.SHAFT_TO_CAT;
 
 		Optional<ItemStack> displayedIngredient = recipeSlotsView.getSlotViews()

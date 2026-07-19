@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.evokerenchantingchamber;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 
 import com.nobodiiiii.createbiotech.content.experience.ExperienceConstants;
@@ -32,12 +34,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.fluids.FluidStack;
-import net.minecraftforge.fluids.capability.IFluidHandler;
-import net.minecraftforge.items.IItemHandler;
+import net.neoforged.neoforge.fluids.FluidStack;
+import net.neoforged.neoforge.fluids.capability.IFluidHandler;
+import net.neoforged.neoforge.items.IItemHandler;
 
 public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 	implements IHaveGoggleInformation {
@@ -61,13 +60,13 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 	private int clientSyncTimer;
 	private ItemStack heldItem = ItemStack.EMPTY;
 	private ItemStack pendingOutput = ItemStack.EMPTY;
-	private final LazyOptional<IItemHandler> itemHandlerCap;
-	private final LazyOptional<IFluidHandler> fluidHandlerCap;
+	private final IItemHandler itemHandlerCap;
+	private final IFluidHandler fluidHandlerCap;
 
 	public EvokerEnchantingChamberBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get(), pos, state);
-		itemHandlerCap = LazyOptional.of(this::createItemHandler);
-		fluidHandlerCap = LazyOptional.of(() -> new ChamberFluidHandler());
+		itemHandlerCap = createItemHandler();
+		fluidHandlerCap = new ChamberFluidHandler();
 	}
 
 	public static void tick(Level level, BlockPos pos, BlockState state, EvokerEnchantingChamberBlockEntity be) {
@@ -271,30 +270,29 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 		this.clientSyncTimer = 0;
 	}
 
-	@Override
 	public AABB getRenderBoundingBox() {
-		return new AABB(worldPosition, worldPosition.offset(1, 2, 1));
+		return AABB.encapsulatingFullBlocks(worldPosition, worldPosition.offset(1, 2, 1));
 	}
 
 	@Override
-	protected void saveAdditional(CompoundTag tag) {
-		super.saveAdditional(tag);
+	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.saveAdditional(tag, registries);
 		if (isUpperHalf())
 			return;
 		tag.putInt("FluidRemaining", fluidRemaining);
 		tag.putInt("FluidTotal", fluidTotal);
 		if (!storedFluid.isEmpty())
-			tag.put("TankContent", storedFluid.writeToNBT(new CompoundTag()));
+			tag.put("TankContent", storedFluid.saveOptional(registries));
 		tag.putBoolean("WaitingForFluid", waitingForFluid);
 		if (!heldItem.isEmpty())
-			tag.put("HeldItem", heldItem.serializeNBT());
+			tag.put("HeldItem", heldItem.saveOptional(registries));
 		if (!pendingOutput.isEmpty())
-			tag.put("PendingOutput", pendingOutput.serializeNBT());
+			tag.put("PendingOutput", pendingOutput.saveOptional(registries));
 	}
 
 	@Override
-	public void load(CompoundTag tag) {
-		super.load(tag);
+	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
+		super.loadAdditional(tag, registries);
 		if (isUpperHalf()) {
 			fluidRemaining = 0;
 			fluidTotal = 0;
@@ -306,18 +304,18 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 		}
 		fluidRemaining = tag.contains("FluidRemaining") ? tag.getInt("FluidRemaining") : tag.getInt("XpRemaining");
 		fluidTotal = tag.contains("FluidTotal") ? tag.getInt("FluidTotal") : tag.getInt("XpTotal");
-		storedFluid = readStoredFluid(tag);
+		storedFluid = readStoredFluid(tag, registries);
 		waitingForFluid = tag.contains("WaitingForFluid")
 			? tag.getBoolean("WaitingForFluid")
 			: tag.getBoolean("WaitingForExperience");
-		heldItem = tag.contains("HeldItem") ? ItemStack.of(tag.getCompound("HeldItem")) : ItemStack.EMPTY;
-		pendingOutput = tag.contains("PendingOutput") ? ItemStack.of(tag.getCompound("PendingOutput"))
+		heldItem = tag.contains("HeldItem") ? ItemStack.parseOptional(registries, tag.getCompound("HeldItem")) : ItemStack.EMPTY;
+		pendingOutput = tag.contains("PendingOutput") ? ItemStack.parseOptional(registries, tag.getCompound("PendingOutput"))
 			: ItemStack.EMPTY;
 	}
 
-	private static FluidStack readStoredFluid(CompoundTag tag) {
+	private static FluidStack readStoredFluid(CompoundTag tag, HolderLookup.Provider registries) {
 		if (tag.contains("TankContent", Tag.TAG_COMPOUND)) {
-			FluidStack fluid = FluidStack.loadFluidStackFromNBT(tag.getCompound("TankContent"));
+			FluidStack fluid = FluidStack.parseOptional(registries, tag.getCompound("TankContent"));
 			return ExperienceFluidHelper.isExperience(fluid) ? fluid : FluidStack.EMPTY;
 		}
 		if (tag.contains("StoredExperience", Tag.TAG_INT))
@@ -326,8 +324,8 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 	}
 
 	@Override
-	public CompoundTag getUpdateTag() {
-		return saveWithoutMetadata();
+	public CompoundTag getUpdateTag(HolderLookup.Provider registries) {
+		return saveWithoutMetadata(registries);
 	}
 
 	@Override
@@ -335,17 +333,14 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 		return ClientboundBlockEntityDataPacket.create(this);
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction side) {
-		if (cap == ForgeCapabilities.ITEM_HANDLER || cap == ForgeCapabilities.FLUID_HANDLER) {
-			EvokerEnchantingChamberBlockEntity controller = getController();
-			if (controller != null && controller != this)
-				return controller.getCapability(cap, side);
-			if (cap == ForgeCapabilities.FLUID_HANDLER)
-				return fluidHandlerCap.cast();
-			return itemHandlerCap.cast();
-		}
-		return super.getCapability(cap, side);
+	public IItemHandler getItemCapability(Direction side) {
+		EvokerEnchantingChamberBlockEntity controller = getController();
+		return controller != null && controller != this ? controller.getItemCapability(side) : itemHandlerCap;
+	}
+
+	public IFluidHandler getFluidCapability(Direction side) {
+		EvokerEnchantingChamberBlockEntity controller = getController();
+		return controller != null && controller != this ? controller.getFluidCapability(side) : fluidHandlerCap;
 	}
 
 	public int insertFluid(FluidStack resource, boolean simulate) {
@@ -468,13 +463,6 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 		}
 
 		return true;
-	}
-
-	@Override
-	public void invalidateCaps() {
-		super.invalidateCaps();
-		itemHandlerCap.invalidate();
-		fluidHandlerCap.invalidate();
 	}
 
 	private void syncToClient() {

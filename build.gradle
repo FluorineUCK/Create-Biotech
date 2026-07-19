@@ -72,6 +72,10 @@ repositories {
     mavenCentral()
 }
 
+configurations {
+    quickPlayMods
+}
+
 dependencies {
     implementation("com.simibubi.create:create-${minecraft_version}:${create_version}")
 
@@ -89,6 +93,16 @@ dependencies {
 
     compileOnly("io.github.llamalad7:mixinextras-common:${mixinextras_version}")
     annotationProcessor("io.github.llamalad7:mixinextras-common:${mixinextras_version}")
+
+    quickPlayMods("com.simibubi.create:create-${minecraft_version}:${create_version}") {
+        transitive = false
+    }
+    quickPlayMods("dev.engine-room.vanillin:vanillin-neoforge-${minecraft_version}:${vanillin_version}") {
+        transitive = false
+    }
+    quickPlayMods("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}") {
+        transitive = false
+    }
 }
 
 sourceSets.main.resources {
@@ -129,6 +143,13 @@ tasks.withType(JavaCompile).configureEach {
     options.compilerArgs.addAll(['-Xmaxerrs', '1000'])
 }
 
+tasks.register('syncQuickPlayMods', Sync) {
+    group = 'mod development'
+    description = 'Stages the standalone runtime mod dependencies used by quickPlayClient.'
+    from(configurations.quickPlayMods)
+    into(layout.buildDirectory.dir('quickplay/mods'))
+}
+
 def configureQuickPlayClientTask = { Exec task, boolean onlineBuild ->
     task.group = 'mod development'
     task.description = onlineBuild
@@ -136,27 +157,27 @@ def configureQuickPlayClientTask = { Exec task, boolean onlineBuild ->
             : 'Runs test.py with an offline Gradle build, copies the mod jar, and quickplays the local NeoForge client.'
     task.workingDir = projectDir
 
-    def command = [findProperty('pythonExecutable') ?: 'python', 'test.py']
+    def command = [project.findProperty('pythonExecutable') ?: 'python', 'test.py']
     if (onlineBuild) {
         command += ['--online-build']
     }
-    if (hasProperty('instance')) {
-        command += ['--instance', property('instance').toString()]
+    if (project.hasProperty('instance')) {
+        command += ['--instance', project.property('instance').toString()]
     }
-    if (hasProperty('world')) {
-        command += ['--world', property('world').toString()]
+    if (project.hasProperty('world')) {
+        command += ['--world', project.property('world').toString()]
     }
-    if (hasProperty('skipBuild')) {
+    if (project.hasProperty('skipBuild')) {
         command += ['--skip-build']
     }
-    if (hasProperty('noCopy')) {
+    if (project.hasProperty('noCopy')) {
         command += ['--no-copy']
     }
-    if (hasProperty('width')) {
-        command += ['--width', property('width').toString()]
+    if (project.hasProperty('width')) {
+        command += ['--width', project.property('width').toString()]
     }
-    if (hasProperty('height')) {
-        command += ['--height', property('height').toString()]
+    if (project.hasProperty('height')) {
+        command += ['--height', project.property('height').toString()]
     }
 
     task.commandLine command

@@ -11,9 +11,9 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.SlotItemHandler;
+import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.SlotItemHandler;
 
 public class SpiderAssemblyTableMenu extends AbstractContainerMenu {
 
@@ -90,7 +90,7 @@ public class SpiderAssemblyTableMenu extends AbstractContainerMenu {
 			if (slot instanceof HybridSlot hybridSlot) {
 				ItemStack carried = getCarried();
 				if (!carried.isEmpty()
-					&& carried.getCapability(ForgeCapabilities.FLUID_HANDLER_ITEM).isPresent()) {
+					&& carried.getCapability(Capabilities.FluidHandler.ITEM) != null) {
 					if (tryFluidExchange(hybridSlot.getHybridIndex(), carried, player))
 						return;
 				}

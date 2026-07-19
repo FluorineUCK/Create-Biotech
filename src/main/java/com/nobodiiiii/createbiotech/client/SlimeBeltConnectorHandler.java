@@ -11,6 +11,7 @@ import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltConnectorItem;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltConnectorItem;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltConnectorItem;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.simibubi.create.content.kinetics.simpleRelays.ShaftBlock;
 
 import net.minecraft.client.Minecraft;
@@ -27,12 +28,12 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.api.distmarker.Dist;
-import net.minecraftforge.event.TickEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public class SlimeBeltConnectorHandler {
 
 	private static final Random RANDOM = new Random();
@@ -40,10 +41,7 @@ public class SlimeBeltConnectorHandler {
 	private SlimeBeltConnectorHandler() {}
 
 	@SubscribeEvent
-	public static void onClientTick(TickEvent.ClientTickEvent event) {
-		if (event.phase != TickEvent.Phase.END)
-			return;
-
+	public static void onClientTick(ClientTickEvent.Post event) {
 		Player player = Minecraft.getInstance().player;
 		Level world = Minecraft.getInstance().level;
 
@@ -54,16 +52,18 @@ public class SlimeBeltConnectorHandler {
 
 		for (InteractionHand hand : InteractionHand.values()) {
 			ItemStack heldItem = player.getItemInHand(hand);
-			if (!CBItems.isCustomBeltConnector(heldItem) || !heldItem.hasTag())
+			if (!CBItems.isCustomBeltConnector(heldItem) || !CBItemData.has(heldItem))
 				continue;
 			boolean magmaConnector = CBItems.isMagmaBeltConnector(heldItem);
 			boolean powerConnector = CBItems.isPowerBeltConnector(heldItem);
 
-			CompoundTag tag = heldItem.getTag();
+			CompoundTag tag = CBItemData.get(heldItem);
 			if (tag == null || !tag.contains("FirstPulley"))
 				continue;
 
-			BlockPos first = NbtUtils.readBlockPos(tag.getCompound("FirstPulley"));
+			BlockPos first = NbtUtils.readBlockPos(tag, "FirstPulley").orElse(null);
+			if (first == null)
+				continue;
 			if (!world.getBlockState(first).hasProperty(BlockStateProperties.AXIS))
 				continue;
 

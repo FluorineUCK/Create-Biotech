@@ -7,8 +7,11 @@ import org.jetbrains.annotations.Nullable;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -23,20 +26,21 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.storage.loot.LootParams;
+import net.minecraft.world.level.storage.loot.LootTable;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParamSets;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.event.entity.living.LivingDropsEvent;
-import net.minecraftforge.event.entity.living.MobEffectEvent;
-import net.minecraftforge.eventbus.api.Event;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.entity.living.LivingDropsEvent;
+import net.neoforged.neoforge.event.entity.living.MobEffectEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public final class SlimeMimicHandler {
 	public static final String SLIME_MIMIC_TAG = "CreateBiotechSlimeMimic";
 	public static final String HAUNT_PROGRESS_TAG = "CreateBiotechHaunting";
-	private static final ResourceLocation VANILLA_SLIME_LOOT_TABLE = new ResourceLocation("minecraft", "entities/slime");
+	private static final ResourceKey<LootTable> VANILLA_SLIME_LOOT_TABLE = ResourceKey.create(Registries.LOOT_TABLE,
+		ResourceLocation.fromNamespaceAndPath("minecraft", "entities/slime"));
 
 	private SlimeMimicHandler() {
 	}
@@ -84,12 +88,7 @@ public final class SlimeMimicHandler {
 	}
 
 	public static CompoundTag createPreparedSpawnEggTag(ItemStack stack) {
-		CompoundTag preparedTag = stack.getTag() == null ? new CompoundTag() : stack.getTag().copy();
-		CompoundTag entityTag = preparedTag.contains("EntityTag", Tag.TAG_COMPOUND)
-			? preparedTag.getCompound("EntityTag").copy()
-			: new CompoundTag();
-		preparedTag.put("EntityTag", createPreparedEntityTag(entityTag));
-		return preparedTag;
+		return createPreparedEntityTag(CBItemData.get(stack));
 	}
 
 	public static boolean shouldSlimeifySpawn(@Nullable Player player, InteractionHand usedHand) {
@@ -105,7 +104,7 @@ public final class SlimeMimicHandler {
 	@SubscribeEvent
 	public static void onMobEffectApplicable(MobEffectEvent.Applicable event) {
 		if (event.getEffectInstance().getEffect() == MobEffects.REGENERATION && isSlimeMimic(event.getEntity()))
-			event.setResult(Event.Result.ALLOW);
+			event.setResult(MobEffectEvent.Applicable.Result.APPLY);
 	}
 
 	public static void advanceHaunting(LivingEntity mimic, Level level) {
@@ -122,7 +121,7 @@ public final class SlimeMimicHandler {
 		int hauntCycleTicks = getHauntCycleTicks();
 		if (progress < hauntCycleTicks) {
 			if (progress % 20 == 0)
-				level.playSound(null, mimic.blockPosition(), SoundEvents.SOUL_ESCAPE, SoundSource.NEUTRAL,
+				level.playSound(null, mimic.blockPosition(), SoundEvents.SOUL_ESCAPE.value(), SoundSource.NEUTRAL,
 					1f, 0.5f + 1.5f * progress / hauntCycleTicks);
 			data.putInt(HAUNT_PROGRESS_TAG, progress + 1);
 			return;
@@ -160,18 +159,18 @@ public final class SlimeMimicHandler {
 
 		Entity attacker = event.getSource().getEntity();
 		if (attacker != null)
-			lootParams.withOptionalParameter(LootContextParams.KILLER_ENTITY, attacker);
+			lootParams.withOptionalParameter(LootContextParams.ATTACKING_ENTITY, attacker);
 
 		Entity directAttacker = event.getSource().getDirectEntity();
 		if (directAttacker != null)
-			lootParams.withOptionalParameter(LootContextParams.DIRECT_KILLER_ENTITY, directAttacker);
+			lootParams.withOptionalParameter(LootContextParams.DIRECT_ATTACKING_ENTITY, directAttacker);
 
 		Player player = entity.getKillCredit() instanceof Player killCreditPlayer ? killCreditPlayer : null;
 		if (player != null)
 			lootParams.withOptionalParameter(LootContextParams.LAST_DAMAGE_PLAYER, player);
 
 		List<ItemStack> slimeDrops = serverLevel.getServer()
-			.getLootData()
+			.reloadableRegistries()
 			.getLootTable(VANILLA_SLIME_LOOT_TABLE)
 			.getRandomItems(lootParams.create(LootContextParamSets.ENTITY));
 

@@ -27,6 +27,7 @@ import com.simibubi.create.foundation.utility.BlockHelper;
 import com.simibubi.create.foundation.utility.ServerSpeedProvider;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -222,7 +223,7 @@ public class MagmaBeltInventory {
 					continue;
 
 				ItemStack remainder = inputBehaviour.handleInsertion(currentItem, movementFacing, false);
-				if (remainder.equals(currentItem.stack, false))
+				if (ItemStack.matches(remainder, currentItem.stack))
 					continue;
 
 				currentItem.stack = remainder;
@@ -312,7 +313,7 @@ public class MagmaBeltInventory {
 		ItemStack stackBefore = currentItem.stack.copy();
 		TransportedResult result = FanProcessing.applyProcessing(currentItem, belt.getLevel(), AllFanProcessingTypes.BLASTING);
 		if (result.doesNothing()) {
-			if (!wasProcessing || !currentItem.stack.equals(stackBefore, false))
+			if (!wasProcessing || !ItemStack.matches(currentItem.stack, stackBefore))
 				belt.notifyUpdate();
 			else
 				belt.setChanged();
@@ -527,22 +528,22 @@ public class MagmaBeltInventory {
 		return null;
 	}
 
-	public void read(CompoundTag nbt) {
+	public void read(CompoundTag nbt, HolderLookup.Provider registries) {
 		items.clear();
 		nbt.getList("Items", Tag.TAG_COMPOUND)
-			.forEach(inbt -> items.add(TransportedItemStack.read((CompoundTag) inbt)));
+			.forEach(inbt -> items.add(TransportedItemStack.read((CompoundTag) inbt, registries)));
 		if (nbt.contains("LazyItem"))
-			lazyClientItem = TransportedItemStack.read(nbt.getCompound("LazyItem"));
+			lazyClientItem = TransportedItemStack.read(nbt.getCompound("LazyItem"), registries);
 		beltMovementPositive = nbt.getBoolean("PositiveOrder");
 	}
 
-	public CompoundTag write() {
+	public CompoundTag write(HolderLookup.Provider registries) {
 		CompoundTag nbt = new CompoundTag();
 		ListTag itemsNBT = new ListTag();
-		items.forEach(stack -> itemsNBT.add(stack.serializeNBT()));
+		items.forEach(stack -> itemsNBT.add(stack.serializeNBT(registries)));
 		nbt.put("Items", itemsNBT);
 		if (lazyClientItem != null)
-			nbt.put("LazyItem", lazyClientItem.serializeNBT());
+			nbt.put("LazyItem", lazyClientItem.serializeNBT(registries));
 		nbt.putBoolean("PositiveOrder", beltMovementPositive);
 		return nbt;
 	}

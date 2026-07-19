@@ -12,7 +12,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraftforge.network.NetworkEvent.Context;
 
 public class PowerBeltSurfaceMovementPacket {
 
@@ -33,9 +32,8 @@ public class PowerBeltSurfaceMovementPacket {
 		buffer.writeFloat(surfaceSpeed);
 	}
 
-	public boolean handle(Context context) {
-		context.enqueueWork(() -> apply(context.getSender()));
-		return true;
+	public void handle(ServerPlayer player) {
+		apply(player);
 	}
 
 	private void apply(ServerPlayer player) {

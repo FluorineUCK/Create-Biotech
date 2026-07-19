@@ -5,6 +5,7 @@ import java.util.Queue;
 
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Matrix4fStack;
 import org.joml.Quaternionf;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -14,6 +15,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.BufferBuilder;
+import com.mojang.blaze3d.vertex.BufferUploader;
+import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.Tesselator;
 
@@ -40,7 +43,7 @@ import net.minecraft.world.phys.Vec3;
  * pre-cancels the upcoming scene rotation so the final quad ends up facing the viewer
  * regardless of how the user spins the ponder view.
  */
-@Mixin(value = PonderWorldParticles.class, remap = false)
+@Mixin(PonderWorldParticles.class)
 public abstract class PonderWorldParticlesMixin {
 
 	@Shadow
@@ -56,9 +59,9 @@ public abstract class PonderWorldParticlesMixin {
 
 		lightTexture.turnOnLightLayer();
 		RenderSystem.enableDepthTest();
-		PoseStack modelViewStack = RenderSystem.getModelViewStack();
-		modelViewStack.pushPose();
-		modelViewStack.mulPoseMatrix(ms.last().pose());
+		Matrix4fStack modelViewStack = RenderSystem.getModelViewStack();
+		modelViewStack.pushMatrix();
+		modelViewStack.mul(ms.last().pose());
 		RenderSystem.applyModelViewMatrix();
 
 		Camera billboardCamera = createBiotech$buildBillboardCamera(ms.last().pose(), renderInfo);
@@ -72,14 +75,17 @@ public abstract class PonderWorldParticlesMixin {
 			RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, 1.0F);
 			RenderSystem.setShader(GameRenderer::getParticleShader);
 			Tesselator tessellator = Tesselator.getInstance();
-			BufferBuilder bufferbuilder = tessellator.getBuilder();
-			type.begin(bufferbuilder, mc.getTextureManager());
-			for (Particle particle : iterable)
-				particle.render(bufferbuilder, billboardCamera, pt);
-			type.end(tessellator);
+			BufferBuilder bufferbuilder = type.begin(tessellator, mc.getTextureManager());
+			if (bufferbuilder != null) {
+				for (Particle particle : iterable)
+					particle.render(bufferbuilder, billboardCamera, pt);
+				MeshData meshData = bufferbuilder.build();
+				if (meshData != null)
+					BufferUploader.drawWithShader(meshData);
+			}
 		}
 
-		modelViewStack.popPose();
+		modelViewStack.popMatrix();
 		RenderSystem.applyModelViewMatrix();
 		RenderSystem.depthMask(true);
 		RenderSystem.disableBlend();

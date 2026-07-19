@@ -8,16 +8,16 @@ import net.minecraft.world.item.CreativeModeTab;
 import net.minecraft.world.item.CreativeModeTab.Output;
 import net.minecraft.world.item.CreativeModeTab.TabVisibility;
 import net.minecraft.world.item.CreativeModeTabs;
-import net.minecraftforge.eventbus.api.IEventBus;
-import net.minecraftforge.registries.DeferredRegister;
-import net.minecraftforge.registries.RegistryObject;
+import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.registries.DeferredRegister;
+import net.neoforged.neoforge.registries.DeferredHolder;
 
 public class CBCreativeModeTabs {
 
 	private static final DeferredRegister<CreativeModeTab> CREATIVE_MODE_TABS =
 		DeferredRegister.create(Registries.CREATIVE_MODE_TAB, CreateBiotech.MOD_ID);
 
-	public static final RegistryObject<CreativeModeTab> MAIN = CREATIVE_MODE_TABS.register("main",
+	public static final DeferredHolder<CreativeModeTab, CreativeModeTab> MAIN = CREATIVE_MODE_TABS.register("main",
 		() -> CreativeModeTab.builder()
 			.title(Component.translatable("itemGroup.create_biotech.main"))
 			.withTabsBefore(CreativeModeTabs.SPAWN_EGGS)

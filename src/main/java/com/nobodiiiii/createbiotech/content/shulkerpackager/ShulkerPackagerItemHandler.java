@@ -4,7 +4,6 @@ import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.content.logistics.packager.PackagerItemHandler;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraftforge.items.ItemHandlerHelper;
 
 public class ShulkerPackagerItemHandler extends PackagerItemHandler {
 
@@ -38,7 +37,7 @@ public class ShulkerPackagerItemHandler extends PackagerItemHandler {
 			blockEntity.notifyUpdate();
 			blockEntity.setChanged();
 		}
-		return ItemHandlerHelper.copyStackWithSize(stack, stack.getCount() - 1);
+		return stack.copyWithCount(stack.getCount() - 1);
 	}
 
 	@Override

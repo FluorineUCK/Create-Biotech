@@ -24,12 +24,12 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.phys.Vec3;
-import net.minecraftforge.event.entity.living.LivingEvent;
-import net.minecraftforge.event.entity.player.PlayerInteractEvent;
-import net.minecraftforge.eventbus.api.SubscribeEvent;
-import net.minecraftforge.fml.common.Mod;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
+import net.neoforged.bus.api.SubscribeEvent;
+import net.neoforged.fml.common.EventBusSubscriber;
 
-@Mod.EventBusSubscriber(modid = CreateBiotech.MOD_ID, bus = Mod.EventBusSubscriber.Bus.FORGE)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public class LiquidLivingSlimeInteractionHandler {
 
 	private static final String WAS_TOUCHING_LIQUID_LIVING_SLIME_KEY =
@@ -42,8 +42,9 @@ public class LiquidLivingSlimeInteractionHandler {
 	private LiquidLivingSlimeInteractionHandler() {}
 
 	@SubscribeEvent
-	public static void onLivingTick(LivingEvent.LivingTickEvent event) {
-		LivingEntity entity = event.getEntity();
+	public static void onLivingTick(EntityTickEvent.Post event) {
+		if (!(event.getEntity() instanceof LivingEntity entity))
+			return;
 		boolean wasTouchingLiquidLivingSlime =
 			entity.getPersistentData().getBoolean(WAS_TOUCHING_LIQUID_LIVING_SLIME_KEY);
 		double previousVerticalSpeed = entity.getPersistentData().getDouble(PREVIOUS_VERTICAL_SPEED_KEY);
@@ -72,7 +73,6 @@ public class LiquidLivingSlimeInteractionHandler {
 			return;
 
 		event.setCanceled(true);
-		event.setCancellationResult(InteractionResult.SUCCESS);
 
 		if (level.isClientSide || event.getAction() != PlayerInteractEvent.LeftClickBlock.Action.START)
 			return;

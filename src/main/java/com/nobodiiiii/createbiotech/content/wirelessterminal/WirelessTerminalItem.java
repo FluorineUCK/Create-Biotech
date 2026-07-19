@@ -4,6 +4,7 @@ import java.util.List;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.simibubi.create.Create;
 import com.simibubi.create.content.logistics.stockTicker.StockTickerBlockEntity;
 import com.simibubi.create.content.logistics.stockTicker.StockTickerInteractionHandler;
@@ -35,7 +36,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
-import net.minecraftforge.network.NetworkHooks;
 
 public class WirelessTerminalItem extends Item {
 
@@ -123,8 +123,8 @@ public class WirelessTerminalItem extends Item {
 	}
 
 	@Override
-	public void appendHoverText(ItemStack stack, @Nullable Level level, List<Component> tooltip, TooltipFlag flag) {
-		super.appendHoverText(stack, level, tooltip, flag);
+	public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
+		super.appendHoverText(stack, context, tooltip, flag);
 
 		BoundTarget boundTarget = getBoundTarget(stack);
 		if (boundTarget == null) {
@@ -213,11 +213,11 @@ public class WirelessTerminalItem extends Item {
 			stockTicker.behaviour.mayAdministrate(player) && Create.LOGISTICS.isLockable(stockTicker.behaviour.freqId);
 		boolean isCurrentlyLocked = Create.LOGISTICS.isLocked(stockTicker.behaviour.freqId);
 
-		NetworkHooks.openScreen(serverPlayer, createRequestMenuProvider(stockTicker), buf -> {
+		serverPlayer.openMenu(createRequestMenuProvider(stockTicker), buf -> {
 			buf.writeBoolean(showLockOption);
 			buf.writeBoolean(isCurrentlyLocked);
 			buf.writeBlockPos(stockTicker.getBlockPos());
-			buf.writeNbt(stockTicker.getUpdateTag());
+			buf.writeNbt(stockTicker.getUpdateTag(stockTicker.getLevel().registryAccess()));
 		});
 		stockTicker.getRecentSummary()
 			.divideAndSendTo(serverPlayer, stockTicker.getBlockPos());
@@ -247,26 +247,26 @@ public class WirelessTerminalItem extends Item {
 	}
 
 	private static void bind(ItemStack stack, Level level, BlockPos stockTickerPos) {
-		CompoundTag tag = stack.getOrCreateTag();
+		CompoundTag tag = CBItemData.getOrEmpty(stack);
 		tag.put(BOUND_POS_KEY, NbtUtils.writeBlockPos(stockTickerPos));
 		tag.putString(BOUND_DIMENSION_KEY, level.dimension().location().toString());
+		CBItemData.set(stack, tag);
 	}
 
 	private static boolean clearBinding(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
+		CompoundTag tag = CBItemData.get(stack);
 		if (tag == null || (!tag.contains(BOUND_POS_KEY) && !tag.contains(BOUND_DIMENSION_KEY)))
 			return false;
 
 		tag.remove(BOUND_POS_KEY);
 		tag.remove(BOUND_DIMENSION_KEY);
-		if (tag.isEmpty())
-			stack.setTag(null);
+		CBItemData.set(stack, tag);
 		return true;
 	}
 
 	@Nullable
 	private static BoundTarget getBoundTarget(ItemStack stack) {
-		CompoundTag tag = stack.getTag();
+		CompoundTag tag = CBItemData.get(stack);
 		if (tag == null || !tag.contains(BOUND_POS_KEY, Tag.TAG_COMPOUND)
 			|| !tag.contains(BOUND_DIMENSION_KEY, Tag.TAG_STRING))
 			return null;
@@ -275,7 +275,9 @@ public class WirelessTerminalItem extends Item {
 		if (dimension == null)
 			return null;
 
-		return new BoundTarget(dimension, NbtUtils.readBlockPos(tag.getCompound(BOUND_POS_KEY)));
+		BlockPos pos = NbtUtils.readBlockPos(tag, BOUND_POS_KEY)
+			.orElse(null);
+		return pos == null ? null : new BoundTarget(dimension, pos);
 	}
 
 	private static void sendStatus(Player player, String key, ChatFormatting style, Object... args) {

@@ -23,7 +23,7 @@ import net.minecraft.world.level.Level;
 @Mixin(value = AllFanProcessingTypes.HauntingType.class, priority = 1001)
 public abstract class HauntingTypeSlimeMimicMixin {
 
-	@Inject(method = "affectEntity", at = @At("HEAD"), cancellable = true, remap = false)
+	@Inject(method = "affectEntity", at = @At("HEAD"), cancellable = true)
 	private void createBiotech$hauntSlimeMimicIntoReality(Entity entity, Level level, CallbackInfo ci) {
 		if (!(entity instanceof LivingEntity living) || !SlimeMimicHandler.isSlimeMimic(living))
 			return;

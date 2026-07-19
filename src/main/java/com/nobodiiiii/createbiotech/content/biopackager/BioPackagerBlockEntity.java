@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.biopackager;
 
+import net.minecraft.core.HolderLookup;
+
 import java.util.List;
 
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
@@ -20,11 +22,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraftforge.common.capabilities.Capability;
-import net.minecraftforge.common.capabilities.ForgeCapabilities;
-import net.minecraftforge.common.util.LazyOptional;
-import net.minecraftforge.items.IItemHandler;
-import net.minecraftforge.items.ItemHandlerHelper;
+import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
 
 public class BioPackagerBlockEntity extends SmartBlockEntity {
 
@@ -39,8 +38,6 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 
 	public InvManipulationBehaviour targetInventory;
 	public BioPackagerItemHandler inventory;
-	private final LazyOptional<IItemHandler> invProvider;
-
 	public BioPackagerBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.BIO_PACKAGER.get(), pos, state);
 		heldBox = ItemStack.EMPTY;
@@ -50,7 +47,6 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 		chainReturnAnimation = false;
 		redstonePowered = state.getOptionalValue(BioPackagerBlock.POWERED).orElse(false);
 		inventory = new BioPackagerItemHandler(this);
-		invProvider = LazyOptional.of(() -> inventory);
 	}
 
 	@Override
@@ -210,12 +206,6 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 	}
 
 	@Override
-	public void invalidate() {
-		super.invalidate();
-		invProvider.invalidate();
-	}
-
-	@Override
 	public void destroy() {
 		super.destroy();
 		if (heldBox.isEmpty())
@@ -226,33 +216,30 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 		heldBox = ItemStack.EMPTY;
 	}
 
-	@Override
-	public <T> LazyOptional<T> getCapability(Capability<T> cap, Direction side) {
-		if (cap == ForgeCapabilities.ITEM_HANDLER)
-			return invProvider.cast();
-		return super.getCapability(cap, side);
+	public IItemHandler getItemCapability(Direction side) {
+		return inventory;
 	}
 
 	@Override
-	protected void read(CompoundTag compound, boolean clientPacket) {
-		super.read(compound, clientPacket);
+	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(compound, registries, clientPacket);
 		redstonePowered = compound.getBoolean("Active");
 		animationInward = compound.getBoolean("AnimationInward");
 		animationTicks = compound.getInt("AnimationTicks");
 		chainReturnAnimation = compound.getBoolean("ChainReturnAnimation");
-		heldBox = ItemStack.of(compound.getCompound("HeldBox"));
-		previouslyUnwrapped = ItemStack.of(compound.getCompound("InsertedBox"));
+		heldBox = ItemStack.parseOptional(registries, compound.getCompound("HeldBox"));
+		previouslyUnwrapped = ItemStack.parseOptional(registries, compound.getCompound("InsertedBox"));
 	}
 
 	@Override
-	protected void write(CompoundTag compound, boolean clientPacket) {
-		super.write(compound, clientPacket);
+	protected void write(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(compound, registries, clientPacket);
 		compound.putBoolean("Active", redstonePowered);
 		compound.putBoolean("AnimationInward", animationInward);
 		compound.putInt("AnimationTicks", animationTicks);
 		compound.putBoolean("ChainReturnAnimation", chainReturnAnimation);
-		compound.put("HeldBox", heldBox.serializeNBT());
-		compound.put("InsertedBox", previouslyUnwrapped.serializeNBT());
+		compound.put("HeldBox", heldBox.saveOptional(registries));
+		compound.put("InsertedBox", previouslyUnwrapped.saveOptional(registries));
 	}
 
 	public float getTrayOffset(float partialTicks) {

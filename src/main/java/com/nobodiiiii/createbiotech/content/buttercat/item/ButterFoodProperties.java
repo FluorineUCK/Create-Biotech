@@ -7,6 +7,8 @@ import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.food.FoodProperties;
+import net.minecraft.core.Holder;
+import net.neoforged.neoforge.common.ModConfigSpec.ConfigValue;
 
 public final class ButterFoodProperties {
 
@@ -19,20 +21,34 @@ public final class ButterFoodProperties {
 	private ButterFoodProperties() {}
 
 	public static FoodProperties create(Variant variant) {
+		return create(variant, false);
+	}
+
+	public static FoodProperties createDefault(Variant variant) {
+		return create(variant, true);
+	}
+
+	private static FoodProperties create(Variant variant, boolean useDefaults) {
 		CBConfigs.ButterCat config = CBConfigs.SERVER.butterCat;
 		FoodProperties.Builder builder = switch (variant) {
-		case BUTTER -> food(config.butterNutrition.get(), config.butterSaturation.get());
-		case SUPER_BUTTER -> food(config.superButterNutrition.get(), config.superButterSaturation.get())
-			.withEffect(ModEffects.BUTTER_ROTATION_EFFECT.get(), config.superButterRotationDuration.get(),
-				config.superButterRotationAmplifier.get())
-			.withEffect(MobEffects.LEVITATION, config.superButterLevitationDuration.get(),
-				config.superButterLevitationAmplifier.get());
-		case INCOMPLETE_SUPER_BUTTER -> food(config.incompleteSuperButterNutrition.get(),
-			config.incompleteSuperButterSaturation.get())
-				.withEffect(ModEffects.BUTTER_ROTATION_EFFECT.get(), config.incompleteSuperButterRotationDuration.get(),
-					config.incompleteSuperButterRotationAmplifier.get());
+		case BUTTER -> food(value(config.butterNutrition, useDefaults), value(config.butterSaturation, useDefaults));
+		case SUPER_BUTTER -> food(value(config.superButterNutrition, useDefaults),
+			value(config.superButterSaturation, useDefaults))
+			.withEffect(ModEffects.BUTTER_ROTATION_EFFECT, value(config.superButterRotationDuration, useDefaults),
+				value(config.superButterRotationAmplifier, useDefaults))
+			.withEffect(MobEffects.LEVITATION, value(config.superButterLevitationDuration, useDefaults),
+				value(config.superButterLevitationAmplifier, useDefaults));
+		case INCOMPLETE_SUPER_BUTTER -> food(value(config.incompleteSuperButterNutrition, useDefaults),
+			value(config.incompleteSuperButterSaturation, useDefaults))
+				.withEffect(ModEffects.BUTTER_ROTATION_EFFECT,
+					value(config.incompleteSuperButterRotationDuration, useDefaults),
+					value(config.incompleteSuperButterRotationAmplifier, useDefaults));
 		};
 		return builder.build();
+	}
+
+	private static <T> T value(ConfigValue<T> configValue, boolean useDefault) {
+		return useDefault ? configValue.getDefault() : configValue.get();
 	}
 
 	private static Builder food(int nutrition, double saturation) {
@@ -42,12 +58,12 @@ public final class ButterFoodProperties {
 	private static class Builder extends FoodProperties.Builder {
 		private Builder(int nutrition, double saturation) {
 			nutrition(nutrition);
-			saturationMod((float) saturation);
+			saturationModifier((float) saturation);
 		}
 
-		private Builder withEffect(MobEffect effect, int duration, int amplifier) {
+		private Builder withEffect(Holder<MobEffect> effect, int duration, int amplifier) {
 			if (duration > 0)
-				effect(() -> new MobEffectInstance(effect, duration, amplifier), 1.0f);
+				effect(new MobEffectInstance(effect, duration, amplifier), 1.0f);
 			return this;
 		}
 	}

@@ -24,8 +24,8 @@ public abstract class LivingEntitySlimeMimicMixin implements SlimeMimicAccess {
 		LivingEntity.class, EntityDataSerializers.BOOLEAN);
 
 	@Inject(method = "defineSynchedData", at = @At("TAIL"))
-	private void createBiotech$defineSlimeMimicData(CallbackInfo ci) {
-		((LivingEntity) (Object) this).getEntityData().define(CREATE_BIOTECH$SLIME_MIMIC, false);
+	private void createBiotech$defineSlimeMimicData(SynchedEntityData.Builder builder, CallbackInfo ci) {
+		builder.define(CREATE_BIOTECH$SLIME_MIMIC, false);
 	}
 
 	@Inject(method = "addAdditionalSaveData", at = @At("TAIL"))
