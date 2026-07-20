@@ -24,7 +24,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientGamePacketListener;
@@ -138,7 +138,8 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 		}
 	}
 
-	public void sendToMenu(FriendlyByteBuf buffer) {
+	@Override
+	public void sendToMenu(RegistryFriendlyByteBuf buffer) {
 		buffer.writeBlockPos(worldPosition);
 		buffer.writeUtf(ownAddress, MAX_ADDRESS_LENGTH);
 		buffer.writeUtf(targetAddress, MAX_ADDRESS_LENGTH);

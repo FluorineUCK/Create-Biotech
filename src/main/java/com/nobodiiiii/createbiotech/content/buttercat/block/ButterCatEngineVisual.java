@@ -1,121 +1,126 @@
 package com.nobodiiiii.createbiotech.content.buttercat.block;
 
 import com.mojang.math.Axis;
-import com.simibubi.create.content.kinetics.base.RotatingInstance;
 import com.simibubi.create.content.kinetics.base.ShaftVisual;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModPartialModels;
-import com.simibubi.create.foundation.render.AllInstanceTypes;
 import dev.engine_room.flywheel.api.instance.Instance;
 import dev.engine_room.flywheel.api.visual.DynamicVisual;
 import dev.engine_room.flywheel.api.visualization.VisualizationContext;
+import dev.engine_room.flywheel.lib.instance.InstanceTypes;
+import dev.engine_room.flywheel.lib.instance.OrientedInstance;
 import dev.engine_room.flywheel.lib.model.Models;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import dev.engine_room.flywheel.lib.visual.SimpleDynamicVisual;
 import net.createmod.catnip.math.AngleHelper;
 import net.minecraft.core.Direction;
-import net.minecraft.util.Mth;
 import org.joml.Quaternionf;
 
 import java.util.function.Consumer;
 
 public class ButterCatEngineVisual extends ShaftVisual<ButterCatEngineBlockEntity> implements SimpleDynamicVisual {
-    private final RotatingInstance cat;
-    private final RotatingInstance bread;
-    private final RotatingInstance rope;
-    private final RotatingInstance butter;
+    private final OrientedInstance cat;
+    private final OrientedInstance bread;
+    private final OrientedInstance rope;
+    private final OrientedInstance butter;
 
     private final Quaternionf blockOrientation;
+    private final Axis attachmentRotationAxis;
 
-    private int catModelCode;
-    private int currentButterLevel;
-    private float lastAttachmentSpeed = Float.NaN;
-    private float lastAttachmentRotationOffset = Float.NaN;
-
+    private PartialModel currentCatModel;
+    private PartialModel currentBreadModel;
+    private PartialModel currentRopeModel;
+    private PartialModel currentButterModel;
+    private float lastAttachmentAngle;
 
     public ButterCatEngineVisual(VisualizationContext context, ButterCatEngineBlockEntity blockEntity, float partialTick) {
         super(context, blockEntity, partialTick);
 
         Direction facing = blockState.getValue(ButterCatEngineBlock.HORIZONTAL_FACING);
-        blockOrientation =  Axis.YP.rotationDegrees(AngleHelper.horizontalAngle(facing));
+        blockOrientation = Axis.YP.rotationDegrees(AngleHelper.horizontalAngle(facing));
+        attachmentRotationAxis =
+            Axis.of(Direction.get(Direction.AxisDirection.POSITIVE, rotationAxis()).step());
 
-        PartialModel catModel = blockEntity.getCatModel();
-        catModelCode = catModel.hashCode();
-        cat = createAttachmentInstance(catModel);
+        currentCatModel = blockEntity.getCatModel();
+        currentBreadModel = blockEntity.getBreadModel();
+        currentRopeModel = blockEntity.getRopeModel();
+        currentButterModel = blockEntity.getButterModel();
+        lastAttachmentAngle = ButterCatEngineRenderer.getAttachmentAngleForBe(blockEntity,
+            blockEntity.getBlockPos(), rotationAxis(), partialTick);
 
-        bread = createAttachmentInstance(ModPartialModels.BCE_EMPTY);
-
-        rope = createAttachmentInstance(ModPartialModels.BCE_EMPTY);
-
-        butter = createAttachmentInstance(ModPartialModels.BCE_EMPTY);
+        cat = createAttachmentInstance(currentCatModel);
+        bread = createAttachmentInstance(currentBreadModel);
+        rope = createAttachmentInstance(currentRopeModel);
+        butter = createAttachmentInstance(currentButterModel);
     }
 
     @Override
     public void beginFrame(DynamicVisual.Context ctx) {
         updateModels();
-        updateAttachmentKinetics(false);
+        if (!isVisible(ctx.frustum()) || doDistanceLimitThisFrame(ctx))
+            return;
+        updateAttachmentRotation(ctx.partialTick());
     }
 
     @Override
     public void update(float pt) {
         super.update(pt);
-        updateAttachmentKinetics(true);
+        updateModels();
+        updateAttachmentRotation(pt);
     }
 
-    private RotatingInstance createAttachmentInstance(PartialModel model) {
-        RotatingInstance instance =
-            instancerProvider().instancer(AllInstanceTypes.ROTATING, Models.partial(model)).createInstance();
+    private OrientedInstance createAttachmentInstance(PartialModel model) {
+        OrientedInstance instance =
+            instancerProvider().instancer(InstanceTypes.ORIENTED, Models.partial(model)).createInstance();
         setupAttachmentInstance(instance);
         return instance;
     }
 
-    private void setupAttachmentInstance(RotatingInstance instance) {
-        instance.rotation.set(blockOrientation);
-        instance.setPosition(getVisualPosition());
-        updateAttachmentKinetics(instance);
-        instance.setChanged();
-    }
-
-    private void updateAttachmentKinetics(boolean force) {
-        float speed = blockEntity.getSpeed();
-        float rotationOffset = ButterCatEngineRenderer.getAttachmentRotationOffsetForBe(blockEntity,
-            blockEntity.getBlockPos(), rotationAxis());
-        if (!force && Mth.equal(lastAttachmentSpeed, speed) && Mth.equal(lastAttachmentRotationOffset, rotationOffset))
-            return;
-
-        lastAttachmentSpeed = speed;
-        lastAttachmentRotationOffset = rotationOffset;
-        updateAttachmentKinetics(cat);
-        updateAttachmentKinetics(bread);
-        updateAttachmentKinetics(rope);
-        updateAttachmentKinetics(butter);
-    }
-
-    private void updateAttachmentKinetics(RotatingInstance instance) {
-        instance.setRotationAxis(rotationAxis())
-            .setRotationalSpeed(blockEntity.getSpeed() * RotatingInstance.SPEED_MULTIPLIER)
-            .setRotationOffset(ButterCatEngineRenderer.getAttachmentRotationOffsetForBe(blockEntity,
-                blockEntity.getBlockPos(), rotationAxis()))
+    private void setupAttachmentInstance(OrientedInstance instance) {
+        instance.position(getVisualPosition())
+            .rotation(getAttachmentRotation(lastAttachmentAngle))
+            .light(computePackedLight())
             .setChanged();
     }
-    private void updateModels() {
 
+    private void updateAttachmentRotation(float partialTick) {
+        lastAttachmentAngle = ButterCatEngineRenderer.getAttachmentAngleForBe(blockEntity,
+            blockEntity.getBlockPos(), rotationAxis(), partialTick);
+        Quaternionf rotation = getAttachmentRotation(lastAttachmentAngle);
+        cat.rotation(rotation).setChanged();
+        bread.rotation(rotation).setChanged();
+        rope.rotation(rotation).setChanged();
+        butter.rotation(rotation).setChanged();
+    }
+
+    private Quaternionf getAttachmentRotation(float angle) {
+        return attachmentRotationAxis.rotationDegrees(angle).mul(blockOrientation);
+    }
+
+    private void updateModels() {
         PartialModel newCatModel = blockEntity.getCatModel();
-        if (newCatModel.hashCode() != catModelCode) {
-            catModelCode = newCatModel.hashCode();
-            instancerProvider().instancer(AllInstanceTypes.ROTATING, Models.partial(newCatModel)).stealInstance(cat);
+        if (newCatModel != currentCatModel) {
+            currentCatModel = newCatModel;
+            instancerProvider().instancer(InstanceTypes.ORIENTED, Models.partial(newCatModel)).stealInstance(cat);
             setupAttachmentInstance(cat);
         }
 
-        if(blockEntity.hasBread()){
-            instancerProvider().instancer(AllInstanceTypes.ROTATING, Models.partial(blockEntity.getBreadModel())).stealInstance(bread);
+        PartialModel newBreadModel = blockEntity.getBreadModel();
+        if (newBreadModel != currentBreadModel) {
+            currentBreadModel = newBreadModel;
+            instancerProvider().instancer(InstanceTypes.ORIENTED, Models.partial(newBreadModel)).stealInstance(bread);
             setupAttachmentInstance(bread);
+        }
 
-            instancerProvider().instancer(AllInstanceTypes.ROTATING, Models.partial(blockEntity.getRopeModel())).stealInstance(rope);
+        PartialModel newRopeModel = blockEntity.getRopeModel();
+        if (newRopeModel != currentRopeModel) {
+            currentRopeModel = newRopeModel;
+            instancerProvider().instancer(InstanceTypes.ORIENTED, Models.partial(newRopeModel)).stealInstance(rope);
             setupAttachmentInstance(rope);
         }
-        if(currentButterLevel != blockEntity.getButterLevel()){
-            currentButterLevel = blockEntity.getButterLevel();
-            instancerProvider().instancer(AllInstanceTypes.ROTATING, Models.partial(blockEntity.getButterModel())).stealInstance(butter);
+
+        PartialModel newButterModel = blockEntity.getButterModel();
+        if (newButterModel != currentButterModel) {
+            currentButterModel = newButterModel;
+            instancerProvider().instancer(InstanceTypes.ORIENTED, Models.partial(newButterModel)).stealInstance(butter);
             setupAttachmentInstance(butter);
         }
     }
@@ -141,13 +146,10 @@ public class ButterCatEngineVisual extends ShaftVisual<ButterCatEngineBlockEntit
     @Override
     public void collectCrumblingInstances(Consumer<Instance> consumer) {
         super.collectCrumblingInstances(consumer);
+        consumer.accept(cat);
+        consumer.accept(butter);
         consumer.accept(bread);
         consumer.accept(rope);
-    }
-
-    @Override
-    protected Direction.Axis rotationAxis() {
-        return super.rotationAxis();
     }
 }
 

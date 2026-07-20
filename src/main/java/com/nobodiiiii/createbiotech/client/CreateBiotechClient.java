@@ -5,6 +5,8 @@ import java.util.function.Predicate;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberRenderer;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpRenderer;
 import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
+import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineRenderer;
+import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineVisual;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerRenderer;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerVisual;
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetRenderer;
@@ -145,6 +147,7 @@ public class CreateBiotechClient {
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.BONE_RATCHET.get(), BoneRatchetRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.PETRI_DISH.get(), PetriDishRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.ALLAY_PORT.get(), AllayPortRenderer::new);
+		event.registerBlockEntityRenderer(CBBlockEntityTypes.BUTTER_CAT_ENGINE.get(), ButterCatEngineRenderer::new);
 		event.registerEntityRenderer(CBEntityTypes.GHAST_HOT_AIR_BALLOON.get(),
 			GhastHotAirBalloonEntityRenderer::new);
 		event.registerEntityRenderer(CBEntityTypes.GHAST_HOT_AIR_BALLOON_SEAT.get(),
@@ -266,6 +269,9 @@ public class CreateBiotechClient {
 			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.ALLAY_PORT.get())
 				.factory(AllayPortVisual::new)
 				.neverSkipVanillaRender()
+				.apply();
+			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.BUTTER_CAT_ENGINE.get())
+				.factory(ButterCatEngineVisual::new)
 				.apply();
 			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.BONE_RATCHET.get())
 				.factory((context, blockEntity, partialTick) -> new EncasedCogVisual(context, blockEntity, false,

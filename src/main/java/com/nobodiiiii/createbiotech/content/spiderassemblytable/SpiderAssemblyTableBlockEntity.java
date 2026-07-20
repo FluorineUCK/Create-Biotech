@@ -46,7 +46,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import net.minecraft.world.MenuProvider;
@@ -253,7 +253,8 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		return Mth.clamp(1 - remaining / processingTicksTotal, 0, 1);
 	}
 
-	public void sendToMenu(FriendlyByteBuf buffer) {
+	@Override
+	public void sendToMenu(RegistryFriendlyByteBuf buffer) {
 		buffer.writeBlockPos(worldPosition);
 	}
 

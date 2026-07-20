@@ -6,7 +6,7 @@ import java.util.List;
 import com.nobodiiiii.createbiotech.registry.CBMenuTypes;
 
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -21,7 +21,7 @@ public class ShulkerTeleporterMenu extends AbstractContainerMenu {
 	private final String targetAddress;
 	private final List<String> candidateAddresses;
 
-	public ShulkerTeleporterMenu(int id, Inventory playerInventory, FriendlyByteBuf data) {
+	public ShulkerTeleporterMenu(int id, Inventory playerInventory, RegistryFriendlyByteBuf data) {
 		this(id, playerInventory, getBlockEntity(playerInventory, data.readBlockPos()), data);
 	}
 
@@ -35,7 +35,7 @@ public class ShulkerTeleporterMenu extends AbstractContainerMenu {
 	}
 
 	private ShulkerTeleporterMenu(int id, Inventory playerInventory, ShulkerTeleporterBlockEntity blockEntity,
-		FriendlyByteBuf data) {
+		RegistryFriendlyByteBuf data) {
 		super(CBMenuTypes.SHULKER_TELEPORTER.get(), id);
 		this.blockEntity = blockEntity;
 		this.blockPos = blockEntity.getBlockPos();
@@ -74,7 +74,7 @@ public class ShulkerTeleporterMenu extends AbstractContainerMenu {
 		return candidateAddresses;
 	}
 
-	private static List<String> readCandidateAddresses(FriendlyByteBuf data) {
+	private static List<String> readCandidateAddresses(RegistryFriendlyByteBuf data) {
 		int size = data.readVarInt();
 		List<String> addresses = new ArrayList<>(size);
 		for (int i = 0; i < size; i++)

@@ -4,7 +4,7 @@ import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTa
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableBlockEntity.MachineKind;
 import com.nobodiiiii.createbiotech.registry.CBMenuTypes;
 
-import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
@@ -33,7 +33,7 @@ public class SpiderAssemblyTableMenu extends AbstractContainerMenu {
 
 	private final SpiderAssemblyTableBlockEntity blockEntity;
 
-	public SpiderAssemblyTableMenu(int id, Inventory playerInventory, FriendlyByteBuf data) {
+	public SpiderAssemblyTableMenu(int id, Inventory playerInventory, RegistryFriendlyByteBuf data) {
 		this(id, playerInventory, getBlockEntity(playerInventory, data));
 	}
 
@@ -148,7 +148,8 @@ public class SpiderAssemblyTableMenu extends AbstractContainerMenu {
 		return copy;
 	}
 
-	private static SpiderAssemblyTableBlockEntity getBlockEntity(Inventory playerInventory, FriendlyByteBuf data) {
+	private static SpiderAssemblyTableBlockEntity getBlockEntity(Inventory playerInventory,
+		RegistryFriendlyByteBuf data) {
 		BlockEntity blockEntity = playerInventory.player.level().getBlockEntity(data.readBlockPos());
 		if (blockEntity instanceof SpiderAssemblyTableBlockEntity spiderAssemblyTable)
 			return spiderAssemblyTable;

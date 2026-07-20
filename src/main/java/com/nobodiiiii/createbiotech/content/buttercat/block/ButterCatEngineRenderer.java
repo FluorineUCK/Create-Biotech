@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.mixin.client.LevelRendererAccessor;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
+import dev.engine_room.flywheel.lib.visualization.VisualizationHelper;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.render.CachedBuffers;
 import net.createmod.catnip.render.SuperByteBuffer;
@@ -37,10 +38,13 @@ public class ButterCatEngineRenderer  extends KineticBlockEntityRenderer<ButterC
 
     @Override
     protected void renderSafe(ButterCatEngineBlockEntity be, float partialTicks, PoseStack ms, MultiBufferSource buffer, int light, int overlay) {
-        super.renderSafe(be, partialTicks, ms, buffer, light, overlay);
-
-        if (VisualizationManager.supportsVisualization(be.getLevel()))
+        if (VisualizationManager.supportsVisualization(be.getLevel())
+            && VisualizationHelper.skipVanillaRender(be))
             return;
+
+        BlockState shaftState = getRenderedBlockState(be);
+        renderRotatingBuffer(be, getRotatedModel(be, shaftState), ms,
+            buffer.getBuffer(getRenderType(be, shaftState)), light);
 
         BlockState blockState = be.getBlockState();
         Direction direction = blockState.getValue(HORIZONTAL_FACING);
