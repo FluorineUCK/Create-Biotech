@@ -2,15 +2,7 @@
   "type": "create:cutting",
   "ingredients": [
     {
-      "type": "neoforge:compound",
-      "ingredients": [
-        {
-          "item": "create:cardboard_block"
-        },
-        {
-          "item": "create:bound_cardboard_block"
-        }
-      ]
+      "item": "create:bound_cardboard_block"
     }
   ],
   "results": [

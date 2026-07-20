@@ -180,9 +180,10 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			return;
 		}
 
-		VertexConsumer innerConsumer = context.buffer()
-			.getBuffer(RenderType.entityCutoutNoCull(SLIME_TEXTURE));
-		VertexConsumer outerConsumer = context.buffer()
+		// 1.20's shared BufferBuilder made both layers land in the translucent batch.
+		// Keep that composite explicit: on 1.21, requesting another shared render type
+		// before writing would finish and invalidate the previously returned consumer.
+		VertexConsumer slimeConsumer = context.buffer()
 			.getBuffer(RenderType.entityTranslucent(SLIME_TEXTURE));
 
 		float outerWidth = width + 2.0f * OUTER_CUBE_INFLATE_PIXELS;
@@ -194,7 +195,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			poseStack.translate(centerX, centerY, centerZ);
 			poseStack.scale(width / SLIME_MODEL_WIDTH, height / SLIME_MODEL_WIDTH, depth / SLIME_MODEL_WIDTH);
 			poseStack.translate(0.0f, -SLIME_MODEL_CENTER_Y, 0.0f);
-			innerCube().render(poseStack, innerConsumer, packedLight, overlay,
+			innerCube().render(poseStack, slimeConsumer, packedLight, overlay,
 				color(INNER_RED, INNER_GREEN, INNER_BLUE, INNER_ALPHA));
 			poseStack.popPose();
 
@@ -203,7 +204,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			poseStack.scale(outerWidth / SLIME_MODEL_WIDTH, outerHeight / SLIME_MODEL_WIDTH,
 				outerDepth / SLIME_MODEL_WIDTH);
 			poseStack.translate(0.0f, -SLIME_MODEL_CENTER_Y, 0.0f);
-			outerCube().render(poseStack, outerConsumer, packedLight, overlay,
+			outerCube().render(poseStack, slimeConsumer, packedLight, overlay,
 				color(OUTER_RED, OUTER_GREEN, OUTER_BLUE, OUTER_ALPHA));
 			poseStack.popPose();
 		});
@@ -215,14 +216,12 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		if (texture == null)
 			return;
 
-		VertexConsumer baseConsumer = context.buffer()
-			.getBuffer(RenderType.entityCutoutNoCull(texture));
-		VertexConsumer filterConsumer = context.buffer()
+		VertexConsumer translucentConsumer = context.buffer()
 			.getBuffer(RenderType.entityTranslucent(texture));
 
 		runWithoutPartInterception(() -> {
-			cube.compile(poseStack.last(), baseConsumer, packedLight, overlay, 0xFFFFFFFF);
-			compileCubeWithNormalOffset(cube, poseStack.last(), filterConsumer, packedLight, overlay,
+			cube.compile(poseStack.last(), translucentConsumer, packedLight, overlay, 0xFFFFFFFF);
+			compileCubeWithNormalOffset(cube, poseStack.last(), translucentConsumer, packedLight, overlay,
 				OVERLAY_RED, OVERLAY_GREEN, OVERLAY_BLUE, FLAT_CUBE_FILTER_ALPHA, FLAT_CUBE_FILTER_NORMAL_OFFSET);
 		});
 	}
