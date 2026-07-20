@@ -297,7 +297,7 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 	}
 
 	private boolean canTransferHeldBoxTo(PackagerBlockEntity target) {
-		ItemStack extracted = inventory.extractItem(0, 1, true);
+		ItemStack extracted = shulkerInventory.extractItem(0, 1, true);
 		return target != null && target != this && PackageItem.isPackage(extracted)
 			&& heldBoxIdleTicks >= getTransferDelay() && canInsertPackageFromAutomation(target, extracted);
 	}
@@ -306,13 +306,14 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 		if (!canTransferHeldBoxTo(target))
 			return false;
 
-		ItemStack extracted = inventory.extractItem(0, 1, false);
+		ItemStack extracted = shulkerInventory.extractItem(0, 1, false);
 		if (extracted.isEmpty())
 			return false;
 		ItemStack toInsert = singlePackageStack(extracted);
-		ItemStack remainder = target.inventory.insertItem(0, toInsert, false);
+		PackagerItemHandler targetInventory = getPackageTransferHandler(target);
+		ItemStack remainder = targetInventory.insertItem(0, toInsert, false);
 		if (!remainder.isEmpty()) {
-			inventory.setStackInSlot(0, extracted);
+			shulkerInventory.setStackInSlot(0, extracted);
 			return false;
 		}
 
@@ -326,8 +327,14 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 		if (target == null || stack.isEmpty() || !PackageItem.isPackage(stack))
 			return false;
 		ItemStack toInsert = singlePackageStack(stack);
-		ItemStack remainder = target.inventory.insertItem(0, toInsert, true);
+		ItemStack remainder = getPackageTransferHandler(target).insertItem(0, toInsert, true);
 		return remainder.getCount() < toInsert.getCount();
+	}
+
+	private static PackagerItemHandler getPackageTransferHandler(PackagerBlockEntity packager) {
+		return packager instanceof ShulkerPackagerBlockEntity shulkerPackager
+			? shulkerPackager.shulkerInventory
+			: packager.inventory;
 	}
 
 	private static ItemStack singlePackageStack(ItemStack stack) {

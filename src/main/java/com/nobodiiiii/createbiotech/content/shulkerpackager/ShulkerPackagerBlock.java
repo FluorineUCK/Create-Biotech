@@ -6,6 +6,8 @@ import com.simibubi.create.AllItems;
 import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.content.logistics.box.PackageItem;
+import com.simibubi.create.content.logistics.packager.PackagerBlock;
+import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.WrenchableDirectionalBlock;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -15,7 +17,6 @@ import com.simibubi.create.foundation.utility.CreateLang;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -42,7 +43,7 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 	implements IBE<ShulkerPackagerBlockEntity>, IWrenchable {
 
 	public static final BooleanProperty POWERED = BlockStateProperties.POWERED;
-	public static final BooleanProperty LINKED = BooleanProperty.create("linked");
+	public static final BooleanProperty LINKED = PackagerBlock.LINKED;
 
 	public ShulkerPackagerBlock(Properties properties) {
 		super(properties);
@@ -63,10 +64,10 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 			BlockEntity be = context.getLevel()
 				.getBlockEntity(context.getClickedPos()
 					.relative(face));
-			if (be instanceof ShulkerPackagerBlockEntity)
+			if (be instanceof PackagerBlockEntity)
 				continue;
-			if (be != null && context.getLevel().getCapability(Capabilities.ItemHandler.BLOCK,
-				context.getClickedPos().relative(face), face.getOpposite()) != null) {
+			if (be != null && be.hasLevel()
+				&& be.getLevel().getCapability(Capabilities.ItemHandler.BLOCK, be.getBlockPos(), null) != null) {
 				preferredFacing = face.getOpposite();
 				break;
 			}
@@ -97,50 +98,36 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 	@Override
 	protected ItemInteractionResult useItemOn(ItemStack itemInHand, BlockState state, Level worldIn, BlockPos pos,
 		Player player, InteractionHand handIn, BlockHitResult hit) {
-		InteractionResult result = interact(state, worldIn, pos, player, handIn, itemInHand);
-		return result.consumesAction()
-			? ItemInteractionResult.sidedSuccess(worldIn.isClientSide)
-			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-	}
-
-	@Override
-	protected InteractionResult useWithoutItem(BlockState state, Level worldIn, BlockPos pos, Player player,
-		BlockHitResult hit) {
-		return interact(state, worldIn, pos, player, InteractionHand.MAIN_HAND, ItemStack.EMPTY);
-	}
-
-	private InteractionResult interact(BlockState state, Level worldIn, BlockPos pos, Player player,
-		InteractionHand handIn, ItemStack itemInHand) {
 		if (AllItems.WRENCH.isIn(itemInHand))
-			return InteractionResult.PASS;
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		if (AllBlocks.FACTORY_GAUGE.isIn(itemInHand))
-			return InteractionResult.PASS;
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		if (AllBlocks.STOCK_LINK.isIn(itemInHand) && !(state.hasProperty(LINKED) && state.getValue(LINKED)))
-			return InteractionResult.PASS;
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		if (AllBlocks.PACKAGE_FROGPORT.isIn(itemInHand))
-			return InteractionResult.PASS;
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
-		if (onBlockEntityUse(worldIn, pos, be -> {
+		if (onBlockEntityUseItemOn(worldIn, pos, be -> {
 			if (be.heldBox.isEmpty()) {
 				if (be.animationTicks > 0)
-					return InteractionResult.SUCCESS;
+					return ItemInteractionResult.SUCCESS;
 				if (PackageItem.isPackage(itemInHand)) {
 					if (worldIn.isClientSide())
-						return InteractionResult.SUCCESS;
+						return ItemInteractionResult.SUCCESS;
 					if (!be.unwrapBox(itemInHand.copy(), true))
-						return InteractionResult.SUCCESS;
+						return ItemInteractionResult.SUCCESS;
 					be.unwrapBox(itemInHand.copy(), false);
 					be.triggerStockCheck();
 					itemInHand.shrink(1);
 					AllSoundEvents.DEPOT_PLOP.playOnServer(worldIn, pos);
 					if (itemInHand.isEmpty())
 						player.setItemInHand(handIn, ItemStack.EMPTY);
-					return InteractionResult.SUCCESS;
+					return ItemInteractionResult.SUCCESS;
 				}
-				return InteractionResult.SUCCESS;
+				return ItemInteractionResult.SUCCESS;
 			}
 			if (be.animationTicks > 0)
-				return InteractionResult.SUCCESS;
+				return ItemInteractionResult.SUCCESS;
 			if (!worldIn.isClientSide()) {
 				player.getInventory()
 					.placeItemBackInInventory(be.heldBox.copy());
@@ -148,11 +135,11 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 				be.heldBox = ItemStack.EMPTY;
 				be.notifyUpdate();
 			}
-			return InteractionResult.SUCCESS;
+			return ItemInteractionResult.SUCCESS;
 		}).consumesAction())
-			return InteractionResult.SUCCESS;
+			return ItemInteractionResult.SUCCESS;
 
-		return InteractionResult.SUCCESS;
+		return ItemInteractionResult.SUCCESS;
 	}
 
 	@Override

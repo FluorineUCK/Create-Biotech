@@ -39,12 +39,11 @@ public final class CapturedEntityBoxJeiRenderer {
 
 	private CapturedEntityBoxJeiRenderer() {}
 
-	public static void drawSlotWithHoverContext(IRecipeSlotDrawable slot, GuiGraphics graphics, double mouseX,
-		double mouseY) {
-		CURRENT_SLOT_HOVERED.set(slot.isMouseOver(mouseX, mouseY));
+	public static void drawSlotWithHoverContext(IRecipeSlotDrawable slot, GuiGraphics graphics, boolean hovered) {
+		CURRENT_SLOT_HOVERED.set(hovered);
 		CURRENT_SLOT.set(slot);
 		try {
-			slot.draw(graphics);
+			slot.draw(graphics, hovered);
 		} finally {
 			CURRENT_SLOT.remove();
 			CURRENT_SLOT_HOVERED.remove();

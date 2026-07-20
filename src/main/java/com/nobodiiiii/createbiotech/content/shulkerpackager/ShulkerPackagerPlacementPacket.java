@@ -17,30 +17,25 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 
 public class ShulkerPackagerPlacementPacket {
 
-	private final Collection<ArmInteractionPoint> points;
-	private final ListTag receivedTag;
+	private final ListTag points;
 	private final BlockPos pos;
 
 	public ShulkerPackagerPlacementPacket(Collection<ArmInteractionPoint> points, BlockPos pos) {
-		this.points = points;
+		this.points = new ListTag();
+		for (ArmInteractionPoint point : points)
+			this.points.add(point.serialize(pos));
 		this.pos = pos;
-		this.receivedTag = null;
 	}
 
 	public ShulkerPackagerPlacementPacket(FriendlyByteBuf buffer) {
 		CompoundTag nbt = buffer.readNbt();
-		receivedTag = nbt == null ? new ListTag() : nbt.getList("Points", Tag.TAG_COMPOUND);
+		points = nbt == null ? new ListTag() : nbt.getList("Points", Tag.TAG_COMPOUND);
 		pos = buffer.readBlockPos();
-		points = null;
 	}
 
 	public void write(FriendlyByteBuf buffer) {
 		CompoundTag nbt = new CompoundTag();
-		ListTag pointsNBT = new ListTag();
-		points.stream()
-			.map(aip -> aip.serialize(pos))
-			.forEach(pointsNBT::add);
-		nbt.put("Points", pointsNBT);
+		nbt.put("Points", points);
 		buffer.writeNbt(nbt);
 		buffer.writeBlockPos(pos);
 	}
@@ -53,7 +48,7 @@ public class ShulkerPackagerPlacementPacket {
 			return;
 		BlockEntity blockEntity = world.getBlockEntity(pos);
 		if (blockEntity instanceof ShulkerPackagerBlockEntity packager)
-			packager.setInteractionPointTag(receivedTag);
+			packager.setInteractionPointTag(points);
 	}
 
 	public static class ClientBoundRequest {

@@ -267,7 +267,7 @@ public class WirelessTerminalItem extends Item {
 	@Nullable
 	private static BoundTarget getBoundTarget(ItemStack stack) {
 		CompoundTag tag = CBItemData.get(stack);
-		if (tag == null || !tag.contains(BOUND_POS_KEY, Tag.TAG_COMPOUND)
+		if (tag == null || !tag.contains(BOUND_POS_KEY, Tag.TAG_INT_ARRAY)
 			|| !tag.contains(BOUND_DIMENSION_KEY, Tag.TAG_STRING))
 			return null;
 
