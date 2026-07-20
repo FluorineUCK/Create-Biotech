@@ -75,10 +75,13 @@ import com.simibubi.create.CreateClient;
 import com.simibubi.create.content.contraptions.render.ContraptionEntityRenderer;
 import com.simibubi.create.content.contraptions.render.ContraptionVisual;
 import com.simibubi.create.content.decoration.encasing.EncasedCTBehaviour;
+import com.simibubi.create.content.fluids.PipeAttachmentModel;
+import com.simibubi.create.content.kinetics.base.SingleAxisRotatingVisual;
 import com.simibubi.create.content.kinetics.simpleRelays.encased.EncasedCogVisual;
 import com.simibubi.create.content.kinetics.transmission.SplitShaftVisual;
 import com.simibubi.create.foundation.block.connected.CTModel;
 import com.simibubi.create.foundation.block.connected.SimpleCTBehaviour;
+import com.simibubi.create.foundation.data.CreateRegistrate;
 import com.simibubi.create.foundation.item.ItemDescription;
 import com.simibubi.create.foundation.item.TooltipModifier;
 
@@ -255,6 +258,11 @@ public class CreateBiotechClient {
 			ButterCatModule.clientInit();
 			CardboardBoxPartials.register();
 			ShulkerPackagePartials.register();
+			CreateRegistrate.blockModel(() -> PipeAttachmentModel::withAO)
+				.accept(CBBlocks.EXPERIENCE_PUMP.get());
+			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.EXPERIENCE_PUMP.get())
+				.factory(SingleAxisRotatingVisual.ofZ(ExperiencePumpRenderer.COG))
+				.apply();
 			SimpleEntityVisualizer.<GhastHotAirBalloonEntity>builder(CBEntityTypes.GHAST_HOT_AIR_BALLOON.get())
 				.factory(ContraptionVisual::new)
 				.apply();

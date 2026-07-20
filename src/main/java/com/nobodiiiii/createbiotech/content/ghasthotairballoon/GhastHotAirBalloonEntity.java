@@ -100,7 +100,10 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 
 	@Override
 	public Vec3 getVehicleAttachmentPoint(Entity vehicle) {
-		return new Vec3(0, getCordOffset() + GhastHotAirBalloonSeatEntity.GHAST_PASSENGER_Y_OFFSET, 0);
+		// Keep the rope length relative to the ghast origin, not its elevated passenger attachment.
+		double vehiclePassengerOffset = vehicle.getPassengerRidingPosition(this).y - vehicle.getY();
+		return new Vec3(0,
+			vehiclePassengerOffset + getCordOffset() + GhastHotAirBalloonSeatEntity.GHAST_PASSENGER_Y_OFFSET, 0);
 	}
 
 	private double getCordOffset() {

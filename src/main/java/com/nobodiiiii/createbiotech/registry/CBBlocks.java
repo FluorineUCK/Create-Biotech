@@ -87,11 +87,8 @@ public class CBBlocks {
 				.noOcclusion()));
 
 	public static final DeferredHolder<Block, ExperiencePumpBlock> EXPERIENCE_PUMP = BLOCKS.register("experience_pump",
-		() -> new ExperiencePumpBlock(Block.Properties.of()
-			.sound(SoundType.COPPER)
-			.strength(2.5f)
-			.mapColor(MapColor.METAL)
-			.noOcclusion()));
+		() -> new ExperiencePumpBlock(Block.Properties.ofFullCopy(Blocks.COPPER_BLOCK)
+			.mapColor(MapColor.STONE)));
 
 	public static final DeferredHolder<Block, BuddingExperienceBlock> BUDDING_EXPERIENCE =
 		BLOCKS.register("budding_experience",
