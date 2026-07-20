@@ -2,7 +2,6 @@ package com.nobodiiiii.createbiotech.content.buttercat.register;
 
 import java.util.IdentityHashMap;
 
-import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
 import com.nobodiiiii.createbiotech.content.buttercat.datagen.other.ModTags;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ButterFoodProperties;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterFoodItem;
@@ -15,9 +14,6 @@ import com.tterrag.registrate.util.entry.ItemEntry;
 import static com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule.REGISTRATE;
 
 public class ModItems {
-    static {
-        ButterCatModule.REGISTRATE.setCreativeTab(ModCreativeModeTabs.CBC_TAB);
-    }
     public static final ItemEntry<ConfigurableButterFoodItem> BUTTER = REGISTRATE
             .item("butter", properties -> new ConfigurableButterFoodItem(properties, ButterFoodProperties.Variant.BUTTER))
             .tag(ModTags.BUTTER)

@@ -1,6 +1,5 @@
 package com.nobodiiiii.createbiotech.content.buttercat.register;
 
-import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
 import com.nobodiiiii.createbiotech.content.buttercat.datagen.other.ModTags;
 import com.simibubi.create.AllFluids;
 import com.tterrag.registrate.util.entry.FluidEntry;
@@ -27,9 +26,6 @@ import org.joml.Vector3f;
 import static com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule.REGISTRATE;
 
 public class ModFluids {
-    static {
-        ButterCatModule.REGISTRATE.setCreativeTab(ModCreativeModeTabs.CBC_TAB);
-    }
     public static final FluidEntry<BaseFlowingFluid.Flowing> CREAM =
             REGISTRATE.standardFluid("cream",(p,s,f)->new BaseFluidType(p,s,f,14147267))
                     .properties(b -> b. viscosity(100)

@@ -1,6 +1,5 @@
 package com.nobodiiiii.createbiotech.content.buttercat.register;
 
-import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlock;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.api.stress.BlockStressValues;
@@ -14,9 +13,6 @@ import net.minecraft.world.level.material.MapColor;
 import static com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule.REGISTRATE;
 
 public class ModBlocks {
-    static {
-        ButterCatModule.REGISTRATE.setCreativeTab(ModCreativeModeTabs.CBC_TAB);
-    }
     public static final BlockEntry<ButterCatEngineBlock> CUTE_CAT_ON_SHAFT = REGISTRATE
             .block("cute_cat_on_shaft", ButterCatEngineBlock::new)
             .initialProperties(SharedProperties::wooden)
