@@ -93,16 +93,22 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
             return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
 
-        if (!be.isInfinite() && itemStack.is(ModItems.SUPER_BUTTER.get())) {
-            be.setInfinite(true);
-            itemStack.shrink(1);
-            if (level.isClientSide) {
-                ClientEffect.create(level, pos, ClientEffect.EffectType.SUPER_BUTTER);
-            }
-            displayMessage(player, "string.create_biotech.infinite");
+        boolean isSuperButter = !be.isInfinite() && itemStack.is(ModItems.SUPER_BUTTER.get());
+        boolean isButter = ModTags.matchesIngredient(itemStack, ModTags.getButters());
+
+        if (level.isClientSide) {
+            return ItemInteractionResult.sidedSuccess(true);
         }
 
-        if (ModTags.matchesIngredient(itemStack, ModTags.getButters())) {
+        if (isSuperButter) {
+            be.setInfinite(true);
+            itemStack.shrink(1);
+            ClientEffect.create(level, pos, ClientEffect.EffectType.SUPER_BUTTER);
+            displayMessage(player, "string.create_biotech.infinite");
+            return ItemInteractionResult.sidedSuccess(false);
+        }
+
+        if (isButter) {
             int butterLevel = ModItems.getButterLevel(itemStack.getItem());
             if (!be.canAcceptButter(butterLevel)) {
                 displayMessage(player, "string.create_biotech.full");
@@ -110,9 +116,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
             }
             be.addButterCount(butterLevel);
             itemStack.shrink(1);
-            if (level.isClientSide) {
-                ClientEffect.create(level, pos, ClientEffect.EffectType.BUTTER);
-            }
+            ClientEffect.create(level, pos, ClientEffect.EffectType.BUTTER);
         }
 
         return ItemInteractionResult.sidedSuccess(level.isClientSide);

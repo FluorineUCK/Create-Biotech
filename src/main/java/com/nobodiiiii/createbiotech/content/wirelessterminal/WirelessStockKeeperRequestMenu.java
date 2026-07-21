@@ -17,6 +17,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.MenuType;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
 public class WirelessStockKeeperRequestMenu extends StockKeeperRequestMenu {
 
@@ -39,6 +41,7 @@ public class WirelessStockKeeperRequestMenu extends StockKeeperRequestMenu {
 	}
 
 	@Override
+	@OnlyIn(Dist.CLIENT)
 	protected StockTickerBlockEntity createOnClient(RegistryFriendlyByteBuf extraData) {
 		StockKeeperRequestMenuAccessor accessor = (StockKeeperRequestMenuAccessor) this;
 		accessor.createBiotech$setAdmin(extraData.readBoolean());

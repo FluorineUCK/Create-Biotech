@@ -36,6 +36,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
 
 public final class CBPackets {
 
@@ -71,17 +73,16 @@ public final class CBPackets {
 			AllayPortConfigurationPacket::write, AllayPortConfigurationPacket::handle);
 
 		registerClient(PowerBeltEntityAnimationPacket.class, PowerBeltEntityAnimationPacket::new,
-			PowerBeltEntityAnimationPacket::write, PowerBeltEntityAnimationPacket::handle);
+			PowerBeltEntityAnimationPacket::write);
 		registerClient(BioPackagerContraptionAnimationPacket.class, BioPackagerContraptionAnimationPacket::new,
-			BioPackagerContraptionAnimationPacket::write, BioPackagerContraptionAnimationPacket::handle);
+			BioPackagerContraptionAnimationPacket::write);
 		registerClient(ShulkerPackagerPlacementPacket.ClientBoundRequest.class,
 			ShulkerPackagerPlacementPacket.ClientBoundRequest::new,
-			ShulkerPackagerPlacementPacket.ClientBoundRequest::write,
-			ShulkerPackagerPlacementPacket.ClientBoundRequest::handle);
+			ShulkerPackagerPlacementPacket.ClientBoundRequest::write);
 		registerClient(AllayPortFlapPacket.class, AllayPortFlapPacket::new,
-			AllayPortFlapPacket::write, AllayPortFlapPacket::handle);
+			AllayPortFlapPacket::write);
 		registerClient(AllayCourierHudPacket.class, AllayCourierHudPacket::new,
-			AllayCourierHudPacket::write, AllayCourierHudPacket::handle);
+			AllayCourierHudPacket::write);
 
 		CatnipPacketRegistry registry = new CatnipPacketRegistry(CreateBiotech.MOD_ID, NETWORK_VERSION);
 		registry.registerPacket(new CatnipPacketRegistry.PacketType<>(
@@ -122,9 +123,9 @@ public final class CBPackets {
 	}
 
 	private static <T> void registerClient(Class<T> type, Function<RegistryFriendlyByteBuf, T> decoder,
-		BiConsumer<T, RegistryFriendlyByteBuf> encoder, BiConsumer<T, LocalPlayer> handler) {
+		BiConsumer<T, RegistryFriendlyByteBuf> encoder) {
 		CLIENTBOUND_IDS.put(type, CLIENTBOUND.size());
-		CLIENTBOUND.add(new ClientRegistration<>(type, decoder, encoder, handler));
+		CLIENTBOUND.add(new ClientRegistration<>(type, decoder, encoder));
 	}
 
 	private static ServerPayload decodeServer(RegistryFriendlyByteBuf buffer) {
@@ -184,12 +185,13 @@ public final class CBPackets {
 
 		@Override
 		@ClientOnly
+		@OnlyIn(Dist.CLIENT)
 		public void handle(LocalPlayer player) {
 			Integer id = CLIENTBOUND_IDS.get(packet.getClass());
 			if (id == null)
 				throw new IllegalArgumentException("Unregistered Create Biotech clientbound packet "
 					+ packet.getClass().getName());
-			CLIENTBOUND.get(id).handle(packet, player);
+			CBClientPacketHandlers.handle(packet, player);
 		}
 
 		@Override
@@ -215,18 +217,13 @@ public final class CBPackets {
 	}
 
 	private record ClientRegistration<T>(Class<T> type, Function<RegistryFriendlyByteBuf, T> decoder,
-										 BiConsumer<T, RegistryFriendlyByteBuf> encoder,
-										 BiConsumer<T, LocalPlayer> handler) {
+										 BiConsumer<T, RegistryFriendlyByteBuf> encoder) {
 		private Object decode(RegistryFriendlyByteBuf buffer) {
 			return decoder.apply(buffer);
 		}
 
 		private void encode(Object packet, RegistryFriendlyByteBuf buffer) {
 			encoder.accept(type.cast(packet), buffer);
-		}
-
-		private void handle(Object packet, LocalPlayer player) {
-			handler.accept(type.cast(packet), player);
 		}
 	}
 
