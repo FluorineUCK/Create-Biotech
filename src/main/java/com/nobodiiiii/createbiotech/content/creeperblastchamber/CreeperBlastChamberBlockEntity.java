@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
 
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
@@ -127,6 +128,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private static final RecipeWrapper HIGH_PRESSURE_RECIPE_WRAPPER = new RecipeWrapper(HIGH_PRESSURE_RECIPE_INVENTORY);
 	private static final Map<UUID, ClientTrackedCreeper> CLIENT_TRACKED_CREEPERS = new HashMap<>();
 	private static final Map<Long, BlockPos> CLIENT_PRESS_CONTROLLERS = new HashMap<>();
+	private static final Map<Level, Set<BlockPos>> CLIENT_LOADED_CHAMBERS = new WeakHashMap<>();
 
 	public LerpedFloat gauge = LerpedFloat.linear();
 	public LerpedFloat displayGauge = LerpedFloat.linear();
@@ -209,10 +211,37 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	}
 
 	@Override
+	public void onLoad() {
+		super.onLoad();
+		registerClientLoadedChamber();
+	}
+
+	@Override
 	public void setRemoved() {
+		unregisterClientLoadedChamber();
 		clearClientTrackedCreepers();
 		clearClientTrackedPresses();
 		super.setRemoved();
+	}
+
+	private void registerClientLoadedChamber() {
+		Level level = getLevel();
+		if (level == null || !level.isClientSide)
+			return;
+		CLIENT_LOADED_CHAMBERS.computeIfAbsent(level, ignored -> new HashSet<>())
+			.add(getBlockPos().immutable());
+	}
+
+	private void unregisterClientLoadedChamber() {
+		Level level = getLevel();
+		if (level == null || !level.isClientSide)
+			return;
+		Set<BlockPos> chambers = CLIENT_LOADED_CHAMBERS.get(level);
+		if (chambers == null)
+			return;
+		chambers.remove(getBlockPos());
+		if (chambers.isEmpty())
+			CLIENT_LOADED_CHAMBERS.remove(level);
 	}
 
 	private void tryDetectStructure() {
@@ -2319,8 +2348,35 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 
 	@Nullable
 	public static BlockPos findGoggleInformationSource(Level level, BlockPos structurePos) {
-		CreeperBlastChamberBlockEntity controller = findStructureController(level, structurePos);
+		CreeperBlastChamberBlockEntity controller = findLoadedClientStructureController(level, structurePos);
 		return controller != null ? controller.getBlockPos() : null;
+	}
+
+	@Nullable
+	private static CreeperBlastChamberBlockEntity findLoadedClientStructureController(Level level,
+		BlockPos structurePos) {
+		if (!level.isClientSide)
+			return null;
+
+		Set<BlockPos> controllerPositions = CLIENT_LOADED_CHAMBERS.get(level);
+		if (controllerPositions == null || controllerPositions.isEmpty())
+			return null;
+
+		Iterator<BlockPos> iterator = controllerPositions.iterator();
+		while (iterator.hasNext()) {
+			BlockPos controllerPos = iterator.next();
+			BlockEntity blockEntity = level.getBlockEntity(controllerPos);
+			if (!(blockEntity instanceof CreeperBlastChamberBlockEntity chamber)) {
+				iterator.remove();
+				continue;
+			}
+			if (chamber.isStructurePart(structurePos))
+				return chamber;
+		}
+
+		if (controllerPositions.isEmpty())
+			CLIENT_LOADED_CHAMBERS.remove(level);
+		return null;
 	}
 
 	@Nullable
