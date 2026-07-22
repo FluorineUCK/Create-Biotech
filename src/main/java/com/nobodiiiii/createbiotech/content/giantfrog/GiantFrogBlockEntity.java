@@ -8,10 +8,17 @@ import com.nobodiiiii.createbiotech.content.frogportal.FrogPortalBehaviour;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachDimensions;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSavedData;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSpace;
+import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
+import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimearmor.SlimeArmorHandler;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.simibubi.create.content.kinetics.belt.BeltBlockEntity;
+import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
+import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
+import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
+import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -30,22 +37,21 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-public class GiantFrogBlockEntity extends BlockEntity {
+public class GiantFrogBlockEntity extends SmartBlockEntity {
 	private static final int EAT_INTERVAL = 20;
-	private static final int EAT_ANIMATION_TICKS = 20;
+	private static final int TONGUE_ANIMATION_TICKS = 20;
 	private static final int CATCH_ANIMATION_TICKS = 6;
 	private static final int EAT_FINISH_TICKS = 10;
 	private static final double CAPTURE_BOX_SIZE = 2.0d;
 	private static final double TONGUE_PULL_SPEED = 0.75d;
 
 	private int eatCooldown;
-	private int eatAnimationTicks;
-	private int eatAnimationAge;
+	private int tongueAnimationTicks;
+	private int tongueAnimationAge;
 	private boolean hasSpace;
 	private long spaceIndex = -1L;
 	private PendingEat pendingEat;
@@ -55,7 +61,18 @@ public class GiantFrogBlockEntity extends BlockEntity {
 		eatCooldown = levelRandomOffset(pos);
 	}
 
+	@Override
+	public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
+		if (GiantFrogBlock.isMouthInputPart(getBlockState())) {
+			behaviours.add(new DirectBeltInputBehaviour(this).onlyInsertWhen(this::canAcceptBeltInput)
+				.setInsertionHandler(this::handleBeltInsertion));
+		}
+	}
+
 	public static void tick(Level level, BlockPos pos, BlockState state, GiantFrogBlockEntity be) {
+		be.tickSmartBlockEntity();
+		if (!GiantFrogBlock.isMain(state))
+			return;
 		if (level.isClientSide) {
 			be.tickClientAnimation();
 			return;
@@ -201,23 +218,37 @@ public class GiantFrogBlockEntity extends BlockEntity {
 	}
 
 	public void startEatAnimation() {
-		eatAnimationTicks = EAT_ANIMATION_TICKS;
-		eatAnimationAge = 0;
+		startTongueAnimation();
 	}
 
-	public boolean isEating() {
-		return eatAnimationTicks > 0;
+	public void startTongueAnimation() {
+		tongueAnimationTicks = TONGUE_ANIMATION_TICKS;
+		tongueAnimationAge = 0;
 	}
 
-	public float getEatAnimationAge(float partialTicks) {
-		return isEating() ? eatAnimationAge + partialTicks : 0.0f;
+	public boolean isTongueAnimating() {
+		return tongueAnimationTicks > 0;
+	}
+
+	public boolean isMouthHeldOpenByBelt() {
+		if (level == null || !GiantFrogBlock.isMain(getBlockState()))
+			return false;
+		Direction facing = getFacing(getBlockState());
+		BlockPos beltPos = GiantFrogBlock.getMouthInputPos(worldPosition, getBlockState())
+			.relative(facing);
+		Direction requiredMovement = facing.getOpposite();
+		return isBeltMovingToward(level, beltPos, requiredMovement);
+	}
+
+	public float getTongueAnimationAge(float partialTicks) {
+		return isTongueAnimating() ? tongueAnimationAge + partialTicks : 0.0f;
 	}
 
 	private void tickClientAnimation() {
-		if (eatAnimationTicks <= 0)
-			return;
-		eatAnimationTicks--;
-		eatAnimationAge++;
+		if (tongueAnimationTicks > 0) {
+			tongueAnimationTicks--;
+			tongueAnimationAge++;
+		}
 	}
 
 	public long ensureRoom(MinecraftServer server, ServerLevel frogLevel) {
@@ -244,6 +275,56 @@ public class GiantFrogBlockEntity extends BlockEntity {
 		spaceIndex = index;
 		hasSpace = true;
 		setChanged();
+	}
+
+	private void tickSmartBlockEntity() {
+		super.tick();
+	}
+
+	private boolean canAcceptBeltInput(Direction side) {
+		return GiantFrogBlock.isMouthInputPart(getBlockState()) && side == getFacing(getBlockState()).getOpposite();
+	}
+
+	private ItemStack handleBeltInsertion(TransportedItemStack transported, Direction side, boolean simulate) {
+		GiantFrogBlockEntity mainFrog = getMainFrog();
+		if (mainFrog == null)
+			return transported.stack;
+		return mainFrog.insertItemIntoStomach(transported.stack, simulate);
+	}
+
+	private ItemStack insertItemIntoStomach(ItemStack stack, boolean simulate) {
+		if (stack.isEmpty())
+			return ItemStack.EMPTY;
+		if (simulate)
+			return ItemStack.EMPTY;
+		if (!(level instanceof ServerLevel serverLevel))
+			return stack;
+
+		MinecraftServer server = serverLevel.getServer();
+		ServerLevel frogLevel = server.getLevel(FrogStomachDimensions.FROG_STOMACH);
+		if (frogLevel == null)
+			return stack;
+
+		long index = ensureRoom(server, frogLevel);
+		BlockPos spawnPos = FrogStomachSpace.spawnPos(index);
+		ItemEntity item = new ItemEntity(frogLevel, spawnPos.getX() + 0.5d, spawnPos.getY() + 0.35d,
+			spawnPos.getZ() + 0.5d, stack.copy());
+		item.setDeltaMovement(Vec3.ZERO);
+		item.setDefaultPickUpDelay();
+		if (!frogLevel.addFreshEntity(item))
+			return stack;
+
+		return ItemStack.EMPTY;
+	}
+
+	private GiantFrogBlockEntity getMainFrog() {
+		if (level == null)
+			return null;
+		BlockPos mainPos = GiantFrogBlock.getMainPos(worldPosition, getBlockState());
+		if (level.getBlockEntity(mainPos) instanceof GiantFrogBlockEntity frog
+			&& GiantFrogBlock.isMain(frog.getBlockState()))
+			return frog;
+		return null;
 	}
 
 	private static Slime findSmallSlime(Level level, BlockPos pos, BlockState state) {
@@ -320,20 +401,34 @@ public class GiantFrogBlockEntity extends BlockEntity {
 		return state.hasProperty(GiantFrogBlock.FACING) ? state.getValue(GiantFrogBlock.FACING) : Direction.NORTH;
 	}
 
+	private static boolean isBeltMovingToward(Level level, BlockPos pos, Direction movement) {
+		if (level.getBlockEntity(pos) instanceof BeltBlockEntity belt)
+			return belt.getSpeed() != 0 && belt.getMovementFacing() == movement;
+		if (level.getBlockEntity(pos) instanceof SlimeBeltBlockEntity belt)
+			return belt.getSpeed() != 0 && belt.getMovementFacing() == movement;
+		if (level.getBlockEntity(pos) instanceof MagmaBeltBlockEntity belt)
+			return belt.getSpeed() != 0 && belt.getMovementFacing() == movement;
+		return false;
+	}
+
 	private static int levelRandomOffset(BlockPos pos) {
 		return Math.floorMod(pos.getX() * 31 + pos.getY() * 17 + pos.getZ() * 13, EAT_INTERVAL);
 	}
 
 	@Override
-	protected void saveAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-		super.saveAdditional(tag, registries);
+	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.write(tag, registries, clientPacket);
+		if (!GiantFrogBlock.isMain(getBlockState()))
+			return;
 		tag.putBoolean("HasSpace", hasSpace);
 		tag.putLong("SpaceIndex", spaceIndex);
 	}
 
 	@Override
-	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
-		super.loadAdditional(tag, registries);
+	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		super.read(tag, registries, clientPacket);
+		if (!GiantFrogBlock.isMain(getBlockState()))
+			return;
 		hasSpace = tag.getBoolean("HasSpace");
 		spaceIndex = tag.getLong("SpaceIndex");
 	}

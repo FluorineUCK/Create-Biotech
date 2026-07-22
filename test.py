@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import argparse
 import glob
+import hashlib
 import io
 import json
 import os
@@ -26,9 +27,18 @@ LIBRARIES_DIR = DOT_MINECRAFT / "libraries"
 ASSETS_DIR = DOT_MINECRAFT / "assets"
 
 DEFAULT_INSTANCE = "1.21.1-NeoForge"
+DEFAULT_USERNAME = "Dev"
 DEFAULT_WIDTH = 1600
 DEFAULT_HEIGHT = 900
 QUICKPLAY_MODS_DIR = PROJECT_ROOT / "build" / "quickplay" / "mods"
+
+
+def offline_player_uuid(username: str) -> str:
+    """Match Minecraft's UUID.nameUUIDFromBytes("OfflinePlayer:<name>") identity."""
+    digest = hashlib.md5(
+        f"OfflinePlayer:{username}".encode("utf-8"), usedforsecurity=False
+    ).digest()
+    return uuid.UUID(bytes=digest, version=3).hex
 
 
 def read_gradle_properties() -> dict[str, str]:
@@ -161,12 +171,14 @@ def build_game_args(
 ) -> list[str]:
     asset_index = version_data.get("assetIndex", {}).get("id", version_data.get("assets", "5"))
     replacements = {
-        "${auth_player_name}": "Dev",
+        "${auth_player_name}": DEFAULT_USERNAME,
         "${version_name}": version_data["id"],
         "${game_directory}": str(game_directory),
         "${assets_root}": str(ASSETS_DIR),
         "${assets_index_name}": str(asset_index),
-        "${auth_uuid}": str(uuid.uuid4()).replace("-", ""),
+        # A new random UUID on every launch makes the same single-player owner look like a
+        # different player to mod data keyed by UUID, even though level.dat restores their position.
+        "${auth_uuid}": offline_player_uuid(DEFAULT_USERNAME),
         "${auth_access_token}": "0",
         "${clientid}": "0",
         "${auth_xuid}": "0",

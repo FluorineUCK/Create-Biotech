@@ -196,7 +196,7 @@ public class GiantFrogBlock extends BaseEntityBlock {
 
 	@Override
 	public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
-		return isMain(state) ? new GiantFrogBlockEntity(pos, state) : null;
+		return isMain(state) || isMouthInputPart(state) ? new GiantFrogBlockEntity(pos, state) : null;
 	}
 
 	@Override
@@ -289,9 +289,28 @@ public class GiantFrogBlock extends BaseEntityBlock {
 		}
 	}
 
-	private static boolean isMain(BlockState state) {
+	public static boolean isMain(BlockState state) {
 		return state.getValue(X_OFFSET) == CENTER_OFFSET && state.getValue(Y_OFFSET) == 0
 			&& state.getValue(Z_OFFSET) == CENTER_OFFSET;
+	}
+
+	public static boolean isMouthInputPart(BlockState state) {
+		if (state.getValue(Y_OFFSET) != 0)
+			return false;
+		Direction facing = state.getValue(FACING);
+		int x = state.getValue(X_OFFSET);
+		int z = state.getValue(Z_OFFSET);
+		return switch (facing) {
+			case NORTH -> x == CENTER_OFFSET && z == 0;
+			case SOUTH -> x == CENTER_OFFSET && z == OCCUPIED_WIDTH - 1;
+			case WEST -> x == 0 && z == CENTER_OFFSET;
+			case EAST -> x == OCCUPIED_WIDTH - 1 && z == CENTER_OFFSET;
+			default -> false;
+		};
+	}
+
+	public static BlockPos getMouthInputPos(BlockPos mainPos, BlockState state) {
+		return mainPos.relative(state.getValue(FACING));
 	}
 
 	private static ItemStack createDropStack(BlockGetter level, BlockPos mainPos) {
@@ -306,7 +325,7 @@ public class GiantFrogBlock extends BaseEntityBlock {
 			stack.set(CBDataComponents.FROG_STOMACH_SPACE.get(), frog.getSpaceIndex());
 	}
 
-	private static BlockPos getMainPos(BlockPos pos, BlockState state) {
+	public static BlockPos getMainPos(BlockPos pos, BlockState state) {
 		return pos.offset(CENTER_OFFSET - state.getValue(X_OFFSET), -state.getValue(Y_OFFSET),
 			CENTER_OFFSET - state.getValue(Z_OFFSET));
 	}
