@@ -527,7 +527,7 @@ public class AllayCourierEntity extends Allay implements Container {
 	@Override
 	public void addAdditionalSaveData(@NotNull CompoundTag tag) {
 		super.addAdditionalSaveData(tag);
-		tag.put("Package", getPackage().save(level().registryAccess(), new CompoundTag()));
+		tag.put("Package", getPackage().saveOptional(level().registryAccess()));
 		CompoundTag direction = new CompoundTag();
 		direction.putDouble("X", launchDirection.x);
 		direction.putDouble("Z", launchDirection.z);

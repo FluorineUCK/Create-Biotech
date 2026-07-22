@@ -1510,7 +1510,7 @@ public final class AllayCourierTask {
 	public CompoundTag save(HolderLookup.Provider registries, CompoundTag tag) {
 		tag.putInt("CoordinateModelVersion", 1);
 		tag.putUUID("Id", id);
-		tag.put("Box", box.save(registries, new CompoundTag()));
+		tag.put("Box", box.saveOptional(registries));
 		tag.putString("CurrentDimension", currentDimension.location().toString());
 		tag.putString("TargetDimension", targetDimension.location().toString());
 		if (sourceDimension != null) tag.putString("SourceDimension", sourceDimension.location().toString());
