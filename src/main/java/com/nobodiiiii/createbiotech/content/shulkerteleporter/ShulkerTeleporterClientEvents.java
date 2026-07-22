@@ -7,6 +7,7 @@ import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 
 import net.minecraft.client.CameraType;
@@ -80,6 +81,10 @@ public class ShulkerTeleporterClientEvents {
 		ShulkerTeleporterBlockEntity teleporter = findRelevantTeleporter(player, event.getPartialTick());
 		if (teleporter == null)
 			return;
+		// The legacy clipping plane is expressed in world Y. Do not activate it for a
+		// transformed sublevel until its local lid plane is projected into view space.
+		if (SubLevelCompat.getContaining(player.level(), teleporter.getBlockPos()) != null)
+			return;
 
 		if (player == Minecraft.getInstance().player
 			&& Minecraft.getInstance().options.getCameraType() == CameraType.FIRST_PERSON)
@@ -113,6 +118,8 @@ public class ShulkerTeleporterClientEvents {
 		ShulkerTeleporterBlockEntity teleporter = findRelevantTeleporter(entity, event.getPartialTick());
 		if (teleporter == null)
 			return;
+		if (SubLevelCompat.getContaining(entity.level(), teleporter.getBlockPos()) != null)
+			return;
 
 		event.setCanceled(true);
 		MultiBufferSource clippedBuffer = createClippedBuffer(event.getMultiBufferSource(), teleporter,
@@ -145,16 +152,35 @@ public class ShulkerTeleporterClientEvents {
 		return renderType -> new YClippingVertexConsumer(bufferSource.getBuffer(renderType), clipNormal, clipY);
 	}
 
-	public static double getFirstPersonCameraYOffset(Player player, float partialTick) {
+	public static Vec3 getFirstPersonCameraOffset(Player player, float partialTick) {
 		ShulkerTeleporterBlockEntity teleporter = findRelevantTeleporter(player, partialTick);
 		if (teleporter == null)
-			return 0.0d;
-		return teleporter.getTopShellYOffset(partialTick) - ShulkerTeleporterBlockEntity.TOP_SHELL_OPEN_Y;
+			return Vec3.ZERO;
+		double localYOffset =
+			teleporter.getTopShellYOffset(partialTick) - ShulkerTeleporterBlockEntity.TOP_SHELL_OPEN_Y;
+		return SubLevelCompat.localOffsetToRenderWorld(player.level(), teleporter.getBlockPos(),
+			new Vec3(0.0d, localYOffset, 0.0d), partialTick);
 	}
 
 	private static ShulkerTeleporterBlockEntity findRelevantTeleporter(LivingEntity entity, float partialTick) {
 		Level level = entity.level();
-		BlockPos center = entity.blockPosition();
+		ShulkerTeleporterBlockEntity[] best = new ShulkerTeleporterBlockEntity[1];
+		float[] bestProgress = new float[1];
+		SubLevelCompat.forEachIncludingEntitySpace(level, entity.position(), entity, (subLevel, center) -> {
+			ShulkerTeleporterBlockEntity candidate = findRelevantTeleporter(level, entity, center, partialTick);
+			if (candidate == null)
+				return;
+			float progress = candidate.getClosingProgress(partialTick);
+			if (best[0] == null || progress > bestProgress[0]) {
+				best[0] = candidate;
+				bestProgress[0] = progress;
+			}
+		});
+		return best[0];
+	}
+
+	private static ShulkerTeleporterBlockEntity findRelevantTeleporter(Level level, LivingEntity entity,
+		BlockPos center, float partialTick) {
 		ShulkerTeleporterBlockEntity best = null;
 		float bestProgress = 0.0f;
 		for (BlockPos pos : BlockPos.betweenClosed(center.offset(-1, -1, -1), center.offset(1, 4, 1))) {

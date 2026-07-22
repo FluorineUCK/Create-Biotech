@@ -1,0 +1,8 @@
+{
+  "replace": false,
+  "values": [
+    "create_biotech:slime_belt",
+    "create_biotech:magma_belt",
+    "create_biotech:power_belt"
+  ]
+}

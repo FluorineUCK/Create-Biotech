@@ -2,6 +2,9 @@ package com.nobodiiiii.createbiotech.content.shulkerteleporter;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+
+import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.registry.CBMenuTypes;
 
@@ -20,6 +23,8 @@ public class ShulkerTeleporterMenu extends AbstractContainerMenu {
 	private final String ownAddress;
 	private final String targetAddress;
 	private final List<String> candidateAddresses;
+	@Nullable
+	private final UUID subLevelId;
 
 	public ShulkerTeleporterMenu(int id, Inventory playerInventory, RegistryFriendlyByteBuf data) {
 		this(id, playerInventory, getBlockEntity(playerInventory, data.readBlockPos()), data);
@@ -32,6 +37,7 @@ public class ShulkerTeleporterMenu extends AbstractContainerMenu {
 		this.ownAddress = blockEntity.getOwnAddress();
 		this.targetAddress = blockEntity.getTargetAddress();
 		this.candidateAddresses = List.copyOf(blockEntity.getCandidateAddresses());
+		this.subLevelId = blockEntity.getSubLevelId();
 	}
 
 	private ShulkerTeleporterMenu(int id, Inventory playerInventory, ShulkerTeleporterBlockEntity blockEntity,
@@ -42,6 +48,7 @@ public class ShulkerTeleporterMenu extends AbstractContainerMenu {
 		this.ownAddress = data.readUtf(ShulkerTeleporterBlockEntity.MAX_ADDRESS_LENGTH);
 		this.targetAddress = data.readUtf(ShulkerTeleporterBlockEntity.MAX_ADDRESS_LENGTH);
 		this.candidateAddresses = readCandidateAddresses(data);
+		this.subLevelId = data.readBoolean() ? data.readUUID() : null;
 	}
 
 	@Override
@@ -72,6 +79,11 @@ public class ShulkerTeleporterMenu extends AbstractContainerMenu {
 
 	public List<String> getCandidateAddresses() {
 		return candidateAddresses;
+	}
+
+	@Nullable
+	public UUID getSubLevelId() {
+		return subLevelId;
 	}
 
 	private static List<String> readCandidateAddresses(RegistryFriendlyByteBuf data) {

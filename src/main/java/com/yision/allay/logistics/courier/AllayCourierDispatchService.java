@@ -1,6 +1,7 @@
 package com.yision.allay.logistics.courier;
 
 import com.simibubi.create.content.logistics.box.PackageItem;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.yision.allay.block.allayport.AllayPortBlockEntity;
 import com.yision.allay.logistics.address.AllayAddressRules;
 import com.yision.allay.block.allayport.AllayPortTargetRegistry;
@@ -16,12 +17,19 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.UUID;
+import java.util.function.Predicate;
 
 public final class AllayCourierDispatchService {
 	private AllayCourierDispatchService() {}
 
 	public static @Nullable AllayCourierTarget resolvePackageTarget(ServerLevel level, ItemStack box,
 		Vec3 origin, @Nullable ResourceKey<Level> sourceDimension, @Nullable BlockPos sourcePos) {
+		return resolvePackageTarget(level, box, origin, sourceDimension, sourcePos, target -> true);
+	}
+
+	public static @Nullable AllayCourierTarget resolvePackageTarget(ServerLevel level, ItemStack box,
+		Vec3 origin, @Nullable ResourceKey<Level> sourceDimension, @Nullable BlockPos sourcePos,
+		Predicate<AllayCourierTarget.AllayPortTarget> allayPortPredicate) {
 		if (!PackageItem.isPackage(box)) {
 			return null;
 		}
@@ -37,7 +45,8 @@ public final class AllayCourierDispatchService {
 		}
 
 		AllayCourierTarget.AllayPortTarget allayPort =
-			findAllayPortExcludingSource(level, address, box, origin, sourceDimension, sourcePos);
+			findAllayPortExcludingSource(level, address, box, origin, sourceDimension, sourcePos,
+				allayPortPredicate);
 		return allayPort != null ? allayPort : findPlayer(level, address, box);
 	}
 
@@ -53,12 +62,13 @@ public final class AllayCourierDispatchService {
 		AllayCourierTask task;
 		if (target instanceof AllayCourierTarget.AllayPortTarget allayPortTarget) {
 			task = AllayCourierTask.forPackageToAllayPort(taskId, box, level,
-				allayPortTarget.dimension(), allayPortTarget.pos(), spawnPosition, launchDirection,
-				null, null, player.getUUID(), AllayCourierReturnMode.DEFAULT_FOR_PLAYER_LAUNCH);
+				allayPortTarget.dimension(), allayPortTarget.pos(), allayPortTarget.subLevelId(),
+				spawnPosition, launchDirection, null, null, null, player.getUUID(),
+				AllayCourierReturnMode.DEFAULT_FOR_PLAYER_LAUNCH);
 		} else if (target instanceof AllayCourierTarget.PlayerTarget playerTarget) {
 			task = AllayCourierTask.forPackageToPlayer(taskId, box, level,
 				playerTarget.playerId(), playerTarget.dimension(), spawnPosition, launchDirection,
-				null, null, player.getUUID(), AllayCourierReturnMode.DEFAULT_FOR_PLAYER_LAUNCH);
+				null, null, null, player.getUUID(), AllayCourierReturnMode.DEFAULT_FOR_PLAYER_LAUNCH);
 		} else {
 			return false;
 		}
@@ -81,14 +91,17 @@ public final class AllayCourierDispatchService {
 
 	private static @Nullable AllayCourierTarget.AllayPortTarget findAllayPortExcludingSource(ServerLevel level,
 		String address, ItemStack box, Vec3 origin, @Nullable ResourceKey<Level> sourceDimension,
-		@Nullable BlockPos sourcePos) {
+		@Nullable BlockPos sourcePos, Predicate<AllayCourierTarget.AllayPortTarget> allayPortPredicate) {
 		TargetLocation location = AllayPortTargetRegistry.findMatchingAnyDimension(level, address, origin,
 			sourceDimension, sourcePos, target -> AllayCourierDimensionRules.canTarget(level, target.dimension())
-					&& canReceiveAllayPortTarget(level, target, box));
+					&& canReceiveAllayPortTarget(level, target, box)
+					&& allayPortPredicate.test(new AllayCourierTarget.AllayPortTarget(
+						target.dimension(), target.pos(), target.subLevelId())));
 		if (location == null) {
 			return null;
 		}
-		return new AllayCourierTarget.AllayPortTarget(location.dimension(), location.pos());
+		return new AllayCourierTarget.AllayPortTarget(location.dimension(), location.pos(),
+			location.subLevelId());
 	}
 
 	public static boolean canReceivePackageTarget(ServerLevel level, AllayCourierTarget target, ItemStack box) {
@@ -102,7 +115,8 @@ public final class AllayCourierDispatchService {
 		}
 		if (target instanceof AllayCourierTarget.AllayPortTarget allayPortTarget) {
 			return canReceiveAllayPortTarget(level,
-				new TargetLocation(allayPortTarget.dimension(), allayPortTarget.pos(), ""), box);
+				new TargetLocation(allayPortTarget.dimension(), allayPortTarget.pos(),
+					allayPortTarget.subLevelId(), ""), box);
 		}
 		return false;
 	}
@@ -110,6 +124,9 @@ public final class AllayCourierDispatchService {
 	private static boolean canReceiveAllayPortTarget(ServerLevel level, TargetLocation target, ItemStack box) {
 		ServerLevel targetLevel = level.getServer().getLevel(target.dimension());
 		if (targetLevel == null) {
+			return false;
+		}
+		if (!SubLevelCompat.matchesSpace(targetLevel, target.pos(), target.subLevelId())) {
 			return false;
 		}
 		BlockEntity blockEntity = targetLevel.getBlockEntity(target.pos());

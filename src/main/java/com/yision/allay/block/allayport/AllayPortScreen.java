@@ -7,6 +7,7 @@ import java.util.function.Consumer;
 import com.google.common.collect.ImmutableList;
 import com.mojang.blaze3d.platform.InputConstants;
 import com.nobodiiiii.createbiotech.network.CBPackets;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.simibubi.create.content.trains.station.NoShadowFontWrapper;
 import com.simibubi.create.foundation.gui.AllGuiTextures;
 import com.simibubi.create.foundation.gui.AllIcons;
@@ -18,6 +19,7 @@ import com.simibubi.create.foundation.gui.widget.SelectionScrollInput;
 import com.simibubi.create.foundation.utility.CreateLang;
 import com.yision.allay.CreateAllay;
 import com.yision.allay.logistics.courier.AllayCourierReturnMode;
+import com.yision.allay.logistics.address.AllayAddressRules;
 
 import net.createmod.catnip.gui.element.GuiGameElement;
 import net.createmod.catnip.gui.widget.AbstractSimiWidget;
@@ -68,6 +70,7 @@ public class AllayPortScreen extends AbstractSimiContainerScreen<AllayPortMenu> 
 	private AllayCourierReturnMode selectedReturnMode;
 	private ItemStack icon;
 	private List<Rect2i> extraAreas = Collections.emptyList();
+	private boolean settingsSent;
 	private final List<Component> returnModeOptions = List.of(
 		Component.translatable("gui.create_biotech.allay_port.return_mode.always_dock"),
 		Component.translatable("gui.create_biotech.allay_port.return_mode.always_return"),
@@ -98,7 +101,7 @@ public class AllayPortScreen extends AbstractSimiContainerScreen<AllayPortMenu> 
 		addressBox = new EditBox(new NoShadowFontWrapper(font), x + UI_X_OFFSET + 23, y - 11, WINDOW_WIDTH - 20, 10,
 			Component.empty());
 		addressBox.setBordered(false);
-		addressBox.setMaxLength(25);
+		addressBox.setMaxLength(AllayAddressRules.MAX_PORT_ADDRESS_LENGTH);
 		addressBox.setTextColor(0x3D3C48);
 		addressBox.setValue(menu.contentHolder.addressFilter);
 		addressBox.setFocused(false);
@@ -109,7 +112,7 @@ public class AllayPortScreen extends AbstractSimiContainerScreen<AllayPortMenu> 
 
 		confirmButton =
 			new IconButton(x + UI_X_OFFSET + WINDOW_WIDTH - 33, y + WINDOW_HEIGHT - 24, AllIcons.I_CONFIRM);
-		confirmButton.withCallback(() -> minecraft.player.closeContainer());
+		confirmButton.withCallback(this::onClose);
 		addRenderableWidget(confirmButton);
 
 		acceptPackages =
@@ -234,10 +237,26 @@ public class AllayPortScreen extends AbstractSimiContainerScreen<AllayPortMenu> 
 	}
 
 	@Override
+	public void onClose() {
+		sendSettingsOnce();
+		super.onClose();
+	}
+
+	@Override
 	public void removed() {
-		CBPackets.sendToServer(new AllayPortConfigurationPacket(menu.contentHolder.getBlockPos(),
-			addressBox.getValue(), acceptPackages.green, selectedReturnMode));
+		sendSettingsOnce();
 		super.removed();
+	}
+
+	private void sendSettingsOnce() {
+		if (settingsSent || addressBox == null || acceptPackages == null || selectedReturnMode == null) {
+			return;
+		}
+		settingsSent = true;
+		CBPackets.sendToServer(new AllayPortConfigurationPacket(menu.contentHolder.getBlockPos(),
+			addressBox.getValue(), acceptPackages.green, selectedReturnMode,
+			menu.contentHolder.getLevel() == null ? null
+				: SubLevelCompat.getSpaceId(menu.contentHolder.getLevel(), menu.contentHolder.getBlockPos())));
 	}
 
 	private AllayPortBlockEntity port() {

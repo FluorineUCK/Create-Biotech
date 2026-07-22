@@ -3,14 +3,19 @@ package com.nobodiiiii.createbiotech.content.shulkerpackager;
 import net.minecraft.core.HolderLookup;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 
+import javax.annotation.Nullable;
+
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.compat.computercraft.events.PackageEvent;
 import com.simibubi.create.content.kinetics.mechanicalArm.ArmBlockEntity;
-import com.simibubi.create.content.kinetics.mechanicalArm.ArmInteractionPoint;
 import com.simibubi.create.content.logistics.BigItemStack;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
@@ -29,12 +34,12 @@ import com.simibubi.create.foundation.utility.CreateLang;
 import net.createmod.catnip.data.Iterate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.SectionPos;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.item.ItemStack;
@@ -42,7 +47,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.ChunkSource;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
@@ -50,7 +54,11 @@ import net.neoforged.neoforge.items.ItemStackHandler;
 
 public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 
-	List<ArmInteractionPoint> outputs;
+	/** Resource bound for both persisted links and the placement protocol. */
+	public static final int MAX_OUTPUTS = 256;
+	private static final int PLACEMENT_REQUEST_LIFETIME = 20 * 10;
+
+	List<ShulkerPackagerTarget> outputs;
 	ListTag interactionPointTag;
 	boolean updateInteractionPoints;
 	int heldBoxIdleTicks;
@@ -58,6 +66,12 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 
 	protected ScrollOptionBehaviour<ArmBlockEntity.SelectionMode> selectionMode;
 	protected int lastOutputIndex;
+	private long interactionPointRevision;
+	@Nullable
+	private UUID pendingConfigurationPlayer;
+	@Nullable
+	private UUID pendingConfigurationNonce;
+	private long pendingConfigurationExpiry;
 
 	public ShulkerPackagerBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.SHULKER_PACKAGER.get(), pos, state);
@@ -86,6 +100,8 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 
 		if (level == null || level.isClientSide)
 			return;
+		if (pendingConfigurationNonce != null && level.getGameTime() > pendingConfigurationExpiry)
+			clearPlacementConfiguration();
 
 		if (animationTicks != 0) {
 			heldBoxIdleTicks = 0;
@@ -256,16 +272,56 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 		notifyUpdate();
 	}
 
-	public List<ArmInteractionPoint> getOutputs() {
+	public List<ShulkerPackagerTarget> getOutputs() {
 		initInteractionPoints();
 		return outputs;
 	}
 
 	public void setInteractionPointTag(ListTag interactionPointTag) {
-		this.interactionPointTag = interactionPointTag;
+		ListTag limitedPoints = limitInteractionPoints(interactionPointTag);
+		if (!limitedPoints.equals(this.interactionPointTag))
+			interactionPointRevision++;
+		this.interactionPointTag = limitedPoints;
 		updateInteractionPoints = true;
+		lastOutputIndex = -1;
 		notifyUpdate();
 		setChanged();
+	}
+
+	public long getInteractionPointRevision() {
+		return interactionPointRevision;
+	}
+
+	/**
+	 * Starts the one-shot server authorization used by the placement configuration packet.
+	 * The token is intentionally transient: saving or moving the block must not authorize a later
+	 * packet against a different block entity at the same raw position.
+	 */
+	public UUID beginPlacementConfiguration(ServerPlayer player) {
+		UUID nonce = UUID.randomUUID();
+		pendingConfigurationPlayer = player.getUUID();
+		pendingConfigurationNonce = nonce;
+		pendingConfigurationExpiry = level == null ? 0 : level.getGameTime() + PLACEMENT_REQUEST_LIFETIME;
+		return nonce;
+	}
+
+	public boolean consumePlacementConfiguration(ServerPlayer player, UUID nonce) {
+		if (level != null && level.getGameTime() > pendingConfigurationExpiry)
+			clearPlacementConfiguration();
+		boolean valid = level != null
+			&& player.level() == level
+			&& level.getGameTime() <= pendingConfigurationExpiry
+			&& player.getUUID().equals(pendingConfigurationPlayer)
+			&& nonce.equals(pendingConfigurationNonce);
+		if (valid)
+			clearPlacementConfiguration();
+		return valid;
+	}
+
+	private void clearPlacementConfiguration() {
+		pendingConfigurationPlayer = null;
+		pendingConfigurationNonce = null;
+		pendingConfigurationExpiry = 0;
 	}
 
 	private void attemptTransferToOutput() {
@@ -370,18 +426,24 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 	}
 
 	private static Vec3 getTransferEffectPos(PackagerBlockEntity packager) {
+		Level level = packager.getLevel();
 		BlockPos pos = packager.getBlockPos();
 		Direction facing = packager.getBlockState()
 			.getOptionalValue(ShulkerPackagerBlock.FACING)
 			.orElse(Direction.UP)
 			.getOpposite();
-		return Vec3.atCenterOf(pos)
+		Vec3 localEffectPos = Vec3.atCenterOf(pos)
 			.add(Vec3.atLowerCornerOf(facing.getNormal())
 				.scale(.65d));
+		return level == null ? localEffectPos : SubLevelCompat.toWorld(level, localEffectPos);
 	}
 
-	private PackagerBlockEntity getConnectedPackagerTarget(ArmInteractionPoint point) {
-		if (level == null || point == null || !point.isValid())
+	private PackagerBlockEntity getConnectedPackagerTarget(ShulkerPackagerTarget point) {
+		if (level == null || point == null)
+			return null;
+		if (!ShulkerPackagerArmInteractions.isValidConnection(level, worldPosition,
+			SubLevelCompat.getSpaceId(level, worldPosition),
+			point.getPos(), point.targetSubLevelId()))
 			return null;
 		BlockEntity blockEntity = level.getBlockEntity(point.getPos());
 		return blockEntity instanceof PackagerBlockEntity packager ? packager : null;
@@ -390,29 +452,45 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 	private void initInteractionPoints() {
 		if (!updateInteractionPoints || interactionPointTag == null || level == null)
 			return;
-		if (!isAreaActuallyLoaded(worldPosition, getConnectionRange() + 1))
+		// A client can receive the block entity before it starts tracking the containing
+		// sublevel. Wait rather than mistaking a legacy relative target for the outer world.
+		if (!SubLevelCompat.isValidSpacePosition(level, worldPosition))
 			return;
-
-		outputs.clear();
+		List<ShulkerPackagerTarget> resolvedOutputs = new ArrayList<>();
+		Set<ShulkerPackagerTarget.Address> seenTargets = new HashSet<>();
 
 		for (Tag tag : interactionPointTag) {
-			ArmInteractionPoint point = ArmInteractionPoint.deserialize((CompoundTag) tag, level, worldPosition);
+			if (resolvedOutputs.size() >= MAX_OUTPUTS)
+				break;
+			if (!(tag instanceof CompoundTag pointTag))
+				continue;
+			ShulkerPackagerTarget point = ShulkerPackagerTarget.fromTag(pointTag, level, worldPosition);
 			if (point == null)
 				continue;
-			if (point.getMode() == ArmInteractionPoint.Mode.TAKE)
-				point.cycleMode();
-			outputs.add(point);
+			if (!seenTargets.add(point.address()))
+				continue;
+			resolvedOutputs.add(point);
 		}
 
+		if (!sameOutputAddresses(outputs, resolvedOutputs))
+			interactionPointRevision++;
+		outputs.clear();
+		outputs.addAll(resolvedOutputs);
 		updateInteractionPoints = false;
+	}
+
+	private static boolean sameOutputAddresses(List<ShulkerPackagerTarget> first,
+		List<ShulkerPackagerTarget> second) {
+		if (first.size() != second.size())
+			return false;
+		for (int i = 0; i < first.size(); i++)
+			if (!first.get(i).address().equals(second.get(i).address()))
+				return false;
+		return true;
 	}
 
 	private static int getTransferDelay() {
 		return CBConfigs.SERVER.shulkerPackager.transferDelay.get();
-	}
-
-	private static int getConnectionRange() {
-		return CBConfigs.SERVER.shulkerPackager.connectionRange.get();
 	}
 
 	private BlockPos getLinkPos() {
@@ -427,35 +505,6 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 		return null;
 	}
 
-	private boolean isAreaActuallyLoaded(BlockPos center, int range) {
-		if (!level.isAreaLoaded(center, range))
-			return false;
-		if (!level.isClientSide)
-			return true;
-
-		int minY = center.getY() - range;
-		int maxY = center.getY() + range;
-		if (maxY < level.getMinBuildHeight() || minY >= level.getMaxBuildHeight())
-			return false;
-
-		int minX = center.getX() - range;
-		int minZ = center.getZ() - range;
-		int maxX = center.getX() + range;
-		int maxZ = center.getZ() + range;
-		int minChunkX = SectionPos.blockToSectionCoord(minX);
-		int maxChunkX = SectionPos.blockToSectionCoord(maxX);
-		int minChunkZ = SectionPos.blockToSectionCoord(minZ);
-		int maxChunkZ = SectionPos.blockToSectionCoord(maxZ);
-
-		ChunkSource chunkSource = level.getChunkSource();
-		for (int chunkX = minChunkX; chunkX <= maxChunkX; ++chunkX)
-			for (int chunkZ = minChunkZ; chunkZ <= maxChunkZ; ++chunkZ)
-				if (!chunkSource.hasChunk(chunkX, chunkZ))
-					return false;
-
-		return true;
-	}
-
 	private void writeInteractionPoints(CompoundTag compound) {
 		if (updateInteractionPoints && interactionPointTag != null) {
 			compound.put("InteractionPoints", interactionPointTag);
@@ -464,9 +513,18 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 
 		ListTag pointsNBT = new ListTag();
 		outputs.stream()
-			.map(aip -> aip.serialize(worldPosition))
+			.map(target -> target.serialize(worldPosition))
 			.forEach(pointsNBT::add);
 		compound.put("InteractionPoints", pointsNBT);
+	}
+
+	private static ListTag limitInteractionPoints(ListTag points) {
+		if (points.size() <= MAX_OUTPUTS)
+			return points;
+		ListTag limited = new ListTag();
+		for (int i = 0; i < MAX_OUTPUTS; i++)
+			limited.add(points.get(i));
+		return limited;
 	}
 
 	@Override
@@ -484,14 +542,17 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 	@Override
 	protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
 		super.read(compound, registries, clientPacket);
-		interactionPointTag = compound.getList("InteractionPoints", Tag.TAG_COMPOUND);
+		ListTag limitedPoints = limitInteractionPoints(compound.getList("InteractionPoints", Tag.TAG_COMPOUND));
+		if (!limitedPoints.equals(interactionPointTag))
+			interactionPointRevision++;
+		interactionPointTag = limitedPoints;
 		updateInteractionPoints = true;
 	}
 
 	@Override
 	public void setLevel(Level level) {
 		super.setLevel(level);
-		for (ArmInteractionPoint output : outputs)
+		for (ShulkerPackagerTarget output : outputs)
 			output.setLevel(level);
 	}
 

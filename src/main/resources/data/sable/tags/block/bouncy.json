@@ -1,0 +1,7 @@
+{
+  "replace": false,
+  "values": [
+    "#create_biotech:buffer_pads",
+    "create_biotech:slime_belt"
+  ]
+}

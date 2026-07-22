@@ -41,7 +41,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 public final class CBPackets {
 
-	private static final String NETWORK_VERSION = "13";
+	private static final String NETWORK_VERSION = "14";
 	private static final List<ServerRegistration<?>> SERVERBOUND = new ArrayList<>();
 	private static final List<ClientRegistration<?>> CLIENTBOUND = new ArrayList<>();
 	private static final Map<Class<?>, Integer> SERVERBOUND_IDS = new HashMap<>();
@@ -83,6 +83,10 @@ public final class CBPackets {
 			AllayPortFlapPacket::write);
 		registerClient(AllayCourierHudPacket.class, AllayCourierHudPacket::new,
 			AllayCourierHudPacket::write);
+		// Keep every existing packet id stable; new packets are appended.
+		registerClient(ShulkerPackagerPlacementPacket.ClientBoundResult.class,
+			ShulkerPackagerPlacementPacket.ClientBoundResult::new,
+			ShulkerPackagerPlacementPacket.ClientBoundResult::write);
 
 		CatnipPacketRegistry registry = new CatnipPacketRegistry(CreateBiotech.MOD_ID, NETWORK_VERSION);
 		registry.registerPacket(new CatnipPacketRegistry.PacketType<>(

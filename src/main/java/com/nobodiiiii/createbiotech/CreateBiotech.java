@@ -74,8 +74,10 @@ public class CreateBiotech {
 	private static void registerAllayEvents() {
 		NeoForge.EVENT_BUS.addListener(AllayCourierTaskManager::onServerTick);
 		NeoForge.EVENT_BUS.addListener(AllayPortTargetRegistry::onServerTick);
-		NeoForge.EVENT_BUS.addListener((ServerStartingEvent event) ->
-			AllayCourierTaskManager.onServerStarting(event.getServer()));
+		NeoForge.EVENT_BUS.addListener((ServerStartingEvent event) -> {
+			AllayPortTargetRegistry.clear();
+			AllayCourierTaskManager.onServerStarting(event.getServer());
+		});
 	}
 
 	private static void onCommonSetup(FMLCommonSetupEvent event) {

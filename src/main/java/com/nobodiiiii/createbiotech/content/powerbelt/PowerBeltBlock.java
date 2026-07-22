@@ -6,6 +6,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.client.PowerBeltClientReporter;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -25,6 +26,8 @@ import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlock;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
 import com.yision.allay.block.allayport.AllayPortBlock;
+
+import dev.ryanhcode.sable.companion.SubLevelAccess;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -139,14 +142,17 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 	@Override
 	public void updateEntityAfterFallOn(BlockGetter world, Entity entity) {
 		super.updateEntityAfterFallOn(world, entity);
-		BlockPos entityPosition = entity.blockPosition();
-		BlockPos beltPos = null;
-
-		if (isPowerBelt(world.getBlockState(entityPosition)))
-			beltPos = entityPosition;
-		else if (isPowerBelt(world.getBlockState(entityPosition.below())))
-			beltPos = entityPosition.below();
-		if (beltPos == null || !(world instanceof Level level))
+		if (!(world instanceof Level level))
+			return;
+		BlockPos beltPos = SubLevelCompat.runIncludingEntitySpace(level, entity.position(), entity,
+			(subLevel, candidatePos) -> {
+				if (isPowerBelt(level.getBlockState(candidatePos)))
+					return candidatePos;
+				return isPowerBelt(level.getBlockState(candidatePos.below())) ? candidatePos.below() : null;
+			});
+		if (beltPos == null)
+			return;
+		if (!SubLevelCompat.canEntityInteractWith(level, beltPos, entity))
 			return;
 
 		entityInside(world.getBlockState(beltPos), level, beltPos, entity);
@@ -171,16 +177,22 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 			return;
 		if (!isPowerBelt(state) || state.getValue(SLOPE) != BeltSlope.HORIZONTAL)
 			return;
-		if (!isEntityOnBeltSurface(pos, entity))
+		if (!SubLevelCompat.canEntityInteractWith(level, pos, entity))
+			return;
+
+		SubLevelAccess beltSubLevel = SubLevelCompat.getContaining(level, pos);
+		Vec3 localEntityPosition = SubLevelCompat.toLocal(beltSubLevel, entity.position());
+		if (!isEntityOnBeltSurface(level, pos, entity, localEntityPosition))
 			return;
 
 		Vec3 beltAxis = Vec3.atLowerCornerOf(state.getValue(HORIZONTAL_FACING)
 			.getNormal());
-		Vec3 tickMovement = entity.position()
-			.subtract(entity.xo, entity.yo, entity.zo);
+		Vec3 previousLocalPosition = SubLevelCompat.toPreviousLocal(beltSubLevel,
+			new Vec3(entity.xo, entity.yo, entity.zo));
+		Vec3 tickMovement = localEntityPosition.subtract(previousLocalPosition);
 		Vec3 motion = entity.getDeltaMovement();
 		double movedSurfaceSpeed = tickMovement.x * beltAxis.x + tickMovement.z * beltAxis.z;
-		double motionSurfaceSpeed = motion.x * beltAxis.x + motion.z * beltAxis.z;
+		double motionSurfaceSpeed = beltSubLevel == null ? motion.x * beltAxis.x + motion.z * beltAxis.z : 0;
 		double surfaceSpeed =
 			Math.abs(movedSurfaceSpeed) >= PowerBeltBlockEntity.MIN_SURFACE_SPEED ? movedSurfaceSpeed : motionSurfaceSpeed;
 		if (Math.abs(surfaceSpeed) < PowerBeltBlockEntity.MIN_SURFACE_SPEED)
@@ -190,8 +202,9 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 			PowerBeltWalkAnimation.recordSurfaceMovement(livingEntity, (float) Math.abs(surfaceSpeed));
 
 		if (Math.abs(movedSurfaceSpeed) >= PowerBeltBlockEntity.MIN_SURFACE_SPEED) {
-			Vec3 correction = beltAxis.scale(movedSurfaceSpeed);
-			entity.setPos(entity.getX() - correction.x, entity.getY(), entity.getZ() - correction.z);
+			Vec3 correction = SubLevelCompat.localNormalToWorld(beltSubLevel, beltAxis.scale(movedSurfaceSpeed));
+			entity.setPos(entity.position()
+				.subtract(correction));
 		}
 		entity.hurtMarked = true;
 
@@ -298,8 +311,18 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 		return InteractionResult.SUCCESS;
 	}
 
-	static boolean isEntityOnBeltSurface(BlockPos pos, Entity entity) {
-		return entity.getY() - .25f >= pos.getY();
+	static boolean isEntityOnBeltSurface(Level level, BlockPos pos, Entity entity) {
+		if (!SubLevelCompat.canEntityInteractWith(level, pos, entity))
+			return false;
+		return isEntityOnBeltSurface(level, pos, entity,
+			SubLevelCompat.toLocal(level, pos, entity.position()));
+	}
+
+	private static boolean isEntityOnBeltSurface(Level level, BlockPos pos, Entity entity, Vec3 localEntityPosition) {
+		if (localEntityPosition.y - .25f < pos.getY())
+			return false;
+		return localEntityPosition.x >= pos.getX() && localEntityPosition.x < pos.getX() + 1
+			&& localEntityPosition.z >= pos.getZ() && localEntityPosition.z < pos.getZ() + 1;
 	}
 
 	@Override
@@ -351,6 +374,8 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 				break;
 			if (!world.isLoaded(nextSegmentPosition))
 				return;
+			if (!sameSpace(world, pos, nextSegmentPosition))
+				return;
 			currentPos = nextSegmentPosition;
 		}
 
@@ -388,6 +413,8 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 		for (boolean forward : new boolean[] {true, false}) {
 			BlockPos currentPos = nextSegmentPosition(state, pos, forward);
 			if (currentPos == null)
+				continue;
+			if (!sameSpace(world, pos, currentPos))
 				continue;
 			BlockState currentState = world.getBlockState(currentPos);
 			if (!isPowerBelt(currentState))
@@ -473,6 +500,10 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 		int limit = 1000;
 		BlockPos current = controllerPos;
 		while (limit-- > 0 && current != null) {
+			if (!sameSpace(world, controllerPos, current))
+				break;
+			if (world instanceof Level level && !level.isLoaded(current))
+				break;
 			BlockState state = world.getBlockState(current);
 			if (!isPowerBelt(state))
 				break;
@@ -527,7 +558,13 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 		PowerBeltBlockEntity segment = getSegmentBE(world, pos);
 		if (segment == null)
 			return null;
+		if (world instanceof Level level && !SubLevelCompat.sameSpace(level, pos, segment.getController()))
+			return null;
 		return getSegmentBE(world, segment.getController());
+	}
+
+	private static boolean sameSpace(LevelAccessor world, BlockPos first, BlockPos second) {
+		return !(world instanceof Level level) || SubLevelCompat.sameSpace(level, first, second);
 	}
 
 	public static Vec3 getBeltVector(BlockState state) {

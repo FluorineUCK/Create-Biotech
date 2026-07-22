@@ -2,9 +2,11 @@ package com.nobodiiiii.createbiotech.content.powerbelt;
 
 import java.util.LinkedList;
 import java.util.List;
+import java.util.UUID;
 
 import javax.annotation.Nonnull;
 
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
@@ -34,6 +36,9 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 public class PowerBeltConnectorItem extends BlockItem {
+	private static final String FIRST_PULLEY = "FirstPulley";
+	private static final String FIRST_PULLEY_DIMENSION = "FirstPulleyDimension";
+	private static final String FIRST_PULLEY_SUBLEVEL = "FirstPulleySubLevel";
 
 	public PowerBeltConnectorItem(Properties properties) {
 		super(CBBlocks.POWER_BELT.get(), properties);
@@ -63,19 +68,24 @@ public class PowerBeltConnectorItem extends BlockItem {
 		CompoundTag tag = CBItemData.getOrEmpty(context.getItemInHand());
 		BlockPos firstPulley = null;
 
-		if (tag.contains("FirstPulley")) {
-			firstPulley = NbtUtils.readBlockPos(tag, "FirstPulley").orElse(null);
-			if (firstPulley == null || !validateAxis(level, firstPulley)
+		if (tag.contains(FIRST_PULLEY)) {
+			firstPulley = NbtUtils.readBlockPos(tag, FIRST_PULLEY).orElse(null);
+			UUID storedSubLevelId = tag.hasUUID(FIRST_PULLEY_SUBLEVEL) ? tag.getUUID(FIRST_PULLEY_SUBLEVEL) : null;
+			boolean validBinding = firstPulley != null
+				&& level.dimension().location().toString().equals(tag.getString(FIRST_PULLEY_DIMENSION))
+				&& SubLevelCompat.matchesSpace(level, firstPulley, storedSubLevelId);
+			if (!validBinding || !validateAxis(level, firstPulley)
 				|| !firstPulley.closerThan(pos, maxLength() * 2)) {
-				tag.remove("FirstPulley");
-				CBItemData.set(context.getItemInHand(), tag);
+				CBItemData.set(context.getItemInHand(), null);
+				tag = new CompoundTag();
+				firstPulley = null;
 			}
 		}
 
 		if (!validAxis || player == null)
 			return InteractionResult.FAIL;
 
-		if (tag.contains("FirstPulley")) {
+		if (tag.contains(FIRST_PULLEY)) {
 			if (!canConnect(level, firstPulley, pos))
 				return InteractionResult.FAIL;
 
@@ -95,7 +105,13 @@ public class PowerBeltConnectorItem extends BlockItem {
 			return InteractionResult.SUCCESS;
 		}
 
-		tag.put("FirstPulley", NbtUtils.writeBlockPos(pos));
+		tag.put(FIRST_PULLEY, NbtUtils.writeBlockPos(pos));
+		tag.putString(FIRST_PULLEY_DIMENSION, level.dimension().location().toString());
+		UUID subLevelId = SubLevelCompat.getSpaceId(level, pos);
+		if (subLevelId != null)
+			tag.putUUID(FIRST_PULLEY_SUBLEVEL, subLevelId);
+		else
+			tag.remove(FIRST_PULLEY_SUBLEVEL);
 		CBItemData.set(context.getItemInHand(), tag);
 		player.getCooldowns()
 			.addCooldown(this, 5);
@@ -103,6 +119,8 @@ public class PowerBeltConnectorItem extends BlockItem {
 	}
 
 	public static void createBelts(Level level, BlockPos start, BlockPos end) {
+		if (!SubLevelCompat.sameSpace(level, start, end))
+			return;
 		level.playSound(null, BlockPos.containing(VecHelper.getCenterOf(start.offset(end))
 			.scale(.5f)), SoundEvents.WOOL_PLACE, SoundSource.BLOCKS, .5f, 1f);
 
@@ -169,6 +187,8 @@ public class PowerBeltConnectorItem extends BlockItem {
 	public static boolean canConnect(Level level, BlockPos first, BlockPos second) {
 		if (!level.isLoaded(first) || !level.isLoaded(second))
 			return false;
+		if (!SubLevelCompat.sameSpace(level, first, second))
+			return false;
 		if (!second.closerThan(first, maxLength()))
 			return false;
 
@@ -207,6 +227,8 @@ public class PowerBeltConnectorItem extends BlockItem {
 		int limit = 1000;
 		for (BlockPos currentPos = first.offset(step); !currentPos.equals(second) && limit-- > 0;
 			currentPos = currentPos.offset(step)) {
+			if (!SubLevelCompat.sameSpace(level, first, currentPos))
+				return false;
 			BlockState blockState = level.getBlockState(currentPos);
 			if (ShaftBlock.isShaft(blockState) && blockState.getValue(AbstractSimpleShaftBlock.AXIS) == shaftAxis)
 				continue;

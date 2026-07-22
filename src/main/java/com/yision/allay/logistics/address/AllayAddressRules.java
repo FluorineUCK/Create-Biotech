@@ -4,10 +4,18 @@ import com.simibubi.create.content.logistics.box.PackageItem;
 import net.minecraft.world.item.ItemStack;
 
 public final class AllayAddressRules {
+	public static final int MAX_PORT_ADDRESS_LENGTH = 25;
+
 	private AllayAddressRules() {}
 
 	public static String normalize(String address) {
 		return address == null ? "" : address.trim();
+	}
+
+	public static String normalizePortAddress(String address) {
+		String normalized = normalize(address);
+		return normalized.length() <= MAX_PORT_ADDRESS_LENGTH
+			? normalized : normalized.substring(0, MAX_PORT_ADDRESS_LENGTH);
 	}
 
 	public static boolean isBlank(String address) {

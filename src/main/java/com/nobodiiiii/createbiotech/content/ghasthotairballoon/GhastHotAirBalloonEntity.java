@@ -4,10 +4,14 @@ import java.util.Collection;
 import java.util.Map;
 import java.util.UUID;
 
+import javax.annotation.Nullable;
+
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 import com.simibubi.create.content.contraptions.OrientedContraptionEntity;
+import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.contraptions.sync.ContraptionSeatMappingPacket;
 
 import net.createmod.catnip.math.AngleHelper;
@@ -53,8 +57,19 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 	private boolean inputUp;
 	private boolean inputDown;
 
+	@Nullable
 	private BlockPos magnetTargetPos;
+	@Nullable
+	private UUID magnetTargetSubLevelId;
 	private int magnetExpireTicks;
+
+	/**
+	 * A plot-local block placement target used only while {@link #disassembleAt} is on the stack.
+	 * The entity itself remains at its outer-world position throughout disassembly.
+	 */
+	@Nullable
+	private BlockPos disassemblyAnchor;
+	private float disassemblyYaw;
 
 	public GhastHotAirBalloonEntity(EntityType<?> type, Level level) {
 		super(type, level);
@@ -96,6 +111,10 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 	@Override
 	protected void writeAdditional(CompoundTag compound, HolderLookup.Provider registries, boolean spawnPacket) {
 		super.writeAdditional(compound, registries, spawnPacket);
+		// This entity is created at a projected world yaw rather than its cardinal initial yaw.
+		// Mark it as manually placed in OrientedContraptionEntity's spawn/save data so a later
+		// INITIAL_ORIENTATION sync cannot snap the client back to the source-local yaw.
+		compound.putBoolean("Placed", true);
 	}
 
 	@Override
@@ -122,7 +141,7 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 			ghast.setNoAi(true);
 			CapturedEntityBoxHelper.markAiDisabledByMod(ghast);
 			tickInputTimeout();
-			tickMagnetExpiry();
+			tickMagnetExpiry(ghast);
 			applyControlledMovement(ghast);
 		}
 
@@ -152,36 +171,63 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 		return getPassengerPositionForSeat(passenger, partialTicks, seat);
 	}
 
-	public void setMagnetTarget(BlockPos pos) {
+	public void setMagnetTarget(BlockPos pos, @Nullable UUID subLevelId) {
 		magnetTargetPos = pos;
+		magnetTargetSubLevelId = subLevelId;
 		magnetExpireTicks = getMagnetTimeoutTicks();
 	}
 
 	public void clearMagnetTarget() {
 		magnetTargetPos = null;
+		magnetTargetSubLevelId = null;
 		magnetExpireTicks = 0;
 	}
 
-	private void tickMagnetExpiry() {
+	private void tickMagnetExpiry(Ghast ghast) {
 		if (magnetTargetPos == null)
 			return;
 		if (magnetExpireTicks > 0)
 			magnetExpireTicks--;
-		if (magnetExpireTicks <= 0 || !isMagnetTargetValid()) {
-			magnetTargetPos = null;
-			magnetExpireTicks = 0;
+		if (magnetExpireTicks <= 0 || !isMagnetTargetValid(ghast)) {
+			clearMagnetTarget();
 		}
 	}
 
-	private boolean isMagnetTargetValid() {
+	public boolean disassembleAt(BlockPos localAnchor, float localYaw) {
+		if (!isAlive() || getContraption() == null || disassemblyAnchor != null)
+			return false;
+		disassemblyAnchor = localAnchor.immutable();
+		disassemblyYaw = localYaw;
+		try {
+			super.disassemble();
+			return !isAlive();
+		} finally {
+			disassemblyAnchor = null;
+		}
+	}
+
+	@Override
+	protected StructureTransform makeStructureTransform() {
+		if (disassemblyAnchor != null)
+			return new StructureTransform(disassemblyAnchor, 0, -disassemblyYaw + getInitialYaw(), 0);
+		return super.makeStructureTransform();
+	}
+
+	private boolean isMagnetTargetValid(Ghast ghast) {
 		if (magnetTargetPos == null || level() == null)
 			return false;
 		if (!level().isLoaded(magnetTargetPos))
 			return false;
+		if (!SubLevelCompat.matchesSpace(level(), magnetTargetPos, magnetTargetSubLevelId))
+			return false;
 		BlockEntity be = level().getBlockEntity(magnetTargetPos);
 		if (!(be instanceof GhastHotAirBalloonAssemblyStationBlockEntity station))
 			return false;
-		return station.isReadyToAccept();
+		if (!station.isReadyToAccept())
+			return false;
+		Vec3 target = GhastHotAirBalloonAssemblyStationBlock.getGhastDockingWorldPosition(level(),
+			magnetTargetPos);
+		return ghast.position().distanceToSqr(target) <= getMagnetMaxDistanceSqr();
 	}
 
 	private void restorePassengerSeatMappings() {
@@ -411,12 +457,16 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 	}
 
 	private void applyMagnetMovement(Ghast ghast) {
-		double targetY = magnetTargetPos.getY() + 1 + GhastHotAirBalloonSeatEntity.GHAST_PASSENGER_Y_OFFSET;
-		Vec3 target = new Vec3(magnetTargetPos.getX() + 0.5, targetY, magnetTargetPos.getZ() + 0.5);
+		Vec3 target = GhastHotAirBalloonAssemblyStationBlock.getGhastDockingWorldPosition(level(),
+			magnetTargetPos);
+		Vec3 targetVelocity = GhastHotAirBalloonAssemblyStationBlock.getDockingVelocityPerTick(level(),
+			magnetTargetPos);
 		Vec3 delta = target.subtract(ghast.position());
 
 		if (delta.lengthSqr() < MAGNET_ARRIVAL_DEADZONE_SQR) {
-			ghast.setDeltaMovement(Vec3.ZERO);
+			Vec3 movement = clampMovement(targetVelocity);
+			ghast.setDeltaMovement(movement);
+			ghast.move(MoverType.SELF, movement);
 			deltaRotation = 0;
 			ghast.hasImpulse = true;
 			ghast.hurtMarked = true;
@@ -433,7 +483,7 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 
 		double mx = horizDist > 1.0E-6 ? delta.x / horizDist * horizSpeed : 0;
 		double mz = horizDist > 1.0E-6 ? delta.z / horizDist * horizSpeed : 0;
-		Vec3 movement = clampMovement(new Vec3(mx, vertSpeed, mz));
+		Vec3 movement = clampMovement(new Vec3(mx, vertSpeed, mz).add(targetVelocity));
 
 		deltaRotation = 0;
 		if (horizDist > 1.0E-6) {
@@ -568,6 +618,11 @@ public class GhastHotAirBalloonEntity extends OrientedContraptionEntity {
 
 	private static double getMagnetBrakeDistance() {
 		return CBConfigs.SERVER.ghastHotAirBalloon.magnetBrakeDistance.get();
+	}
+
+	private static double getMagnetMaxDistanceSqr() {
+		double distance = CBConfigs.SERVER.ghastHotAirBalloon.magnetMaxDistance.get();
+		return distance * distance;
 	}
 
 	public static EntityType.Builder<?> build(EntityType.Builder<?> builder) {

@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.powerbelt;
 
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllBlocks;
@@ -54,6 +55,8 @@ public class PowerBeltSlicer {
 
 			resetChain(world, PowerBeltBlock.getBeltChain(world, controllerBE.getBlockPos()));
 			BlockPos next = part == BeltPart.END ? pos.subtract(beltVector) : pos.offset(beltVector);
+			if (!SubLevelCompat.sameSpace(world, pos, next))
+				return InteractionResult.FAIL;
 			BlockState nextState = world.getBlockState(next);
 			if (!nextState.is(CBBlocks.POWER_BELT.get()))
 				return InteractionResult.FAIL;
@@ -80,6 +83,8 @@ public class PowerBeltSlicer {
 			.subtract(centerOf)
 			.dot(Vec3.atLowerCornerOf(beltVector)) > 0;
 		BlockPos next = !towardPositive ? pos.subtract(beltVector) : pos.offset(beltVector);
+		if (!SubLevelCompat.sameSpace(world, pos, next))
+			return InteractionResult.FAIL;
 
 		if (hitSegment == 0 || hitSegment == 1 && !towardPositive)
 			return InteractionResult.FAIL;
@@ -137,6 +142,8 @@ public class PowerBeltSlicer {
 			return InteractionResult.PASS;
 
 		BlockPos next = part == BeltPart.START ? pos.subtract(beltVector) : pos.offset(beltVector);
+		if (!SubLevelCompat.sameSpace(world, pos, next))
+			return InteractionResult.FAIL;
 		PowerBeltBlockEntity mergedController = null;
 		BlockState nextState = world.getBlockState(next);
 

@@ -34,6 +34,7 @@
     "PowerBeltWalkAnimationMixin",
     "MixinSuperGlueSelectionHelper",
     "SawBlockEntityMixin",
+    "ServerGamePacketListenerAccessor",
     "SmartBlockEntityLegacyRefreshMixin",
     "SpawnEggItemMixin",
     "StockKeeperRequestMenuAccessor",
@@ -42,6 +43,7 @@
   "client": [
     "client.BasinRendererMixin",
     "client.CameraMixin",
+    "client.ClientLevelMixin",
     "client.CreeperAccessor",
     "client.CreeperRendererMixin",
     "client.FlapStuffsMixin",

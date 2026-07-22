@@ -104,6 +104,7 @@ public class ShulkerTeleporterScreen extends AbstractSimiContainerScreen<Shulker
 	private String pendingNewAddress = "";
 	private double scrollOffset;
 	private int bodySlices = MIN_BODY_SLICES;
+	private boolean configurationSubmitted;
 
 	private CursorEditBox searchBox;
 	private CursorEditBox ownAddressBox;
@@ -296,11 +297,25 @@ public class ShulkerTeleporterScreen extends AbstractSimiContainerScreen<Shulker
 	}
 
 	@Override
+	public void onClose() {
+		submitConfiguration();
+		super.onClose();
+	}
+
+	@Override
 	public void removed() {
+		submitConfiguration();
+		super.removed();
+	}
+
+	private void submitConfiguration() {
+		if (configurationSubmitted)
+			return;
+		configurationSubmitted = true;
 		finishAddingAddress(true, false);
 		CBPackets.sendToServer(new ShulkerTeleporterConfigPacket(menu.getBlockPos(),
-			ownAddressBox == null ? menu.getOwnAddress() : ownAddressBox.getValue(), targetAddress, candidateAddresses));
-		super.removed();
+			ownAddressBox == null ? menu.getOwnAddress() : ownAddressBox.getValue(), targetAddress, candidateAddresses,
+			menu.getSubLevelId()));
 	}
 
 	private void renderAddRow(GuiGraphics graphics) {

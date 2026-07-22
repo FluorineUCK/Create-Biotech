@@ -1,14 +1,23 @@
 package com.nobodiiiii.createbiotech.content.ghasthotairballoon;
 
+import java.util.UUID;
+
+import javax.annotation.Nullable;
+
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
+
+import dev.ryanhcode.sable.companion.SubLevelAccess;
 
 import net.minecraft.client.renderer.culling.Frustum;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.NbtUtils;
+import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -17,10 +26,18 @@ import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
+import net.neoforged.neoforge.entity.IEntityWithComplexSpawn;
 
-public class GhastHotAirBalloonSeatEntity extends Entity {
+public class GhastHotAirBalloonSeatEntity extends Entity implements IEntityWithComplexSpawn {
 
 	public static final double GHAST_PASSENGER_Y_OFFSET = 7 / 16d;
+	private static final String STATION_POS_TAG = "StationPos";
+	private static final String STATION_SPACE_TAG = "StationSpace";
+
+	@Nullable
+	private BlockPos stationPos;
+	@Nullable
+	private UUID stationSubLevelId;
 
 	public GhastHotAirBalloonSeatEntity(EntityType<?> type, Level level) {
 		super(type, level);
@@ -28,8 +45,16 @@ public class GhastHotAirBalloonSeatEntity extends Entity {
 	}
 
 	public GhastHotAirBalloonSeatEntity(Level level, BlockPos stationPos) {
+		this(level, stationPos, SubLevelCompat.getSpaceId(level, stationPos));
+	}
+
+	public GhastHotAirBalloonSeatEntity(Level level, BlockPos stationPos,
+		@Nullable UUID stationSubLevelId) {
 		this(CBEntityTypes.GHAST_HOT_AIR_BALLOON_SEAT.get(), level);
-		setPos(stationPos.getX() + 0.5, stationPos.getY() + 1.0, stationPos.getZ() + 0.5);
+		this.stationPos = stationPos.immutable();
+		this.stationSubLevelId = stationSubLevelId;
+		moveToStation();
+		setOldPosAndRot();
 	}
 
 	public static EntityType.Builder<?> build(EntityType.Builder<?> builder) {
@@ -51,7 +76,9 @@ public class GhastHotAirBalloonSeatEntity extends Entity {
 	protected void positionRider(Entity passenger, Entity.MoveFunction callback) {
 		if (!this.hasPassenger(passenger))
 			return;
-		callback.accept(passenger, this.getX(), this.getY() + GHAST_PASSENGER_Y_OFFSET, this.getZ());
+		// The seat itself is already at the projected ghast passenger point. Keeping both the
+		// seat and ghast in outer-world coordinates avoids ever placing a ghast in Sable's plot.
+		callback.accept(passenger, this.getX(), this.getY(), this.getZ());
 	}
 
 	@Override
@@ -59,13 +86,44 @@ public class GhastHotAirBalloonSeatEntity extends Entity {
 
 	@Override
 	public void tick() {
+		super.tick();
 		if (level().isClientSide)
 			return;
-		boolean blockPresent = level().getBlockState(blockPosition().below()).getBlock()
-			== CBBlocks.GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION.get();
-		if (isVehicle() && blockPresent)
+		if (!isVehicle() || !isStationValid()) {
+			discard();
 			return;
-		this.discard();
+		}
+
+		moveToStation();
+		if (getFirstPassenger() instanceof Ghast ghast) {
+			SubLevelAccess subLevel = SubLevelCompat.getContaining(level(), stationPos);
+			float localYaw = GhastHotAirBalloonAssemblyStationBlock.getFacingYaw(
+				level().getBlockState(stationPos));
+			float worldYaw = SubLevelCompat.localYawToWorld(subLevel, localYaw);
+			ghast.setYRot(worldYaw);
+			ghast.setYBodyRot(worldYaw);
+			ghast.setYHeadRot(worldYaw);
+		}
+	}
+
+	public boolean belongsTo(Level level, BlockPos stationPos) {
+		return this.stationPos != null && this.stationPos.equals(stationPos)
+			&& SubLevelCompat.matchesSpace(level, stationPos, stationSubLevelId);
+	}
+
+	private boolean isStationValid() {
+		if (stationPos == null || !level().isLoaded(stationPos))
+			return false;
+		if (!SubLevelCompat.matchesSpace(level(), stationPos, stationSubLevelId))
+			return false;
+		return level().getBlockState(stationPos).is(CBBlocks.GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION.get());
+	}
+
+	private void moveToStation() {
+		if (stationPos == null)
+			return;
+		Vec3 position = GhastHotAirBalloonAssemblyStationBlock.getGhastDockingWorldPosition(level(), stationPos);
+		setPos(position.x, position.y, position.z);
 	}
 
 	@Override
@@ -91,10 +149,35 @@ public class GhastHotAirBalloonSeatEntity extends Entity {
 	protected void defineSynchedData(SynchedEntityData.Builder builder) {}
 
 	@Override
-	protected void readAdditionalSaveData(CompoundTag tag) {}
+	public void writeSpawnData(RegistryFriendlyByteBuf buffer) {
+		buffer.writeBoolean(stationPos != null);
+		if (stationPos != null)
+			buffer.writeBlockPos(stationPos);
+		buffer.writeBoolean(stationSubLevelId != null);
+		if (stationSubLevelId != null)
+			buffer.writeUUID(stationSubLevelId);
+	}
 
 	@Override
-	protected void addAdditionalSaveData(CompoundTag tag) {}
+	public void readSpawnData(RegistryFriendlyByteBuf buffer) {
+		stationPos = buffer.readBoolean() ? buffer.readBlockPos() : null;
+		stationSubLevelId = buffer.readBoolean() ? buffer.readUUID() : null;
+	}
+
+	@Override
+	protected void readAdditionalSaveData(CompoundTag tag) {
+		stationPos = NbtUtils.readBlockPos(tag, STATION_POS_TAG).orElseGet(() -> blockPosition().below());
+		stationSubLevelId = tag.hasUUID(STATION_SPACE_TAG) ? tag.getUUID(STATION_SPACE_TAG)
+			: SubLevelCompat.getSpaceId(level(), stationPos);
+	}
+
+	@Override
+	protected void addAdditionalSaveData(CompoundTag tag) {
+		if (stationPos != null)
+			tag.put(STATION_POS_TAG, NbtUtils.writeBlockPos(stationPos));
+		if (stationSubLevelId != null)
+			tag.putUUID(STATION_SPACE_TAG, stationSubLevelId);
+	}
 
 	public static class Render extends EntityRenderer<GhastHotAirBalloonSeatEntity> {
 		public Render(EntityRendererProvider.Context context) {

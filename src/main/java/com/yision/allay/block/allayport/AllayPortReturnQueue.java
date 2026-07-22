@@ -1,5 +1,6 @@
 package com.yision.allay.block.allayport;
 
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.yision.allay.logistics.courier.AllayCourierTask;
 import com.yision.allay.logistics.courier.AllayCourierTaskManager;
 import net.minecraft.core.BlockPos;
@@ -61,7 +62,17 @@ final class AllayPortReturnQueue {
 				return;
 			}
 		} else if (task.isAllayPortReturn()) {
-			if (tryQueueStoredReturnCarrier(task.dimension(), task.pos())) {
+			if (!task.spaceIdentityKnown()) {
+				PendingReturnCarrier resolvedTask = resolveLegacySpaceIdentity(task);
+				if (resolvedTask != null) {
+					pendingReturnCarriers.removeFirst();
+					pendingReturnCarriers.addFirst(resolvedTask);
+					task = resolvedTask;
+					port.setChanged();
+				}
+			}
+			if (task.spaceIdentityKnown()
+				&& tryQueueStoredReturnCarrier(task.dimension(), task.pos(), task.subLevelId())) {
 				pendingReturnCarriers.removeFirst();
 				port.markPortContentsChanged();
 				return;
@@ -88,6 +99,7 @@ final class AllayPortReturnQueue {
 		}
 		launchTask(serverLevel, AllayCourierTask.forCarrierReturn(
 			UUID.randomUUID(), serverLevel, returnDimension, returnPos,
+			resolveSpaceId(serverLevel, returnDimension, returnPos),
 			port.getCourierSpawnPosition(), port.getCourierLaunchDirection()));
 		return true;
 	}
@@ -128,7 +140,10 @@ final class AllayPortReturnQueue {
 			if (!inventory.receiveCarrier()) {
 				return AllayPortBlockEntity.CourierReceiveResult.REJECTED;
 			}
-			schedulePendingReturnCarrier(returnDimension, returnPos, RETURN_LAUNCH_DELAY_TICKS);
+			ServerLevel serverLevel = port.getLevel() instanceof ServerLevel level ? level : null;
+			schedulePendingReturnCarrier(returnDimension, returnPos,
+				serverLevel == null ? null : resolveSpaceId(serverLevel, returnDimension, returnPos),
+				RETURN_LAUNCH_DELAY_TICKS);
 			return AllayPortBlockEntity.CourierReceiveResult.CARRIER_STORED;
 		}
 
@@ -137,9 +152,10 @@ final class AllayPortReturnQueue {
 			: AllayPortBlockEntity.CourierReceiveResult.REJECTED;
 	}
 
-	private void schedulePendingReturnCarrier(ResourceKey<Level> returnDimension, BlockPos returnPos, int delayTicks) {
+	private void schedulePendingReturnCarrier(ResourceKey<Level> returnDimension, BlockPos returnPos,
+		@Nullable UUID returnSubLevelId, int delayTicks) {
 		pendingReturnCarriers.addLast(PendingReturnCarrier.toAllayPort(
-			returnDimension, returnPos, Math.max(0, delayTicks), RETURN_RETRY_TICKS));
+			returnDimension, returnPos, returnSubLevelId, Math.max(0, delayTicks), RETURN_RETRY_TICKS));
 		port.markPortContentsChanged();
 	}
 
@@ -149,7 +165,8 @@ final class AllayPortReturnQueue {
 		port.markPortContentsChanged();
 	}
 
-	private boolean tryQueueStoredReturnCarrier(@Nullable ResourceKey<Level> returnDimension, @Nullable BlockPos returnPos) {
+	private boolean tryQueueStoredReturnCarrier(@Nullable ResourceKey<Level> returnDimension,
+		@Nullable BlockPos returnPos, @Nullable UUID returnSubLevelId) {
 		if (!(port.getLevel() instanceof ServerLevel serverLevel) || returnDimension == null || returnPos == null) {
 			return false;
 		}
@@ -161,7 +178,7 @@ final class AllayPortReturnQueue {
 			return false;
 		}
 		launchTask(serverLevel, AllayCourierTask.forCarrierReturn(
-			UUID.randomUUID(), serverLevel, returnDimension, returnPos,
+			UUID.randomUUID(), serverLevel, returnDimension, returnPos, returnSubLevelId,
 			port.getCourierSpawnPosition(), port.getCourierLaunchDirection()));
 		port.markPortContentsChanged();
 		return true;
@@ -194,6 +211,30 @@ final class AllayPortReturnQueue {
 		port.flap(false);
 	}
 
+	private static @Nullable UUID resolveSpaceId(ServerLevel originLevel,
+		ResourceKey<Level> dimension, BlockPos pos) {
+		ServerLevel targetLevel = originLevel.getServer().getLevel(dimension);
+		return targetLevel == null ? null : SubLevelCompat.getSpaceId(targetLevel, pos);
+	}
+
+	/**
+	 * Old queue entries predate space identities. Resolve that ambiguity only after the block
+	 * entity has joined a server level; during NBT loading {@link AllayPortBlockEntity#getLevel()}
+	 * is commonly still {@code null}. An orphaned plot coordinate remains unresolved and retries
+	 * instead of being reinterpreted as an outer-world destination.
+	 */
+	private @Nullable PendingReturnCarrier resolveLegacySpaceIdentity(PendingReturnCarrier task) {
+		if (!(port.getLevel() instanceof ServerLevel originLevel)
+			|| task.dimension() == null || task.pos() == null) {
+			return null;
+		}
+		ServerLevel targetLevel = originLevel.getServer().getLevel(task.dimension());
+		if (targetLevel == null || !SubLevelCompat.isValidSpacePosition(targetLevel, task.pos())) {
+			return null;
+		}
+		return task.withSpaceIdentity(SubLevelCompat.getSpaceId(targetLevel, task.pos()));
+	}
+
 	void write(CompoundTag tag) {
 		if (!pendingReturnCarriers.isEmpty()) {
 			ListTag list = new ListTag();
@@ -204,11 +245,15 @@ final class AllayPortReturnQueue {
 					entry.putUUID("PlayerId", task.playerId());
 				} else {
 					entry.putString("Type", "allay_port");
+					entry.putBoolean("SpaceIdentityKnown", task.spaceIdentityKnown());
 					if (task.dimension() != null) {
 						entry.putString("Dimension", task.dimension().location().toString());
 					}
 					if (task.pos() != null) {
 						entry.put("Pos", NbtUtils.writeBlockPos(task.pos()));
+					}
+					if (task.subLevelId() != null) {
+						entry.putUUID("SubLevelId", task.subLevelId());
 					}
 				}
 				entry.putInt("DelayTicks", task.delayTicks());
@@ -237,7 +282,12 @@ final class AllayPortReturnQueue {
 					BlockPos pos = NbtUtils.readBlockPos(entry, "Pos")
 						.orElse(null);
 					if (dim != null && pos != null) {
-						pendingReturnCarriers.addLast(PendingReturnCarrier.toAllayPort(dim, pos, delay, retry));
+						UUID subLevelId = entry.hasUUID("SubLevelId") ? entry.getUUID("SubLevelId") : null;
+						boolean spaceIdentityKnown = entry.contains("SpaceIdentityKnown")
+							? entry.getBoolean("SpaceIdentityKnown")
+							: entry.hasUUID("SubLevelId");
+						pendingReturnCarriers.addLast(PendingReturnCarrier.toAllayPort(
+							dim, pos, subLevelId, spaceIdentityKnown, delay, retry));
 					}
 				}
 			}
@@ -247,24 +297,40 @@ final class AllayPortReturnQueue {
 	private record PendingReturnCarrier(
 		@Nullable ResourceKey<Level> dimension,
 		@Nullable BlockPos pos,
+		@Nullable UUID subLevelId,
+		boolean spaceIdentityKnown,
 		@Nullable UUID playerId,
 		int delayTicks,
 		int retryTicks
 	) {
-		static PendingReturnCarrier toAllayPort(ResourceKey<Level> dim, BlockPos p, int delay, int retry) {
-			return new PendingReturnCarrier(dim, p.immutable(), null, delay, retry);
+		static PendingReturnCarrier toAllayPort(ResourceKey<Level> dim, BlockPos p,
+			@Nullable UUID subLevelId, int delay, int retry) {
+			return toAllayPort(dim, p, subLevelId, true, delay, retry);
+		}
+
+		static PendingReturnCarrier toAllayPort(ResourceKey<Level> dim, BlockPos p,
+			@Nullable UUID subLevelId, boolean spaceIdentityKnown, int delay, int retry) {
+			return new PendingReturnCarrier(dim, p.immutable(), subLevelId, spaceIdentityKnown,
+				null, delay, retry);
 		}
 
 		static PendingReturnCarrier toPlayer(UUID pid, int delay, int retry) {
-			return new PendingReturnCarrier(null, null, pid, delay, retry);
+			return new PendingReturnCarrier(null, null, null, true, pid, delay, retry);
 		}
 
 		PendingReturnCarrier withDelay(int newDelay) {
-			return new PendingReturnCarrier(dimension, pos, playerId, newDelay, retryTicks);
+			return new PendingReturnCarrier(dimension, pos, subLevelId, spaceIdentityKnown,
+				playerId, newDelay, retryTicks);
 		}
 
 		PendingReturnCarrier withRetry(int newRetry) {
-			return new PendingReturnCarrier(dimension, pos, playerId, delayTicks, newRetry);
+			return new PendingReturnCarrier(dimension, pos, subLevelId, spaceIdentityKnown,
+				playerId, delayTicks, newRetry);
+		}
+
+		PendingReturnCarrier withSpaceIdentity(@Nullable UUID resolvedSubLevelId) {
+			return new PendingReturnCarrier(dimension, pos, resolvedSubLevelId, true,
+				playerId, delayTicks, retryTicks);
 		}
 
 		boolean isPlayerReturn() {

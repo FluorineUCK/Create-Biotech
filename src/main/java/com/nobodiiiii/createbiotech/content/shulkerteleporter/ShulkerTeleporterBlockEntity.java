@@ -14,6 +14,7 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -48,6 +49,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements MenuProvider {
 
@@ -69,6 +71,8 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	private int sealedHoldTicks;
 	private boolean closing;
 	private final Map<UUID, Integer> arrivalCooldowns = new HashMap<>();
+	@Nullable
+	private ShulkerTeleporterSavedData.Location registeredLocation;
 
 	public ShulkerTeleporterBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.SHULKER_TELEPORTER.get(), pos, state);
@@ -100,7 +104,7 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 
 		tickArrivalCooldowns();
 
-		List<Entity> entitiesInside = level.getEntitiesOfClass(Entity.class, getTeleportArea(),
+		List<Entity> entitiesInside = level.getEntitiesOfClass(Entity.class, getWorldTeleportArea(),
 			this::canTeleportEntity);
 		boolean shouldClose = !entitiesInside.isEmpty() && hasUsableTarget() && Math.abs(getSpeed()) > 0;
 
@@ -146,6 +150,10 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 		buffer.writeVarInt(candidateAddresses.size());
 		for (String candidateAddress : candidateAddresses)
 			buffer.writeUtf(candidateAddress, MAX_ADDRESS_LENGTH);
+		UUID subLevelId = getSubLevelId();
+		buffer.writeBoolean(subLevelId != null);
+		if (subLevelId != null)
+			buffer.writeUUID(subLevelId);
 	}
 
 	@Override
@@ -162,7 +170,9 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	public boolean canPlayerUse(Player player) {
 		BlockPos bottom = getBottomPos();
 		return level != null && level.getBlockEntity(worldPosition) == this
-			&& player.distanceToSqr(bottom.getX() + 0.5d, bottom.getY() + 1.0d, bottom.getZ() + 0.5d) <= 64.0d;
+			&& SubLevelCompat.canEntityInteractWith(level, worldPosition, player)
+			&& SubLevelCompat.distanceSquared(level, player.position(),
+				new Vec3(bottom.getX() + 0.5d, bottom.getY() + 1.0d, bottom.getZ() + 0.5d)) <= 64.0d;
 	}
 
 	public String getOwnAddress() {
@@ -175,6 +185,11 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 
 	public List<String> getCandidateAddresses() {
 		return List.copyOf(candidateAddresses);
+	}
+
+	@Nullable
+	public UUID getSubLevelId() {
+		return level == null ? null : SubLevelCompat.getSpaceId(level, worldPosition);
 	}
 
 	public void setAddresses(String ownAddress, String targetAddress) {
@@ -221,8 +236,17 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 		return TELEPORT_TRIGGER_AREA.move(getBottomPos());
 	}
 
+	public AABB getWorldTeleportArea() {
+		return level == null ? getTeleportArea()
+			: SubLevelCompat.toWorldBounds(level, worldPosition, getTeleportArea());
+	}
+
 	public boolean isEntityInTeleportArea(Entity entity) {
-		return entity.isAlive() && !entity.isSpectator() && getTeleportArea().intersects(entity.getBoundingBox());
+		Vec3 localEntityPosition = level == null ? entity.position()
+			: SubLevelCompat.toLocal(level, worldPosition, entity.position());
+		return level != null && entity.isAlive() && !entity.isSpectator()
+			&& SubLevelCompat.canEntityInteractWith(level, worldPosition, entity)
+			&& getTeleportArea().contains(localEntityPosition);
 	}
 
 	@Override
@@ -234,6 +258,13 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	public void onLoad() {
 		super.onLoad();
 		registerAddress();
+	}
+
+	@Override
+	public void onChunkUnloaded() {
+		if (registeredLocation != null && registeredLocation.subLevelId() != null)
+			unregisterAddress();
+		super.onChunkUnloaded();
 	}
 
 	@Override
@@ -316,11 +347,13 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 			return false;
 
 		BlockPos targetBottom = target.getBottomPos();
+		Vec3 targetWorldPos = SubLevelCompat.toWorld(targetLevel,
+			new Vec3(targetBottom.getX() + 0.5d, targetBottom.getY() + 1.0d / 16.0d,
+				targetBottom.getZ() + 0.5d));
 		boolean teleportedAny = false;
 		for (Entity entity : entities) {
 			entity.resetFallDistance();
-			boolean teleported = entity.teleportTo(targetLevel, targetBottom.getX() + 0.5d,
-				targetBottom.getY() + 1.0d / 16.0d, targetBottom.getZ() + 0.5d,
+			boolean teleported = entity.teleportTo(targetLevel, targetWorldPos.x, targetWorldPos.y, targetWorldPos.z,
 				Set.<RelativeMovement>of(), entity.getYRot(), entity.getXRot());
 			if (!teleported)
 				continue;
@@ -335,9 +368,11 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	}
 
 	private static void playTeleportEffects(ServerLevel level, BlockPos bottom) {
-		double x = bottom.getX() + 0.5d;
-		double y = bottom.getY() + 1.0d;
-		double z = bottom.getZ() + 0.5d;
+		Vec3 worldPos = SubLevelCompat.toWorld(level,
+			new Vec3(bottom.getX() + 0.5d, bottom.getY() + 1.0d, bottom.getZ() + 0.5d));
+		double x = worldPos.x;
+		double y = worldPos.y;
+		double z = worldPos.z;
 		level.playSound(null, x, y, z, SoundEvents.ENDERMAN_TELEPORT, SoundSource.BLOCKS, 1.0f, 1.0f);
 		level.sendParticles(ParticleTypes.PORTAL, x, y, z, 32, 0.45d, 1.0d, 0.45d, 0.2d);
 	}
@@ -371,11 +406,19 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 				savedData.unregister(location);
 				continue;
 			}
+			if (!SubLevelCompat.matchesSpace(candidateLevel, location.pos(), location.subLevelId())) {
+				savedData.unregister(location);
+				continue;
+			}
 
-			ChunkPos targetChunk = new ChunkPos(location.pos());
-			// This ticket expires after five ticks and is only refreshed while an entity is waiting to teleport.
-			candidateLevel.getChunkSource()
-				.addRegionTicket(TicketType.POST_TELEPORT, targetChunk, 1, ticketOwner);
+			if (location.subLevelId() == null) {
+				ChunkPos targetChunk = new ChunkPos(location.pos());
+				// Static-world endpoints can be loaded with a vanilla ticket. Sublevels own their plot lifecycle.
+				candidateLevel.getChunkSource()
+					.addRegionTicket(TicketType.POST_TELEPORT, targetChunk, 1, ticketOwner);
+			} else if (!candidateLevel.isLoaded(location.pos())) {
+				continue;
+			}
 			BlockEntity blockEntity = candidateLevel.getBlockEntity(location.pos());
 			if (!(blockEntity instanceof ShulkerTeleporterBlockEntity target)) {
 				savedData.unregister(location);
@@ -395,12 +438,12 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	private boolean canReceiveTeleport() {
 		if (!isFullyOpen() || level == null)
 			return false;
-		return level.getEntitiesOfClass(Entity.class, getTeleportArea(), this::blocksIncomingTeleport)
+		return level.getEntitiesOfClass(Entity.class, getWorldTeleportArea(), this::blocksIncomingTeleport)
 			.isEmpty();
 	}
 
 	private boolean blocksIncomingTeleport(Entity entity) {
-		return entity.isAlive() && !entity.isSpectator()
+		return isEntityInTeleportArea(entity)
 			&& (entity instanceof LivingEntity || entity instanceof ItemEntity);
 	}
 
@@ -411,19 +454,26 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	private void registerAddress() {
 		if (!(level instanceof ServerLevel serverLevel))
 			return;
-		ShulkerTeleporterSavedData.get(serverLevel.getServer())
-			.register(getSavedLocation(), ownAddress);
+		ShulkerTeleporterSavedData savedData = ShulkerTeleporterSavedData.get(serverLevel.getServer());
+		ShulkerTeleporterSavedData.Location currentLocation = getSavedLocation();
+		if (registeredLocation != null && !registeredLocation.equals(currentLocation))
+			savedData.unregister(registeredLocation);
+		savedData.register(currentLocation, ownAddress);
+		registeredLocation = currentLocation;
 	}
 
 	public void unregisterAddress() {
 		if (!(level instanceof ServerLevel serverLevel))
 			return;
+		ShulkerTeleporterSavedData.Location location = registeredLocation == null ? getSavedLocation() : registeredLocation;
 		ShulkerTeleporterSavedData.get(serverLevel.getServer())
-			.unregister(getSavedLocation());
+			.unregister(location);
+		registeredLocation = null;
 	}
 
 	private ShulkerTeleporterSavedData.Location getSavedLocation() {
-		return new ShulkerTeleporterSavedData.Location(level.dimension(), worldPosition.immutable());
+		return new ShulkerTeleporterSavedData.Location(level.dimension(),
+			SubLevelCompat.getSpaceId(level, worldPosition), worldPosition.immutable());
 	}
 
 	private void sendBlockUpdate() {
