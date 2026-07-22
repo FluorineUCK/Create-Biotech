@@ -273,6 +273,9 @@ public class GiantFrogBlock extends BaseEntityBlock {
 
 	private static void removeStructure(Level level, BlockPos pos, BlockState state, boolean dropItem) {
 		BlockPos mainPos = getMainPos(pos, state);
+		if (level.getBlockEntity(mainPos) instanceof GiantFrogBlockEntity frog)
+			frog.dropBeltTransferItem();
+
 		if (!level.isClientSide && dropItem)
 			Block.popResource(level, mainPos, createDropStack(level, mainPos));
 

@@ -50,7 +50,11 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	private static final int EAT_FINISH_TICKS = 10;
 	private static final double CAPTURE_BOX_SIZE = 2.0d;
 	private static final double TONGUE_PULL_SPEED = 0.75d;
-	private static final double BELT_TRANSFER_DISTANCE = 0.5d;
+	private static final double BELT_CONNECTION_FORWARD_DISTANCE = 1.5d;
+	private static final double BELT_ITEM_Y = 15.0d / 16.0d;
+	private static final double BELT_HANDOFF_DISTANCE = 0.26d;
+	private static final double BELT_TONGUE_TRANSFER_DISTANCE = 0.5d;
+	private static final double BELT_TRANSFER_DISTANCE = BELT_HANDOFF_DISTANCE + BELT_TONGUE_TRANSFER_DISTANCE;
 	private static final int DEFAULT_BELT_TRANSFER_TICKS = 8;
 	private static final int MIN_BELT_TRANSFER_TICKS = 4;
 	private static final int MAX_BELT_TRANSFER_TICKS = 20;
@@ -61,7 +65,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	private boolean hasSpace;
 	private long spaceIndex = -1L;
 	private PendingEat pendingEat;
-	private ItemStack beltTransferStack = ItemStack.EMPTY;
+	private TransportedItemStack beltTransferItem;
 	private int beltTransferAge;
 	private int previousBeltTransferAge;
 	private int beltTransferDuration = DEFAULT_BELT_TRANSFER_TICKS;
@@ -260,11 +264,15 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	}
 
 	public ItemStack getBeltTransferStack() {
-		return beltTransferStack;
+		return beltTransferItem == null ? ItemStack.EMPTY : beltTransferItem.stack;
+	}
+
+	public TransportedItemStack getBeltTransferItem() {
+		return beltTransferItem;
 	}
 
 	public float getBeltTransferProgress(float partialTicks) {
-		if (beltTransferStack.isEmpty())
+		if (!hasActiveBeltTransfer())
 			return 0.0f;
 		float age = Mth.lerp(partialTicks, (float) previousBeltTransferAge, (float) beltTransferAge);
 		return Mth.clamp(age / Math.max(1, beltTransferDuration), 0.0f, 1.0f);
@@ -329,16 +337,16 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		if (simulate)
 			return ItemStack.EMPTY;
 
-		mainFrog.beginBeltTransfer(transported.stack, getBeltTransferDuration());
+		mainFrog.beginBeltTransfer(transported, getBeltTransferDuration());
 		return ItemStack.EMPTY;
 	}
 
 	private boolean hasActiveBeltTransfer() {
-		return !beltTransferStack.isEmpty();
+		return beltTransferItem != null && !beltTransferItem.stack.isEmpty();
 	}
 
-	private void beginBeltTransfer(ItemStack stack, int duration) {
-		beltTransferStack = stack.copy();
+	private void beginBeltTransfer(TransportedItemStack transported, int duration) {
+		beltTransferItem = transported.copy();
 		beltTransferAge = 0;
 		previousBeltTransferAge = 0;
 		beltTransferDuration = Mth.clamp(duration, MIN_BELT_TRANSFER_TICKS, MAX_BELT_TRANSFER_TICKS);
@@ -347,7 +355,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	}
 
 	private void tickServerBeltTransfer() {
-		if (beltTransferStack.isEmpty())
+		if (!hasActiveBeltTransfer())
 			return;
 
 		previousBeltTransferAge = beltTransferAge;
@@ -356,7 +364,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		if (beltTransferAge < beltTransferDuration)
 			return;
 
-		ItemStack transferred = beltTransferStack.copy();
+		ItemStack transferred = beltTransferItem.stack.copy();
 		clearBeltTransfer();
 		ItemStack remainder = insertItemIntoStomach(transferred, false);
 		if (!remainder.isEmpty())
@@ -365,8 +373,20 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		sendData();
 	}
 
+	public void dropBeltTransferItem() {
+		if (!hasActiveBeltTransfer())
+			return;
+
+		ItemStack transferred = beltTransferItem.stack.copy();
+		Vec3 dropPos = getBeltTransferWorldPos();
+		clearBeltTransfer();
+		dropItemAtBeltTransfer(transferred, dropPos);
+		setChanged();
+		sendData();
+	}
+
 	private void tickClientBeltTransfer() {
-		if (beltTransferStack.isEmpty())
+		if (!hasActiveBeltTransfer())
 			return;
 		previousBeltTransferAge = beltTransferAge;
 		if (beltTransferAge < beltTransferDuration) {
@@ -377,7 +397,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	}
 
 	private void clearBeltTransfer() {
-		beltTransferStack = ItemStack.EMPTY;
+		beltTransferItem = null;
 		beltTransferAge = 0;
 		previousBeltTransferAge = 0;
 		beltTransferDuration = DEFAULT_BELT_TRANSFER_TICKS;
@@ -408,18 +428,36 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	}
 
 	private void dropBeltTransferRemainder(ItemStack stack) {
+		BlockPos mouthPos = GiantFrogBlock.getMouthInputPos(worldPosition, getBlockState());
+		Vec3 dropPos = Vec3.atBottomCenterOf(mouthPos)
+			.add(0.0d, BELT_ITEM_Y, 0.0d);
+		dropItemAtBeltTransfer(stack, dropPos);
+	}
+
+	private void dropItemAtBeltTransfer(ItemStack stack, Vec3 dropPos) {
 		if (!(level instanceof ServerLevel serverLevel) || stack.isEmpty())
 			return;
 
-		BlockPos mouthPos = GiantFrogBlock.getMouthInputPos(worldPosition, getBlockState());
-		Vec3 dropPos = Vec3.atBottomCenterOf(mouthPos)
-			.add(0.0d, 15.0d / 16.0d, 0.0d);
 		ItemEntity item = new ItemEntity(serverLevel, dropPos.x, dropPos.y, dropPos.z, stack.copy());
 		item.setDeltaMovement(Vec3.atLowerCornerOf(getFacing(getBlockState()).getOpposite()
 			.getNormal())
 			.scale(0.05d));
 		item.setDefaultPickUpDelay();
 		serverLevel.addFreshEntity(item);
+	}
+
+	private Vec3 getBeltTransferWorldPos() {
+		Direction facing = getFacing(getBlockState());
+		Vec3 outward = Vec3.atLowerCornerOf(facing.getNormal());
+		Vec3 sideways = Vec3.atLowerCornerOf(facing.getClockWise()
+			.getNormal());
+		double progress = Mth.clamp((double) beltTransferAge / Math.max(1, beltTransferDuration), 0.0d, 1.0d);
+		double sideOffset = beltTransferItem == null ? 0.0d : beltTransferItem.sideOffset;
+		return Vec3.atLowerCornerOf(worldPosition)
+			.add(0.5d, BELT_ITEM_Y, 0.5d)
+			.add(outward.scale(BELT_CONNECTION_FORWARD_DISTANCE + BELT_HANDOFF_DISTANCE))
+			.add(outward.scale(-BELT_TRANSFER_DISTANCE * progress))
+			.add(sideways.scale(sideOffset));
 	}
 
 	private ItemStack insertItemIntoStomach(ItemStack stack, boolean simulate) {
@@ -552,8 +590,8 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 			return;
 		tag.putBoolean("HasSpace", hasSpace);
 		tag.putLong("SpaceIndex", spaceIndex);
-		if (!beltTransferStack.isEmpty()) {
-			tag.put("BeltTransferItem", beltTransferStack.saveOptional(registries));
+		if (hasActiveBeltTransfer()) {
+			tag.put("BeltTransferItem", beltTransferItem.serializeNBT(registries));
 			tag.putInt("BeltTransferAge", beltTransferAge);
 			tag.putInt("BeltTransferDuration", beltTransferDuration);
 		}
@@ -567,13 +605,13 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		hasSpace = tag.getBoolean("HasSpace");
 		spaceIndex = tag.getLong("SpaceIndex");
 		if (tag.contains("BeltTransferItem")) {
-			beltTransferStack = ItemStack.parseOptional(registries, tag.getCompound("BeltTransferItem"));
+			beltTransferItem = TransportedItemStack.read(tag.getCompound("BeltTransferItem"), registries);
 			beltTransferAge = tag.getInt("BeltTransferAge");
 			previousBeltTransferAge = beltTransferAge;
 			beltTransferDuration = tag.contains("BeltTransferDuration")
 				? Mth.clamp(tag.getInt("BeltTransferDuration"), MIN_BELT_TRANSFER_TICKS, MAX_BELT_TRANSFER_TICKS)
 				: DEFAULT_BELT_TRANSFER_TICKS;
-			if (beltTransferStack.isEmpty())
+			if (!hasActiveBeltTransfer())
 				clearBeltTransfer();
 			return;
 		}

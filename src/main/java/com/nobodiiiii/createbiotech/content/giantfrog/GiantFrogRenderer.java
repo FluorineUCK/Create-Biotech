@@ -6,7 +6,9 @@ import com.mojang.math.Axis;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.foundation.render.BlockEntityModelElement;
+import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.logistics.box.PackageItem;
+import com.simibubi.create.foundation.render.ShadowRenderHelper;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.FrogModel;
@@ -21,6 +23,7 @@ import net.minecraft.client.renderer.entity.ItemRenderer;
 import net.minecraft.client.renderer.texture.OverlayTexture;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.frog.Frog;
 import net.minecraft.world.item.ItemDisplayContext;
@@ -40,7 +43,10 @@ public class GiantFrogRenderer implements BlockEntityRenderer<GiantFrogBlockEnti
 		(TONGUE_PIVOT_Z_UNITS + BELT_CONNECTION_FORWARD_BLOCKS * MODEL_UNITS_PER_BLOCK / GiantFrogBlock.FROG_SCALE)
 			/ -TONGUE_FRONT_Z_UNITS;
 	private static final double BELT_ITEM_Y = 15.0d / 16.0d;
-	private static final double BELT_TRANSFER_DISTANCE_BLOCKS = 0.5d;
+	private static final double BELT_HANDOFF_DISTANCE_BLOCKS = 0.26d;
+	private static final double BELT_TONGUE_TRANSFER_DISTANCE_BLOCKS = 0.5d;
+	private static final double BELT_TRANSFER_DISTANCE_BLOCKS =
+		BELT_HANDOFF_DISTANCE_BLOCKS + BELT_TONGUE_TRANSFER_DISTANCE_BLOCKS;
 	private static final float BELT_TRANSFER_ITEM_SCALE = 0.5f;
 
 	private final FrogModel<Frog> frogModel;
@@ -116,24 +122,34 @@ public class GiantFrogRenderer implements BlockEntityRenderer<GiantFrogBlockEnti
 
 	private void renderBeltTransferItem(GiantFrogBlockEntity blockEntity, float partialTick, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight, int packedOverlay, Direction facing) {
-		ItemStack stack = blockEntity.getBeltTransferStack();
-		if (stack.isEmpty())
+		TransportedItemStack transported = blockEntity.getBeltTransferItem();
+		if (transported == null || transported.stack.isEmpty())
 			return;
 
+		ItemStack stack = transported.stack;
 		float progress = blockEntity.getBeltTransferProgress(partialTick);
+		float sideOffset = Mth.lerp(partialTick, transported.prevSideOffset, transported.sideOffset);
 		Vec3 outward = Vec3.atLowerCornerOf(facing.getNormal());
-		Vec3 position = new Vec3(0.5d, BELT_ITEM_Y, 0.5d).add(outward.scale(BELT_CONNECTION_FORWARD_BLOCKS))
-			.add(outward.scale(-BELT_TRANSFER_DISTANCE_BLOCKS * progress));
+		Vec3 sideways = Vec3.atLowerCornerOf(facing.getClockWise()
+			.getNormal());
+		Vec3 position = new Vec3(0.5d, BELT_ITEM_Y, 0.5d)
+			.add(outward.scale(BELT_CONNECTION_FORWARD_BLOCKS + BELT_HANDOFF_DISTANCE_BLOCKS))
+			.add(outward.scale(-BELT_TRANSFER_DISTANCE_BLOCKS * progress))
+			.add(sideways.scale(sideOffset));
 
 		poseStack.pushPose();
 		poseStack.translate(position.x, position.y, position.z);
-		poseStack.mulPose(Axis.YP.rotationDegrees(facing.toYRot()));
+		poseStack.pushPose();
+		poseStack.translate(0.0d, -1.0d / 8.0d + 0.005d, 0.0d);
+		ShadowRenderHelper.renderShadow(poseStack, buffer, 0.75f, 0.2f);
+		poseStack.popPose();
 
 		ItemRenderer itemRenderer = Minecraft.getInstance()
 			.getItemRenderer();
 		BakedModel bakedModel = itemRenderer.getModel(stack, blockEntity.getLevel(), null, 0);
 		boolean blockItem = bakedModel.isGui3d();
 		boolean box = PackageItem.isPackage(stack);
+		poseStack.mulPose(Axis.YP.rotationDegrees(transported.angle));
 		if (!blockItem) {
 			poseStack.translate(0.0d, -0.09375d, 0.0d);
 			poseStack.mulPose(Axis.XP.rotationDegrees(90.0f));
