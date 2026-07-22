@@ -28,6 +28,7 @@ import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTa
 import com.nobodiiiii.createbiotech.content.squidprinter.EnchantmentBookCopyItem;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerItem;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackageItem;
+import com.nobodiiiii.createbiotech.content.slimearmor.SlimeArmorItem;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterItem;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointItem;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessTerminalItem;
@@ -35,6 +36,7 @@ import com.yision.allay.block.allayport.AllayPortItem;
 import com.yision.allay.item.allaycourier.AllayCourierItem;
 import com.yision.allay.item.allaycourier.IncompleteAllayCourierItem;
 
+import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
@@ -107,6 +109,20 @@ public class CBItems {
 
 	public static final DeferredHolder<Item, Item> CAPTURED_SMALL_SLIME = ITEMS.register("captured_small_slime",
 		() -> new CapturedSmallSlimeItem(new Item.Properties().stacksTo(4)));
+
+	// Slime armour: a slime counterpart to Create's cardboard armour, obtained by filling each
+	// cardboard piece with 250mb of liquid living slime. Renders as a small slime when crouching.
+	public static final DeferredHolder<Item, Item> SLIME_HELMET = ITEMS.register("slime_helmet",
+		() -> new SlimeArmorItem(ArmorItem.Type.HELMET, new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> SLIME_CHESTPLATE = ITEMS.register("slime_chestplate",
+		() -> new SlimeArmorItem(ArmorItem.Type.CHESTPLATE, new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> SLIME_LEGGINGS = ITEMS.register("slime_leggings",
+		() -> new SlimeArmorItem(ArmorItem.Type.LEGGINGS, new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> SLIME_BOOTS = ITEMS.register("slime_boots",
+		() -> new SlimeArmorItem(ArmorItem.Type.BOOTS, new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> UNIVERSAL_JOINT = ITEMS.register("universal_joint",
 		() -> new UniversalJointItem(new Item.Properties()));

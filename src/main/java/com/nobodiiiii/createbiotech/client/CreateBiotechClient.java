@@ -75,6 +75,7 @@ import com.simibubi.create.CreateClient;
 import com.simibubi.create.content.contraptions.render.ContraptionEntityRenderer;
 import com.simibubi.create.content.contraptions.render.ContraptionVisual;
 import com.simibubi.create.content.decoration.encasing.EncasedCTBehaviour;
+import com.simibubi.create.content.equipment.armor.CardboardArmorStealthOverlay;
 import com.simibubi.create.content.fluids.PipeAttachmentModel;
 import com.simibubi.create.content.kinetics.base.SingleAxisRotatingVisual;
 import com.simibubi.create.content.kinetics.simpleRelays.encased.EncasedCogVisual;
@@ -112,6 +113,7 @@ import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -247,6 +249,13 @@ public class CreateBiotechClient {
 	public static void registerParticleProviders(RegisterParticleProvidersEvent event) {
 		event.registerSpriteSet(CBParticleTypes.STRAIGHT_ENCHANT.get(), StraightEnchantParticle.Provider::new);
 		event.registerSpriteSet(CBParticleTypes.ALLAY_COURIER_NOTE.get(), CourierNoteParticle.Provider::new);
+	}
+
+	@SubscribeEvent
+	public static void registerClientExtensions(RegisterClientExtensionsEvent event) {
+		// Slime armour shares Create's cardboard stealth blur overlay on the helmet slot; the overlay's
+		// opacity is driven by Create's testForStealth, which a full slime set satisfies.
+		event.registerItem(new CardboardArmorStealthOverlay(), CBItems.SLIME_HELMET.get());
 	}
 
 	@SubscribeEvent
