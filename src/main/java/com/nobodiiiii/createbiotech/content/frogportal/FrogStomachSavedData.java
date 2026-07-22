@@ -23,8 +23,8 @@ import net.minecraft.world.level.saveddata.SavedData;
  * <ul>
  *   <li>a monotonic counter that hands out a unique space index to every Frog Portal on its first
  *       teleport, and</li>
- *   <li>a per-player record of where each entity entered from, so the Frog Esophagus can send them
- *       back.</li>
+ *   <li>a per-player, per-room record of where each entity entered from, so a Frog Esophagus sends
+ *       them back to the last portal they used to enter that specific room.</li>
  * </ul>
  * Stored on the overworld data storage, mirroring {@code ShulkerTeleporterSavedData}.
  */
@@ -33,7 +33,7 @@ public class FrogStomachSavedData extends SavedData {
 	private static final String DATA_NAME = "create_biotech_frog_stomach";
 
 	private long nextIndex = 0L;
-	private final Map<UUID, Location> returnPoints = new HashMap<>();
+	private final Map<ReturnKey, Location> returnPoints = new HashMap<>();
 
 	public static FrogStomachSavedData get(MinecraftServer server) {
 		return server.overworld()
@@ -48,23 +48,24 @@ public class FrogStomachSavedData extends SavedData {
 		return index;
 	}
 
-	public void setReturn(UUID uuid, ResourceKey<Level> dimension, BlockPos pos) {
-		returnPoints.put(uuid, new Location(dimension, pos.immutable()));
+	public void setReturn(UUID uuid, long spaceIndex, ResourceKey<Level> dimension, BlockPos pos) {
+		returnPoints.put(new ReturnKey(uuid, spaceIndex), new Location(dimension, pos.immutable()));
 		setDirty();
 	}
 
 	@Nullable
-	public Location getReturn(UUID uuid) {
-		return returnPoints.get(uuid);
+	public Location getReturn(UUID uuid, long spaceIndex) {
+		return returnPoints.get(new ReturnKey(uuid, spaceIndex));
 	}
 
 	@Override
 	public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
 		tag.putLong("NextIndex", nextIndex);
 		ListTag entries = new ListTag();
-		for (Map.Entry<UUID, Location> entry : returnPoints.entrySet()) {
+		for (Map.Entry<ReturnKey, Location> entry : returnPoints.entrySet()) {
 			CompoundTag entryTag = new CompoundTag();
-			entryTag.putUUID("UUID", entry.getKey());
+			entryTag.putUUID("UUID", entry.getKey().uuid());
+			entryTag.putLong("SpaceIndex", entry.getKey().spaceIndex());
 			entryTag.putString("Dimension", entry.getValue().dimension().location().toString());
 			entryTag.putLong("Pos", entry.getValue().pos().asLong());
 			entries.add(entryTag);
@@ -80,14 +81,18 @@ public class FrogStomachSavedData extends SavedData {
 		for (Tag rawEntry : entries) {
 			CompoundTag entryTag = (CompoundTag) rawEntry;
 			try {
+				if (!entryTag.contains("SpaceIndex", Tag.TAG_LONG))
+					continue;
 				ResourceLocation dimensionId = ResourceLocation.parse(entryTag.getString("Dimension"));
 				ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION, dimensionId);
-				data.returnPoints.put(entryTag.getUUID("UUID"),
+				data.returnPoints.put(new ReturnKey(entryTag.getUUID("UUID"), entryTag.getLong("SpaceIndex")),
 					new Location(dimension, BlockPos.of(entryTag.getLong("Pos"))));
 			} catch (IllegalArgumentException ignored) {}
 		}
 		return data;
 	}
+
+	private record ReturnKey(UUID uuid, long spaceIndex) {}
 
 	public record Location(ResourceKey<Level> dimension, BlockPos pos) {}
 }

@@ -1,5 +1,6 @@
 {
   "variants": {
-    "": { "model": "create_biotech:block/frog_esophagus" }
+    "axis=x": { "model": "create_biotech:block/frog_esophagus_ns" },
+    "axis=z": { "model": "create_biotech:block/frog_esophagus_ew" }
   }
 }

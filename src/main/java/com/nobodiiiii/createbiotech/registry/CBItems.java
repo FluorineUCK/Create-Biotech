@@ -19,6 +19,7 @@ import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchan
 import com.nobodiiiii.createbiotech.content.experience.HiddenExperienceItem;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.LargeCardboardBoxItem;
+import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogItem;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltConnectorItem;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltConnectorItem;
 import com.nobodiiiii.createbiotech.content.processing.basin.CapturedSmallSlimeItem;
@@ -172,6 +173,9 @@ public class CBItems {
 
 	public static final DeferredHolder<Item, Item> GIANT_FROG_PORTAL = ITEMS.register("giant_frog_portal",
 		() -> new BlockItem(CBBlocks.GIANT_FROG_PORTAL.get(), new Item.Properties().stacksTo(1)));
+
+	public static final DeferredHolder<Item, Item> GIANT_FROG = ITEMS.register("giant_frog",
+		() -> new GiantFrogItem(CBBlocks.GIANT_FROG.get(), new Item.Properties().stacksTo(1)));
 
 	public static final DeferredHolder<Item, Item> ALLAY_PORT = ITEMS.register("allay_port",
 		() -> new AllayPortItem(CBBlocks.ALLAY_PORT.get(), new Item.Properties()));

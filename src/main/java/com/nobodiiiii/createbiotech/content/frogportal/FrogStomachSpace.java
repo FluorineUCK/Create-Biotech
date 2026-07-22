@@ -52,6 +52,19 @@ public final class FrogStomachSpace {
 		return new BlockPos(o.getX() + 2, o.getY() + 1, o.getZ() + 2);
 	}
 
+	public static long spaceIndexFromEsophagusPos(BlockPos pos) {
+		if (pos.getY() != BASE_Y + 1)
+			return -1L;
+		int spacing = boxSize() + GAP;
+		if (Math.floorMod(pos.getX(), spacing) != 2 || Math.floorMod(pos.getZ(), spacing) != 2)
+			return -1L;
+		long col = Math.floorDiv(pos.getX(), spacing);
+		long row = Math.floorDiv(pos.getZ(), spacing);
+		if (col < 0 || col >= ROW || row < 0)
+			return -1L;
+		return row * ROW + col;
+	}
+
 	/** Cheap sanity check that the room's floor corner is present. */
 	public static boolean isBuilt(ServerLevel level, long index) {
 		return level.getBlockState(origin(index)).is(CBBlocks.FROG_STOMACH_WALL.get());
@@ -86,6 +99,8 @@ public final class FrogStomachSpace {
 
 		BlockPos ep = esophagusPos(index);
 		level.setBlock(ep, CBBlocks.FROG_ESOPHAGUS.get().defaultBlockState(), Block.UPDATE_CLIENTS);
+		if (level.getBlockEntity(ep) instanceof FrogEsophagusBlockEntity esophagus)
+			esophagus.setSpaceIndex(index);
 		// keep the floor directly under the return portal air-free is unnecessary; the shell already
 		// provides it. Ensure the portal's own cell (and the one above, for standing) is clear.
 		level.setBlock(ep.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);

@@ -1,5 +1,6 @@
 {
   "variants": {
-    "": { "model": "create_biotech:block/giant_frog_portal" }
+    "axis=x": { "model": "create_biotech:block/giant_frog_portal_ns" },
+    "axis=z": { "model": "create_biotech:block/giant_frog_portal_ew" }
   }
 }

@@ -1,6 +1,3 @@
 {
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "create_biotech:block/frog_esophagus"
-  }
+  "parent": "create_biotech:block/frog_esophagus_ns"
 }

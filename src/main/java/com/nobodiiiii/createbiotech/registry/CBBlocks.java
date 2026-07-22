@@ -21,6 +21,7 @@ import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionPro
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.GiantFrogPortalBlock;
+import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlock;
@@ -291,15 +292,23 @@ public class CBBlocks {
 				.sound(SoundType.SLIME_BLOCK)
 				.strength(2.0f)
 				.mapColor(MapColor.COLOR_GREEN)
+				.noCollission()
+				.lightLevel(state -> 11)
+				.noOcclusion()));
+
+	public static final DeferredHolder<Block, GiantFrogBlock> GIANT_FROG =
+		BLOCKS.register("giant_frog",
+			() -> new GiantFrogBlock(Block.Properties.of()
+				.sound(SoundType.SLIME_BLOCK)
+				.strength(1.0f)
+				.mapColor(MapColor.COLOR_GREEN)
 				.noOcclusion()));
 
 	// Indestructible shell of every Frog Stomach room; placed by FrogStomachSpace, never obtainable.
 	public static final DeferredHolder<Block, Block> FROG_STOMACH_WALL =
 		BLOCKS.register("frog_stomach_wall",
-			() -> new Block(Block.Properties.of()
-				.sound(SoundType.SLIME_BLOCK)
+			() -> new Block(Block.Properties.ofFullCopy(Blocks.ORANGE_CONCRETE)
 				.strength(-1.0f, 3600000.0f)
-				.mapColor(MapColor.COLOR_PINK)
 				.noLootTable()));
 
 	// Indestructible return portal inside every Frog Stomach room; placed with the room, never obtainable.
@@ -309,6 +318,8 @@ public class CBBlocks {
 				.sound(SoundType.SLIME_BLOCK)
 				.strength(-1.0f, 3600000.0f)
 				.mapColor(MapColor.COLOR_RED)
+				.noCollission()
+				.lightLevel(state -> 11)
 				.noOcclusion()
 				.noLootTable()));
 

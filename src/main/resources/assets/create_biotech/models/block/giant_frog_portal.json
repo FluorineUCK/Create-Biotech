@@ -1,6 +1,3 @@
 {
-  "parent": "minecraft:block/cube_all",
-  "textures": {
-    "all": "create_biotech:block/giant_frog_portal"
-  }
+  "parent": "create_biotech:block/giant_frog_portal_ns"
 }
