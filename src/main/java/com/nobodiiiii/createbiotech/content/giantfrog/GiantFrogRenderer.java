@@ -11,6 +11,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.frog.Frog;
 import net.minecraft.world.level.Level;
@@ -32,18 +33,35 @@ public class GiantFrogRenderer implements BlockEntityRenderer<GiantFrogBlockEnti
 			return;
 
 		Direction facing = getFacing(blockEntity.getBlockState());
+		updateAnimationState(blockEntity, frog);
+		float animationAge = blockEntity.getEatAnimationAge(partialTick);
+		int animationTicks = Mth.floor(animationAge);
+		float animationPartialTicks = animationAge - animationTicks;
 
 		poseStack.pushPose();
 		poseStack.translate(0.5d, 0.0d, 0.5d);
 		poseStack.scale(GiantFrogBlock.FROG_SCALE, GiantFrogBlock.FROG_SCALE, GiantFrogBlock.FROG_SCALE);
 		EntityRenderHelper.render(EntityRenderHelper.settings(frog)
 			.packedLight(packedLight)
-			.partialTicks(0.0f)
-			.ticks(0)
+			.partialTicks(animationPartialTicks)
+			.ticks(animationTicks)
 			.face(facing)
 			.dispatcherYaw(facing.toYRot())
 			.flushBuffers(false), poseStack, buffer);
 		poseStack.popPose();
+	}
+
+	private void updateAnimationState(GiantFrogBlockEntity blockEntity, Frog frog) {
+		frog.jumpAnimationState.stop();
+		frog.croakAnimationState.stop();
+		frog.swimIdleAnimationState.stop();
+
+		if (!blockEntity.isEating()) {
+			frog.tongueAnimationState.stop();
+			return;
+		}
+
+		frog.tongueAnimationState.start(0);
 	}
 
 	private Direction getFacing(BlockState state) {

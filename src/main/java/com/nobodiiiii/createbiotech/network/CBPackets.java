@@ -9,6 +9,7 @@ import java.util.function.Function;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerContraptionAnimationPacket;
+import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogEatPacket;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastBalloonMagnetTargetPacket;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltEntityAnimationPacket;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltSurfaceMovementPacket;
@@ -41,7 +42,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 public final class CBPackets {
 
-	private static final String NETWORK_VERSION = "13";
+	private static final String NETWORK_VERSION = "14";
 	private static final List<ServerRegistration<?>> SERVERBOUND = new ArrayList<>();
 	private static final List<ClientRegistration<?>> CLIENTBOUND = new ArrayList<>();
 	private static final Map<Class<?>, Integer> SERVERBOUND_IDS = new HashMap<>();
@@ -83,6 +84,8 @@ public final class CBPackets {
 			AllayPortFlapPacket::write);
 		registerClient(AllayCourierHudPacket.class, AllayCourierHudPacket::new,
 			AllayCourierHudPacket::write);
+		registerClient(GiantFrogEatPacket.class, GiantFrogEatPacket::new,
+			GiantFrogEatPacket::write);
 
 		CatnipPacketRegistry registry = new CatnipPacketRegistry(CreateBiotech.MOD_ID, NETWORK_VERSION);
 		registry.registerPacket(new CatnipPacketRegistry.PacketType<>(

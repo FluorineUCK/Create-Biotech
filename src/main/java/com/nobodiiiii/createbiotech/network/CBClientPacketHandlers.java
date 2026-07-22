@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.network;
 
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerContraptionAnimationPacket;
+import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogEatPacket;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltEntityAnimationPacket;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerPlacementPacket;
 import com.yision.allay.block.allayport.AllayPortFlapPacket;
@@ -26,6 +27,8 @@ final class CBClientPacketHandlers {
 			allayPortFlap.handle(player);
 		} else if (packet instanceof AllayCourierHudPacket allayCourierHud) {
 			allayCourierHud.handle(player);
+		} else if (packet instanceof GiantFrogEatPacket giantFrogEat) {
+			giantFrogEat.handle(player);
 		} else {
 			throw new IllegalArgumentException("Unhandled Create Biotech clientbound packet "
 				+ packet.getClass().getName());

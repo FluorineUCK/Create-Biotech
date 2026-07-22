@@ -29,11 +29,14 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 
 	public static final float FROG_SCALE = 4.0f;
-	public static final double BODY_WIDTH = 0.5d * FROG_SCALE;
-	public static final double BODY_HEIGHT = 0.5d * FROG_SCALE;
+	public static final double BODY_WIDTH = 3.0d;
+	public static final double BODY_HEIGHT = 2.0d;
 
-	private static final VoxelShape SHAPE = Block.box(-8, 0, -8, 24, 32, 24);
-	private static final AABB BODY_BOUNDS = new AABB(-0.5d, 0.0d, -0.5d, 1.5d, BODY_HEIGHT, 1.5d);
+	private static final double BODY_MIN = 0.5d - BODY_WIDTH / 2.0d;
+	private static final double BODY_MAX = 0.5d + BODY_WIDTH / 2.0d;
+	private static final VoxelShape SHAPE = Block.box(BODY_MIN * 16.0d, 0, BODY_MIN * 16.0d,
+		BODY_MAX * 16.0d, BODY_HEIGHT * 16.0d, BODY_MAX * 16.0d);
+	private static final AABB BODY_BOUNDS = new AABB(BODY_MIN, 0.0d, BODY_MIN, BODY_MAX, BODY_HEIGHT, BODY_MAX);
 
 	public GiantFrogBlock(Properties properties) {
 		super(properties);

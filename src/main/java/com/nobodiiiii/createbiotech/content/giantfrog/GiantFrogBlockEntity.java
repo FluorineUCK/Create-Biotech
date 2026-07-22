@@ -4,9 +4,11 @@ import java.util.Comparator;
 import java.util.List;
 
 import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
+import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -21,9 +23,12 @@ import net.minecraft.world.phys.Vec3;
 
 public class GiantFrogBlockEntity extends BlockEntity {
 	private static final int EAT_INTERVAL = 20;
+	private static final int EAT_ANIMATION_TICKS = 20;
 	private static final double TONGUE_REACH = 1.25d;
 
 	private int eatCooldown;
+	private int eatAnimationTicks;
+	private int eatAnimationAge;
 
 	public GiantFrogBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.GIANT_FROG.get(), pos, state);
@@ -31,8 +36,10 @@ public class GiantFrogBlockEntity extends BlockEntity {
 	}
 
 	public static void tick(Level level, BlockPos pos, BlockState state, GiantFrogBlockEntity be) {
-		if (level.isClientSide)
+		if (level.isClientSide) {
+			be.tickClientAnimation();
 			return;
+		}
 
 		if (be.eatCooldown > 0) {
 			be.eatCooldown--;
@@ -56,6 +63,28 @@ public class GiantFrogBlockEntity extends BlockEntity {
 			0.9f + level.random.nextFloat() * 0.2f);
 		level.playSound(null, pos, SoundEvents.FROG_EAT, SoundSource.NEUTRAL, 1.0f,
 			0.9f + level.random.nextFloat() * 0.2f);
+		if (level instanceof ServerLevel serverLevel)
+			CBPackets.sendToTrackingChunk(new GiantFrogEatPacket(pos), serverLevel, pos);
+	}
+
+	public void startEatAnimation() {
+		eatAnimationTicks = EAT_ANIMATION_TICKS;
+		eatAnimationAge = 0;
+	}
+
+	public boolean isEating() {
+		return eatAnimationTicks > 0;
+	}
+
+	public float getEatAnimationAge(float partialTicks) {
+		return isEating() ? eatAnimationAge + partialTicks : 0.0f;
+	}
+
+	private void tickClientAnimation() {
+		if (eatAnimationTicks <= 0)
+			return;
+		eatAnimationTicks--;
+		eatAnimationAge++;
 	}
 
 	private static Slime findSmallSlime(Level level, BlockPos pos) {
