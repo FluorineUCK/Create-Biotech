@@ -2,7 +2,6 @@
 // 由思索者自动生成 — 请勿手动修改；下次导出时会被覆盖。
 package com.nobodiiiii.createbiotech.ponder.generated;
 
-import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.mojang.logging.LogUtils;
 import net.createmod.catnip.math.Pointing;
 import net.createmod.ponder.api.PonderPalette;
@@ -1705,7 +1704,8 @@ public final class GeneratedPonderSupport {
             try {
                 CompoundTag tag = TagParser.parseTag(finalNbt);
                 if (!tag.isEmpty()) {
-                    CBItemData.set(stack, tag);
+                    stack.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                        net.minecraft.world.item.component.CustomData.of(tag));
                 }
             } catch (Exception ignored) {
             }
@@ -1725,9 +1725,13 @@ public final class GeneratedPonderSupport {
             }
         }
         if (!itemPatch.isEmpty()) {
-            CompoundTag itemData = CBItemData.getOrEmpty(copy);
-            itemData.merge(itemPatch.copy());
-            CBItemData.set(copy, itemData);
+            net.minecraft.world.item.component.CustomData existing = copy.getOrDefault(
+                net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                net.minecraft.world.item.component.CustomData.EMPTY);
+            CompoundTag stackTag = existing.copyTag();
+            stackTag.merge(itemPatch.copy());
+            copy.set(net.minecraft.core.component.DataComponents.CUSTOM_DATA,
+                net.minecraft.world.item.component.CustomData.of(stackTag));
         }
         return copy;
     }

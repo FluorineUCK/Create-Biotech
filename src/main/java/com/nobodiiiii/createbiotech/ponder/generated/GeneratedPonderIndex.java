@@ -17,6 +17,7 @@ import com.nobodiiiii.createbiotech.ponder.generated.scenes.GeneratedBioPackager
 import com.nobodiiiii.createbiotech.ponder.generated.scenes.GeneratedPowerBeltConnector_f5338733;
 import com.nobodiiiii.createbiotech.ponder.generated.scenes.GeneratedGhastHelm_b77c337a;
 import com.nobodiiiii.createbiotech.ponder.generated.scenes.GeneratedGhastHotAirBalloonAssemblyStation_0bf36ffd;
+import com.nobodiiiii.createbiotech.ponder.generated.scenes.GeneratedShulkerPackager_2ca00f57;
 
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.createmod.ponder.api.registration.PonderTagRegistrationHelper;
@@ -42,6 +43,7 @@ public final class GeneratedPonderIndex {
         GeneratedPowerBeltConnector_f5338733.register(helper);
         GeneratedGhastHelm_b77c337a.register(helper);
         GeneratedGhastHotAirBalloonAssemblyStation_0bf36ffd.register(helper);
+        GeneratedShulkerPackager_2ca00f57.register(helper);
     }
 
     public static void registerTags(PonderTagRegistrationHelper<ResourceLocation> helper) {
@@ -60,5 +62,6 @@ public final class GeneratedPonderIndex {
         GeneratedPowerBeltConnector_f5338733.registerTags(helper);
         GeneratedGhastHelm_b77c337a.registerTags(helper);
         GeneratedGhastHotAirBalloonAssemblyStation_0bf36ffd.registerTags(helper);
+        GeneratedShulkerPackager_2ca00f57.registerTags(helper);
     }
 }
