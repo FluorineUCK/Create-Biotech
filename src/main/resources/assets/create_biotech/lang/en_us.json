@@ -1,5 +1,9 @@
 {
   "itemGroup.create_biotech.main": "Create: Biotech",
+  "block.create_biotech.giant_frog_portal": "Giant Frog Portal",
+  "block.create_biotech.giant_frog_portal.tooltip.summary": "Stand on it to be swallowed into a private room in the _Frog Stomach_. Break and re-place to keep the same room.",
+  "block.create_biotech.frog_stomach_wall": "Frog Stomach Wall",
+  "block.create_biotech.frog_esophagus": "Frog Esophagus",
   "block.create_biotech.evoker_enchanting_chamber": "Evoker Enchanting Chamber",
   "block.create_biotech.experience_pump": "Experience Pump",
   "block.create_biotech.budding_experience": "Budding Experience",

@@ -19,6 +19,8 @@ import com.nobodiiiii.createbiotech.content.experience.ExperienceConstants;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlock;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlock;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.GiantFrogPortalBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlock;
@@ -282,6 +284,33 @@ public class CBBlocks {
 
 	public static final Map<DyeColor, DeferredHolder<Block, BufferPadBlock>> BUFFER_PADS = registerBufferPads();
 	public static final DeferredHolder<Block, BufferPadBlock> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
+
+	public static final DeferredHolder<Block, GiantFrogPortalBlock> GIANT_FROG_PORTAL =
+		BLOCKS.register("giant_frog_portal",
+			() -> new GiantFrogPortalBlock(Block.Properties.of()
+				.sound(SoundType.SLIME_BLOCK)
+				.strength(2.0f)
+				.mapColor(MapColor.COLOR_GREEN)
+				.noOcclusion()));
+
+	// Indestructible shell of every Frog Stomach room; placed by FrogStomachSpace, never obtainable.
+	public static final DeferredHolder<Block, Block> FROG_STOMACH_WALL =
+		BLOCKS.register("frog_stomach_wall",
+			() -> new Block(Block.Properties.of()
+				.sound(SoundType.SLIME_BLOCK)
+				.strength(-1.0f, 3600000.0f)
+				.mapColor(MapColor.COLOR_PINK)
+				.noLootTable()));
+
+	// Indestructible return portal inside every Frog Stomach room; placed with the room, never obtainable.
+	public static final DeferredHolder<Block, FrogEsophagusBlock> FROG_ESOPHAGUS =
+		BLOCKS.register("frog_esophagus",
+			() -> new FrogEsophagusBlock(Block.Properties.of()
+				.sound(SoundType.SLIME_BLOCK)
+				.strength(-1.0f, 3600000.0f)
+				.mapColor(MapColor.COLOR_RED)
+				.noOcclusion()
+				.noLootTable()));
 
 	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
 	// here so the project's primary block registry remains the place to inspect mod blocks.

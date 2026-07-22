@@ -26,6 +26,15 @@ public final class CBDataComponents {
 			builder -> builder.persistent(Codec.INT)
 				.networkSynchronized(ByteBufCodecs.INT));
 
+	/**
+	 * The Frog Stomach room index bound to a {@code GIANT_FROG_PORTAL}. Travels on the dropped item so
+	 * breaking and re-placing the portal rebinds it to the same private room.
+	 */
+	public static final Supplier<DataComponentType<Long>> FROG_STOMACH_SPACE =
+		COMPONENTS.registerComponentType("frog_stomach_space",
+			builder -> builder.persistent(Codec.LONG)
+				.networkSynchronized(ByteBufCodecs.VAR_LONG));
+
 	private CBDataComponents() {
 	}
 

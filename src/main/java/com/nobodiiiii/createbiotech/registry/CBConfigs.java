@@ -97,6 +97,7 @@ public class CBConfigs {
 		public final FixedCarrotFishingRod fixedCarrotFishingRod;
 		public final BufferPad bufferPad;
 		public final ShulkerPackager shulkerPackager;
+		public final FrogStomach frogStomach;
 
 		Server(ModConfigSpec.Builder builder) {
 			experience = new Experience(builder);
@@ -120,6 +121,17 @@ public class CBConfigs {
 			fixedCarrotFishingRod = new FixedCarrotFishingRod(builder);
 			bufferPad = new BufferPad(builder);
 			shulkerPackager = new ShulkerPackager(builder);
+			frogStomach = new FrogStomach(builder);
+		}
+	}
+
+	public static class FrogStomach {
+		public final ModConfigSpec.IntValue boxSize;
+
+		FrogStomach(ModConfigSpec.Builder builder) {
+			builder.push("frogStomach");
+			boxSize = builder.defineInRange("boxSize", 48, 5, 256);
+			builder.pop();
 		}
 	}
 
