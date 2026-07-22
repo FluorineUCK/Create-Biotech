@@ -73,7 +73,7 @@ public class FrogEsophagusBlock extends Block implements EntityBlock, Portal {
 		if (loc != null)
 			dest = level.getServer().getLevel(loc.dimension());
 		if (dest != null) {
-			target = Vec3.atBottomCenterOf(loc.pos().above());
+			target = loc.pos();
 		} else {
 			dest = level.getServer().overworld();
 			target = Vec3.atBottomCenterOf(dest.getSharedSpawnPos());

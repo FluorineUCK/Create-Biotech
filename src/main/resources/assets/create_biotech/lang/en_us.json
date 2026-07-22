@@ -1,9 +1,7 @@
 {
   "itemGroup.create_biotech.main": "Create: Biotech",
-  "block.create_biotech.giant_frog_portal": "Giant Frog Portal",
-  "block.create_biotech.giant_frog_portal.tooltip.summary": "Step inside and wait to be swallowed into a private room in the _Frog Stomach_. Break and re-place to keep the same room.",
   "block.create_biotech.giant_frog": "Giant Frog",
-  "block.create_biotech.giant_frog.tooltip.summary": "A _four-times-sized_ frog block. It stays put, collides like its body, and eats nearby _small slimes_.",
+  "block.create_biotech.giant_frog.tooltip.summary": "A _four-times-sized_ frog block. It eats nearby _small slimes_ and players crouching in a full _Slime Armor_ set, sending them into its _Frog Stomach_.",
   "block.create_biotech.frog_stomach_wall": "Frog Stomach Wall",
   "block.create_biotech.frog_esophagus": "Frog Esophagus",
   "block.create_biotech.evoker_enchanting_chamber": "Evoker Enchanting Chamber",

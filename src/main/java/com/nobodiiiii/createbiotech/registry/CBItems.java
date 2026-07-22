@@ -171,9 +171,6 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> SHULKER_TELEPORTER = ITEMS.register("shulker_teleporter",
 		() -> new BlockItem(CBBlocks.SHULKER_TELEPORTER.get(), new Item.Properties()));
 
-	public static final DeferredHolder<Item, Item> GIANT_FROG_PORTAL = ITEMS.register("giant_frog_portal",
-		() -> new BlockItem(CBBlocks.GIANT_FROG_PORTAL.get(), new Item.Properties().stacksTo(1)));
-
 	public static final DeferredHolder<Item, Item> GIANT_FROG = ITEMS.register("giant_frog",
 		() -> new GiantFrogItem(CBBlocks.GIANT_FROG.get(), new Item.Properties().stacksTo(1)));
 

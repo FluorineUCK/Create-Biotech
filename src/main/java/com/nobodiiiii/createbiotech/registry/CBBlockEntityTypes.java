@@ -13,7 +13,6 @@ import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlockEntity
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlockEntity;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlockEntity;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusBlockEntity;
-import com.nobodiiiii.createbiotech.content.frogportal.GiantFrogPortalBlockEntity;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlockEntity;
 import com.nobodiiiii.createbiotech.content.fluid.NetherPortalFluidBlockEntity;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlockEntity;
@@ -184,12 +183,6 @@ public class CBBlockEntityTypes {
 		BLOCK_ENTITY_TYPES.register("allay_port",
 			() -> BlockEntityType.Builder
 				.of(AllayPortBlockEntity::new, CBBlocks.ALLAY_PORT.get())
-				.build(null));
-
-	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<GiantFrogPortalBlockEntity>> GIANT_FROG_PORTAL =
-		BLOCK_ENTITY_TYPES.register("giant_frog_portal",
-			() -> BlockEntityType.Builder
-				.of(GiantFrogPortalBlockEntity::new, CBBlocks.GIANT_FROG_PORTAL.get())
 				.build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<GiantFrogBlockEntity>> GIANT_FROG =

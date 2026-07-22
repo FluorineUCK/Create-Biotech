@@ -23,7 +23,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-final class FrogPortalBehaviour {
+public final class FrogPortalBehaviour {
 
 	static final EnumProperty<Direction.Axis> AXIS = BlockStateProperties.HORIZONTAL_AXIS;
 	private static final VoxelShape X_AXIS_AABB = Block.box(0.0, 0.0, 6.0, 16.0, 16.0, 10.0);
@@ -54,7 +54,7 @@ final class FrogPortalBehaviour {
 		return ((Portal) Blocks.NETHER_PORTAL).getLocalTransition();
 	}
 
-	static DimensionTransition transitionTo(ServerLevel level, Entity entity, Vec3 pos) {
+	public static DimensionTransition transitionTo(ServerLevel level, Entity entity, Vec3 pos) {
 		BlockPos ticketPos = BlockPos.containing(pos);
 		DimensionTransition.PostDimensionTransition postTransition =
 			DimensionTransition.PLAY_PORTAL_SOUND.then(transitionedEntity -> transitionedEntity.placePortalTicket(ticketPos));

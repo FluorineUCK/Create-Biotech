@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:block/cube_all",
   "textures": {
-    "all": "minecraft:block/orange_concrete"
+    "all": "create_biotech:block/frog_stomach_wall"
   }
 }

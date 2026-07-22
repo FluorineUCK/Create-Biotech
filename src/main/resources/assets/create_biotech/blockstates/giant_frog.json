@@ -1,8 +1,5 @@
 {
-  "variants": {
-    "facing=north": { "model": "create_biotech:block/giant_frog" },
-    "facing=east": { "model": "create_biotech:block/giant_frog", "y": 90 },
-    "facing=south": { "model": "create_biotech:block/giant_frog", "y": 180 },
-    "facing=west": { "model": "create_biotech:block/giant_frog", "y": 270 }
-  }
+  "multipart": [
+    { "apply": { "model": "create_biotech:block/giant_frog" } }
+  ]
 }

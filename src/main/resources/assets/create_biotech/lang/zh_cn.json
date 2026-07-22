@@ -1,9 +1,7 @@
 {
   "itemGroup.create_biotech.main": "机械动力：生物科技",
-  "block.create_biotech.giant_frog_portal": "巨型青蛙传送门",
-  "block.create_biotech.giant_frog_portal.tooltip.summary": "进入门中稍候，即可被吞入_青蛙胃袋_中的独立房间。破坏后重新放置可保留同一房间。",
   "block.create_biotech.giant_frog": "巨型青蛙",
-  "block.create_biotech.giant_frog.tooltip.summary": "_四倍体型_的青蛙方块。它不会移动，碰撞箱贴合身体，并会吃掉附近的_小型史莱姆_。",
+  "block.create_biotech.giant_frog.tooltip.summary": "_四倍体型_的青蛙方块。它会吃掉附近的_小型史莱姆_，也会吞下穿着全套_史莱姆套装_蹲下的玩家，并送入它的_青蛙胃袋_。",
   "block.create_biotech.frog_stomach_wall": "青蛙胃袋壁",
   "block.create_biotech.frog_esophagus": "青蛙食道",
   "block.create_biotech.evoker_enchanting_chamber": "唤魔者附魔室",

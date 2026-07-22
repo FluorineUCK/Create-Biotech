@@ -20,7 +20,6 @@ import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlock;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlock;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusBlock;
-import com.nobodiiiii.createbiotech.content.frogportal.GiantFrogPortalBlock;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
@@ -285,16 +284,6 @@ public class CBBlocks {
 
 	public static final Map<DyeColor, DeferredHolder<Block, BufferPadBlock>> BUFFER_PADS = registerBufferPads();
 	public static final DeferredHolder<Block, BufferPadBlock> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
-
-	public static final DeferredHolder<Block, GiantFrogPortalBlock> GIANT_FROG_PORTAL =
-		BLOCKS.register("giant_frog_portal",
-			() -> new GiantFrogPortalBlock(Block.Properties.of()
-				.sound(SoundType.SLIME_BLOCK)
-				.strength(2.0f)
-				.mapColor(MapColor.COLOR_GREEN)
-				.noCollission()
-				.lightLevel(state -> 11)
-				.noOcclusion()));
 
 	public static final DeferredHolder<Block, GiantFrogBlock> GIANT_FROG =
 		BLOCKS.register("giant_frog",
