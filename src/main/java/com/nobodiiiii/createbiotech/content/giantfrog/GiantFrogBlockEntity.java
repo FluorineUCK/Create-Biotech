@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.giantfrog;
 
 import java.util.Comparator;
 import java.util.List;
+import java.util.UUID;
 
 import com.nobodiiiii.createbiotech.content.frogportal.FrogPortalBehaviour;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachDimensions;
@@ -13,10 +14,13 @@ import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.entity.Entity;
@@ -34,13 +38,17 @@ import net.minecraft.world.phys.Vec3;
 public class GiantFrogBlockEntity extends BlockEntity {
 	private static final int EAT_INTERVAL = 20;
 	private static final int EAT_ANIMATION_TICKS = 20;
-	private static final double TONGUE_REACH = 1.25d;
+	private static final int CATCH_ANIMATION_TICKS = 6;
+	private static final int EAT_FINISH_TICKS = 10;
+	private static final double CAPTURE_BOX_SIZE = 2.0d;
+	private static final double TONGUE_PULL_SPEED = 0.75d;
 
 	private int eatCooldown;
 	private int eatAnimationTicks;
 	private int eatAnimationAge;
 	private boolean hasSpace;
 	private long spaceIndex = -1L;
+	private PendingEat pendingEat;
 
 	public GiantFrogBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.GIANT_FROG.get(), pos, state);
@@ -53,58 +61,143 @@ public class GiantFrogBlockEntity extends BlockEntity {
 			return;
 		}
 
+		if (be.pendingEat != null) {
+			be.tickPendingEat(level, pos, state);
+			return;
+		}
+
 		if (be.eatCooldown > 0) {
 			be.eatCooldown--;
 			return;
 		}
 
 		be.eatCooldown = EAT_INTERVAL;
-		if (be.tryEatPlayer(level, pos))
+		if (be.tryStartEatingPlayer(level, pos, state))
 			return;
-		be.tryEatSmallSlime(level, pos);
+		be.tryStartEatingSmallSlime(level, pos, state);
 	}
 
-	private boolean tryEatPlayer(Level level, BlockPos pos) {
-		Player player = findSlimeDisguisedPlayer(level, pos);
+	private boolean tryStartEatingPlayer(Level level, BlockPos pos, BlockState state) {
+		Player player = findSlimeDisguisedPlayer(level, pos, state);
 		if (player == null)
 			return false;
 		if (!(level instanceof ServerLevel serverLevel))
 			return false;
-		ServerLevel frogLevel = level.getServer().getLevel(FrogStomachDimensions.FROG_STOMACH);
-		if (frogLevel == null)
-			return false;
 
-		long index = ensureRoom(level.getServer(), frogLevel);
-		FrogStomachSavedData.get(level.getServer())
-			.setReturn(player.getUUID(), index, level.dimension(), player.position());
-
-		playEatEffects(serverLevel, pos);
-		Entity changed = player.changeDimension(FrogPortalBehaviour.transitionTo(frogLevel, player,
-			Vec3.atBottomCenterOf(FrogStomachSpace.spawnPos(index))));
-		if (changed != null)
-			changed.setPortalCooldown();
+		pendingEat = PendingEat.player(player, level.dimension());
+		playTongueEffects(serverLevel, pos);
 		return true;
 	}
 
-	private void tryEatSmallSlime(Level level, BlockPos pos) {
-		Slime slime = findSmallSlime(level, pos);
+	private void tickPendingEat(Level level, BlockPos pos, BlockState state) {
+		if (!(level instanceof ServerLevel serverLevel)) {
+			pendingEat = null;
+			return;
+		}
+
+		Entity target = findPendingTarget(serverLevel, pendingEat);
+		if (pendingEat.phase == PendingEatPhase.CATCH) {
+			if (target == null || !target.isAlive()) {
+				pendingEat = null;
+				return;
+			}
+
+			pullTargetTowardMouth(target, pos, state);
+			pendingEat.age++;
+			if (pendingEat.age < CATCH_ANIMATION_TICKS)
+				return;
+
+			PendingEat eat = pendingEat;
+			eat.phase = PendingEatPhase.EAT;
+			eat.age = 0;
+			playEatSound(serverLevel, pos);
+			finishPendingEat(serverLevel, eat, target);
+			return;
+		}
+
+		pendingEat.age++;
+		if (pendingEat.age >= EAT_FINISH_TICKS)
+			pendingEat = null;
+	}
+
+	private boolean tryStartEatingSmallSlime(Level level, BlockPos pos, BlockState state) {
+		Slime slime = findSmallSlime(level, pos, state);
 		if (slime == null)
+			return false;
+		if (!(level instanceof ServerLevel serverLevel))
+			return false;
+
+		pendingEat = PendingEat.smallSlime(slime);
+		playTongueEffects(serverLevel, pos);
+		return true;
+	}
+
+	private void finishPendingEat(ServerLevel level, PendingEat eat, Entity target) {
+		switch (eat.type) {
+			case SMALL_SLIME -> finishEatingSmallSlime(level, target);
+			case SLIME_ARMORED_PLAYER -> {
+				if (target instanceof ServerPlayer player)
+					finishEatingPlayer(level, player, eat);
+			}
+		}
+	}
+
+	private void finishEatingSmallSlime(ServerLevel level, Entity target) {
+		if (!(target instanceof Slime slime) || !slime.isAlive())
 			return;
 
 		Vec3 dropPos = slime.position();
 		slime.discard();
 		level.addFreshEntity(new ItemEntity(level, dropPos.x, dropPos.y, dropPos.z, new ItemStack(Items.SLIME_BALL)));
-
-		playEatEffects(level, pos);
 	}
 
-	private void playEatEffects(Level level, BlockPos pos) {
+	private void finishEatingPlayer(ServerLevel level, ServerPlayer player, PendingEat eat) {
+		if (eat.returnDimension == null || eat.returnPos == null)
+			return;
+
+		MinecraftServer server = level.getServer();
+		ServerLevel frogLevel = server.getLevel(FrogStomachDimensions.FROG_STOMACH);
+		if (frogLevel == null)
+			return;
+
+		long index = ensureRoom(server, frogLevel);
+		FrogStomachSavedData.get(server)
+			.setReturn(player.getUUID(), index, eat.returnDimension, eat.returnPos);
+
+		Entity changed = player.changeDimension(FrogPortalBehaviour.transitionTo(frogLevel, player,
+			Vec3.atBottomCenterOf(FrogStomachSpace.spawnPos(index))));
+		if (changed != null)
+			changed.setPortalCooldown();
+	}
+
+	private static Entity findPendingTarget(ServerLevel level, PendingEat eat) {
+		if (eat.type == PendingEatType.SLIME_ARMORED_PLAYER)
+			return level.getServer()
+				.getPlayerList()
+				.getPlayer(eat.uuid);
+		return level.getEntity(eat.uuid);
+	}
+
+	private static void pullTargetTowardMouth(Entity target, BlockPos pos, BlockState state) {
+		Vec3 direction = target.position().vectorTo(getMouthPos(pos, state));
+		target.setDeltaMovement(direction.lengthSqr() < 1.0E-7d
+			? Vec3.ZERO
+			: direction.normalize()
+				.scale(TONGUE_PULL_SPEED));
+		target.hasImpulse = true;
+		target.hurtMarked = true;
+	}
+
+	private void playTongueEffects(Level level, BlockPos pos) {
 		level.playSound(null, pos, SoundEvents.FROG_TONGUE, SoundSource.NEUTRAL, 1.0f,
-			0.9f + level.random.nextFloat() * 0.2f);
-		level.playSound(null, pos, SoundEvents.FROG_EAT, SoundSource.NEUTRAL, 1.0f,
 			0.9f + level.random.nextFloat() * 0.2f);
 		if (level instanceof ServerLevel serverLevel)
 			CBPackets.sendToTrackingChunk(new GiantFrogEatPacket(pos), serverLevel, pos);
+	}
+
+	private void playEatSound(Level level, BlockPos pos) {
+		level.playSound(null, pos, SoundEvents.FROG_EAT, SoundSource.NEUTRAL, 1.0f,
+			0.9f + level.random.nextFloat() * 0.2f);
 	}
 
 	public void startEatAnimation() {
@@ -153,9 +246,9 @@ public class GiantFrogBlockEntity extends BlockEntity {
 		setChanged();
 	}
 
-	private static Slime findSmallSlime(Level level, BlockPos pos) {
-		AABB bounds = GiantFrogBlock.getBodyBounds(pos).inflate(TONGUE_REACH, 0.5d, TONGUE_REACH);
-		Vec3 frogCenter = Vec3.atCenterOf(pos);
+	private static Slime findSmallSlime(Level level, BlockPos pos, BlockState state) {
+		AABB bounds = getCaptureBounds(pos, state);
+		Vec3 frogCenter = getCaptureCenter(bounds);
 		List<Slime> slimes = level.getEntitiesOfClass(Slime.class, bounds, GiantFrogBlockEntity::canEat);
 		return slimes.stream()
 			.min(Comparator.comparingDouble(slime -> slime.distanceToSqr(frogCenter)))
@@ -166,9 +259,9 @@ public class GiantFrogBlockEntity extends BlockEntity {
 		return slime.isAlive() && slime.getSize() == 1 && !BasinEntityProcessing.isCapturedSmallSlime(slime);
 	}
 
-	private static Player findSlimeDisguisedPlayer(Level level, BlockPos pos) {
-		AABB bounds = GiantFrogBlock.getBodyBounds(pos).inflate(TONGUE_REACH, 0.5d, TONGUE_REACH);
-		Vec3 frogCenter = Vec3.atCenterOf(pos);
+	private static Player findSlimeDisguisedPlayer(Level level, BlockPos pos, BlockState state) {
+		AABB bounds = getCaptureBounds(pos, state);
+		Vec3 frogCenter = getCaptureCenter(bounds);
 		List<Player> players = level.getEntitiesOfClass(Player.class, bounds, GiantFrogBlockEntity::canEatPlayer);
 		return players.stream()
 			.min(Comparator.comparingDouble(player -> player.distanceToSqr(frogCenter)))
@@ -178,6 +271,53 @@ public class GiantFrogBlockEntity extends BlockEntity {
 	private static boolean canEatPlayer(Player player) {
 		return player.isAlive() && !player.isSpectator() && player.canUsePortal(false)
 			&& SlimeArmorHandler.testForSlimeStealth(player);
+	}
+
+	private static AABB getCaptureBounds(BlockPos pos, BlockState state) {
+		AABB body = GiantFrogBlock.getBodyBounds(pos, state);
+		Direction facing = getFacing(state);
+		double centerX = (body.minX + body.maxX) * 0.5d;
+		double centerZ = (body.minZ + body.maxZ) * 0.5d;
+		double minY = body.minY;
+		double maxY = minY + CAPTURE_BOX_SIZE;
+		double halfSize = CAPTURE_BOX_SIZE / 2.0d;
+
+		return switch (facing) {
+			case NORTH -> new AABB(centerX - halfSize, minY, body.minZ - CAPTURE_BOX_SIZE,
+				centerX + halfSize, maxY, body.minZ);
+			case SOUTH -> new AABB(centerX - halfSize, minY, body.maxZ,
+				centerX + halfSize, maxY, body.maxZ + CAPTURE_BOX_SIZE);
+			case WEST -> new AABB(body.minX - CAPTURE_BOX_SIZE, minY, centerZ - halfSize,
+				body.minX, maxY, centerZ + halfSize);
+			case EAST -> new AABB(body.maxX, minY, centerZ - halfSize,
+				body.maxX + CAPTURE_BOX_SIZE, maxY, centerZ + halfSize);
+			default -> body;
+		};
+	}
+
+	private static Vec3 getCaptureCenter(AABB bounds) {
+		return new Vec3((bounds.minX + bounds.maxX) * 0.5d, (bounds.minY + bounds.maxY) * 0.5d,
+			(bounds.minZ + bounds.maxZ) * 0.5d);
+	}
+
+	private static Vec3 getMouthPos(BlockPos pos, BlockState state) {
+		AABB body = GiantFrogBlock.getBodyBounds(pos, state);
+		Direction facing = getFacing(state);
+		double centerX = (body.minX + body.maxX) * 0.5d;
+		double centerZ = (body.minZ + body.maxZ) * 0.5d;
+		double mouthY = body.minY + Math.min(0.75d, (body.maxY - body.minY) * 0.65d);
+
+		return switch (facing) {
+			case NORTH -> new Vec3(centerX, mouthY, body.minZ);
+			case SOUTH -> new Vec3(centerX, mouthY, body.maxZ);
+			case WEST -> new Vec3(body.minX, mouthY, centerZ);
+			case EAST -> new Vec3(body.maxX, mouthY, centerZ);
+			default -> body.getCenter();
+		};
+	}
+
+	private static Direction getFacing(BlockState state) {
+		return state.hasProperty(GiantFrogBlock.FACING) ? state.getValue(GiantFrogBlock.FACING) : Direction.NORTH;
 	}
 
 	private static int levelRandomOffset(BlockPos pos) {
@@ -196,5 +336,40 @@ public class GiantFrogBlockEntity extends BlockEntity {
 		super.loadAdditional(tag, registries);
 		hasSpace = tag.getBoolean("HasSpace");
 		spaceIndex = tag.getLong("SpaceIndex");
+	}
+
+	private enum PendingEatType {
+		SMALL_SLIME,
+		SLIME_ARMORED_PLAYER
+	}
+
+	private enum PendingEatPhase {
+		CATCH,
+		EAT
+	}
+
+	private static class PendingEat {
+		private final UUID uuid;
+		private final PendingEatType type;
+		private final ResourceKey<Level> returnDimension;
+		private final Vec3 returnPos;
+		private PendingEatPhase phase = PendingEatPhase.CATCH;
+		private int age;
+
+		private PendingEat(UUID uuid, PendingEatType type, ResourceKey<Level> returnDimension, Vec3 returnPos) {
+			this.uuid = uuid;
+			this.type = type;
+			this.returnDimension = returnDimension;
+			this.returnPos = returnPos;
+		}
+
+		private static PendingEat smallSlime(Slime slime) {
+			return new PendingEat(slime.getUUID(), PendingEatType.SMALL_SLIME, null, null);
+		}
+
+		private static PendingEat player(Player player, ResourceKey<Level> returnDimension) {
+			return new PendingEat(player.getUUID(), PendingEatType.SLIME_ARMORED_PLAYER, returnDimension,
+				player.position());
+		}
 	}
 }

@@ -49,20 +49,31 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	public static final IntegerProperty Z_OFFSET = IntegerProperty.create("z", 0, 2);
 
 	public static final float FROG_SCALE = 4.0f;
-	public static final double FROG_ENTITY_WIDTH = 0.5d;
-	public static final double FROG_ENTITY_HEIGHT = 0.5d;
-	public static final double BODY_WIDTH = FROG_ENTITY_WIDTH * FROG_SCALE;
-	public static final double BODY_HEIGHT = FROG_ENTITY_HEIGHT * FROG_SCALE;
-
+	private static final double PIXELS_PER_BLOCK = 16.0d;
 	private static final int OCCUPIED_WIDTH = 3;
 	private static final int OCCUPIED_HEIGHT = 2;
 	private static final int CENTER_OFFSET = OCCUPIED_WIDTH / 2;
-	private static final double PIXELS_PER_BLOCK = 16.0d;
+	private static final int HORIZONTAL_DIRECTIONS = 4;
+	private static final double FOOTPRINT_PIXELS = OCCUPIED_WIDTH * PIXELS_PER_BLOCK;
+	private static final double MODEL_ORIGIN_X = FOOTPRINT_PIXELS / 2.0d;
+	private static final double MODEL_ORIGIN_Y = 8.0d;
+	private static final double MODEL_ORIGIN_Z = FOOTPRINT_PIXELS / 2.0d;
+	private static final double FACING_OFFSET_CORRECTION = 12.0d;
 
-	private static final double BODY_MIN = 0.5d - BODY_WIDTH / 2.0d;
-	private static final double BODY_MAX = 0.5d + BODY_WIDTH / 2.0d;
-	private static final VoxelShape[] BODY_SHAPES = makeBodyShapes();
-	private static final AABB BODY_BOUNDS = new AABB(BODY_MIN, 0.0d, BODY_MIN, BODY_MAX, BODY_HEIGHT, BODY_MAX);
+	public static final double BODY_WIDTH = 28.0d / PIXELS_PER_BLOCK;
+	public static final double BODY_LENGTH = 36.0d / PIXELS_PER_BLOCK;
+	public static final double BODY_HEIGHT = 20.0d / PIXELS_PER_BLOCK;
+
+	private static final PixelBox BODY_BOX = modelBox(-14.0d, -4.0d, -28.0d, 28.0d, 20.0d, 36.0d);
+	private static final PixelBox[] COLLISION_BOXES = {
+		BODY_BOX,
+		modelBox(-20.0d, -8.0d, -26.0d, 8.0d, 12.0d, 12.0d),
+		modelBox(12.0d, -8.0d, -26.0d, 8.0d, 12.0d, 12.0d),
+		modelBox(-22.0d, -8.0d, -4.0d, 12.0d, 12.0d, 16.0d),
+		modelBox(10.0d, -8.0d, -4.0d, 12.0d, 12.0d, 16.0d)
+	};
+	private static final VoxelShape[] COLLISION_SHAPES = makeCollisionShapes();
+	private static final AABB BODY_BOUNDS = BODY_BOX.boundsForAllFacings();
 	private static final ThreadLocal<Boolean> PLACING_STRUCTURE = ThreadLocal.withInitial(() -> false);
 	private static final ThreadLocal<Boolean> REMOVING_STRUCTURE = ThreadLocal.withInitial(() -> false);
 
@@ -216,6 +227,13 @@ public class GiantFrogBlock extends BaseEntityBlock {
 		return BODY_BOUNDS.move(pos);
 	}
 
+	public static AABB getBodyBounds(BlockPos pos, BlockState state) {
+		Direction facing = state.hasProperty(FACING) ? state.getValue(FACING) : Direction.NORTH;
+		return BODY_BOX.rotateTo(facing)
+			.offsetAwayFrom(facing, FACING_OFFSET_CORRECTION)
+			.toAabb(pos);
+	}
+
 	private static boolean canPlaceAt(Level level, BlockPos mainPos, BlockPlaceContext context) {
 		if (mainPos.getY() + OCCUPIED_HEIGHT > level.getMaxBuildHeight())
 			return false;
@@ -294,31 +312,67 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	}
 
 	private static VoxelShape getBodyShape(BlockState state) {
-		return BODY_SHAPES[shapeIndex(state.getValue(X_OFFSET), state.getValue(Y_OFFSET), state.getValue(Z_OFFSET))];
+		return COLLISION_SHAPES[shapeIndex(state.getValue(FACING), state.getValue(X_OFFSET),
+			state.getValue(Y_OFFSET), state.getValue(Z_OFFSET))];
 	}
 
-	private static VoxelShape[] makeBodyShapes() {
-		VoxelShape[] shapes = new VoxelShape[OCCUPIED_WIDTH * OCCUPIED_HEIGHT * OCCUPIED_WIDTH];
-		forEachOccupiedOffset((x, y, z) -> shapes[shapeIndex(x, y, z)] = createBodyShape(x, y, z));
+	private static VoxelShape[] makeCollisionShapes() {
+		VoxelShape[] shapes = new VoxelShape[HORIZONTAL_DIRECTIONS * OCCUPIED_WIDTH * OCCUPIED_HEIGHT
+			* OCCUPIED_WIDTH];
+		for (Direction facing : Direction.Plane.HORIZONTAL)
+			forEachOccupiedOffset((x, y, z) ->
+				shapes[shapeIndex(facing, x, y, z)] = createCollisionShape(facing, x, y, z));
 		return shapes;
 	}
 
-	private static VoxelShape createBodyShape(int x, int y, int z) {
-		double partX = x - CENTER_OFFSET;
-		double partZ = z - CENTER_OFFSET;
-		double minX = clampPixel(BODY_MIN - partX);
-		double maxX = clampPixel(BODY_MAX - partX);
-		double minY = clampPixel(-y);
-		double maxY = clampPixel(BODY_HEIGHT - y);
-		double minZ = clampPixel(BODY_MIN - partZ);
-		double maxZ = clampPixel(BODY_MAX - partZ);
+	private static VoxelShape createCollisionShape(Direction facing, int x, int y, int z) {
+		VoxelShape shape = Shapes.empty();
+		for (PixelBox box : COLLISION_BOXES) {
+			VoxelShape part = createPartShape(box.rotateTo(facing).offsetAwayFrom(facing, FACING_OFFSET_CORRECTION),
+				x, y, z);
+			if (!part.isEmpty())
+				shape = Shapes.or(shape, part);
+		}
+		return shape.optimize();
+	}
+
+	private static VoxelShape createPartShape(PixelBox box, int x, int y, int z) {
+		double partX = x * PIXELS_PER_BLOCK;
+		double partY = y * PIXELS_PER_BLOCK;
+		double partZ = z * PIXELS_PER_BLOCK;
+		double minX = clampMinPixel(box.minX - partX, x);
+		double maxX = clampMaxPixel(box.maxX - partX, x);
+		double minY = clampPixel(box.minY - partY);
+		double maxY = clampPixel(box.maxY - partY);
+		double minZ = clampMinPixel(box.minZ - partZ, z);
+		double maxZ = clampMaxPixel(box.maxZ - partZ, z);
 		if (minX >= maxX || minY >= maxY || minZ >= maxZ)
 			return Shapes.empty();
 		return Block.box(minX, minY, minZ, maxX, maxY, maxZ);
 	}
 
-	private static double clampPixel(double blocks) {
-		return Math.max(0.0d, Math.min(PIXELS_PER_BLOCK, blocks * PIXELS_PER_BLOCK));
+	private static double clampPixel(double pixels) {
+		return Math.max(0.0d, Math.min(PIXELS_PER_BLOCK, pixels));
+	}
+
+	private static double clampMinPixel(double pixels, int offset) {
+		return offset == 0 ? pixels : Math.max(0.0d, pixels);
+	}
+
+	private static double clampMaxPixel(double pixels, int offset) {
+		return offset == OCCUPIED_WIDTH - 1 ? pixels : Math.min(PIXELS_PER_BLOCK, pixels);
+	}
+
+	private static PixelBox modelBox(double originX, double originY, double originZ, double sizeX, double sizeY,
+		double sizeZ) {
+		double minX = MODEL_ORIGIN_X + originX;
+		double minY = MODEL_ORIGIN_Y + originY;
+		double minZ = MODEL_ORIGIN_Z - originZ - sizeZ;
+		return new PixelBox(minX, minY, minZ, minX + sizeX, minY + sizeY, MODEL_ORIGIN_Z - originZ);
+	}
+
+	private static int shapeIndex(Direction facing, int x, int y, int z) {
+		return facing.get2DDataValue() * OCCUPIED_WIDTH * OCCUPIED_HEIGHT * OCCUPIED_WIDTH + shapeIndex(x, y, z);
 	}
 
 	private static int shapeIndex(int x, int y, int z) {
@@ -335,5 +389,58 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	@FunctionalInterface
 	private interface OffsetConsumer {
 		void accept(int x, int y, int z);
+	}
+
+	private record PixelBox(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+		PixelBox rotateTo(Direction facing) {
+			return switch (facing) {
+				case NORTH -> new PixelBox(FOOTPRINT_PIXELS - maxX, minY, FOOTPRINT_PIXELS - maxZ,
+					FOOTPRINT_PIXELS - minX, maxY, FOOTPRINT_PIXELS - minZ);
+				case EAST -> new PixelBox(minZ, minY, FOOTPRINT_PIXELS - maxX, maxZ, maxY,
+					FOOTPRINT_PIXELS - minX);
+				case WEST -> new PixelBox(FOOTPRINT_PIXELS - maxZ, minY, minX, FOOTPRINT_PIXELS - minZ, maxY, maxX);
+				default -> this;
+			};
+		}
+
+		AABB boundsForAllFacings() {
+			double minX = Double.POSITIVE_INFINITY;
+			double minY = Double.POSITIVE_INFINITY;
+			double minZ = Double.POSITIVE_INFINITY;
+			double maxX = Double.NEGATIVE_INFINITY;
+			double maxY = Double.NEGATIVE_INFINITY;
+			double maxZ = Double.NEGATIVE_INFINITY;
+			for (Direction facing : Direction.Plane.HORIZONTAL) {
+				PixelBox box = rotateTo(facing).offsetAwayFrom(facing, FACING_OFFSET_CORRECTION);
+				minX = Math.min(minX, box.minX);
+				minY = Math.min(minY, box.minY);
+				minZ = Math.min(minZ, box.minZ);
+				maxX = Math.max(maxX, box.maxX);
+				maxY = Math.max(maxY, box.maxY);
+				maxZ = Math.max(maxZ, box.maxZ);
+			}
+			return new AABB(minX / PIXELS_PER_BLOCK - CENTER_OFFSET, minY / PIXELS_PER_BLOCK,
+				minZ / PIXELS_PER_BLOCK - CENTER_OFFSET, maxX / PIXELS_PER_BLOCK - CENTER_OFFSET,
+				maxY / PIXELS_PER_BLOCK, maxZ / PIXELS_PER_BLOCK - CENTER_OFFSET);
+		}
+
+		PixelBox offsetAwayFrom(Direction facing, double pixels) {
+			return switch (facing) {
+				case NORTH -> new PixelBox(minX, minY, minZ + pixels, maxX, maxY, maxZ + pixels);
+				case SOUTH -> new PixelBox(minX, minY, minZ - pixels, maxX, maxY, maxZ - pixels);
+				case EAST -> new PixelBox(minX - pixels, minY, minZ, maxX - pixels, maxY, maxZ);
+				case WEST -> new PixelBox(minX + pixels, minY, minZ, maxX + pixels, maxY, maxZ);
+				default -> this;
+			};
+		}
+
+		AABB toAabb(BlockPos pos) {
+			return new AABB(pos.getX() + minX / PIXELS_PER_BLOCK - CENTER_OFFSET,
+				pos.getY() + minY / PIXELS_PER_BLOCK,
+				pos.getZ() + minZ / PIXELS_PER_BLOCK - CENTER_OFFSET,
+				pos.getX() + maxX / PIXELS_PER_BLOCK - CENTER_OFFSET,
+				pos.getY() + maxY / PIXELS_PER_BLOCK,
+				pos.getZ() + maxZ / PIXELS_PER_BLOCK - CENTER_OFFSET);
+		}
 	}
 }
