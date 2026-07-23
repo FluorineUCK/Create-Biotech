@@ -2,14 +2,20 @@
 // 由思索者自动生成 — 请勿手动修改；下次导出时会被覆盖。
 package com.nobodiiiii.createbiotech.ponder.generated.scenes;
 
+import com.nobodiiiii.createbiotech.ponder.PonderSupportExt;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderAttribution;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderSupport;
+import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
+import com.simibubi.create.foundation.ponder.CreateSceneBuilder;
+import com.simibubi.create.infrastructure.ponder.scenes.highLogistics.PonderHilo;
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.createmod.ponder.api.registration.PonderTagRegistrationHelper;
 import net.createmod.ponder.api.scene.SceneBuilder;
 import net.createmod.ponder.api.scene.SceneBuildingUtil;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 import java.util.Map;
 
@@ -57,9 +63,33 @@ public final class GeneratedShulkerPackager_2ca00f57 {
         scene.idle(10);
         GeneratedPonderSupport.modifyBlockEntity(scene, Map.ofEntries(Map.entry("powered", "false"), Map.entry("facing", "north"), Map.entry("linked", "true")), "{Active:0b,AnimationInward:1b,AnimationTicks:0,ComputerAddress:\"\",HasAttachedComputer:0b,HasComputerAddress:0b,HeldBox:{},InsertedBox:{},InteractionPoints:[],LastSummary:[],QueuedExitingPackages:[],ScrollValue:0,SignAddress:\"\"}", true, new BlockPos(0, 1, 2), new BlockPos(0, 1, 2));
         scene.idle(10);
-        GeneratedPonderSupport.showText(scene, "//显示链接器播放请求动画，潜影打包机打出潜影包裹包，等待并传送到另一个打包机中，另一个打包机播放收包动画，整体流程参考打包机实际逻辑", null, 60, null, true);
+        GeneratedPonderSupport.showText(scene, "收到请求后，潜影打包机会将包裹传送到选定的目标", new Vec3(0.5, 2.0, 2.5), 80, null, true);
         scene.addKeyframe();
-        scene.idle(130);
+
+        // Reuse Create's packager helpers so the tray, hatch, and package follow
+        // the same timing as the original Packager Ponder animation.
+        CreateSceneBuilder createScene = new CreateSceneBuilder(scene);
+        BlockPos sourcePackager = new BlockPos(0, 1, 2);
+        BlockPos targetPackager = new BlockPos(2, 1, 2);
+        ItemStack shulkerPackage = new ItemStack(CBItems.SHULKER_PACKAGE.get());
+
+        PonderHilo.linkEffect(createScene, new BlockPos(0, 1, 1));
+        scene.idle(10);
+
+        PonderHilo.packagerCreate(createScene, sourcePackager, shulkerPackage);
+        scene.idle(PackagerBlockEntity.CYCLE + 8);
+
+        // The target packager's section was moved two blocks to the right, so
+        // its transfer particles are emitted at the resulting visual position.
+        PonderSupportExt.emitParticles(scene, "minecraft:portal", new Vec3(0.5, 1.5, 3.15), Vec3.ZERO, 32.0f, 1);
+        PonderSupportExt.emitParticles(scene, "minecraft:portal", new Vec3(4.5, 1.5, 3.15), Vec3.ZERO, 32.0f, 1);
+        GeneratedPonderSupport.playSound(scene, "minecraft:entity.enderman.teleport", 0.8f, 1.0f, "blocks");
+        scene.idle(2);
+
+        PonderHilo.packagerClear(createScene, sourcePackager);
+        PonderHilo.packagerUnpack(createScene, targetPackager, shulkerPackage);
+        scene.idle(PackagerBlockEntity.CYCLE);
+        scene.idle(30);
         GeneratedPonderSupport.showText(scene, "潜影打包机适用于短距离传输，长距离传输可以使用悦灵驿站、货物蛙港、火车与邮箱等", new Vec3(2.5, 2.0, 0.5), 120, null, true);
         GeneratedPonderSupport.setBlock(scene, context, "create_biotech:allay_port", Map.ofEntries(Map.entry("facing", "north")), new BlockPos(3, 1, 0), null, "{AcceptsPackages:1b,AddressFilter:\"\",CarrierInventory:{Items:[],Size:1},Inventory:{Items:[],Size:18},ReturnMode:\"always_return\"}", false, false, "simultaneous", 20, 1, false, null, "down");
         GeneratedPonderSupport.setBlock(scene, context, "create:package_frogport", Map.ofEntries(Map.entry("waterlogged", "false"), Map.entry("facing", "east"), Map.entry("open", "false")), new BlockPos(2, 1, 0), null, "{AcceptsPackages:1b,AddressFilter:\"\",HasAttachedComputer:0b,Inventory:{Items:[],Size:18},Owner:[I;940439953,-167562164,-1601161573,-1389718966],PlacedYaw:0.0f}", false, false, "simultaneous", 20, 1, false, null, "down");
