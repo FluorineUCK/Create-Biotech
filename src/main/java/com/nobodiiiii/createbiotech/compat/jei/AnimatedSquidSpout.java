@@ -127,6 +127,7 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 		RenderSystem.depthMask(true);
 
 		try {
+			RenderSystem.setShader(GameRenderer::getParticleShader);
 			BufferBuilder builder = renderType.begin(Tesselator.getInstance(),
 				Minecraft.getInstance().getTextureManager());
 			VertexConsumer transformed = new PoseStackVertexConsumer(builder, poseStack.last().pose());
