@@ -1,5 +1,10 @@
 package com.nobodiiiii.createbiotech.content.ghasthotairballoon;
 
+import java.util.UUID;
+
+import javax.annotation.Nullable;
+
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 
 import net.minecraft.core.BlockPos;
@@ -12,24 +17,43 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 
 public class GhastBalloonMagnetTargetPacket {
 
-	private static final long NO_TARGET = Long.MIN_VALUE;
-
 	private final int entityId;
-	private final long targetPacked;
+	@Nullable
+	private final BlockPos targetPos;
+	@Nullable
+	private final UUID targetSubLevelId;
 
-	public GhastBalloonMagnetTargetPacket(int entityId, BlockPos target) {
+	public GhastBalloonMagnetTargetPacket(int entityId, @Nullable BlockPos target) {
+		this(entityId, target, null);
+	}
+
+	public GhastBalloonMagnetTargetPacket(int entityId, @Nullable BlockPos target,
+		@Nullable UUID targetSubLevelId) {
 		this.entityId = entityId;
-		this.targetPacked = target == null ? NO_TARGET : target.asLong();
+		this.targetPos = target;
+		this.targetSubLevelId = target == null ? null : targetSubLevelId;
 	}
 
 	public GhastBalloonMagnetTargetPacket(FriendlyByteBuf buffer) {
 		this.entityId = buffer.readVarInt();
-		this.targetPacked = buffer.readLong();
+		if (buffer.readBoolean()) {
+			this.targetPos = buffer.readBlockPos();
+			this.targetSubLevelId = buffer.readBoolean() ? buffer.readUUID() : null;
+		} else {
+			this.targetPos = null;
+			this.targetSubLevelId = null;
+		}
 	}
 
 	public void write(FriendlyByteBuf buffer) {
 		buffer.writeVarInt(entityId);
-		buffer.writeLong(targetPacked);
+		buffer.writeBoolean(targetPos != null);
+		if (targetPos == null)
+			return;
+		buffer.writeBlockPos(targetPos);
+		buffer.writeBoolean(targetSubLevelId != null);
+		if (targetSubLevelId != null)
+			buffer.writeUUID(targetSubLevelId);
 	}
 
 	public void handle(ServerPlayer player) {
@@ -50,16 +74,17 @@ public class GhastBalloonMagnetTargetPacket {
 		if (!(balloon.getVehicle() instanceof Ghast ghast) || !ghast.isAlive())
 			return;
 
-		if (targetPacked == NO_TARGET) {
+		if (targetPos == null) {
 			balloon.clearMagnetTarget();
 			return;
 		}
 
-		BlockPos targetPos = BlockPos.of(targetPacked);
+		// A replacement request is authoritative. If its target became invalid between the
+		// client scan and server handling, do not keep steering toward the previous station.
+		balloon.clearMagnetTarget();
 		if (!level.isLoaded(targetPos))
 			return;
-		if (ghast.position().distanceToSqr(targetPos.getX() + 0.5, targetPos.getY() + 1, targetPos.getZ() + 0.5)
-			> getMaxDistanceSqr())
+		if (!SubLevelCompat.matchesSpace(level, targetPos, targetSubLevelId))
 			return;
 		BlockEntity be = level.getBlockEntity(targetPos);
 		if (!(be instanceof GhastHotAirBalloonAssemblyStationBlockEntity station))
@@ -67,7 +92,12 @@ public class GhastBalloonMagnetTargetPacket {
 		if (!station.isReadyToAccept())
 			return;
 
-		balloon.setMagnetTarget(targetPos);
+		var targetWorld = GhastHotAirBalloonAssemblyStationBlock.getGhastDockingWorldPosition(level, targetPos);
+		if (ghast.position().distanceToSqr(targetWorld)
+			> getMaxDistanceSqr())
+			return;
+
+		balloon.setMagnetTarget(targetPos, targetSubLevelId);
 	}
 
 	private static double getMaxDistanceSqr() {

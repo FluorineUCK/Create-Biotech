@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
@@ -70,7 +71,8 @@ public class PowerBeltConversionHandler {
 		if (beltChain.size() < 2)
 			return false;
 		for (BlockPos beltPos : beltChain)
-			if (!level.isLoaded(beltPos) || !isHorizontalBelt(level.getBlockState(beltPos)))
+			if (!level.isLoaded(beltPos) || !SubLevelCompat.sameSpace(level, controllerPos, beltPos)
+				|| !isHorizontalBelt(level.getBlockState(beltPos)))
 				return false;
 
 		BeltBlockEntity controllerBE = BeltHelper.getSegmentBE(level, controllerPos);
@@ -115,7 +117,7 @@ public class PowerBeltConversionHandler {
 		BlockPos currentPos = pos;
 		int limit = 1000;
 		while (limit-- > 0) {
-			if (!level.isLoaded(currentPos))
+			if (!level.isLoaded(currentPos) || !SubLevelCompat.sameSpace(level, pos, currentPos))
 				return null;
 			BlockState currentState = level.getBlockState(currentPos);
 			if (!isHorizontalBelt(currentState))
@@ -124,6 +126,8 @@ public class PowerBeltConversionHandler {
 			BlockPos nextSegmentPosition = BeltBlock.nextSegmentPosition(currentState, currentPos, false);
 			if (nextSegmentPosition == null)
 				return currentPos;
+			if (!SubLevelCompat.sameSpace(level, pos, nextSegmentPosition))
+				return null;
 			currentPos = nextSegmentPosition;
 		}
 		return null;

@@ -37,10 +37,10 @@ public abstract class CameraMixin {
 		if (player != Minecraft.getInstance().player)
 			return;
 
-		double yOffset = ShulkerTeleporterClientEvents.getFirstPersonCameraYOffset(player, partialTick);
-		if (yOffset == 0.0d)
+		Vec3 offset = ShulkerTeleporterClientEvents.getFirstPersonCameraOffset(player, partialTick);
+		if (offset.equals(Vec3.ZERO))
 			return;
 
-		setPosition(getPosition().add(0.0d, yOffset, 0.0d));
+		setPosition(getPosition().add(offset));
 	}
 }

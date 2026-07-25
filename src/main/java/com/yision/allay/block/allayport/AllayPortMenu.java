@@ -49,6 +49,14 @@ public class AllayPortMenu extends PackagePortMenu {
 		return new AllayPortMenu(AllMenuTypes.ALLAY_PORT.get(), id, inv, blockEntity);
 	}
 
+	public BlockPos getBlockPos() {
+		return contentHolder.getBlockPos();
+	}
+
+	public AllayPortBlockEntity getBlockEntity() {
+		return (AllayPortBlockEntity) contentHolder;
+	}
+
 	@Override
 	protected void addSlots() {
 		SmartInventory inventory = contentHolder.inventory;

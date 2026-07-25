@@ -1,0 +1,12 @@
+{
+  "replace": false,
+  "values": [
+    "#create_biotech:buffer_pads",
+    "#create_biotech:belts",
+    "create_biotech:ghast_helm",
+    "create_biotech:ghast_hot_air_balloon_assembly_station",
+    "create_biotech:bone_ratchet",
+    "create_biotech:universal_joint",
+    "create_biotech:slime_clutch"
+  ]
+}

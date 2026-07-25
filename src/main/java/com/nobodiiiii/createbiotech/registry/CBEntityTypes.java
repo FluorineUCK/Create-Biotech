@@ -51,7 +51,10 @@ public class CBEntityTypes {
 			EntityType.Builder<GhastHotAirBalloonSeatEntity> builder = EntityType.Builder
 				.<GhastHotAirBalloonSeatEntity>of(GhastHotAirBalloonSeatEntity::new, MobCategory.MISC)
 				.setTrackingRange(5)
-				.setUpdateInterval(Integer.MAX_VALUE)
+				// A station in a moving sublevel projects to a different outer-world position
+				// every tick. The ghast is this invisible entity's passenger, so the client must
+				// receive the seat's current position instead of riding a stale spawn position.
+				.setUpdateInterval(1)
 				.setShouldReceiveVelocityUpdates(false);
 			GhastHotAirBalloonSeatEntity.build(builder);
 			return builder.build("ghast_hot_air_balloon_seat");

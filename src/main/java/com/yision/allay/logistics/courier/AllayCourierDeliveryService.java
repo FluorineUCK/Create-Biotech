@@ -1,5 +1,6 @@
 package com.yision.allay.logistics.courier;
 
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.yision.allay.block.allayport.AllayPortBlockEntity;
 import com.yision.allay.entity.courier.AllayCourierEntity;
 import com.yision.allay.registry.AllItems;
@@ -55,13 +56,15 @@ public final class AllayCourierDeliveryService {
 		AllayCourierReturnMode returnMode,
 		@Nullable ResourceKey<Level> targetDimension,
 		@Nullable BlockPos targetAllayPortPos,
+		@Nullable UUID targetAllayPortSubLevelId,
 		@Nullable UUID targetPlayerId,
 		@Nullable ServerLevel currentLevel,
 		Vec3 currentPosition,
 		Vec3 landingTarget
 	) {
 		ServerLevel targetLevel = resolveTargetLevel(server, targetDimension, targetAllayPortPos, targetPlayerId);
-		AllayPortBlockEntity targetAllayPort = resolveTargetAllayPort(targetLevel, targetAllayPortPos);
+		AllayPortBlockEntity targetAllayPort = resolveTargetAllayPort(targetLevel, targetAllayPortPos,
+			targetAllayPortSubLevelId);
 		ServerPlayer targetPlayer = targetAllayPort == null ? resolveTargetPlayer(server, targetPlayerId, targetAllayPort) : null;
 
 		switch (mission) {
@@ -194,9 +197,10 @@ public final class AllayCourierDeliveryService {
 	}
 
 	public static @Nullable AllayPortBlockEntity resolveTargetAllayPort(
-		@Nullable ServerLevel level, @Nullable BlockPos pos
+		@Nullable ServerLevel level, @Nullable BlockPos pos, @Nullable UUID subLevelId
 	) {
 		if (level == null || pos == null) return null;
+		if (!SubLevelCompat.matchesSpace(level, pos, subLevelId)) return null;
 		return level.getBlockEntity(pos) instanceof AllayPortBlockEntity be ? be : null;
 	}
 
