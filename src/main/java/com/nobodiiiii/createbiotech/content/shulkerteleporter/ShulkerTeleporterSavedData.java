@@ -6,6 +6,9 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
+
+import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
@@ -38,8 +41,11 @@ public class ShulkerTeleporterSavedData extends SavedData {
 			unregister(location);
 			return;
 		}
+		boolean removedStaleLocation = addresses.keySet()
+			.removeIf(existing -> !existing.equals(location) && existing.dimension().equals(location.dimension())
+				&& existing.pos().equals(location.pos()));
 		String previous = addresses.put(location, address);
-		if (!Objects.equals(previous, address))
+		if (removedStaleLocation || !Objects.equals(previous, address))
 			setDirty();
 	}
 
@@ -66,14 +72,21 @@ public class ShulkerTeleporterSavedData extends SavedData {
 
 	private static Comparator<Location> targetOrder(Location source) {
 		return Comparator
-			.comparing((Location target) -> !target.dimension().equals(source.dimension()))
-			.thenComparingDouble(target -> target.dimension().equals(source.dimension())
+			.comparing((Location target) -> !sameLogicalSpace(source, target))
+			.thenComparing(target -> !target.dimension().equals(source.dimension()))
+			.thenComparingDouble(target -> sameLogicalSpace(source, target)
 				? target.pos().distSqr(source.pos())
 				: 0)
 			.thenComparing(target -> target.dimension().location().toString())
+			.thenComparing(target -> target.subLevelId() == null ? "" : target.subLevelId().toString())
 			.thenComparingInt(target -> target.pos().getX())
 			.thenComparingInt(target -> target.pos().getY())
 			.thenComparingInt(target -> target.pos().getZ());
+	}
+
+	private static boolean sameLogicalSpace(Location first, Location second) {
+		return first.dimension().equals(second.dimension())
+			&& Objects.equals(first.subLevelId(), second.subLevelId());
 	}
 
 	@Override
@@ -84,6 +97,8 @@ public class ShulkerTeleporterSavedData extends SavedData {
 			entryTag.putString("Address", entry.getValue());
 			entryTag.putString("Dimension", entry.getKey().dimension().location().toString());
 			entryTag.putLong("Pos", entry.getKey().pos().asLong());
+			if (entry.getKey().subLevelId() != null)
+				entryTag.putUUID("SubLevel", entry.getKey().subLevelId());
 			entries.add(entryTag);
 		}
 		tag.put(ENTRIES_TAG, entries);
@@ -101,11 +116,12 @@ public class ShulkerTeleporterSavedData extends SavedData {
 			try {
 				ResourceLocation dimensionId = ResourceLocation.parse(entryTag.getString("Dimension"));
 				ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION, dimensionId);
-				data.addresses.put(new Location(dimension, BlockPos.of(entryTag.getLong("Pos"))), address);
+				UUID subLevelId = entryTag.hasUUID("SubLevel") ? entryTag.getUUID("SubLevel") : null;
+				data.addresses.put(new Location(dimension, subLevelId, BlockPos.of(entryTag.getLong("Pos"))), address);
 			} catch (IllegalArgumentException ignored) {}
 		}
 		return data;
 	}
 
-	public record Location(ResourceKey<Level> dimension, BlockPos pos) {}
+	public record Location(ResourceKey<Level> dimension, @Nullable UUID subLevelId, BlockPos pos) {}
 }

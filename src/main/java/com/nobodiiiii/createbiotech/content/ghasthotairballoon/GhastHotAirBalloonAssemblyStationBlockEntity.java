@@ -10,11 +10,14 @@ import javax.annotation.Nullable;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.advancement.PlacedByPlayerAdvancementTracker;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.api.contraption.BlockMovementChecks;
 import com.simibubi.create.content.contraptions.AssemblyException;
 import com.simibubi.create.infrastructure.config.AllConfigs;
+
+import dev.ryanhcode.sable.companion.SubLevelAccess;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -31,7 +34,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 public class GhastHotAirBalloonAssemblyStationBlockEntity extends BlockEntity {
 
@@ -134,10 +137,12 @@ public class GhastHotAirBalloonAssemblyStationBlockEntity extends BlockEntity {
 		if (GhastHotAirBalloonAssemblyStationBlock.isSeatOccupied(level, pos))
 			return;
 		boolean stationIdle = !wasPowered && offset == 0 && !extending && !retracting;
+		Vec3 stationVelocity = GhastHotAirBalloonAssemblyStationBlock.getDockingVelocityPerTick(level, pos);
 		for (Ghast ghast : GhastHotAirBalloonAssemblyStationBlock.findGhastsToSeat(level, pos)) {
 			if (!GhastHotAirBalloonAssemblyStationBlock.canBePickedUp(ghast, stationIdle))
 				continue;
-			if (ghast.getDeltaMovement().lengthSqr() > getMaxVelocityForAttractSqr())
+			if (ghast.getDeltaMovement().subtract(stationVelocity).lengthSqr()
+				> getMaxVelocityForAttractSqr())
 				continue;
 			GhastHotAirBalloonAssemblyStationBlock.sitDown(level, pos, state, ghast);
 			return;
@@ -213,47 +218,52 @@ public class GhastHotAirBalloonAssemblyStationBlockEntity extends BlockEntity {
 		sendUpdate();
 	}
 
-	public void dockContraption(GhastHotAirBalloonEntity contraption, float yaw) {
+	public void dockContraption(GhastHotAirBalloonEntity contraption, float localYaw) {
 		if (level == null || level.isClientSide)
 			return;
 		if (!contraption.isAlive())
 			return;
+		if (!(contraption.getContraption() instanceof GhastHotAirBalloonContraption balloonContraption))
+			return;
 
-		float magnetY = (float) (contraption.getY() + 1.0);
-		float depth = worldPosition.getY() - magnetY;
-		snapToDisassembleOffset(depth);
+		int initialOffset = balloonContraption.getInitialOffset();
+		if (initialOffset < 2)
+			return;
+		BlockPos localAnchor = worldPosition.below(initialOffset - 1);
+		if (level.isOutsideBuildHeight(localAnchor))
+			return;
 
-		double targetX = worldPosition.getX() + 0.5;
-		double targetZ = worldPosition.getZ() + 0.5;
-		contraption.setPos(targetX, contraption.getY(), targetZ);
-		contraption.xo = targetX;
-		contraption.zo = targetZ;
-		contraption.xOld = targetX;
-		contraption.zOld = targetZ;
-		contraption.setDeltaMovement(0, 0, 0);
-		contraption.yaw = yaw;
-		contraption.prevYaw = yaw;
-		contraption.targetYaw = yaw;
-
-		contraption.disassemble();
+		// Supply a plot-local StructureTransform without ever moving the live entity to the
+		// plot. This keeps the dynamic structure outside even during synchronous disassembly.
+		if (contraption.disassembleAt(localAnchor, localYaw))
+			snapToDisassembleOffset(initialOffset - 2);
 	}
 
 	private boolean tryAssemble(BlockPos anchorPos, int ropeLength) {
 		if (level == null || level.isClientSide)
 			return false;
+		if (!SubLevelCompat.isValidSpacePosition(level, anchorPos))
+			return false;
 
-		BlockPos seatPos = worldPosition.above();
-		AABB seatBox = new AABB(seatPos).inflate(0.1);
 		List<GhastHotAirBalloonSeatEntity> seats =
-			level.getEntitiesOfClass(GhastHotAirBalloonSeatEntity.class, seatBox);
+			GhastHotAirBalloonAssemblyStationBlock.findSeatsAtStation(level, worldPosition);
 		if (seats.isEmpty())
 			return false;
 		GhastHotAirBalloonSeatEntity seat = seats.get(0);
 		List<Entity> passengers = seat.getPassengers();
 		if (passengers.isEmpty() || !(passengers.get(0) instanceof Ghast ghast))
 			return false;
+		if (SubLevelCompat.getTrackingOrVehicleSubLevel(ghast) != null)
+			return false;
+
+		SubLevelAccess sourceSubLevel = SubLevelCompat.getContaining(level, anchorPos);
+		float localYaw = GhastHotAirBalloonAssemblyStationBlock.getFacingYaw(getBlockState());
+		float worldYaw = SubLevelCompat.localYawToWorld(sourceSubLevel, localYaw);
+		Vec3 worldAnchor = SubLevelCompat.toWorld(sourceSubLevel, Vec3.atBottomCenterOf(anchorPos));
 
 		int initialOffset = ropeLength + 1;
+		Vec3 worldGhastPosition = worldAnchor.add(0,
+			initialOffset + GhastHotAirBalloonSeatEntity.GHAST_PASSENGER_Y_OFFSET, 0);
 		GhastHotAirBalloonContraption contraption = new GhastHotAirBalloonContraption(initialOffset);
 		try {
 			if (!contraption.assemble(level, anchorPos))
@@ -261,24 +271,63 @@ public class GhastHotAirBalloonAssemblyStationBlockEntity extends BlockEntity {
 		} catch (AssemblyException e) {
 			return false;
 		}
-		if (contraption.getBlocks().isEmpty())
+		if (contraption.getBlocks().isEmpty()) {
+			contraption.stop(level);
 			return false;
+		}
 
-		contraption.removeBlocksFromWorld(level, BlockPos.ZERO);
+		GhastHotAirBalloonEntity contraptionEntity =
+			GhastHotAirBalloonEntity.create(level, contraption, Direction.fromYRot(localYaw));
+		contraptionEntity.startAtYaw(worldYaw);
+		setInitialPosition(contraptionEntity, worldAnchor);
+		if (!level.addFreshEntity(contraptionEntity)) {
+			// AbstractContraptionEntity.remove() pairs the successful startMoving() with stop().
+			contraptionEntity.discard();
+			return false;
+		}
+		if (!contraptionEntity.startRiding(ghast, true)) {
+			contraptionEntity.discard();
+			return false;
+		}
 
+		// Move both entities out before removing plot blocks. Removing the source can delete the
+		// sublevel synchronously, so neither the ghast nor its balloon may still occupy plot space.
 		ghast.stopRiding();
 		ghast.setNoAi(true);
 		CapturedEntityBoxHelper.markAiDisabledByMod(ghast);
 		ghast.setPersistenceRequired();
-		seat.discard();
+		ghast.setDeltaMovement(Vec3.ZERO);
+		setInitialPositionAndRotation(ghast, worldGhastPosition, worldYaw);
+		// Keep the passenger at the exact projected anchor in this same tick. The normal rider
+		// update on subsequent ticks produces the same position from worldGhastPosition.
+		setInitialPosition(contraptionEntity, worldAnchor);
 
-		GhastHotAirBalloonEntity contraptionEntity =
-			GhastHotAirBalloonEntity.create(level, contraption, Direction.fromYRot(ghast.getYRot()));
-		contraptionEntity.setPos(anchorPos.getX() + 0.5, anchorPos.getY(), anchorPos.getZ() + 0.5);
-		level.addFreshEntity(contraptionEntity);
-		contraptionEntity.startRiding(ghast, true);
-		contraption.onEntityInitialize(level, contraptionEntity);
+		contraption.removeBlocksFromWorld(level, BlockPos.ZERO);
+		seat.discard();
 		return true;
+	}
+
+	private static void setInitialPosition(Entity entity, Vec3 position) {
+		entity.setPos(position.x, position.y, position.z);
+		entity.xo = position.x;
+		entity.yo = position.y;
+		entity.zo = position.z;
+		entity.xOld = position.x;
+		entity.yOld = position.y;
+		entity.zOld = position.z;
+	}
+
+	private static void setInitialPositionAndRotation(Ghast ghast, Vec3 position, float yaw) {
+		ghast.moveTo(position.x, position.y, position.z, yaw, 0);
+		setInitialPosition(ghast, position);
+		ghast.setYRot(yaw);
+		ghast.setYBodyRot(yaw);
+		ghast.setYHeadRot(yaw);
+		ghast.setXRot(0);
+		ghast.yRotO = yaw;
+		ghast.yBodyRotO = yaw;
+		ghast.yHeadRotO = yaw;
+		ghast.xRotO = 0;
 	}
 
 	public boolean isRunning() {

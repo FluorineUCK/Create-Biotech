@@ -2,6 +2,7 @@
 .gradle-user/
 build/
 run/
+/logs/
 out/
 bin/
 .minecraft/

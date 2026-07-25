@@ -1,0 +1,21 @@
+{
+  "replace": false,
+  "values": [
+    "create_biotech:buffer_pad",
+    "create_biotech:white_buffer_pad",
+    "create_biotech:orange_buffer_pad",
+    "create_biotech:magenta_buffer_pad",
+    "create_biotech:light_blue_buffer_pad",
+    "create_biotech:yellow_buffer_pad",
+    "create_biotech:lime_buffer_pad",
+    "create_biotech:pink_buffer_pad",
+    "create_biotech:gray_buffer_pad",
+    "create_biotech:light_gray_buffer_pad",
+    "create_biotech:cyan_buffer_pad",
+    "create_biotech:purple_buffer_pad",
+    "create_biotech:blue_buffer_pad",
+    "create_biotech:brown_buffer_pad",
+    "create_biotech:green_buffer_pad",
+    "create_biotech:black_buffer_pad"
+  ]
+}

@@ -42,6 +42,9 @@ public final class AllayCourierTaskManager {
 		List<AllayCourierTask> completed = new ArrayList<>();
 
 		for (AllayCourierTask task : tasks) {
+			if (task.prepareForTick(server)) {
+				removeCourier(task);
+			}
 			ServerLevel level = server.getLevel(task.currentDimension());
 			AllayCourierEntity courier = findActiveCourier(task, level);
 			if (courier == null && level != null && canShowEntity(level, task.position())) {

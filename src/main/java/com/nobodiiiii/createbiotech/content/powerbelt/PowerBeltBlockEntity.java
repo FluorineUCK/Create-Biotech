@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.powerbelt;
 
 import net.minecraft.core.HolderLookup;
 
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -254,6 +255,8 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 	public PowerBeltBlockEntity getControllerBE() {
 		if (controller == null || level == null || !level.isLoaded(controller))
 			return null;
+		if (!SubLevelCompat.sameSpace(level, worldPosition, controller))
+			return null;
 		BlockEntity be = level.getBlockEntity(controller);
 		return be instanceof PowerBeltBlockEntity powerBelt ? powerBelt : null;
 	}
@@ -402,7 +405,8 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 	@Override
 	public float propagateRotationTo(KineticBlockEntity target, BlockState stateFrom, BlockState stateTo, BlockPos diff,
 		boolean connectedViaAxes, boolean connectedViaCogs) {
-		if (target instanceof PowerBeltBlockEntity belt && !connectedViaAxes)
+		if (target instanceof PowerBeltBlockEntity belt && !connectedViaAxes && level != null
+			&& SubLevelCompat.sameSpace(level, worldPosition, belt.getBlockPos()))
 			return getController().equals(belt.getController()) ? 1 : 0;
 		return 0;
 	}

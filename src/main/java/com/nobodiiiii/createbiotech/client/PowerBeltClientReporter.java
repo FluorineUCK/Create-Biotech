@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.client;
 
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltSurfaceMovementPacket;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 
 import net.minecraft.client.Minecraft;
@@ -14,6 +15,7 @@ public class PowerBeltClientReporter {
 	public static void reportSurfaceMovement(Player player, BlockPos pos, float surfaceSpeed) {
 		if (Minecraft.getInstance().player != player)
 			return;
-		CBPackets.sendToServer(new PowerBeltSurfaceMovementPacket(pos, surfaceSpeed));
+		CBPackets.sendToServer(new PowerBeltSurfaceMovementPacket(pos, surfaceSpeed,
+			SubLevelCompat.getSpaceId(player.level(), pos)));
 	}
 }

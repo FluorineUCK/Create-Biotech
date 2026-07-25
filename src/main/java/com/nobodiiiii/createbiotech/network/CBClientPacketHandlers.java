@@ -23,6 +23,8 @@ final class CBClientPacketHandlers {
 			bioPackagerAnimation.handle(player);
 		} else if (packet instanceof ShulkerPackagerPlacementPacket.ClientBoundRequest shulkerPlacement) {
 			shulkerPlacement.handle(player);
+		} else if (packet instanceof ShulkerPackagerPlacementPacket.ClientBoundResult shulkerPlacementResult) {
+			shulkerPlacementResult.handle(player);
 		} else if (packet instanceof AllayPortFlapPacket allayPortFlap) {
 			allayPortFlap.handle(player);
 		} else if (packet instanceof AllayCourierHudPacket allayCourierHud) {

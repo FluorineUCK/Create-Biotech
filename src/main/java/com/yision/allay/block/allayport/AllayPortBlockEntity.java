@@ -4,11 +4,13 @@ import net.minecraft.core.HolderLookup;
 
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.network.CBPackets;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.content.logistics.packagePort.PackagePortBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.yision.allay.logistics.courier.AllayCourierReturnMode;
 import com.yision.allay.logistics.courier.AllayCourierTask;
+import com.yision.allay.logistics.address.AllayAddressRules;
 import net.createmod.catnip.animation.LerpedFloat;
 import net.createmod.catnip.animation.LerpedFloat.Chaser;
 import net.minecraft.core.BlockPos;
@@ -106,15 +108,21 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 	}
 
 	Vec3 getCourierSpawnPosition() {
-		return Vec3.atCenterOf(worldPosition).add(0, -0.25, 0);
+		Vec3 localPosition = Vec3.atCenterOf(worldPosition).add(0, -0.25, 0);
+		return level == null ? localPosition : SubLevelCompat.toWorld(level, worldPosition, localPosition);
 	}
 
 	Vec3 getCourierLaunchDirection() {
-		return Vec3.atLowerCornerOf(getLaunchSide().getNormal());
+		Vec3 localDirection = Vec3.atLowerCornerOf(getLaunchSide().getNormal());
+		if (level == null) {
+			return localDirection;
+		}
+		Vec3 worldDirection = SubLevelCompat.localNormalToWorld(level, worldPosition, localDirection);
+		return worldDirection.lengthSqr() < 1.0E-8 ? localDirection : worldDirection.normalize();
 	}
 
 	AllayCourierTask prepareCourierDeparture(AllayCourierTask task) {
-		return task.departFromAllayPort(getCourierSpawnPosition());
+		return task.departFromAllayPort(this);
 	}
 
 	public boolean tryPullFromBelow() {
@@ -258,6 +266,17 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 	}
 
 	@Override
+	public boolean canPlayerUse(Player player) {
+		if (level == null || !SubLevelCompat.isValidSpacePosition(level, worldPosition)
+			|| level.getBlockEntity(worldPosition) != this) {
+			return false;
+		}
+		Vec3 worldCenter = SubLevelCompat.toWorld(level, worldPosition,
+			Vec3.atCenterOf(worldPosition));
+		return player.position().distanceToSqr(worldCenter) <= 64.0;
+	}
+
+	@Override
 	public AbstractContainerMenu createMenu(int containerId, Inventory playerInventory, Player player) {
 		return AllayPortMenu.create(containerId, playerInventory, this);
 	}
@@ -270,12 +289,15 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 		}
 		tag.putString("ReturnMode", returnMode.serializedName());
 		portInventory.write(tag, registries);
-		returnQueue.write(tag);
+		if (!clientPacket) {
+			returnQueue.write(tag);
+		}
 	}
 
 	@Override
 	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		super.read(tag, registries, clientPacket);
+		addressFilter = AllayAddressRules.normalizePortAddress(addressFilter);
 		if (clientPacket) {
 			courierWaving = tag.getBoolean("CourierWaving");
 		}
@@ -283,7 +305,9 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 			? AllayCourierReturnMode.byName(tag.getString("ReturnMode"))
 			: AllayCourierReturnMode.DEFAULT_FOR_PORT;
 		portInventory.read(tag, registries);
-		returnQueue.read(tag);
+		if (!clientPacket) {
+			returnQueue.read(tag);
+		}
 	}
 
 	@Override

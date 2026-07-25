@@ -312,6 +312,10 @@ public class CBConfigs {
 	}
 
 	public static class GhastHotAirBalloon {
+		public static final int MAGNET_KEEP_ALIVE_PERIOD_TICKS = 4;
+		/** Allows two consecutive keep-alive packets to be delayed or lost before expiry. */
+		public static final int MIN_MAGNET_TIMEOUT_TICKS = MAGNET_KEEP_ALIVE_PERIOD_TICKS * 3;
+
 		public final ModConfigSpec.DoubleValue forwardAcceleration;
 		public final ModConfigSpec.DoubleValue backwardAcceleration;
 		public final ModConfigSpec.DoubleValue verticalAcceleration;
@@ -345,7 +349,8 @@ public class CBConfigs {
 			turnDirectionChangeBrake = builder.defineInRange("turnDirectionChangeBrake", 6.0d, 0.0d, Double.MAX_VALUE);
 			maxTurnSpeed = builder.defineInRange("maxTurnSpeed", 6.0d, 0.0d, Double.MAX_VALUE);
 			inputTimeoutTicks = builder.defineInRange("inputTimeoutTicks", 8, 1, Integer.MAX_VALUE);
-			magnetTimeoutTicks = builder.defineInRange("magnetTimeoutTicks", 12, 1, Integer.MAX_VALUE);
+			magnetTimeoutTicks = builder.defineInRange("magnetTimeoutTicks", 12,
+				MIN_MAGNET_TIMEOUT_TICKS, Integer.MAX_VALUE);
 			magnetBrakeDistance = builder.defineInRange("magnetBrakeDistance", 2.5d, 0.0001d, Double.MAX_VALUE);
 			magnetMaxDistance = builder.defineInRange("magnetMaxDistance", 32.0d, 0.0d, Double.MAX_VALUE);
 			assemblyStationSpeed = builder.defineInRange("assemblyStationSpeed", 0.5d, 0.0001d, Double.MAX_VALUE);

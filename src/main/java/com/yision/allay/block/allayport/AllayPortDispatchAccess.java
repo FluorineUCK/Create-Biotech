@@ -1,6 +1,7 @@
 package com.yision.allay.block.allayport;
 
 import com.simibubi.create.content.logistics.box.PackageItem;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.yision.allay.logistics.address.AllayAddressRules;
 import com.yision.allay.logistics.courier.AllayCourierDispatchService;
 import com.yision.allay.logistics.courier.AllayCourierTask;
@@ -85,16 +86,18 @@ final class AllayPortDispatchAccess {
 			ItemStack singlePackage = packageInSlot.copy();
 			singlePackage.setCount(1);
 			AllayCourierTask task;
+			UUID sourceSubLevelId = SubLevelCompat.getSpaceId(serverLevel, port.getBlockPos());
 			if (target instanceof AllayCourierTarget.AllayPortTarget allayPort) {
 				task = AllayCourierTask.forPackageToAllayPort(
 					UUID.randomUUID(), singlePackage, serverLevel, allayPort.dimension(), allayPort.pos(),
+					allayPort.subLevelId(),
 					port.getCourierSpawnPosition(), port.getCourierLaunchDirection(),
-					serverLevel.dimension(), port.getBlockPos(), null, port.getReturnMode());
+					serverLevel.dimension(), port.getBlockPos(), sourceSubLevelId, null, port.getReturnMode());
 			} else if (target instanceof AllayCourierTarget.PlayerTarget player) {
 				task = AllayCourierTask.forPackageToPlayer(
 					UUID.randomUUID(), singlePackage, serverLevel, player.playerId(), player.dimension(),
 					port.getCourierSpawnPosition(), port.getCourierLaunchDirection(),
-					serverLevel.dimension(), port.getBlockPos(), null, port.getReturnMode());
+					serverLevel.dimension(), port.getBlockPos(), sourceSubLevelId, null, port.getReturnMode());
 			} else {
 				continue;
 			}

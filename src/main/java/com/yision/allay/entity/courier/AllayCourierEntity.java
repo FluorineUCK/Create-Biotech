@@ -59,6 +59,7 @@ public class AllayCourierEntity extends Allay implements Container {
 	private double guidedMaxSpeed;
 	private double guidedAcceleration;
 	private boolean guidedPathLocked;
+	private Vec3 guidedTargetVelocity = Vec3.ZERO;
 	private boolean renderLogisticsHat = true;
 	private @Nullable UUID taskId;
 	private int invalidTaskChecks;
@@ -88,7 +89,7 @@ public class AllayCourierEntity extends Allay implements Container {
 		courier.setPhase(task.phase());
 		courier.taskId = task.id();
 		courier.setPos(task.position());
-		courier.setDeltaMovement(Vec3.ZERO);
+		courier.setDeltaMovement(task.velocityOnSpawn(level));
 		courier.noPhysics = true;
 		courier.alignToDirection(task.launchDirection());
 		courier.hasImpulse = true;
@@ -159,6 +160,7 @@ public class AllayCourierEntity extends Allay implements Container {
 		preciseFlightTarget = target;
 		preciseFlightSpeed = speedModifier;
 		guidedFlightTarget = null;
+		guidedTargetVelocity = Vec3.ZERO;
 	}
 
 	/**
@@ -167,18 +169,20 @@ public class AllayCourierEntity extends Allay implements Container {
 	 * the Allay's retained velocity and clamps the next movement to the remaining distance.
 	 */
 	public void guideAlongDockingPath(Vec3 target, Vec3 lookDirection, double maxSpeed,
-		double acceleration, boolean lockToPath) {
+		double acceleration, boolean lockToPath, Vec3 targetVelocity) {
 		preciseFlightTarget = null;
 		guidedFlightTarget = target;
 		guidedLookDirection = horizontalDirection(lookDirection);
 		guidedMaxSpeed = Math.max(0.01, maxSpeed);
 		guidedAcceleration = Math.max(0.005, acceleration);
 		guidedPathLocked = lockToPath;
+		guidedTargetVelocity = targetVelocity;
 	}
 
 	public void clearCourierDestination() {
 		preciseFlightTarget = null;
 		guidedFlightTarget = null;
+		guidedTargetVelocity = Vec3.ZERO;
 		getNavigation().stop();
 		getBrain().eraseMemory(MemoryModuleType.WALK_TARGET);
 		getBrain().eraseMemory(MemoryModuleType.PATH);
@@ -238,7 +242,7 @@ public class AllayCourierEntity extends Allay implements Container {
 		Vec3 offset = guidedFlightTarget.subtract(position());
 		double distance = offset.length();
 		if (distance <= 1.0E-4) {
-			setDeltaMovement(Vec3.ZERO);
+			setDeltaMovement(guidedTargetVelocity);
 			turnToward(guidedLookDirection);
 			return;
 		}
@@ -246,22 +250,24 @@ public class AllayCourierEntity extends Allay implements Container {
 		Vec3 direction = offset.scale(1.0 / distance);
 		double brakingSpeed = Math.sqrt(2.0 * guidedAcceleration * distance);
 		double desiredSpeed = Math.min(distance, Math.min(guidedMaxSpeed, brakingSpeed));
-		Vec3 desiredVelocity = direction.scale(desiredSpeed);
+		Vec3 desiredRelativeVelocity = direction.scale(desiredSpeed);
+		Vec3 relativeVelocity = getDeltaMovement().subtract(guidedTargetVelocity);
 		Vec3 nextVelocity;
 
 		if (guidedPathLocked) {
-			double forwardSpeed = Math.max(0.0, getDeltaMovement().dot(direction));
+			double forwardSpeed = Math.max(0.0, relativeVelocity.dot(direction));
 			double nextSpeed = approach(forwardSpeed, desiredSpeed, guidedAcceleration);
-			nextVelocity = direction.scale(Math.min(distance, nextSpeed));
+			nextVelocity = guidedTargetVelocity.add(direction.scale(Math.min(distance, nextSpeed)));
 		} else {
-			Vec3 correction = desiredVelocity.subtract(getDeltaMovement());
+			Vec3 correction = desiredRelativeVelocity.subtract(relativeVelocity);
 			if (correction.lengthSqr() > guidedAcceleration * guidedAcceleration) {
 				correction = correction.normalize().scale(guidedAcceleration);
 			}
-			nextVelocity = getDeltaMovement().add(correction);
-			if (nextVelocity.lengthSqr() > distance * distance) {
-				nextVelocity = nextVelocity.normalize().scale(distance);
+			Vec3 nextRelativeVelocity = relativeVelocity.add(correction);
+			if (nextRelativeVelocity.lengthSqr() > distance * distance) {
+				nextRelativeVelocity = nextRelativeVelocity.normalize().scale(distance);
 			}
+			nextVelocity = guidedTargetVelocity.add(nextRelativeVelocity);
 		}
 
 		setDeltaMovement(nextVelocity);
@@ -521,7 +527,7 @@ public class AllayCourierEntity extends Allay implements Container {
 	@Override
 	public void addAdditionalSaveData(@NotNull CompoundTag tag) {
 		super.addAdditionalSaveData(tag);
-		tag.put("Package", getPackage().save(level().registryAccess(), new CompoundTag()));
+		tag.put("Package", getPackage().saveOptional(level().registryAccess()));
 		CompoundTag direction = new CompoundTag();
 		direction.putDouble("X", launchDirection.x);
 		direction.putDouble("Z", launchDirection.z);
