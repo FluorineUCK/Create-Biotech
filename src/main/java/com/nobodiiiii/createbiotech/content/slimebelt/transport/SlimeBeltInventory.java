@@ -115,6 +115,8 @@ public class SlimeBeltInventory {
 				lazyClientItem.locked = true;
 		}
 
+		boolean movementDirectionChanged = refreshMovementDirection();
+
 		// Added/Removed items from previous cycle
 		if (!toInsert.isEmpty() || !toRemove.isEmpty()) {
 			toInsert.forEach(this::insert);
@@ -127,11 +129,8 @@ public class SlimeBeltInventory {
 		if (belt.getSpeed() == 0)
 			return;
 
-		boolean movingPositive = belt.getDirectionAwareBeltMovementSpeed() > 0;
-		if (beltMovementPositive != movingPositive) {
-			beltMovementPositive = movingPositive;
+		if (movementDirectionChanged)
 			belt.notifyUpdate();
-		}
 
 		float trackSpeed = Math.abs(belt.getDirectionAwareBeltMovementSpeed());
 		boolean horizontalProcessing = belt.getBlockState().getValue(SlimeBeltBlock.SLOPE) == com.simibubi.create.content.kinetics.belt.BeltSlope.HORIZONTAL;
@@ -634,13 +633,16 @@ public class SlimeBeltInventory {
 		DirectBeltInputBehaviour inputBehaviour =
 			BlockEntityBehaviour.get(world, outputPosition, DirectBeltInputBehaviour.TYPE);
 
-		// Detect a foreign slime belt sitting at the seam — any "I can't push into it
-		// right now" answer should become a hard BLOCK rather than letting our items
-		// fall back to wrapping around our own connector loop.
+		// Detect a foreign or not-yet-initialized slime belt at the seam — any
+		// "I can't push into it right now" answer should become a hard BLOCK
+		// rather than letting our items fall back to our own connector loop.
 		SlimeBeltBlockEntity adjacentSegment = SlimeBeltHelper.getSegmentBE(world, outputPosition);
-		boolean adjacentIsForeignSlimeBelt = adjacentSegment != null
-			&& adjacentSegment.getControllerBE() != null
-			&& !adjacentSegment.getControllerBE().getBlockPos().equals(belt.getBlockPos());
+		SlimeBeltBlockEntity adjacentController =
+			adjacentSegment == null ? null : adjacentSegment.getControllerBE();
+		boolean adjacentIsForeignSlimeBelt = adjacentController != null
+			&& !adjacentController.getBlockPos().equals(belt.getBlockPos());
+		boolean adjacentSlimeBeltNeedsHandoff = adjacentSegment != null
+			&& (adjacentController == null || adjacentIsForeignSlimeBelt);
 
 		if (inputBehaviour != null && inputBehaviour.canInsertFromSide(insertSide)) {
 			// Structurally compatible. If the downstream foreign slime belt is currently
@@ -653,7 +655,7 @@ public class SlimeBeltInventory {
 
 		// Not structurally compatible (e.g. antiparallel rotation). Foreign slime belt
 		// in front of us is still a hard obstruction; do not wrap.
-		if (adjacentIsForeignSlimeBelt)
+		if (adjacentSlimeBeltNeedsHandoff)
 			return Ending.BLOCKED;
 
 		if (BlockHelper.hasBlockSolidSide(world.getBlockState(outputPosition), world, outputPosition,
@@ -674,7 +676,13 @@ public class SlimeBeltInventory {
 	}
 
 	public boolean canInsertAtFromSide(int segment, Direction side) {
-		SlimeBeltHelper.IOTarget target = SlimeBeltHelper.resolveIOTarget(belt, segment, side);
+		return canInsertAtFromSide(segment, side, false);
+	}
+
+	public boolean canInsertAtFromSide(int segment, Direction side, boolean preferEndpointEntryTrack) {
+		refreshMovementDirection();
+		SlimeBeltHelper.IOTarget target =
+			SlimeBeltHelper.resolveIOTarget(belt, segment, side, preferEndpointEntryTrack);
 		if (target == null)
 			return false;
 		Track track = target.track();
@@ -729,7 +737,14 @@ public class SlimeBeltInventory {
 	}
 
 	public void prepareInsertedItem(TransportedItemStack transported, int segment, Direction side) {
-		SlimeBeltHelper.IOTarget target = SlimeBeltHelper.resolveIOTarget(belt, segment, side);
+		prepareInsertedItem(transported, segment, side, false);
+	}
+
+	public void prepareInsertedItem(TransportedItemStack transported, int segment, Direction side,
+		boolean preferEndpointEntryTrack) {
+		refreshMovementDirection();
+		SlimeBeltHelper.IOTarget target =
+			SlimeBeltHelper.resolveIOTarget(belt, segment, side, preferEndpointEntryTrack);
 		Track track = target != null && target.track() != null
 			? target.track()
 			: SlimeBeltHelper.resolveInputTrack(belt.getBlockState(), side);
@@ -849,6 +864,19 @@ public class SlimeBeltInventory {
 			&& !side.getAxis().isVertical()
 			&& transported.prevBeltPosition != 0
 			&& belt.getBlockState().getValue(SlimeBeltBlock.SLOPE) == BeltSlope.VERTICAL;
+	}
+
+	private boolean refreshMovementDirection() {
+		if (belt.getSpeed() == 0)
+			return false;
+		// Direct insertion may run before this controller's tick after loading or
+		// a kinetic reversal. Coordinate conversion must use the live direction,
+		// not the previous tick's persisted PositiveOrder value.
+		boolean movingPositive = belt.getDirectionAwareBeltMovementSpeed() > 0;
+		if (beltMovementPositive == movingPositive)
+			return false;
+		beltMovementPositive = movingPositive;
+		return true;
 	}
 
 	private boolean wouldHvOvershootConnector(int segment, Direction side, Track track) {

@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README.zh-CN.md) · [玩家介绍](docs/INTRODUCTION.zh-CN.md) · [Player Intro](docs/INTRODUCTION.md)
 
-一个基于 [Create](https://www.curseforge.com/minecraft/mc-mods/create) 的 Minecraft 1.20.1 Forge 附属模组，核心方向是把生物和生物材料接进 Create 现有的动能、运输和加工系统。这里有史莱姆传送带、恶魂热气球、经验相关机械，也有把生物接到工作盆、装置、漏斗和 JEI 里的各种实现。
+一个基于 [Create](https://www.curseforge.com/minecraft/mc-mods/create) 的 Minecraft 1.21.1 NeoForge 附属模组，核心方向是把生物和生物材料接进 Create 现有的动能、运输和加工系统。这里有史莱姆传送带、恶魂热气球、经验相关机械，也有把生物接到工作盆、装置、漏斗和 JEI 里的各种实现。
 
 本 README 主要面向贡献者和 AI 编码代理。想先了解玩法的话，请看 [docs/INTRODUCTION.zh-CN.md](docs/INTRODUCTION.zh-CN.md)。
 
@@ -12,14 +12,14 @@
 
 | 项目           | 值                                                                       |
 | -------------- | ------------------------------------------------------------------------ |
-| Minecraft      | 1.20.1                                                                   |
-| 加载器         | Forge 47.1.33（通过 `net.neoforged.moddev.legacyforge`）               |
-| Java           | 17                                                                       |
+| Minecraft      | 1.21.1                                                                   |
+| 加载器         | NeoForge 21.1.219（通过 `net.neoforged.moddev`）                         |
+| Java           | 21                                                                       |
 | 模组 id / 版本 | `create_biotech` / 见 [gradle.properties](gradle.properties)              |
-| 硬依赖         | Create 6.0.8、Registrate、Flywheel、Ponder                               |
+| 硬依赖         | Create 6.0.10、Registrate、Flywheel、Ponder                              |
 | 软依赖         | JEI、Jade                                                                |
 | Mixin 配置     | [create_biotech.mixins.json](src/main/resources/create_biotech.mixins.json) |
-| 映射表         | Parchment 2023.09.03                                                     |
+| 映射表         | Parchment 2024.11.17                                                     |
 
 ```bash
 ./gradlew build                     # 构建 jar

@@ -1,8 +1,8 @@
 package com.nobodiiiii.createbiotech.foundation.ponder;
 
-import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.infrastructure.ponder.AllCreateBiotechPonderScenes;
 import com.nobodiiiii.createbiotech.infrastructure.ponder.AllCreateBiotechPonderTags;
+import com.simibubi.create.Create;
 
 import net.createmod.ponder.api.registration.PonderPlugin;
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
@@ -13,7 +13,8 @@ public class CreateBiotechPonderPlugin implements PonderPlugin {
 
 	@Override
 	public String getModId() {
-		return CreateBiotech.MOD_ID;
+		// Mount Smart Super Glue onto Create's own super_glue scene and lang keys.
+		return Create.ID;
 	}
 
 	@Override

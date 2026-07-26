@@ -181,8 +181,24 @@ public class SlimeBeltHelper {
 	}
 
 	public static IOTarget resolveIOTarget(SlimeBeltBlockEntity controller, int segment, Direction side) {
+		return resolveIOTarget(controller, segment, side, false);
+	}
+
+	public static IOTarget resolveIOTarget(SlimeBeltBlockEntity controller, int segment, Direction side,
+		boolean preferEndpointEntryTrack) {
 		if (controller == null || controller.beltLength <= 0)
 			return null;
+
+		// A direct handoff from a vertical belt must enter the horizontal loop at
+		// this endpoint's ingress track. Keep this opt-in so ordinary UP/DOWN
+		// capability and funnel access can still address the physical FRONT/BACK
+		// surfaces away from belt-to-belt handoffs.
+		if (preferEndpointEntryTrack && side != null && side.getAxis().isVertical()
+			&& controller.getBlockState().getValue(SlimeBeltBlock.SLOPE) == BeltSlope.HORIZONTAL) {
+			Track entryTrack = getEndpointEntryTrack(controller, segment);
+			if (entryTrack != null)
+				return IOTarget.ofTrack(entryTrack);
+		}
 
 		if (side != null && side.getAxis() == getChainBlockAxis(controller)) {
 			Track entryTrack = getEndpointEntryTrack(controller, segment);

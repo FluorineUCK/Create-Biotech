@@ -1,7 +1,5 @@
 package com.nobodiiiii.createbiotech.infrastructure.ponder;
 
-import net.minecraft.core.registries.Registries;
-
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.infrastructure.ponder.AllCreatePonderTags;
 import com.simibubi.create.infrastructure.ponder.scenes.ChassisScenes;
@@ -12,9 +10,12 @@ import net.neoforged.neoforge.registries.DeferredHolder;
 
 public class AllCreateBiotechPonderScenes {
 
+	private static final ResourceLocation CREATE_SUPER_GLUE_SCHEMATIC =
+		ResourceLocation.fromNamespaceAndPath("create", "super_glue");
+
 	public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
 		PonderSceneRegistrationHelper<DeferredHolder<?, ?>> HELPER = helper.withKeyFunction(DeferredHolder::getId);
 		HELPER.forComponents(CBItems.SMART_SUPER_GLUE)
-			.addStoryBoard("super_glue", ChassisScenes::superGlue, AllCreatePonderTags.CONTRAPTION_ASSEMBLY);
+			.addStoryBoard(CREATE_SUPER_GLUE_SCHEMATIC, ChassisScenes::superGlue, AllCreatePonderTags.CONTRAPTION_ASSEMBLY);
 	}
 }

@@ -2,7 +2,7 @@
 
 [English](README.md) · [中文](README.zh-CN.md) · [Player Intro](docs/INTRODUCTION.md) · [玩家介绍](docs/INTRODUCTION.zh-CN.md)
 
-A Minecraft 1.20.1 Forge addon based on [Create](https://www.curseforge.com/minecraft/mc-mods/create), focused on bringing mobs and biological materials into Create's existing kinetic, transport, and processing systems. It includes slime belts, ghast balloons, experience machinery, and the plumbing needed to connect living creatures to basins, contraptions, funnels, and JEI.
+A Minecraft 1.21.1 NeoForge addon based on [Create](https://www.curseforge.com/minecraft/mc-mods/create), focused on bringing mobs and biological materials into Create's existing kinetic, transport, and processing systems. It includes slime belts, ghast balloons, experience machinery, and the plumbing needed to connect living creatures to basins, contraptions, funnels, and JEI.
 
 This README is mainly for contributors and AI coding agents. If you want a player-facing overview first, read [docs/INTRODUCTION.md](docs/INTRODUCTION.md).
 
@@ -12,14 +12,14 @@ This README is mainly for contributors and AI coding agents. If you want a playe
 
 | Field | Value |
 | --- | --- |
-| Minecraft | 1.20.1 |
-| Loader | Forge 47.1.33 (via `net.neoforged.moddev.legacyforge`) |
-| Java | 17 |
+| Minecraft | 1.21.1 |
+| Loader | NeoForge 21.1.219 (via `net.neoforged.moddev`) |
+| Java | 21 |
 | Mod id / version | `create_biotech` / see [gradle.properties](gradle.properties) |
-| Hard deps | Create 6.0.8, Registrate, Flywheel, Ponder |
+| Hard deps | Create 6.0.10, Registrate, Flywheel, Ponder |
 | Soft deps | JEI, Jade |
 | Mixin config | [create_biotech.mixins.json](src/main/resources/create_biotech.mixins.json) |
-| Mappings | Parchment 2023.09.03 |
+| Mappings | Parchment 2024.11.17 |
 
 ```bash
 ./gradlew build                     # build the jar

@@ -375,7 +375,9 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		SlimeBeltBlockEntity controllerBE = getControllerBE();
 		if (controllerBE == null)
 			return false;
-		SlimeBeltHelper.IOTarget target = SlimeBeltHelper.resolveIOTarget(controllerBE, index, side);
+		boolean verticalHorizontalChainInput = isVerticalHorizontalChainInput(side);
+		SlimeBeltHelper.IOTarget target =
+			SlimeBeltHelper.resolveIOTarget(controllerBE, index, side, verticalHorizontalChainInput);
 		if (target == null)
 			return false;
 		return isCompatibleAdjacentSlimeBeltChainInput(side, controllerBE, target.track());
@@ -384,21 +386,25 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	private boolean isOccupied(Direction side) {
 		side = resolveInsertionSide(side);
 		SlimeBeltInventory beltInventory = getInventory();
-		return beltInventory == null || getSpeed() == 0 || !beltInventory.canInsertAtFromSide(index, side);
+		boolean verticalHorizontalChainInput = isVerticalHorizontalChainInput(side);
+		return beltInventory == null || getSpeed() == 0
+			|| !beltInventory.canInsertAtFromSide(index, side, verticalHorizontalChainInput);
 	}
 
 	private ItemStack tryInsertingFromSide(TransportedItemStack transportedStack, Direction side, boolean simulate) {
 		side = resolveInsertionSide(side);
 		SlimeBeltInventory beltInventory = getInventory();
+		boolean verticalHorizontalChainInput = isVerticalHorizontalChainInput(side);
 		if (!SlimeBeltBlock.canTransportObjects(getBlockState()) || beltInventory == null)
 			return transportedStack.stack;
-		if (!canInsertFrom(side) || !beltInventory.canInsertAtFromSide(index, side))
+		if (!canInsertFrom(side)
+			|| !beltInventory.canInsertAtFromSide(index, side, verticalHorizontalChainInput))
 			return transportedStack.stack;
 		if (simulate)
 			return ItemStack.EMPTY;
 
 		TransportedItemStack copied = transportedStack.copy();
-		beltInventory.prepareInsertedItem(copied, index, side);
+		beltInventory.prepareInsertedItem(copied, index, side, verticalHorizontalChainInput);
 		beltInventory.addItem(copied);
 		setChanged();
 		sendData();
@@ -408,11 +414,15 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	private Direction resolveInsertionSide(Direction side) {
 		if (side == null || level == null)
 			return side;
-		if (hasAdjacentFunnel(side))
-			return side;
 		Direction physicalSourceSide = side.getOpposite();
+		// Adjacent belts pass their movement direction rather than their physical
+		// source side. Resolve that ambiguity before treating the same direction
+		// as a funnel input, otherwise a funnel on the opposite face can mask the
+		// vertical-to-horizontal belt handoff.
 		if (hasAdjacentHorizontalVerticalBeltSource(physicalSourceSide))
 			return physicalSourceSide;
+		if (hasAdjacentFunnel(side))
+			return side;
 
 		if (side.getAxis().isVertical())
 			return side;
@@ -432,6 +442,14 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		if (hasAdjacentBeltSource(physicalSourceSide))
 			return physicalSourceSide;
 		return side;
+	}
+
+	private boolean isVerticalHorizontalChainInput(Direction physicalSide) {
+		if (physicalSide == null || !physicalSide.getAxis().isVertical())
+			return false;
+		if (getBlockState().getValue(SlimeBeltBlock.SLOPE) != BeltSlope.HORIZONTAL)
+			return false;
+		return hasAdjacentHorizontalVerticalBeltSource(physicalSide);
 	}
 
 	private boolean isCompatibleAdjacentSlimeBeltChainInput(Direction side, SlimeBeltBlockEntity targetController,

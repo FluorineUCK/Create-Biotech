@@ -39,7 +39,7 @@ SOFTWARE.
 The Allay logistics implementation in this repository references source code from:
 
 - Online repository: [`yision1/CreatePhantom`](https://github.com/yision1/CreatePhantom)
-- Upstream version caveat: the referenced upstream code targets Minecraft 1.21.1 / NeoForge and was adapted here for Minecraft 1.20.1 / Legacy Forge.
+- Upstream version caveat: the referenced upstream code targets Minecraft 1.21.1 / NeoForge and was adapted here for Minecraft 1.21.1 / NeoForge.
 
 Only source code was referenced. No assets, data files, localization, recipes, or other resources from Create Phantom were used. Later edits to code adapted from that reference remain subject to the upstream BSD-3-Clause notice requirement.
 
