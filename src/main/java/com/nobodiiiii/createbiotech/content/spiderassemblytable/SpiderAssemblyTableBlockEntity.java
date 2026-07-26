@@ -98,7 +98,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 	private MachineKind activeMachine;
 	private int processingTicksRemaining;
 	private int processingTicksTotal;
-	private boolean impactFiredThisCycle;
+	private boolean processAppliedThisCycle;
 	private boolean impactPending;
 	private ItemStack impactDisplayItem = ItemStack.EMPTY;
 	private ItemStack cachedInput = ItemStack.EMPTY;
@@ -168,6 +168,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		tag.putInt("ActiveMachine", activeMachine == null ? -1 : activeMachine.ordinal());
 		tag.putInt("ProcessingTicksRemaining", processingTicksRemaining);
 		tag.putInt("ProcessingTicksTotal", processingTicksTotal);
+		tag.putBoolean("ProcessApplied", processAppliedThisCycle);
 		if (!cachedInput.isEmpty())
 			tag.put("CachedInput", cachedInput.saveOptional(registries));
 		PlacedByPlayerAdvancementTracker.writeOwner(tag, advancementOwner);
@@ -208,6 +209,7 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 			: null;
 		processingTicksRemaining = tag.getInt("ProcessingTicksRemaining");
 		processingTicksTotal = tag.getInt("ProcessingTicksTotal");
+		processAppliedThisCycle = tag.getBoolean("ProcessApplied");
 		cachedInput = tag.contains("CachedInput")
 			? ItemStack.parseOptional(registries, tag.getCompound("CachedInput"))
 			: ItemStack.EMPTY;
@@ -523,17 +525,16 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		if (getSpeed() == 0)
 			return;
 
-		int previousRemaining = processingTicksRemaining;
+		if (!processAppliedThisCycle && !cachedInput.isEmpty() && !isCachedInputStillHeld())
+			invalidateCachedInput();
+
 		processingTicksRemaining--;
+		if (processingTicksRemaining > 0)
+			return;
 
-		int midpoint = processingTicksTotal / 2;
-		if (!impactFiredThisCycle && previousRemaining > midpoint && processingTicksRemaining <= midpoint) {
-			triggerImpact();
-			impactFiredThisCycle = true;
-		}
-
-		if (processingTicksRemaining < 0)
-			processingTicksRemaining = 0;
+		resetActiveProcess();
+		setChanged();
+		sendData();
 	}
 
 	protected ProcessingResult onItemReceived(TransportedItemStack transported,
@@ -564,11 +565,37 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 			return HOLD;
 		}
 
-		if (processingTicksRemaining > 0)
+		if (processAppliedThisCycle)
 			return HOLD;
 
-		List<ItemStack> outputs = applyActiveProcess(cachedInput.isEmpty() ? transported.stack : cachedInput);
+		if (!matchesCachedInput(transported.stack)) {
+			invalidateCachedInput();
+			return HOLD;
+		}
 
+		if (processingTicksRemaining > processingTicksTotal / 2)
+			return HOLD;
+
+		if (!applyActiveProcessToTransported(transported, handler)) {
+			invalidateCachedInput();
+			return HOLD;
+		}
+
+		return HOLD;
+	}
+
+	private boolean applyActiveProcessToTransported(TransportedItemStack transported,
+		TransportedItemStackHandlerBehaviour handler) {
+		if (activeMachine == null || activeSlot < 0 || transported.stack.isEmpty())
+			return false;
+
+		ItemStack currentInput = transported.stack.copy();
+		currentInput.setCount(1);
+		if (createPlan(activeSlot, activeMachine, currentInput).isEmpty())
+			return false;
+
+		ItemStack impactItem = resolveImpactItem().copy();
+		List<ItemStack> outputs = applyActiveProcess(currentInput);
 		List<TransportedItemStack> outList = new ArrayList<>();
 		for (ItemStack out : outputs) {
 			if (out.isEmpty())
@@ -602,10 +629,10 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		if (containsCompletedSequencedAssembly(outputs))
 			PlacedByPlayerAdvancementTracker.awardPlacedBy(level, advancementOwner, CBAdvancements.SPIDER_ASSEMBLY_TABLE);
 
-		resetActiveProcess();
+		processAppliedThisCycle = true;
+		triggerImpact(impactItem);
 		setChanged();
-		sendData();
-		return HOLD;
+		return true;
 	}
 
 	private void resetActiveProcess() {
@@ -613,15 +640,47 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		activeMachine = null;
 		processingTicksRemaining = 0;
 		processingTicksTotal = 0;
-		impactFiredThisCycle = false;
+		processAppliedThisCycle = false;
 		cachedInput = ItemStack.EMPTY;
 	}
 
-	private void triggerImpact() {
+	private boolean isCachedInputStillHeld() {
+		if (level == null || cachedInput.isEmpty())
+			return false;
+
+		TransportedItemStackHandlerBehaviour handler =
+			BlockEntityBehaviour.get(level, worldPosition.below(2), TransportedItemStackHandlerBehaviour.TYPE);
+		if (handler == null)
+			return false;
+
+		boolean[] found = { false };
+		handler.handleCenteredProcessingOnAllItems(.51f, transported -> {
+			if (matchesCachedInput(transported.stack))
+				found[0] = true;
+			return TransportedResult.doNothing();
+		});
+		return found[0];
+	}
+
+	private boolean matchesCachedInput(ItemStack input) {
+		return !cachedInput.isEmpty()
+			&& !input.isEmpty()
+			&& ItemStack.isSameItemSameComponents(cachedInput, input);
+	}
+
+	private void invalidateCachedInput() {
+		if (cachedInput.isEmpty())
+			return;
+		cachedInput = ItemStack.EMPTY;
+		setChanged();
+		sendData();
+	}
+
+	private void triggerImpact(ItemStack impactItem) {
 		if (level == null || activeMachine == null)
 			return;
 		playMachineSound();
-		impactDisplayItem = resolveImpactItem().copy();
+		impactDisplayItem = impactItem.copy();
 		impactPending = true;
 		sendData();
 	}
@@ -703,9 +762,9 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 
 			activeSlot = slot;
 			activeMachine = kind;
-			processingTicksTotal = Math.max(1, plan.get().duration());
+			processingTicksTotal = Math.max(2, plan.get().duration());
 			processingTicksRemaining = processingTicksTotal;
-			impactFiredThisCycle = false;
+			processAppliedThisCycle = false;
 			nextSlot = (slot + 1) % LEG_COUNT;
 			cachedInput = singleInput;
 			setChanged();
