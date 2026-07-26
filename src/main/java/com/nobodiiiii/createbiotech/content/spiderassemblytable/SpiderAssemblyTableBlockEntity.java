@@ -34,6 +34,7 @@ import com.simibubi.create.content.kinetics.deployer.DeployerApplicationRecipe;
 import com.simibubi.create.content.kinetics.press.PressingBehaviour;
 import com.simibubi.create.content.kinetics.press.PressingRecipe;
 import com.simibubi.create.content.kinetics.saw.CuttingRecipe;
+import com.simibubi.create.content.logistics.depot.DepotBlockEntity;
 import com.simibubi.create.content.processing.sequenced.SequencedAssemblyRecipe;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 import com.simibubi.create.foundation.recipe.RecipeApplier;
@@ -547,6 +548,8 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 			return HOLD;
 		if (transported.stack.isEmpty())
 			return PASS;
+		if (promotePreferredWorkpiece(transported, handler))
+			return HOLD;
 		if (!startProcessFor(transported.stack))
 			return PASS;
 		return HOLD;
@@ -560,6 +563,8 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 		if (activeSlot < 0) {
 			if (transported.stack.isEmpty())
 				return PASS;
+			if (promotePreferredWorkpiece(transported, handler))
+				return HOLD;
 			if (!startProcessFor(transported.stack))
 				return PASS;
 			return HOLD;
@@ -770,6 +775,71 @@ public class SpiderAssemblyTableBlockEntity extends KineticBlockEntity implement
 			setChanged();
 			sendData();
 			return true;
+		}
+		return false;
+	}
+
+	private boolean promotePreferredWorkpiece(TransportedItemStack transported,
+		TransportedItemStackHandlerBehaviour handler) {
+		if (level == null || transported.stack.isEmpty())
+			return false;
+
+		BlockPos depotPos = worldPosition.below(2);
+		if (!(level.getBlockEntity(depotPos) instanceof DepotBlockEntity))
+			return false;
+
+		IItemHandler depotInventory = level.getCapability(Capabilities.ItemHandler.BLOCK, depotPos, null);
+		if (depotInventory == null || depotInventory.getSlots() < 2)
+			return false;
+
+		float bestPriority = getWorkpiecePriority(transported.stack);
+		int bestSlot = -1;
+		for (int slot = 1; slot < depotInventory.getSlots(); slot++) {
+			ItemStack candidate = depotInventory.getStackInSlot(slot);
+			float priority = getWorkpiecePriority(candidate);
+			if (priority <= bestPriority)
+				continue;
+			bestPriority = priority;
+			bestSlot = slot;
+		}
+		if (bestSlot < 0)
+			return false;
+
+		ItemStack candidate = depotInventory.getStackInSlot(bestSlot).copy();
+		ItemStack simulated = depotInventory.extractItem(bestSlot, candidate.getCount(), true);
+		if (!ItemStack.matches(candidate, simulated))
+			return false;
+		ItemStack extracted = depotInventory.extractItem(bestSlot, candidate.getCount(), false);
+		if (extracted.isEmpty())
+			return false;
+
+		TransportedItemStack displaced = transported.copy();
+		displaced.clearFanProcessingData();
+		TransportedItemStack preferred = transported.copy();
+		preferred.stack = extracted;
+		preferred.locked = true;
+		preferred.clearFanProcessingData();
+		handler.handleProcessingOnItem(transported,
+			TransportedResult.convertToAndLeaveHeld(List.of(displaced), preferred));
+		return true;
+	}
+
+	private float getWorkpiecePriority(ItemStack input) {
+		if (input.isEmpty() || !hasAvailableProcess(input))
+			return -1;
+		if (!input.has(AllDataComponents.SEQUENCED_ASSEMBLY))
+			return 0;
+		return input.get(AllDataComponents.SEQUENCED_ASSEMBLY).progress();
+	}
+
+	private boolean hasAvailableProcess(ItemStack input) {
+		ItemStack singleInput = input.copy();
+		singleInput.setCount(1);
+		for (int attempt = 0; attempt < LEG_COUNT; attempt++) {
+			int slot = (nextSlot + attempt) % LEG_COUNT;
+			MachineKind kind = getMachineKind(slot);
+			if (kind != null && createPlan(slot, kind, singleInput).isPresent())
+				return true;
 		}
 		return false;
 	}
