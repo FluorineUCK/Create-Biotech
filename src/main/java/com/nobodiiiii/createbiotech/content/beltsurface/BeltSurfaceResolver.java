@@ -12,7 +12,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * Two distinct entry points with non-overlapping contracts:
+ * Entry points with non-overlapping contracts:
  * <ul>
  *   <li>{@link #resolve(BlockGetter, BlockPos)} — query an <strong>already-placed</strong> {@link BeltFunnelBlock}'s
  *       attached surface. The attachment is read from {@link BeltFunnelStateExtensions#ATTACHMENT_SURFACE} encoded in
@@ -21,6 +21,9 @@ import net.minecraft.world.level.block.state.BlockState;
  *       that happens to sit next to a belt. <strong>This is the entry point all runtime queries (rendering, mode
  *       determination, interaction handler) should use</strong>; the null return is what stops us from accidentally
  *       tilting a non-specialised funnel's flap (and similar leaks).</li>
+ *   <li>{@link #resolve(BlockGetter, BlockPos, BlockState)} — the same state-encoded lookup when the caller already has
+ *       the authoritative state. Collision-shape callers must use this overload because physics engines can supply a
+ *       context-free {@link BlockGetter} that has no state or block entities at the queried position.</li>
  *   <li>{@link #resolveForPlacement(BlockGetter, BlockPos)} — used only during placement / state-conversion, when the
  *       block at {@code funnelPos} doesn't yet (or no longer) carry a BeltFunnel encoding. Scans the six orthogonal
  *       neighbours for a {@link BeltSurfaceHost} whose outward normal points back at {@code funnelPos}.</li>
@@ -39,6 +42,17 @@ public final class BeltSurfaceResolver {
 		if (world == null || funnelPos == null)
 			return null;
 		BlockState selfState = world.getBlockState(funnelPos);
+		return resolve(world, funnelPos, selfState);
+	}
+
+	/**
+	 * Resolve from a caller-provided state. This keeps context-free collision queries independent of whether their
+	 * synthetic {@link BlockGetter} exposes the state at {@code funnelPos}.
+	 */
+	@Nullable
+	public static BeltSurface resolve(BlockGetter world, BlockPos funnelPos, @Nullable BlockState selfState) {
+		if (world == null || funnelPos == null || selfState == null)
+			return null;
 		if (!(selfState.getBlock() instanceof BeltFunnelBlock))
 			return null;
 		return resolveFromBeltFunnelState(world, funnelPos, selfState);

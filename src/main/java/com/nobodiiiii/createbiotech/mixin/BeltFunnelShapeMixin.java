@@ -25,7 +25,7 @@ public abstract class BeltFunnelShapeMixin {
 	@Inject(method = "getShape", at = @At("RETURN"), cancellable = true)
 	private void createBiotech$tiltShape(BlockState state, BlockGetter world, BlockPos pos, CollisionContext context,
 		CallbackInfoReturnable<VoxelShape> cir) {
-		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos);
+		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos, state);
 		if (surface == null)
 			return;
 		cir.setReturnValue(surface.transformShape(cir.getReturnValue()));
@@ -42,7 +42,7 @@ public abstract class BeltFunnelShapeMixin {
 		if (shape != Shape.PULLING && shape != Shape.PUSHING)
 			return;
 
-		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos);
+		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos, state);
 		if (surface == null)
 			return;
 		VoxelShape collision = AllShapes.FUNNEL_COLLISION.get(state.getValue(BeltFunnelBlock.HORIZONTAL_FACING));
