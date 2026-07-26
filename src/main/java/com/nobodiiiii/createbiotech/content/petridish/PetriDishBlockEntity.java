@@ -45,10 +45,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.shapes.BooleanOp;
-import net.minecraft.world.phys.shapes.CollisionContext;
-import net.minecraft.world.phys.shapes.Shapes;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
@@ -461,7 +457,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		if (entityType == null)
 			return;
 
-		if (!hasClearEmergenceSpace(entityType))
+		if (!hasClearEmergenceSpace())
 			return;
 
 		beginEmergence();
@@ -503,7 +499,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		double spawnY = worldPosition.getY() + EMERGENCE_SPAWN_Y_OFFSET;
 		double spawnZ = worldPosition.getZ() + 0.5d;
 		BlockPos spawnPos = BlockPos.containing(spawnX, spawnY, spawnZ);
-		if (!hasClearEmergenceSpace(entityType)) {
+		if (!hasClearEmergenceSpace()) {
 			cancelEmergence();
 			return;
 		}
@@ -549,50 +545,11 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		sendData();
 	}
 
-	private boolean hasClearEmergenceSpace(EntityType<?> entityType) {
+	private boolean hasClearEmergenceSpace() {
 		if (level == null)
 			return false;
 
-		Entity probe = entityType.create(level);
-		if (probe == null)
-			return false;
-
-		double spawnX = worldPosition.getX() + 0.5d;
-		double spawnY = worldPosition.getY() + EMERGENCE_SPAWN_Y_OFFSET;
-		double spawnZ = worldPosition.getZ() + 0.5d;
-		float spawnYaw = getSpawnYaw();
-		probe.moveTo(spawnX, spawnY, spawnZ, spawnYaw, probe.getXRot());
-
-		AABB bounds = probe.getBoundingBox().deflate(1.0E-6d);
-		if (!level.getEntityCollisions(probe, bounds)
-			.isEmpty())
-			return false;
-
-		CollisionContext collisionContext = CollisionContext.of(probe);
-		VoxelShape boundsShape = Shapes.create(bounds);
-		BlockPos minPos = BlockPos.containing(bounds.minX, bounds.minY, bounds.minZ);
-		BlockPos maxPos = BlockPos.containing(bounds.maxX, bounds.maxY, bounds.maxZ);
-		BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos();
-
-		for (int x = minPos.getX(); x <= maxPos.getX(); x++) {
-			for (int y = minPos.getY(); y <= maxPos.getY(); y++) {
-				for (int z = minPos.getZ(); z <= maxPos.getZ(); z++) {
-					cursor.set(x, y, z);
-					if (cursor.equals(worldPosition))
-						continue;
-
-					BlockState state = level.getBlockState(cursor);
-					VoxelShape collisionShape = state.getCollisionShape(level, cursor, collisionContext);
-					if (collisionShape.isEmpty())
-						continue;
-
-					if (Shapes.joinIsNotEmpty(collisionShape.move(x, y, z), boundsShape, BooleanOp.AND))
-						return false;
-				}
-			}
-		}
-
-		return true;
+		return level.isEmptyBlock(worldPosition.above());
 	}
 
 	private void cancelEmergence() {
