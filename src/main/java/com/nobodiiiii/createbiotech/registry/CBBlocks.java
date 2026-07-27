@@ -305,7 +305,7 @@ public class CBBlocks {
 	// Slime-like secretion generated in flat-topped piles on the floor of every new Frog Stomach room.
 	public static final DeferredHolder<Block, FrogStomachSecretionBlock> FROG_STOMACH_SECRETION =
 		BLOCKS.register("frog_stomach_secretion",
-			() -> new FrogStomachSecretionBlock(Block.Properties.ofFullCopy(Blocks.SLIME_BLOCK)));
+			() -> new FrogStomachSecretionBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)));
 
 	// Indestructible return portal inside every Frog Stomach room; placed with the room, never obtainable.
 	public static final DeferredHolder<Block, FrogDigestiveTractBlock> FROG_DIGESTIVE_TRACT =

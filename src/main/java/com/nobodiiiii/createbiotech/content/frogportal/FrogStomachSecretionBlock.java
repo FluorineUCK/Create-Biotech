@@ -1,31 +1,27 @@
 package com.nobodiiiii.createbiotech.content.frogportal;
 
-import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.SlimeBlock;
+import net.minecraft.core.BlockPos;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.HoneyBlock;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
- * A full slime-block analogue. NeoForge's piston hooks otherwise recognize only the vanilla block
- * instance, so the sticky and slime markers must be exposed explicitly for this custom block.
+ * Uses honey-block movement and sliding behaviour without its piston adhesion. Landing remains
+ * completely safe, while the block's model continues to use the slime-block texture.
  */
-public class FrogStomachSecretionBlock extends SlimeBlock {
+public class FrogStomachSecretionBlock extends HoneyBlock {
 
 	public FrogStomachSecretionBlock(Properties properties) {
 		super(properties);
 	}
 
 	@Override
-	public boolean isSlimeBlock(BlockState state) {
-		return true;
-	}
-
-	@Override
-	public boolean isStickyBlock(BlockState state) {
-		return true;
-	}
-
-	@Override
-	public boolean canStickTo(BlockState state, BlockState other) {
-		return !other.is(Blocks.HONEY_BLOCK);
+	public void fallOn(Level level, BlockState state, BlockPos pos, Entity entity, float fallDistance) {
+		entity.playSound(SoundEvents.HONEY_BLOCK_SLIDE, 1.0f, 1.0f);
+		if (!level.isClientSide)
+			level.broadcastEntityEvent(entity, (byte) 54);
+		entity.causeFallDamage(fallDistance, 0.0f, level.damageSources().fall());
 	}
 }
