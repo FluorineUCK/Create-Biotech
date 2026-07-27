@@ -8,6 +8,7 @@ import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
+import net.minecraft.core.particles.BlockParticleOption;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -103,11 +104,16 @@ public final class FrogStomachSecretionSpreading {
 
 	private static void bloom(ServerLevel level, BlockPos pos) {
 		RandomSource random = level.getRandom();
-		level.sendParticles(ParticleTypes.SCULK_SOUL,
-			pos.getX() + 0.5d, pos.getY() + 1.15d, pos.getZ() + 0.5d,
-			2, 0.2d, 0.0d, 0.2d, 0.0d);
-		level.playSound(null, pos, SoundEvents.SCULK_CATALYST_BLOOM, SoundSource.BLOCKS,
+		sendSecretionParticles(level, pos, 8);
+		level.playSound(null, pos, SoundEvents.HONEY_BLOCK_PLACE, SoundSource.BLOCKS,
 			2.0f, 0.6f + random.nextFloat() * 0.4f);
+	}
+
+	private static void sendSecretionParticles(ServerLevel level, BlockPos pos, int count) {
+		BlockParticleOption particle = new BlockParticleOption(ParticleTypes.BLOCK,
+			CBBlocks.FROG_STOMACH_SECRETION.get().defaultBlockState());
+		level.sendParticles(particle, pos.getX() + 0.5d, pos.getY() + 1.05d, pos.getZ() + 0.5d,
+			count, 0.3d, 0.1d, 0.3d, 0.05d);
 	}
 
 	private static final class SpreadingData extends SavedData {
@@ -179,10 +185,10 @@ public final class FrogStomachSecretionSpreading {
 				}
 
 				if (cursor.charge <= 0) {
-					level.levelEvent(3006, cursor.pos, 0);
+					sendSecretionParticles(level, cursor.pos, 1);
 					cursors.remove(i);
 				} else {
-					level.levelEvent(3006, cursor.pos, chargeParticleData(cursor.charge));
+					sendSecretionParticles(level, cursor.pos, chargeParticleCount(cursor.charge));
 				}
 			}
 
@@ -202,7 +208,7 @@ public final class FrogStomachSecretionSpreading {
 				BlockState secretionState = CBBlocks.FROG_STOMACH_SECRETION.get().defaultBlockState();
 				level.setBlock(spreadPos, secretionState, Block.UPDATE_ALL);
 				Block.pushEntitiesUp(replacedState, secretionState, level, spreadPos);
-				level.playSound(null, spreadPos, SoundEvents.SCULK_BLOCK_SPREAD, SoundSource.BLOCKS, 1.0f, 1.0f);
+				level.playSound(null, spreadPos, SoundEvents.HONEY_BLOCK_PLACE, SoundSource.BLOCKS, 1.0f, 1.0f);
 				cursor.pos = spreadPos;
 				cursor.charge--;
 				cursor.stalledUpdates = 0;
@@ -243,9 +249,8 @@ public final class FrogStomachSecretionSpreading {
 			return null;
 		}
 
-		private static int chargeParticleData(int charge) {
-			int strength = (int) (Math.log1p(charge) / 2.3f) + 1;
-			return strength << 6;
+		private static int chargeParticleCount(int charge) {
+			return Math.min(8, (int) (Math.log1p(charge) / 2.3f) + 1);
 		}
 
 		@Override

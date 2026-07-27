@@ -20,6 +20,8 @@ public class CBParticleTypes {
 		PARTICLE_TYPES.register("straight_enchant", () -> new SimpleParticleType(false));
 	public static final DeferredHolder<ParticleType<?>, SimpleParticleType> ALLAY_COURIER_NOTE =
 		PARTICLE_TYPES.register("allay_courier_note", () -> new SimpleParticleType(false));
+	public static final DeferredHolder<ParticleType<?>, SimpleParticleType> FROG_PORTAL =
+		PARTICLE_TYPES.register("frog_portal", () -> new SimpleParticleType(false));
 
 	private CBParticleTypes() {
 	}

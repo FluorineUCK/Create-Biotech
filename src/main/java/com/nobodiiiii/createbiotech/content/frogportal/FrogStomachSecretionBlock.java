@@ -9,7 +9,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Uses honey-block movement and sliding behaviour without its piston adhesion. Landing remains
- * completely safe, while the block's model continues to use the slime-block texture.
+ * completely safe, while the block renders as an orange, hollow slime-block shell.
  */
 public class FrogStomachSecretionBlock extends HoneyBlock {
 

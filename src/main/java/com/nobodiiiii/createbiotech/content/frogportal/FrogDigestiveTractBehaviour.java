@@ -1,8 +1,9 @@
 package com.nobodiiiii.createbiotech.content.frogportal;
 
+import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -76,7 +77,7 @@ public final class FrogDigestiveTractBehaviour {
 	static void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
 		if (random.nextInt(100) == 0) {
 			level.playLocalSound((double) pos.getX() + 0.5, (double) pos.getY() + 0.5,
-				(double) pos.getZ() + 0.5, SoundEvents.PORTAL_AMBIENT, SoundSource.BLOCKS, 0.5f,
+				(double) pos.getZ() + 0.5, SoundEvents.SLIME_BLOCK_HIT, SoundSource.BLOCKS, 0.5f,
 				random.nextFloat() * 0.4f + 0.8f, false);
 		}
 
@@ -96,7 +97,7 @@ public final class FrogDigestiveTractBehaviour {
 				xSpeed = (double) (random.nextFloat() * 2.0f * (float) direction);
 			}
 
-			level.addParticle(ParticleTypes.PORTAL, x, y, z, xSpeed, ySpeed, zSpeed);
+			level.addParticle(CBParticleTypes.FROG_PORTAL.get(), x, y, z, xSpeed, ySpeed, zSpeed);
 		}
 	}
 }

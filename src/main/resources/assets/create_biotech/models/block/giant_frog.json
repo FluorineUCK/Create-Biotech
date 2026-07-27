@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:block/block",
   "textures": {
-    "particle": "minecraft:block/slime_block"
+    "particle": "create_biotech:block/frog_stomach_wall"
   }
 }

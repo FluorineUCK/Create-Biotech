@@ -1,8 +1,8 @@
 {
   "render_type": "minecraft:translucent",
   "textures": {
-    "particle": "minecraft:block/nether_portal",
-    "portal": "minecraft:block/nether_portal"
+    "particle": "create_biotech:block/frog_digestive_tract",
+    "portal": "create_biotech:block/frog_digestive_tract"
   },
   "elements": [
     {

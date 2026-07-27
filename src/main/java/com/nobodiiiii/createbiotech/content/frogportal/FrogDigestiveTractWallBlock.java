@@ -5,6 +5,8 @@ import javax.annotation.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -37,13 +39,13 @@ public class FrogDigestiveTractWallBlock extends Block {
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 
 	private static final VoxelShape NORTH_BASE_SHAPE = Block.box(0.0, 0.0, 3.0, 16.0, 16.0, 16.0);
-	private static final VoxelShape NORTH_SLIME_SHAPE = Block.box(4.0, 4.0, 0.0, 12.0, 12.0, 3.0);
+	private static final VoxelShape NORTH_SLIME_SHAPE = Block.box(4.0, 4.0, -5.0, 12.0, 12.0, 3.0);
 	private static final VoxelShape SOUTH_BASE_SHAPE = Block.box(0.0, 0.0, 0.0, 16.0, 16.0, 13.0);
-	private static final VoxelShape SOUTH_SLIME_SHAPE = Block.box(4.0, 4.0, 13.0, 12.0, 12.0, 16.0);
+	private static final VoxelShape SOUTH_SLIME_SHAPE = Block.box(4.0, 4.0, 13.0, 12.0, 12.0, 21.0);
 	private static final VoxelShape WEST_BASE_SHAPE = Block.box(3.0, 0.0, 0.0, 16.0, 16.0, 16.0);
-	private static final VoxelShape WEST_SLIME_SHAPE = Block.box(0.0, 4.0, 4.0, 3.0, 12.0, 12.0);
+	private static final VoxelShape WEST_SLIME_SHAPE = Block.box(-5.0, 4.0, 4.0, 3.0, 12.0, 12.0);
 	private static final VoxelShape EAST_BASE_SHAPE = Block.box(0.0, 0.0, 0.0, 13.0, 16.0, 16.0);
-	private static final VoxelShape EAST_SLIME_SHAPE = Block.box(13.0, 4.0, 4.0, 16.0, 12.0, 12.0);
+	private static final VoxelShape EAST_SLIME_SHAPE = Block.box(13.0, 4.0, 4.0, 21.0, 12.0, 12.0);
 
 	public FrogDigestiveTractWallBlock(Properties properties) {
 		super(properties);
@@ -71,8 +73,7 @@ public class FrogDigestiveTractWallBlock extends Block {
 		level.setBlock(pos, filledState, Block.UPDATE_CLIENTS);
 		level.updateNeighbourForOutputSignal(pos, this);
 		heldItem.shrink(1);
-		// Matches an Eye of Ender being inserted into an End Portal frame.
-		level.levelEvent(1503, pos, 0);
+		level.playSound(null, pos, SoundEvents.SLIME_BLOCK_PLACE, SoundSource.BLOCKS, 1.0f, 1.0f);
 		if (level instanceof ServerLevel serverLevel)
 			FrogStomachSpace.tryActivatePortal(serverLevel, pos);
 		return ItemInteractionResult.CONSUME;

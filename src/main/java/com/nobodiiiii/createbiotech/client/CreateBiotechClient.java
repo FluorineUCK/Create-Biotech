@@ -61,6 +61,7 @@ import com.yision.allay.item.allaycourier.AllayCourierMenu;
 import com.yision.allay.item.allaycourier.AllayCourierScreen;
 import com.nobodiiiii.createbiotech.foundation.ponder.CreateBiotechPonderPlugin;
 import com.nobodiiiii.createbiotech.client.particle.CourierNoteParticle;
+import com.nobodiiiii.createbiotech.client.particle.FrogPortalParticle;
 import com.nobodiiiii.createbiotech.client.particle.StraightEnchantParticle;
 import com.nobodiiiii.createbiotech.client.render.SlimeMimicRenderLayer;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -251,6 +252,7 @@ public class CreateBiotechClient {
 	public static void registerParticleProviders(RegisterParticleProvidersEvent event) {
 		event.registerSpriteSet(CBParticleTypes.STRAIGHT_ENCHANT.get(), StraightEnchantParticle.Provider::new);
 		event.registerSpriteSet(CBParticleTypes.ALLAY_COURIER_NOTE.get(), CourierNoteParticle.Provider::new);
+		event.registerSpriteSet(CBParticleTypes.FROG_PORTAL.get(), FrogPortalParticle.Provider::new);
 	}
 
 	@SubscribeEvent

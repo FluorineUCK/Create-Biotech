@@ -1,12 +1,10 @@
 {
   "parent": "minecraft:block/block",
-  "render_type": "minecraft:translucent",
   "textures": {
     "particle": "create_biotech:block/frog_digestive_tract_wall_side",
     "bottom": "create_biotech:block/frog_digestive_tract_wall_bottom",
     "top": "create_biotech:block/frog_digestive_tract_wall_top",
-    "side": "create_biotech:block/frog_digestive_tract_wall_side",
-    "eye": "create_biotech:block/frog_digestive_tract_eye"
+    "side": "create_biotech:block/frog_digestive_tract_wall_side"
   },
   "elements": [
     {
@@ -19,18 +17,6 @@
         "south": {"uv": [0, 3, 16, 16], "texture": "#side", "cullface": "south"},
         "west": {"uv": [0, 3, 16, 16], "texture": "#side", "cullface": "west"},
         "east": {"uv": [0, 3, 16, 16], "texture": "#side", "cullface": "east"}
-      }
-    },
-    {
-      "from": [4, 13, 4],
-      "to": [12, 21, 12],
-      "faces": {
-        "down": {"uv": [0, 0, 16, 16], "texture": "#eye"},
-        "up": {"uv": [0, 0, 16, 16], "texture": "#eye"},
-        "north": {"uv": [0, 0, 16, 16], "texture": "#eye"},
-        "south": {"uv": [0, 0, 16, 16], "texture": "#eye"},
-        "west": {"uv": [0, 0, 16, 16], "texture": "#eye"},
-        "east": {"uv": [0, 0, 16, 16], "texture": "#eye"}
       }
     }
   ]

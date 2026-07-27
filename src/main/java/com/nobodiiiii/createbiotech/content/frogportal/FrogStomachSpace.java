@@ -1,5 +1,8 @@
 package com.nobodiiiii.createbiotech.content.frogportal;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -27,15 +30,21 @@ public final class FrogStomachSpace {
 	/** Rooms per grid row before wrapping to the next row of the layout. */
 	private static final int ROW = 4096;
 	/** Y of the room's floor shell. */
-	private static final int BASE_Y = 64;
+	private static final int BASE_Y = 0;
 	private static final int PORTAL_SIZE = 3;
 	private static final int PORTAL_FRONT_SIZE = 5;
 	private static final int BOTTOM_WALL_Y_OFFSET = 1;
 	private static final int TAIL_PORTAL_Y_OFFSET = BOTTOM_WALL_Y_OFFSET + 1;
-	private static final int MIN_RANDOM_PILES = 3;
-	private static final int RANDOM_PILE_VARIATION = 4;
+	private static final int MIN_RANDOM_PILES = 4;
+	private static final int RANDOM_PILE_VARIATION = 5;
 	private static final int MAX_PILE_HEIGHT = 3;
 	private static final int MAX_PILE_RADIUS = 6;
+	private static final int ENCLOSED_FROGLIGHT_CHANCE = 20;
+	private static final BlockState[] FROGLIGHTS = {
+		Blocks.OCHRE_FROGLIGHT.defaultBlockState(),
+		Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState(),
+		Blocks.VERDANT_FROGLIGHT.defaultBlockState()
+	};
 	private static final double MOUTH_ENTRY_SPEED = 0.5d;
 
 	private FrogStomachSpace() {}
@@ -197,6 +206,8 @@ public final class FrogStomachSpace {
 			placeNaturalMound(level, random, centerX, centerZ, floorY, radiusX, radiusZ, height,
 				minX, maxX, minZ, maxZ);
 		}
+
+		replaceEnclosedSecretionsWithFroglights(level, random, origin, size);
 	}
 
 	private static void placeNaturalMound(ServerLevel level, RandomSource random, int centerX, int centerZ, int floorY,
@@ -234,6 +245,34 @@ public final class FrogStomachSpace {
 						level.setBlock(p, secretion, Block.UPDATE_CLIENTS);
 				}
 			}
+	}
+
+	private static void replaceEnclosedSecretionsWithFroglights(ServerLevel level, RandomSource random,
+		BlockPos origin, int size) {
+		List<BlockPos> enclosedSecretions = new ArrayList<>();
+		BlockPos.MutableBlockPos candidate = new BlockPos.MutableBlockPos();
+		for (int x = origin.getX() + 1; x < origin.getX() + size - 1; x++)
+			for (int y = origin.getY() + 1; y <= origin.getY() + MAX_PILE_HEIGHT; y++)
+				for (int z = origin.getZ() + 1; z < origin.getZ() + size - 1; z++) {
+					candidate.set(x, y, z);
+					if (level.getBlockState(candidate).is(CBBlocks.FROG_STOMACH_SECRETION.get())
+						&& isEnclosedBySecretionOrWall(level, candidate))
+						enclosedSecretions.add(candidate.immutable());
+				}
+
+		for (BlockPos pos : enclosedSecretions)
+			if (random.nextInt(ENCLOSED_FROGLIGHT_CHANCE) == 0)
+				level.setBlock(pos, FROGLIGHTS[random.nextInt(FROGLIGHTS.length)], Block.UPDATE_CLIENTS);
+	}
+
+	private static boolean isEnclosedBySecretionOrWall(ServerLevel level, BlockPos pos) {
+		for (Direction direction : Direction.values()) {
+			BlockState neighbour = level.getBlockState(pos.relative(direction));
+			if (!neighbour.is(CBBlocks.FROG_STOMACH_SECRETION.get())
+				&& !neighbour.is(CBBlocks.FROG_STOMACH_WALL.get()))
+				return false;
+		}
+		return true;
 	}
 
 	private static double normalizedMoundDistance(int x, int z, MoundLobe[] lobes) {

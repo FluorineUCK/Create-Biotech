@@ -301,6 +301,7 @@ public class CBBlocks {
 		BLOCKS.register("frog_stomach_wall",
 			() -> new FrogStomachWallBlock(Block.Properties.ofFullCopy(Blocks.ORANGE_CONCRETE)
 				.strength(-1.0f, 3600000.0f)
+				.sound(SoundType.SLIME_BLOCK)
 				.noLootTable()));
 
 	// Slime-like secretion generated in flat-topped piles on the floor of every new Frog Stomach room.
@@ -314,7 +315,7 @@ public class CBBlocks {
 			() -> new FrogDigestiveTractBlock(Block.Properties.of()
 				.sound(SoundType.SLIME_BLOCK)
 				.strength(-1.0f, 3600000.0f)
-				.mapColor(MapColor.COLOR_RED)
+				.mapColor(MapColor.COLOR_ORANGE)
 				.noCollission()
 				.lightLevel(state -> 11)
 				.noOcclusion()
@@ -325,6 +326,8 @@ public class CBBlocks {
 		BLOCKS.register("frog_digestive_tract_wall",
 			() -> new FrogDigestiveTractWallBlock(Block.Properties.ofFullCopy(Blocks.END_PORTAL_FRAME)
 				.strength(-1.0f, 3600000.0f)
+				.mapColor(MapColor.COLOR_ORANGE)
+				.sound(SoundType.SLIME_BLOCK)
 				.noLootTable()));
 
 	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
