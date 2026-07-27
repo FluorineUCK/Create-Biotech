@@ -8,6 +8,7 @@ import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
 import com.nobodiiiii.createbiotech.content.bufferpad.BufferPadMovementBehaviour;
 import com.nobodiiiii.createbiotech.content.experience.ExperienceOpenPipeEffectHandler;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultCompat;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSecretionSpreading;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSlimeSpawning;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastBalloonRopeShearsInteraction;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmMovingInteraction;
@@ -71,6 +72,7 @@ public class CreateBiotech {
 		registerAllayEvents();
 		FixedCarrotFishingRodGoalHandler.register();
 		FrogStomachSlimeSpawning.register();
+		FrogStomachSecretionSpreading.register();
 	}
 
 	private static void registerAllayEvents() {

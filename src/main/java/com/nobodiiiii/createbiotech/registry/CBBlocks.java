@@ -22,6 +22,7 @@ import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFis
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractWallBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSecretionBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachWallBlock;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
@@ -296,9 +297,9 @@ public class CBBlocks {
 				.noOcclusion()));
 
 	// Indestructible shell of every Frog Stomach room; placed by FrogStomachSpace, never obtainable.
-	public static final DeferredHolder<Block, Block> FROG_STOMACH_WALL =
+	public static final DeferredHolder<Block, FrogStomachWallBlock> FROG_STOMACH_WALL =
 		BLOCKS.register("frog_stomach_wall",
-			() -> new Block(Block.Properties.ofFullCopy(Blocks.ORANGE_CONCRETE)
+			() -> new FrogStomachWallBlock(Block.Properties.ofFullCopy(Blocks.ORANGE_CONCRETE)
 				.strength(-1.0f, 3600000.0f)
 				.noLootTable()));
 
