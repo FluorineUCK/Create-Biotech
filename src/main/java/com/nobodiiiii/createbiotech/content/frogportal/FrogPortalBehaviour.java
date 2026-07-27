@@ -76,20 +76,23 @@ public final class FrogPortalBehaviour {
 				random.nextFloat() * 0.4f + 0.8f, false);
 		}
 
-		for (int i = 0; i < 2; i++) {
+		for (int i = 0; i < 4; i++) {
 			double x = (double) pos.getX() + random.nextDouble();
 			double y = (double) pos.getY() + random.nextDouble();
 			double z = (double) pos.getZ() + random.nextDouble();
-			double xSpeed = 0.0;
-			double ySpeed = 0.0;
-			double zSpeed = 0.0;
+			double xSpeed = ((double) random.nextFloat() - 0.5) * 0.5;
+			double ySpeed = ((double) random.nextFloat() - 0.5) * 0.5;
+			double zSpeed = ((double) random.nextFloat() - 0.5) * 0.5;
+			int direction = random.nextInt(2) * 2 - 1;
 			if (state.getValue(AXIS) == Direction.Axis.X) {
-				z = (double) pos.getZ() + 0.5;
+				z = (double) pos.getZ() + 0.5 + 0.25 * (double) direction;
+				zSpeed = (double) (random.nextFloat() * 2.0f * (float) direction);
 			} else {
-				x = (double) pos.getX() + 0.5;
+				x = (double) pos.getX() + 0.5 + 0.25 * (double) direction;
+				xSpeed = (double) (random.nextFloat() * 2.0f * (float) direction);
 			}
 
-			level.addParticle(ParticleTypes.SMOKE, x, y, z, xSpeed, ySpeed, zSpeed);
+			level.addParticle(ParticleTypes.PORTAL, x, y, z, xSpeed, ySpeed, zSpeed);
 		}
 	}
 }

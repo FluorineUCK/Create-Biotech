@@ -174,6 +174,15 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> GIANT_FROG = ITEMS.register("giant_frog",
 		() -> new GiantFrogItem(CBBlocks.GIANT_FROG.get(), new Item.Properties().stacksTo(1)));
 
+	public static final DeferredHolder<Item, Item> FROG_STOMACH_WALL = ITEMS.register("frog_stomach_wall",
+		() -> new BlockItem(CBBlocks.FROG_STOMACH_WALL.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> FROG_ESOPHAGUS = ITEMS.register("frog_esophagus",
+		() -> new BlockItem(CBBlocks.FROG_ESOPHAGUS.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> FROG_ESOPHAGUS_FRAME = ITEMS.register("frog_esophagus_frame",
+		() -> new BlockItem(CBBlocks.FROG_ESOPHAGUS_FRAME.get(), new Item.Properties()));
+
 	public static final DeferredHolder<Item, Item> ALLAY_PORT = ITEMS.register("allay_port",
 		() -> new AllayPortItem(CBBlocks.ALLAY_PORT.get(), new Item.Properties()));
 
