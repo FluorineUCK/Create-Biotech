@@ -12,6 +12,7 @@ import net.minecraft.client.model.SquidModel;
 import net.minecraft.client.model.geom.ModelLayers;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.animal.Squid;
 import net.neoforged.neoforge.fluids.FluidStack;
@@ -51,7 +52,9 @@ public class SquidPrinterRenderer extends SafeBlockEntityRenderer<SquidPrinterBl
 			}
 		}
 
-		renderSquid(be, partialTicks, ms, buffer, light);
+		Direction facing = be.getBlockState()
+			.getValue(SquidPrinterBlock.FACING);
+		renderSquid(be, partialTicks, ms, buffer, light, facing);
 		FilteringRenderer.renderOnBlockEntity(be, partialTicks, ms, buffer, light, overlay);
 	}
 
@@ -83,10 +86,11 @@ public class SquidPrinterRenderer extends SafeBlockEntityRenderer<SquidPrinterBl
 	}
 
 	private void renderSquid(SquidPrinterBlockEntity be, float partialTicks, PoseStack ms, MultiBufferSource buffer,
-		int light) {
+		int light, Direction facing) {
 		float scale = SquidPrinterSquidVisual.RENDER_SCALE;
 		BlockEntityModelElement.builder()
 			.atLocal(0.5d, SquidPrinterSquidVisual.HEAD_TOP_Y, 0.5d)
+			.rotateY(180.0f - facing.toYRot())
 			.scale(-scale, -scale, scale)
 			.packedLight(light)
 			.render(ms, buffer, (poseStack, buf, lightArg) -> {

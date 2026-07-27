@@ -10,6 +10,7 @@ import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.util.Mth;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -38,18 +39,12 @@ public final class SlimeBeltInsertionPlanner {
 	 * FRONT/BACK track surface nor the movement direction.
 	 */
 	private static final float INSERT_OFF_TRACK_SIDE_OFFSET = .675f;
-	/**
-	 * Extra forward shift along motion direction when a horizontal belt feeds into a
-	 * vertical belt, aligning items with the upstream belt's surface height. If the push
-	 * overshoots the track exit, the item is buffered on the exit turn instead.
-	 */
-	private static final float INSERT_HV_MOTION_OFFSET = .625f;
 
 	/**
 	 * @param track              track the item logically enters
-	 * @param occupancyConnector when set, the occupancy gate requires this whole turn to
-	 *                           be empty instead of probing the track landing (HV
-	 *                           overshoot buffering; stack-independent)
+	 * @param occupancyConnector when set, the occupancy gate additionally requires this
+	 *                           whole turn to be empty (HV landings within one spacing of
+	 *                           the track exit; stack-independent)
 	 * @param landingLoopPosition loop position the item lands at — also the blocking
 	 *                           probe, keeping gate and landing consistent
 	 * @param sideOffset         cross-axis offset to apply, or null to keep the stack's
@@ -71,20 +66,21 @@ public final class SlimeBeltInsertionPlanner {
 		boolean verticalSlope = controller.getBlockState()
 			.getValue(SlimeBeltBlock.SLOPE) == BeltSlope.VERTICAL;
 
-		// The HV-overshoot gate is stack-independent: any horizontal-axis insert into a
-		// vertical belt whose pushed landing would pass the track exit must wait for the
-		// exit turn to be clear, whether or not this particular stack gets the push.
-		boolean hvOvershoot = side != null && !side.getAxis().isVertical() && verticalSlope
-			&& generalTrackProgress(frame, beltLength, segment, track) + INSERT_HV_MOTION_OFFSET > beltLength;
-		LoopSection occupancyConnector = hvOvershoot ? exitTurnOf(frame, track) : null;
+		// HORIZONTAL → VERTICAL input lands level with the feeding belt's top surface
+		// (see hvSurfaceTrackProgress). When that landing sits within one item spacing of
+		// the track exit, gate on the exit turn being clear — the arriving item would
+		// otherwise overlap one already wrapping. Stack-independent, mirroring the
+		// occupancy queries that cannot know the incoming stack.
+		boolean hvIntoVertical = side != null && !side.getAxis().isVertical() && verticalSlope;
+		LoopSection occupancyConnector = null;
+		if (hvIntoVertical && hvSurfaceTrackProgress(controller, frame, segment, track, side) > beltLength - 1)
+			occupancyConnector = exitTurnOf(frame, track);
 
 		boolean isFrontChain = side != null && side == movementFacing && track == Track.FRONT;
 		boolean isBackChain = side != null && side == movementFacing.getOpposite() && track == Track.BACK;
 		boolean isVerticalIntoHorizontalEntry = isVerticalAxisChainIntoHorizontal(controller, segment, track, side);
-		boolean isHvIntoVertical = cameFromBelt && side != null && !side.getAxis().isVertical() && verticalSlope;
 
 		float trackProgress;
-		LoopSection landingConnector = null;
 		if (isFrontChain) {
 			// Smooth FRONT chain-continuation: land at the FRONT entry of this segment,
 			// extrapolated backward when the prior belt sits directly behind us so items
@@ -98,18 +94,13 @@ public final class SlimeBeltInsertionPlanner {
 			// horizontal loop's entry) land exactly at the track entry. Extrapolating the
 			// BACK track backward would overlap the turn arc, so no continuation bias.
 			trackProgress = 0f;
+		} else if (hvIntoVertical && cameFromBelt) {
+			trackProgress = hvSurfaceTrackProgress(controller, frame, segment, track, side);
 		} else {
 			trackProgress = generalTrackProgress(frame, beltLength, segment, track);
-			if (isHvIntoVertical) {
-				trackProgress += INSERT_HV_MOTION_OFFSET;
-				if (trackProgress > beltLength)
-					landingConnector = exitTurnOf(frame, track);
-			}
 		}
 
-		float landing = landingConnector != null
-			? frame.loopPositionOfTurnProgress(landingConnector, SlimeBeltLoopGeometry.WRAP_ENTRY_OFFSET)
-			: frame.loopPositionOfTrackProgress(track, trackProgress);
+		float landing = frame.loopPositionOfTrackProgress(track, trackProgress);
 
 		Float sideOffset = resolveSideOffset(controller, side, movementFacing);
 		return new InsertionPlan(track, occupancyConnector, landing, sideOffset, side, segment);
@@ -223,6 +214,49 @@ public final class SlimeBeltInsertionPlanner {
 		if (track == Track.FRONT)
 			return frame.movementPositive() ? frontOffset : beltLength - frontOffset;
 		return frame.movementPositive() ? beltLength - frontOffset : frontOffset;
+	}
+
+	/**
+	 * Track progress on a vertical belt that lands level with the feeding belt's surface.
+	 * Solves {@code worldY(frontOffset) = sourceBlockY + surfaceHeight} using the vertical
+	 * belt's {@code worldY = (chainUp ? f : 1 - f) - VERTICAL_BELT_DROP} — independent of
+	 * movement direction, unlike the fixed forward push this replaces. Clamped one entry
+	 * offset inside the segment so the item stays addressed to it.
+	 */
+	private static float hvSurfaceTrackProgress(SlimeBeltBlockEntity controller, MotionFrame frame, int segment,
+		Track track, Direction side) {
+		float surfaceHeight = sourceSurfaceHeight(controller, segment, side);
+		float drop = (float) SlimeBeltLoopGeometry.VERTICAL_BELT_DROP;
+		boolean chainUp = controller.getBeltFacing()
+			.getAxisDirection()
+			.getStep() > 0;
+		float frontOffset = chainUp ? segment + surfaceHeight + drop
+			: segment + 1f - surfaceHeight - drop;
+		frontOffset = Mth.clamp(frontOffset, segment + SlimeBeltLoopGeometry.WRAP_ENTRY_OFFSET,
+			segment + 1f - SlimeBeltLoopGeometry.WRAP_ENTRY_OFFSET);
+		return frame.trackProgressOfFrontOffset(track, frontOffset);
+	}
+
+	/**
+	 * Height within the source block of the belt surface feeding us: a slime belt whose
+	 * BACK track exits toward this segment hands items off at its underside, everything
+	 * else (slime FRONT exits, vanilla and magma belts) at its top surface.
+	 */
+	private static float sourceSurfaceHeight(SlimeBeltBlockEntity controller, int segment, Direction side) {
+		float topSurface = .5f + (float) SlimeBeltLoopGeometry.TRACK_SURFACE_OFFSET;
+		if (side == null || controller.getLevel() == null)
+			return topSurface;
+		BlockEntity sourceBE = controller.getLevel()
+			.getBlockEntity(SlimeBeltHelper.getPositionForOffset(controller, segment)
+				.relative(side));
+		if (sourceBE instanceof SlimeBeltBlockEntity sourceSegment) {
+			SlimeBeltBlockEntity sourceController = sourceSegment.getControllerBE();
+			Track outputTrack = sourceController == null ? null
+				: SlimeBeltHelper.getEndpointOutputTrack(sourceController, sourceSegment.index);
+			if (outputTrack == Track.BACK)
+				return .5f - (float) SlimeBeltLoopGeometry.TRACK_SURFACE_OFFSET;
+		}
+		return topSurface;
 	}
 
 	private static LoopSection exitTurnOf(MotionFrame frame, Track track) {

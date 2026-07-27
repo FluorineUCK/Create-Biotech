@@ -661,10 +661,10 @@ public class SlimeBeltInventory {
 	public boolean canInsert(@Nullable InsertionPlan plan) {
 		if (plan == null)
 			return false;
-		// HV-overshoot landings buffer on the exit turn — guard against pile-up there:
-		// if the turn already holds an item, the source must wait.
-		if (plan.occupancyConnector() != null)
-			return isTurnClear(plan.occupancyConnector(), null);
+		// Landings within one spacing of the track exit additionally require the exit
+		// turn to be clear, so the arriving item cannot overlap one already wrapping.
+		if (plan.occupancyConnector() != null && !isTurnClear(plan.occupancyConnector(), null))
+			return false;
 		for (TransportedItemStack stack : items)
 			if (isBlocking(plan.track(), plan.landingLoopPosition(), stack))
 				return false;
