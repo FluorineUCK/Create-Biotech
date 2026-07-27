@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.frogportal;
 
+import javax.annotation.Nullable;
+
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 
@@ -9,12 +11,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Pure geometry + builder for the private rooms in the Frog Stomach dimension. Each space index maps
  * to a fixed, non-overlapping cube laid out on a grid so coordinates stay bounded. A room is a hollow
- * cube walled with the indestructible {@link CBBlocks#FROG_STOMACH_WALL}. Its south wall contains an
- * upright, slimeball-activated 3x3 {@link CBBlocks#FROG_ESOPHAGUS} return portal.
+ * cube walled with the indestructible {@link CBBlocks#FROG_STOMACH_WALL}. Its north wall contains a
+ * high, pre-activated mouth portal and its south wall contains a low, slimeball-activated tail portal.
  */
 public final class FrogStomachSpace {
 
@@ -25,10 +28,16 @@ public final class FrogStomachSpace {
 	/** Y of the room's floor shell. */
 	private static final int BASE_Y = 64;
 	private static final int PORTAL_SIZE = 3;
-	private static final int BOTTOM_FRAME_Y_OFFSET = 1;
-	private static final int PORTAL_Y_OFFSET = BOTTOM_FRAME_Y_OFFSET + 1;
+	private static final int BOTTOM_WALL_Y_OFFSET = 1;
+	private static final int TAIL_PORTAL_Y_OFFSET = BOTTOM_WALL_Y_OFFSET + 1;
+	private static final double MOUTH_ENTRY_SPEED = 0.5d;
 
 	private FrogStomachSpace() {}
+
+	public enum PortalType {
+		MOUTH,
+		TAIL
+	}
 
 	/** Edge length of a room in blocks, from server config (default 48 = 3x3 chunks). */
 	public static int boxSize() {
@@ -43,21 +52,33 @@ public final class FrogStomachSpace {
 		return new BlockPos(col * spacing, BASE_Y, row * spacing);
 	}
 
-	/** Where an arriving entity is placed: interior centre, standing on the floor. */
-	public static BlockPos spawnPos(long index) {
+	/** Bottom-left portal block of the low tail exit, viewed from inside the room. */
+	public static BlockPos tailPortalPos(long index) {
 		BlockPos o = origin(index);
-		int size = boxSize();
-		return new BlockPos(o.getX() + size / 2, o.getY() + 1, o.getZ() + size / 2);
-	}
-
-	/** Bottom-left block of the 3x3 portal field, viewed from inside the room. */
-	public static BlockPos esophagusPos(long index) {
-		BlockPos o = origin(index);
-		return new BlockPos(o.getX() + boxSize() / 2 - 1, o.getY() + PORTAL_Y_OFFSET,
+		return new BlockPos(o.getX() + boxSize() / 2 - 1, o.getY() + TAIL_PORTAL_Y_OFFSET,
 			o.getZ() + boxSize() - 2);
 	}
 
-	public static long spaceIndexFromEsophagusPos(BlockPos pos) {
+	/** Bottom-left portal block of the high mouth entrance, viewed from inside the room. */
+	public static BlockPos mouthPortalPos(long index) {
+		BlockPos o = origin(index);
+		int size = boxSize();
+		return new BlockPos(o.getX() + size / 2 - 1, o.getY() + size - PORTAL_SIZE - 2,
+			o.getZ() + 1);
+	}
+
+	/** Exact centre of the mouth portal, used by everything entering through the Giant Frog's mouth. */
+	public static Vec3 mouthPortalCenter(long index) {
+		return Vec3.atCenterOf(mouthPortalPos(index).offset(1, 1, 0));
+	}
+
+	/** The southward impulse applied after an entity or item arrives through the mouth. */
+	public static Vec3 mouthEntryVelocity() {
+		return Vec3.atLowerCornerOf(Direction.SOUTH.getNormal())
+			.scale(MOUTH_ENTRY_SPEED);
+	}
+
+	public static long spaceIndexFromDigestiveTractPos(BlockPos pos) {
 		int spacing = boxSize() + GAP;
 		long col = Math.floorDiv(pos.getX(), spacing);
 		long row = Math.floorDiv(pos.getZ(), spacing);
@@ -65,28 +86,39 @@ public final class FrogStomachSpace {
 			return -1L;
 
 		long index = row * ROW + col;
-		BlockPos portal = esophagusPos(index);
-		boolean insidePortal = pos.getZ() == portal.getZ()
-			&& pos.getX() >= portal.getX() && pos.getX() < portal.getX() + PORTAL_SIZE
-			&& pos.getY() >= portal.getY() && pos.getY() < portal.getY() + PORTAL_SIZE;
-		boolean insideFrame = isFramePos(index, pos);
-		return insidePortal || insideFrame ? index : -1L;
+		return portalTypeFromDigestiveTractPos(index, pos) != null ? index : -1L;
 	}
 
-	/** Checks both the room shell marker and all twelve generated exit frames. */
+	@Nullable
+	public static PortalType portalTypeFromDigestiveTractPos(long index, BlockPos pos) {
+		for (PortalType type : PortalType.values())
+			if (isPortalPos(index, type, pos) || isWallPos(index, type, pos))
+				return type;
+		return null;
+	}
+
+	/** Checks the shell, both wall rings, and the permanently active mouth portal. */
 	public static boolean isBuilt(ServerLevel level, long index) {
 		if (!level.getBlockState(origin(index)).is(CBBlocks.FROG_STOMACH_WALL.get()))
 			return false;
-		for (BlockPos framePos : framePositions(index))
-			if (!level.getBlockState(framePos).is(CBBlocks.FROG_ESOPHAGUS_FRAME.get()))
+		for (PortalType type : PortalType.values())
+			for (BlockPos wallPos : wallPositions(index, type))
+				if (!level.getBlockState(wallPos).is(CBBlocks.FROG_DIGESTIVE_TRACT_WALL.get()))
+					return false;
+		for (BlockPos wallPos : wallPositions(index, PortalType.MOUTH))
+			if (!level.getBlockState(wallPos).getValue(FrogDigestiveTractWallBlock.HAS_SLIME))
+				return false;
+		for (BlockPos portalPos : portalPositions(index, PortalType.MOUTH))
+			if (!level.getBlockState(portalPos).is(CBBlocks.FROG_DIGESTIVE_TRACT.get()))
 				return false;
 		return true;
 	}
 
 	/**
 	 * Build (or repair) the room for {@code index}: force-loads the covered chunks, places the six
-	 * indestructible wall faces and the inactive return-portal frame. The interior is left as the
-	 * dimension's native void air, so only the shell (~13k blocks for a 48-cube) is written.
+	 * indestructible wall faces, a pre-activated high mouth portal, and an inactive low tail portal.
+	 * The interior is left as the dimension's native void air, so only the shell (~13k blocks for a
+	 * 48-cube) is written.
 	 */
 	public static void buildRoom(ServerLevel level, long index) {
 		int size = boxSize();
@@ -110,50 +142,66 @@ public final class FrogStomachSpace {
 					}
 				}
 
-		BlockState emptyFrame = CBBlocks.FROG_ESOPHAGUS_FRAME.get().defaultBlockState();
-		for (BlockPos framePos : framePositions(index))
-			level.setBlock(framePos, emptyFrame, Block.UPDATE_CLIENTS);
-		for (BlockPos portalPos : portalPositions(index))
+		placeWallRing(level, index, PortalType.TAIL, false);
+		for (BlockPos portalPos : portalPositions(index, PortalType.TAIL))
 			level.setBlock(portalPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
 
-		// Remove the old, single floor portal when an existing room is migrated to the framed exit.
+		placeWallRing(level, index, PortalType.MOUTH, true);
+		activatePortal(level, index, PortalType.MOUTH, false);
+
+		// Remove the old, single floor portal when an existing room is migrated to the walled exit.
 		BlockPos legacyPortal = o.offset(2, 1, 2);
-		if (level.getBlockState(legacyPortal).is(CBBlocks.FROG_ESOPHAGUS.get()))
+		if (level.getBlockState(legacyPortal).is(CBBlocks.FROG_DIGESTIVE_TRACT.get()))
 			level.setBlock(legacyPortal, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
 	}
 
 	/**
-	 * Activates the generated room exit containing {@code filledFramePos}, if all twelve frames have
-	 * received slimeballs.
+	 * Activates the generated room exit containing {@code filledWallPos}, if all twelve
+	 * digestive-tract wall blocks have received slimeballs.
 	 */
-	public static boolean tryActivatePortal(ServerLevel level, BlockPos filledFramePos) {
+	public static boolean tryActivatePortal(ServerLevel level, BlockPos filledWallPos) {
 		if (!level.dimension().equals(FrogStomachDimensions.FROG_STOMACH))
 			return false;
-		long index = spaceIndexFromEsophagusPos(filledFramePos);
-		if (index < 0 || !isFramePos(index, filledFramePos))
+		long index = spaceIndexFromDigestiveTractPos(filledWallPos);
+		PortalType type = index >= 0 ? portalTypeFromDigestiveTractPos(index, filledWallPos) : null;
+		if (type == null || !isWallPos(index, type, filledWallPos))
 			return false;
-		for (BlockPos framePos : framePositions(index)) {
-			BlockState state = level.getBlockState(framePos);
-			if (!state.is(CBBlocks.FROG_ESOPHAGUS_FRAME.get())
-				|| !state.getValue(FrogEsophagusFrameBlock.HAS_SLIME))
+		for (BlockPos wallPos : wallPositions(index, type)) {
+			BlockState state = level.getBlockState(wallPos);
+			if (!state.is(CBBlocks.FROG_DIGESTIVE_TRACT_WALL.get())
+				|| !state.getValue(FrogDigestiveTractWallBlock.HAS_SLIME))
 				return false;
 		}
 
-		BlockState portal = CBBlocks.FROG_ESOPHAGUS.get()
-			.defaultBlockState()
-			.setValue(FrogPortalBehaviour.AXIS, Direction.Axis.X);
-		for (BlockPos portalPos : portalPositions(index)) {
-			level.setBlock(portalPos, portal, Block.UPDATE_CLIENTS);
-			if (level.getBlockEntity(portalPos) instanceof FrogEsophagusBlockEntity esophagus)
-				esophagus.setSpaceIndex(index);
-		}
-		BlockPos center = esophagusPos(index).offset(1, 1, 0);
-		level.globalLevelEvent(1038, center, 0);
+		activatePortal(level, index, type, true);
 		return true;
 	}
 
-	private static BlockPos[] framePositions(long index) {
-		BlockPos portal = esophagusPos(index);
+	private static void placeWallRing(ServerLevel level, long index, PortalType type, boolean activated) {
+		Direction facing = type == PortalType.MOUTH ? Direction.SOUTH : Direction.NORTH;
+		BlockState wall = CBBlocks.FROG_DIGESTIVE_TRACT_WALL.get()
+			.defaultBlockState()
+			.setValue(FrogDigestiveTractWallBlock.HAS_SLIME, activated)
+			.setValue(FrogDigestiveTractWallBlock.FACING, facing);
+		for (BlockPos wallPos : wallPositions(index, type))
+			level.setBlock(wallPos, wall, Block.UPDATE_CLIENTS);
+	}
+
+	private static void activatePortal(ServerLevel level, long index, PortalType type, boolean playEffect) {
+		BlockState portal = CBBlocks.FROG_DIGESTIVE_TRACT.get()
+			.defaultBlockState()
+			.setValue(FrogDigestiveTractBehaviour.AXIS, Direction.Axis.X);
+		for (BlockPos portalPos : portalPositions(index, type)) {
+			level.setBlock(portalPos, portal, Block.UPDATE_CLIENTS);
+			if (level.getBlockEntity(portalPos) instanceof FrogDigestiveTractBlockEntity digestiveTract)
+				digestiveTract.setBinding(index, type);
+		}
+		if (playEffect)
+			level.globalLevelEvent(1038, portalPos(index, type).offset(1, 1, 0), 0);
+	}
+
+	private static BlockPos[] wallPositions(long index, PortalType type) {
+		BlockPos portal = portalPos(index, type);
 		BlockPos[] positions = new BlockPos[PORTAL_SIZE * 4];
 		int next = 0;
 		for (int x = 0; x < PORTAL_SIZE; x++) {
@@ -167,8 +215,8 @@ public final class FrogStomachSpace {
 		return positions;
 	}
 
-	private static BlockPos[] portalPositions(long index) {
-		BlockPos portal = esophagusPos(index);
+	private static BlockPos[] portalPositions(long index, PortalType type) {
+		BlockPos portal = portalPos(index, type);
 		BlockPos[] positions = new BlockPos[PORTAL_SIZE * PORTAL_SIZE];
 		int next = 0;
 		for (int x = 0; x < PORTAL_SIZE; x++)
@@ -177,8 +225,15 @@ public final class FrogStomachSpace {
 		return positions;
 	}
 
-	private static boolean isFramePos(long index, BlockPos pos) {
-		BlockPos portal = esophagusPos(index);
+	private static boolean isPortalPos(long index, PortalType type, BlockPos pos) {
+		BlockPos portal = portalPos(index, type);
+		return pos.getZ() == portal.getZ()
+			&& pos.getX() >= portal.getX() && pos.getX() < portal.getX() + PORTAL_SIZE
+			&& pos.getY() >= portal.getY() && pos.getY() < portal.getY() + PORTAL_SIZE;
+	}
+
+	private static boolean isWallPos(long index, PortalType type, BlockPos pos) {
+		BlockPos portal = portalPos(index, type);
 		if (pos.getZ() != portal.getZ())
 			return false;
 		int dx = pos.getX() - portal.getX();
@@ -186,5 +241,9 @@ public final class FrogStomachSpace {
 		boolean horizontalEdge = dx >= 0 && dx < PORTAL_SIZE && (dy == -1 || dy == PORTAL_SIZE);
 		boolean verticalEdge = dy >= 0 && dy < PORTAL_SIZE && (dx == -1 || dx == PORTAL_SIZE);
 		return horizontalEdge || verticalEdge;
+	}
+
+	private static BlockPos portalPos(long index, PortalType type) {
+		return type == PortalType.MOUTH ? mouthPortalPos(index) : tailPortalPos(index);
 	}
 }

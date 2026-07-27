@@ -316,6 +316,16 @@ public class GiantFrogBlock extends BaseEntityBlock {
 		return mainPos.relative(state.getValue(FACING));
 	}
 
+	/** The air block one block beyond the front edge of the frog's mouth. */
+	public static BlockPos getMouthExitPos(BlockPos mainPos, Direction facing) {
+		return mainPos.relative(facing, CENTER_OFFSET + 1);
+	}
+
+	/** The air block one block beyond the rear edge of the frog. */
+	public static BlockPos getTailExitPos(BlockPos mainPos, Direction facing) {
+		return mainPos.relative(facing.getOpposite(), CENTER_OFFSET + 1);
+	}
+
 	private static ItemStack createDropStack(BlockGetter level, BlockPos mainPos) {
 		ItemStack stack = new ItemStack(CBItems.GIANT_FROG.get());
 		if (level.getBlockEntity(mainPos) instanceof GiantFrogBlockEntity frog)

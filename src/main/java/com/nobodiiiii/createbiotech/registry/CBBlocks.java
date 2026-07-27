@@ -19,8 +19,8 @@ import com.nobodiiiii.createbiotech.content.experience.ExperienceConstants;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlock;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlock;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
-import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusBlock;
-import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusFrameBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractWallBlock;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
@@ -302,9 +302,9 @@ public class CBBlocks {
 				.noLootTable()));
 
 	// Indestructible return portal inside every Frog Stomach room; placed with the room, never obtainable.
-	public static final DeferredHolder<Block, FrogEsophagusBlock> FROG_ESOPHAGUS =
-		BLOCKS.register("frog_esophagus",
-			() -> new FrogEsophagusBlock(Block.Properties.of()
+	public static final DeferredHolder<Block, FrogDigestiveTractBlock> FROG_DIGESTIVE_TRACT =
+		BLOCKS.register("frog_digestive_tract",
+			() -> new FrogDigestiveTractBlock(Block.Properties.of()
 				.sound(SoundType.SLIME_BLOCK)
 				.strength(-1.0f, 3600000.0f)
 				.mapColor(MapColor.COLOR_RED)
@@ -313,10 +313,10 @@ public class CBBlocks {
 				.noOcclusion()
 				.noLootTable()));
 
-	// Upright End Portal-style frame; generated with each Frog Stomach room and filled with slimeballs.
-	public static final DeferredHolder<Block, FrogEsophagusFrameBlock> FROG_ESOPHAGUS_FRAME =
-		BLOCKS.register("frog_esophagus_frame",
-			() -> new FrogEsophagusFrameBlock(Block.Properties.ofFullCopy(Blocks.END_PORTAL_FRAME)
+	// Upright digestive-tract wall; generated with each Frog Stomach room and filled with slimeballs.
+	public static final DeferredHolder<Block, FrogDigestiveTractWallBlock> FROG_DIGESTIVE_TRACT_WALL =
+		BLOCKS.register("frog_digestive_tract_wall",
+			() -> new FrogDigestiveTractWallBlock(Block.Properties.ofFullCopy(Blocks.END_PORTAL_FRAME)
 				.strength(-1.0f, 3600000.0f)
 				.noLootTable()));
 

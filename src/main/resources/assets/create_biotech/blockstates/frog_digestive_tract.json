@@ -1,0 +1,6 @@
+{
+  "variants": {
+    "axis=x": { "model": "create_biotech:block/frog_digestive_tract_ns" },
+    "axis=z": { "model": "create_biotech:block/frog_digestive_tract_ew" }
+  }
+}

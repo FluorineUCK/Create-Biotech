@@ -7,6 +7,7 @@ import java.util.UUID;
 import javax.annotation.Nullable;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -24,8 +25,8 @@ import net.minecraft.world.phys.Vec3;
  * <ul>
  *   <li>a monotonic counter that hands out a unique space index to every Giant Frog on its first
  *       successful swallow, and</li>
- *   <li>a per-player, per-room record of where each entity entered from, so a Frog Esophagus sends
- *       them back to where that frog swallowed them into that specific room.</li>
+ *   <li>the current dimension, block position, and facing of the Giant Frog bound to each room, and</li>
+ *   <li>legacy per-player return points retained as a fallback for rooms created by older versions.</li>
  * </ul>
  * Stored on the overworld data storage, mirroring {@code ShulkerTeleporterSavedData}.
  */
@@ -35,6 +36,7 @@ public class FrogStomachSavedData extends SavedData {
 
 	private long nextIndex = 0L;
 	private final Map<ReturnKey, Location> returnPoints = new HashMap<>();
+	private final Map<Long, FrogLocation> frogLocations = new HashMap<>();
 
 	public static FrogStomachSavedData get(MinecraftServer server) {
 		return server.overworld()
@@ -59,6 +61,18 @@ public class FrogStomachSavedData extends SavedData {
 		return returnPoints.get(new ReturnKey(uuid, spaceIndex));
 	}
 
+	public void setFrogLocation(long spaceIndex, ResourceKey<Level> dimension, BlockPos pos, Direction facing) {
+		FrogLocation location = new FrogLocation(dimension, pos.immutable(), facing);
+		if (location.equals(frogLocations.put(spaceIndex, location)))
+			return;
+		setDirty();
+	}
+
+	@Nullable
+	public FrogLocation getFrogLocation(long spaceIndex) {
+		return frogLocations.get(spaceIndex);
+	}
+
 	@Override
 	public CompoundTag save(CompoundTag tag, HolderLookup.Provider registries) {
 		tag.putLong("NextIndex", nextIndex);
@@ -74,6 +88,17 @@ public class FrogStomachSavedData extends SavedData {
 			entries.add(entryTag);
 		}
 		tag.put("ReturnPoints", entries);
+
+		ListTag frogs = new ListTag();
+		for (Map.Entry<Long, FrogLocation> entry : frogLocations.entrySet()) {
+			CompoundTag frogTag = new CompoundTag();
+			frogTag.putLong("SpaceIndex", entry.getKey());
+			frogTag.putString("Dimension", entry.getValue().dimension().location().toString());
+			frogTag.putLong("Pos", entry.getValue().pos().asLong());
+			frogTag.putString("Facing", entry.getValue().facing().getSerializedName());
+			frogs.add(frogTag);
+		}
+		tag.put("FrogLocations", frogs);
 		return tag;
 	}
 
@@ -95,6 +120,22 @@ public class FrogStomachSavedData extends SavedData {
 					new Location(dimension, pos));
 			} catch (IllegalArgumentException ignored) {}
 		}
+
+		ListTag frogs = tag.getList("FrogLocations", Tag.TAG_COMPOUND);
+		for (Tag rawFrog : frogs) {
+			CompoundTag frogTag = (CompoundTag) rawFrog;
+			try {
+				if (!frogTag.contains("SpaceIndex", Tag.TAG_LONG) || !frogTag.contains("Pos", Tag.TAG_LONG))
+					continue;
+				ResourceLocation dimensionId = ResourceLocation.parse(frogTag.getString("Dimension"));
+				ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION, dimensionId);
+				Direction facing = Direction.byName(frogTag.getString("Facing"));
+				if (facing == null || facing.getAxis().isVertical())
+					continue;
+				data.frogLocations.put(frogTag.getLong("SpaceIndex"),
+					new FrogLocation(dimension, BlockPos.of(frogTag.getLong("Pos")), facing));
+			} catch (IllegalArgumentException ignored) {}
+		}
 		return data;
 	}
 
@@ -111,4 +152,6 @@ public class FrogStomachSavedData extends SavedData {
 	private record ReturnKey(UUID uuid, long spaceIndex) {}
 
 	public record Location(ResourceKey<Level> dimension, Vec3 pos) {}
+
+	public record FrogLocation(ResourceKey<Level> dimension, BlockPos pos, Direction facing) {}
 }

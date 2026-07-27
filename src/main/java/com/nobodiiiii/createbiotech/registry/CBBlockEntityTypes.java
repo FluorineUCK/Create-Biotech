@@ -12,7 +12,7 @@ import com.nobodiiiii.createbiotech.content.experience.BuddingExperienceBlockEnt
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlockEntity;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlockEntity;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlockEntity;
-import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusBlockEntity;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlockEntity;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlockEntity;
 import com.nobodiiiii.createbiotech.content.fluid.NetherPortalFluidBlockEntity;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlockEntity;
@@ -191,10 +191,10 @@ public class CBBlockEntityTypes {
 				.of(GiantFrogBlockEntity::new, CBBlocks.GIANT_FROG.get())
 				.build(null));
 
-	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FrogEsophagusBlockEntity>> FROG_ESOPHAGUS =
-		BLOCK_ENTITY_TYPES.register("frog_esophagus",
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FrogDigestiveTractBlockEntity>>
+		FROG_DIGESTIVE_TRACT = BLOCK_ENTITY_TYPES.register("frog_digestive_tract",
 			() -> BlockEntityType.Builder
-				.of(FrogEsophagusBlockEntity::new, CBBlocks.FROG_ESOPHAGUS.get())
+				.of(FrogDigestiveTractBlockEntity::new, CBBlocks.FROG_DIGESTIVE_TRACT.get())
 				.build(null));
 
 	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported

@@ -22,13 +22,13 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-public final class FrogPortalBehaviour {
+public final class FrogDigestiveTractBehaviour {
 
 	static final EnumProperty<Direction.Axis> AXIS = BlockStateProperties.HORIZONTAL_AXIS;
 	private static final VoxelShape X_AXIS_AABB = Block.box(0.0, 0.0, 6.0, 16.0, 16.0, 10.0);
 	private static final VoxelShape Z_AXIS_AABB = Block.box(6.0, 0.0, 0.0, 10.0, 16.0, 16.0);
 
-	private FrogPortalBehaviour() {}
+	private FrogDigestiveTractBehaviour() {}
 
 	static VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
 		return state.getValue(AXIS) == Direction.Axis.Z ? Z_AXIS_AABB : X_AXIS_AABB;
@@ -54,10 +54,14 @@ public final class FrogPortalBehaviour {
 	}
 
 	public static DimensionTransition transitionTo(ServerLevel level, Entity entity, Vec3 pos) {
+		return transitionTo(level, entity, pos, entity.getDeltaMovement());
+	}
+
+	public static DimensionTransition transitionTo(ServerLevel level, Entity entity, Vec3 pos, Vec3 deltaMovement) {
 		BlockPos ticketPos = BlockPos.containing(pos);
 		DimensionTransition.PostDimensionTransition postTransition =
 			DimensionTransition.PLAY_PORTAL_SOUND.then(transitionedEntity -> transitionedEntity.placePortalTicket(ticketPos));
-		return new DimensionTransition(level, pos, entity.getDeltaMovement(), entity.getYRot(), entity.getXRot(),
+		return new DimensionTransition(level, pos, deltaMovement, entity.getYRot(), entity.getXRot(),
 			postTransition);
 	}
 

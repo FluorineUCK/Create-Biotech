@@ -33,8 +33,8 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.SHULKER_TELEPORTER.get());
 				output.accept(CBItems.GIANT_FROG.get());
 				output.accept(CBItems.FROG_STOMACH_WALL.get(), TabVisibility.SEARCH_TAB_ONLY);
-				output.accept(CBItems.FROG_ESOPHAGUS.get(), TabVisibility.SEARCH_TAB_ONLY);
-				output.accept(CBItems.FROG_ESOPHAGUS_FRAME.get(), TabVisibility.SEARCH_TAB_ONLY);
+				output.accept(CBItems.FROG_DIGESTIVE_TRACT.get(), TabVisibility.SEARCH_TAB_ONLY);
+				output.accept(CBItems.FROG_DIGESTIVE_TRACT_WALL.get(), TabVisibility.SEARCH_TAB_ONLY);
 				output.accept(CBItems.ALLAY_PORT.get());
 				output.accept(CBItems.ALLAY_COURIER.get());
 				output.accept(CBItems.UNIVERSAL_JOINT.get());

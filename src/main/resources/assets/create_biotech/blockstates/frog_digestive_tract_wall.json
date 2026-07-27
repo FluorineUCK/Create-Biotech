@@ -1,0 +1,42 @@
+{
+  "variants": {
+    "facing=north,slime=false": {
+      "model": "minecraft:block/end_portal_frame",
+      "x": 90
+    },
+    "facing=north,slime=true": {
+      "model": "create_biotech:block/frog_digestive_tract_wall_filled",
+      "x": 90
+    },
+    "facing=east,slime=false": {
+      "model": "minecraft:block/end_portal_frame",
+      "x": 90,
+      "y": 90
+    },
+    "facing=east,slime=true": {
+      "model": "create_biotech:block/frog_digestive_tract_wall_filled",
+      "x": 90,
+      "y": 90
+    },
+    "facing=south,slime=false": {
+      "model": "minecraft:block/end_portal_frame",
+      "x": 90,
+      "y": 180
+    },
+    "facing=south,slime=true": {
+      "model": "create_biotech:block/frog_digestive_tract_wall_filled",
+      "x": 90,
+      "y": 180
+    },
+    "facing=west,slime=false": {
+      "model": "minecraft:block/end_portal_frame",
+      "x": 90,
+      "y": 270
+    },
+    "facing=west,slime=true": {
+      "model": "create_biotech:block/frog_digestive_tract_wall_filled",
+      "x": 90,
+      "y": 270
+    }
+  }
+}

@@ -4,7 +4,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
-import com.nobodiiiii.createbiotech.content.frogportal.FrogPortalBehaviour;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBehaviour;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachDimensions;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSavedData;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSpace;
@@ -64,6 +64,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	private int tongueAnimationAge;
 	private boolean hasSpace;
 	private long spaceIndex = -1L;
+	private boolean frogLocationRecorded;
 	private PendingEat pendingEat;
 	private TransportedItemStack beltTransferItem;
 	private int beltTransferAge;
@@ -92,6 +93,8 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 			be.tickClientAnimation();
 			return;
 		}
+		if (be.hasSpace && !be.frogLocationRecorded && level instanceof ServerLevel serverLevel)
+			be.recordFrogLocation(serverLevel.getServer());
 
 		be.tickServerBeltTransfer();
 		if (be.hasActiveBeltTransfer())
@@ -200,8 +203,8 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		FrogStomachSavedData.get(server)
 			.setReturn(player.getUUID(), index, eat.returnDimension, eat.returnPos);
 
-		Entity changed = player.changeDimension(FrogPortalBehaviour.transitionTo(frogLevel, player,
-			Vec3.atBottomCenterOf(FrogStomachSpace.spawnPos(index))));
+		Entity changed = player.changeDimension(FrogDigestiveTractBehaviour.transitionTo(frogLevel, player,
+			FrogStomachSpace.mouthPortalCenter(index), FrogStomachSpace.mouthEntryVelocity()));
 		if (changed != null)
 			changed.setPortalCooldown();
 	}
@@ -295,6 +298,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		} else if (!FrogStomachSpace.isBuilt(frogLevel, spaceIndex)) {
 			FrogStomachSpace.buildRoom(frogLevel, spaceIndex);
 		}
+		recordFrogLocation(server);
 		return spaceIndex;
 	}
 
@@ -310,6 +314,16 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		spaceIndex = index;
 		hasSpace = true;
 		setChanged();
+		if (level instanceof ServerLevel serverLevel)
+			recordFrogLocation(serverLevel.getServer());
+	}
+
+	private void recordFrogLocation(MinecraftServer server) {
+		if (!hasSpace || !(level instanceof ServerLevel serverLevel) || !GiantFrogBlock.isMain(getBlockState()))
+			return;
+		FrogStomachSavedData.get(server)
+			.setFrogLocation(spaceIndex, serverLevel.dimension(), worldPosition, getFacing(getBlockState()));
+		frogLocationRecorded = true;
 	}
 
 	private void tickSmartBlockEntity() {
@@ -474,10 +488,10 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 			return stack;
 
 		long index = ensureRoom(server, frogLevel);
-		BlockPos spawnPos = FrogStomachSpace.spawnPos(index);
-		ItemEntity item = new ItemEntity(frogLevel, spawnPos.getX() + 0.5d, spawnPos.getY() + 0.35d,
-			spawnPos.getZ() + 0.5d, stack.copy());
-		item.setDeltaMovement(Vec3.ZERO);
+		Vec3 entryPos = FrogStomachSpace.mouthPortalCenter(index);
+		ItemEntity item = new ItemEntity(frogLevel, entryPos.x, entryPos.y, entryPos.z, stack.copy());
+		item.setDeltaMovement(FrogStomachSpace.mouthEntryVelocity());
+		item.setPortalCooldown();
 		item.setDefaultPickUpDelay();
 		if (!frogLevel.addFreshEntity(item))
 			return stack;
@@ -604,6 +618,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 			return;
 		hasSpace = tag.getBoolean("HasSpace");
 		spaceIndex = tag.getLong("SpaceIndex");
+		frogLocationRecorded = false;
 		if (tag.contains("BeltTransferItem")) {
 			beltTransferItem = TransportedItemStack.read(tag.getCompound("BeltTransferItem"), registries);
 			beltTransferAge = tag.getInt("BeltTransferAge");
