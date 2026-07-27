@@ -8,6 +8,7 @@ import org.apache.commons.lang3.mutable.MutableBoolean;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Track;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInventory;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
 import com.simibubi.create.AllBlocks;
@@ -171,7 +172,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 			if (beltInventory == null || controller == null)
 				return;
 
-			SlimeBeltHelper.Track insertTrack = getClosestCaptureTrack(entity, belt, beltInventory, controller);
+			Track insertTrack = getClosestCaptureTrack(entity, belt, beltInventory, controller);
 			if (insertTrack == null)
 				return;
 
@@ -219,12 +220,12 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 		return slope != BeltSlope.VERTICAL && slope != BeltSlope.SIDEWAYS;
 	}
 
-	private static SlimeBeltHelper.Track getClosestCaptureTrack(Entity entity, SlimeBeltBlockEntity belt, SlimeBeltInventory beltInventory,
+	private static Track getClosestCaptureTrack(Entity entity, SlimeBeltBlockEntity belt, SlimeBeltInventory beltInventory,
 		SlimeBeltBlockEntity controller) {
-		SlimeBeltHelper.Track primary = getNearestTrack(entity.getBoundingBox()
+		Track primary = getNearestTrack(entity.getBoundingBox()
 			.getCenter(), belt, controller);
-		SlimeBeltHelper.Track secondary = primary == SlimeBeltHelper.Track.FRONT ? SlimeBeltHelper.Track.BACK
-			: SlimeBeltHelper.Track.FRONT;
+		Track secondary = primary == Track.FRONT ? Track.BACK
+			: Track.FRONT;
 		if (beltInventory.canInsertAtOnTrack(belt.index, primary))
 			return primary;
 		if (beltInventory.canInsertAtOnTrack(belt.index, secondary))
@@ -234,16 +235,16 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 
 	// Dropped items can touch either exposed belt surface, so choose the insertion point on the nearest track.
 	private static Vec3 getCaptureTarget(SlimeBeltBlockEntity belt, SlimeBeltBlockEntity controller,
-		SlimeBeltHelper.Track track) {
+		Track track) {
 		return SlimeBeltHelper.getTrackCenterVector(controller, belt.index, track);
 	}
 
-	private static SlimeBeltHelper.Track getNearestTrack(Vec3 referencePoint, SlimeBeltBlockEntity belt,
+	private static Track getNearestTrack(Vec3 referencePoint, SlimeBeltBlockEntity belt,
 		SlimeBeltBlockEntity controller) {
-		Vec3 frontTarget = getCaptureTarget(belt, controller, SlimeBeltHelper.Track.FRONT);
-		Vec3 backTarget = getCaptureTarget(belt, controller, SlimeBeltHelper.Track.BACK);
+		Vec3 frontTarget = getCaptureTarget(belt, controller, Track.FRONT);
+		Vec3 backTarget = getCaptureTarget(belt, controller, Track.BACK);
 		return referencePoint.distanceToSqr(backTarget) < referencePoint.distanceToSqr(frontTarget)
-			? SlimeBeltHelper.Track.BACK : SlimeBeltHelper.Track.FRONT;
+			? Track.BACK : Track.FRONT;
 	}
 
 	@Override
@@ -302,11 +303,11 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 				return InteractionResult.SUCCESS;
 
 			SlimeBeltInventory beltInventory = controllerBelt.getInventory();
-			SlimeBeltHelper.Track clickedTrack = getNearestTrack(hit.getLocation(), belt, controllerBelt);
+			Track clickedTrack = getNearestTrack(hit.getLocation(), belt, controllerBelt);
 			MutableBoolean success = tryPickupItemFromTrack(player, belt, beltInventory, clickedTrack);
 			if (!success.isTrue())
 				success = tryPickupItemFromTrack(player, belt, beltInventory,
-					clickedTrack == SlimeBeltHelper.Track.FRONT ? SlimeBeltHelper.Track.BACK : SlimeBeltHelper.Track.FRONT);
+					clickedTrack == Track.FRONT ? Track.BACK : Track.FRONT);
 
 			if (success.isTrue())
 				world.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, .2f,
@@ -329,7 +330,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeB
 	}
 
 	private static MutableBoolean tryPickupItemFromTrack(Player player, SlimeBeltBlockEntity belt,
-		SlimeBeltInventory beltInventory, SlimeBeltHelper.Track track) {
+		SlimeBeltInventory beltInventory, Track track) {
 		MutableBoolean success = new MutableBoolean(false);
 		beltInventory.applyToEachWithin(belt.index + .5f, .55f, track, transportedItemStack -> {
 			player.getInventory().placeItemBackInInventory(transportedItemStack.stack);

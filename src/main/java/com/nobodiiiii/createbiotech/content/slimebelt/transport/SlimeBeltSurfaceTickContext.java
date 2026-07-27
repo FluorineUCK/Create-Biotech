@@ -4,7 +4,7 @@ import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.FunnelTickContext;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper.Track;
+import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Track;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.foundation.blockEntity.behaviour.inventory.VersionedInventoryTrackerBehaviour;
 

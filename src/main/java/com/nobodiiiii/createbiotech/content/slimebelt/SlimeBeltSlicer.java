@@ -242,10 +242,11 @@ public class SlimeBeltSlicer {
 		}
 
 		List<TransportedSnapshot> snapshots = new ArrayList<>();
-		for (SlimeBeltBlockEntity controller : uniqueControllers.values())
+		for (SlimeBeltBlockEntity controller : uniqueControllers.values()) {
+			SlimeBeltLoopGeometry loop = controller.getLoop();
 			for (TransportedItemStack transported : new ArrayList<>(controller.getInventory().getTransportedItems()))
-				snapshots.add(new TransportedSnapshot(transported.copy(),
-					SlimeBeltHelper.getVectorForOffset(controller, transported.beltPosition)));
+				snapshots.add(new TransportedSnapshot(transported.copy(), loop.worldPos(transported.beltPosition)));
+		}
 		return snapshots;
 	}
 
@@ -263,7 +264,7 @@ public class SlimeBeltSlicer {
 		for (TransportedSnapshot snapshot : snapshots) {
 			Placement bestPlacement = null;
 			for (SlimeBeltBlockEntity controller : controllers) {
-				Projection projection = projectOntoLoop(controller, snapshot.worldPosition());
+				Projection projection = projectOntoLoop(controller.getLoop(), snapshot.worldPosition());
 				if (bestPlacement == null || projection.distanceSqr() < bestPlacement.distanceSqr())
 					bestPlacement = new Placement(controller, snapshot.transported().copy(), projection.loopPosition(),
 						projection.distanceSqr());
@@ -284,7 +285,7 @@ public class SlimeBeltSlicer {
 				float loopPosition = placement.loopPosition();
 				if (previousPosition != Float.NEGATIVE_INFINITY && Math.abs(loopPosition - previousPosition) < POSITION_EPSILON)
 					loopPosition = previousPosition + POSITION_EPSILON;
-				loopPosition = SlimeBeltHelper.normalizeLoopPosition(controller, loopPosition);
+				loopPosition = controller.getLoop().normalize(loopPosition);
 
 				transported.beltPosition = loopPosition;
 				transported.prevBeltPosition = loopPosition;
@@ -314,23 +315,23 @@ public class SlimeBeltSlicer {
 		return new ArrayList<>(uniqueControllers.values());
 	}
 
-	private static Projection projectOntoLoop(SlimeBeltBlockEntity controller, Vec3 worldPosition) {
-		float loopLength = SlimeBeltHelper.getLoopLength(controller);
+	private static Projection projectOntoLoop(SlimeBeltLoopGeometry loop, Vec3 worldPosition) {
+		float loopLength = loop.loopLength();
 		if (loopLength <= 0)
 			return new Projection(0, Double.MAX_VALUE);
 
 		Projection best = new Projection(0, Double.MAX_VALUE);
-		best = sampleProjection(controller, worldPosition, 0, loopLength, PROJECTION_COARSE_STEP, best);
-		return sampleProjection(controller, worldPosition, best.loopPosition() - PROJECTION_FINE_RADIUS,
+		best = sampleProjection(loop, worldPosition, 0, loopLength, PROJECTION_COARSE_STEP, best);
+		return sampleProjection(loop, worldPosition, best.loopPosition() - PROJECTION_FINE_RADIUS,
 			best.loopPosition() + PROJECTION_FINE_RADIUS, PROJECTION_FINE_STEP, best);
 	}
 
-	private static Projection sampleProjection(SlimeBeltBlockEntity controller, Vec3 worldPosition, float start,
+	private static Projection sampleProjection(SlimeBeltLoopGeometry loop, Vec3 worldPosition, float start,
 		float end, float step, Projection initialBest) {
 		Projection best = initialBest;
 		for (float sample = start; sample <= end + step / 2f; sample += step) {
-			float loopPosition = SlimeBeltHelper.normalizeLoopPosition(controller, sample);
-			double distanceSqr = SlimeBeltHelper.getVectorForOffset(controller, loopPosition).distanceToSqr(worldPosition);
+			float loopPosition = loop.normalize(sample);
+			double distanceSqr = loop.worldPos(loopPosition).distanceToSqr(worldPosition);
 			if (distanceSqr < best.distanceSqr())
 				best = new Projection(loopPosition, distanceSqr);
 		}
@@ -338,34 +339,11 @@ public class SlimeBeltSlicer {
 	}
 
 	private static void updateInsertionData(SlimeBeltBlockEntity controller, TransportedItemStack transported) {
-		float normalized = SlimeBeltHelper.normalizeLoopPosition(controller, transported.beltPosition);
-		float frontOffset = SlimeBeltHelper.getFrontOffsetForLoopPosition(controller, normalized);
-		int segment = Mth.clamp(Mth.floor(frontOffset), 0, controller.beltLength - 1);
-		SlimeBeltHelper.LoopSection section = SlimeBeltHelper.getLoopSection(controller, normalized);
-		SlimeBeltHelper.Track track = switch (section) {
-			case BACK -> SlimeBeltHelper.Track.BACK;
-			case END_TURN -> getConnectorProgress(controller, normalized, section) < .5f
-				? SlimeBeltHelper.Track.FRONT : SlimeBeltHelper.Track.BACK;
-			case START_TURN -> getConnectorProgress(controller, normalized, section) < .5f
-				? SlimeBeltHelper.Track.BACK : SlimeBeltHelper.Track.FRONT;
-			default -> SlimeBeltHelper.Track.FRONT;
-		};
+		SlimeBeltLoopGeometry loop = controller.getLoop();
+		float normalized = loop.normalize(transported.beltPosition);
+		int segment = Mth.clamp(Mth.floor(loop.frontOffset(normalized)), 0, controller.beltLength - 1);
 		transported.insertedAt = segment;
-		transported.insertedFrom = SlimeBeltHelper.getRepresentativeSideForTrack(controller, segment, track);
-	}
-
-	private static float getConnectorProgress(SlimeBeltBlockEntity controller, float loopPosition,
-		SlimeBeltHelper.LoopSection section) {
-		float normalized = SlimeBeltHelper.normalizeLoopPosition(controller, loopPosition);
-		float connectorLength = SlimeBeltHelper.getConnectorLength(controller);
-		if (connectorLength <= 0)
-			return 1;
-		return switch (section) {
-			case END_TURN -> Mth.clamp((normalized - controller.beltLength) / connectorLength, 0, 1);
-			case START_TURN -> Mth.clamp(
-				(normalized - (controller.beltLength + connectorLength + controller.beltLength)) / connectorLength, 0, 1);
-			default -> 0;
-		};
+		transported.insertedFrom = loop.representativeSide(segment, loop.closestTrack(normalized));
 	}
 
 	private static void spawnSnapshot(Level world, TransportedSnapshot snapshot) {
