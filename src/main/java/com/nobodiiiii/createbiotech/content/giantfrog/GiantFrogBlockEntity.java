@@ -293,10 +293,10 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 		if (!hasSpace) {
 			spaceIndex = FrogStomachSavedData.get(server).allocateSpace();
 			hasSpace = true;
-			FrogStomachSpace.buildRoom(frogLevel, spaceIndex);
+			FrogStomachSpace.buildRoom(frogLevel, spaceIndex, true);
 			setChanged();
 		} else if (!FrogStomachSpace.isBuilt(frogLevel, spaceIndex)) {
-			FrogStomachSpace.buildRoom(frogLevel, spaceIndex);
+			FrogStomachSpace.buildRoom(frogLevel, spaceIndex, false);
 		}
 		recordFrogLocation(server);
 		return spaceIndex;

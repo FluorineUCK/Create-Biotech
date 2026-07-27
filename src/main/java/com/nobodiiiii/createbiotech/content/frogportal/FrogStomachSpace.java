@@ -8,6 +8,7 @@ import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,8 +29,13 @@ public final class FrogStomachSpace {
 	/** Y of the room's floor shell. */
 	private static final int BASE_Y = 64;
 	private static final int PORTAL_SIZE = 3;
+	private static final int PORTAL_FRONT_SIZE = 5;
 	private static final int BOTTOM_WALL_Y_OFFSET = 1;
 	private static final int TAIL_PORTAL_Y_OFFSET = BOTTOM_WALL_Y_OFFSET + 1;
+	private static final int MIN_RANDOM_PILES = 3;
+	private static final int RANDOM_PILE_VARIATION = 4;
+	private static final int MAX_PILE_HEIGHT = 3;
+	private static final int MAX_PILE_RADIUS = 6;
 	private static final double MOUTH_ENTRY_SPEED = 0.5d;
 
 	private FrogStomachSpace() {}
@@ -116,11 +122,10 @@ public final class FrogStomachSpace {
 
 	/**
 	 * Build (or repair) the room for {@code index}: force-loads the covered chunks, places the six
-	 * indestructible wall faces, a pre-activated high mouth portal, and an inactive low tail portal.
-	 * The interior is left as the dimension's native void air, so only the shell (~13k blocks for a
-	 * 48-cube) is written.
+	 * indestructible wall faces, optionally generates secretion piles for a newly allocated room,
+	 * and places a pre-activated high mouth portal plus an inactive low tail portal.
 	 */
-	public static void buildRoom(ServerLevel level, long index) {
+	public static void buildRoom(ServerLevel level, long index, boolean generateSecretions) {
 		int size = boxSize();
 		BlockPos o = origin(index);
 		int minX = o.getX(), minY = o.getY(), minZ = o.getZ();
@@ -142,10 +147,15 @@ public final class FrogStomachSpace {
 					}
 				}
 
-		placeWallRing(level, index, PortalType.TAIL, false);
-		for (BlockPos portalPos : portalPositions(index, PortalType.TAIL))
-			level.setBlock(portalPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+		if (generateSecretions)
+			generateSecretionPiles(level, index, o, size);
 
+		// Keep a 5x5 plane in front of each portal and its 3x3 field clear. The mouth field is
+		// installed again below, after the generated terrain has been removed from its opening.
+		clearPortalAccess(level, index, PortalType.TAIL);
+		clearPortalAccess(level, index, PortalType.MOUTH);
+
+		placeWallRing(level, index, PortalType.TAIL, false);
 		placeWallRing(level, index, PortalType.MOUTH, true);
 		activatePortal(level, index, PortalType.MOUTH, false);
 
@@ -153,6 +163,117 @@ public final class FrogStomachSpace {
 		BlockPos legacyPortal = o.offset(2, 1, 2);
 		if (level.getBlockState(legacyPortal).is(CBBlocks.FROG_DIGESTIVE_TRACT.get()))
 			level.setBlock(legacyPortal, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+	}
+
+	private static void generateSecretionPiles(ServerLevel level, long index, BlockPos origin, int size) {
+		long seed = level.getSeed() ^ Long.rotateLeft(index * 0x9E3779B97F4A7C15L, 17);
+		RandomSource random = RandomSource.create(seed);
+		int minX = origin.getX() + 1;
+		int maxX = origin.getX() + size - 2;
+		int minZ = origin.getZ() + 1;
+		int maxZ = origin.getZ() + size - 2;
+		int floorY = origin.getY();
+
+		int cornerRadius = Math.max(1, Math.min(2, (size - 2) / 3));
+		placeNaturalMound(level, random, minX, minZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
+			minX, maxX, minZ, maxZ);
+		placeNaturalMound(level, random, maxX, minZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
+			minX, maxX, minZ, maxZ);
+		placeNaturalMound(level, random, minX, maxZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
+			minX, maxX, minZ, maxZ);
+		placeNaturalMound(level, random, maxX, maxZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
+			minX, maxX, minZ, maxZ);
+
+		int interiorWidth = Math.max(1, size - 2);
+		int maxRadius = Math.max(1, Math.min(MAX_PILE_RADIUS, interiorWidth / 4));
+		int minRadius = Math.min(3, maxRadius);
+		int pileCount = MIN_RANDOM_PILES + random.nextInt(RANDOM_PILE_VARIATION);
+		for (int pile = 0; pile < pileCount; pile++) {
+			int centerX = minX + random.nextInt(interiorWidth);
+			int centerZ = minZ + random.nextInt(interiorWidth);
+			int radiusX = minRadius + random.nextInt(maxRadius - minRadius + 1);
+			int radiusZ = minRadius + random.nextInt(maxRadius - minRadius + 1);
+			int height = Math.min(MAX_PILE_HEIGHT, 2 + random.nextInt(2));
+			placeNaturalMound(level, random, centerX, centerZ, floorY, radiusX, radiusZ, height,
+				minX, maxX, minZ, maxZ);
+		}
+	}
+
+	private static void placeNaturalMound(ServerLevel level, RandomSource random, int centerX, int centerZ, int floorY,
+		int radiusX, int radiusZ, int height, int minX, int maxX, int minZ, int maxZ) {
+		BlockState secretion = CBBlocks.FROG_STOMACH_SECRETION.get().defaultBlockState();
+		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
+
+		int lobeCount = 2 + random.nextInt(2);
+		MoundLobe[] lobes = new MoundLobe[lobeCount];
+		lobes[0] = new MoundLobe(centerX, centerZ, radiusX, radiusZ,
+			random.nextDouble() * Math.PI * 2.0d, random.nextDouble() * Math.PI * 2.0d);
+		int scanRadiusX = radiusX;
+		int scanRadiusZ = radiusZ;
+		for (int lobe = 1; lobe < lobeCount; lobe++) {
+			int offsetX = random.nextInt(radiusX + 1) - radiusX / 2;
+			int offsetZ = random.nextInt(radiusZ + 1) - radiusZ / 2;
+			int lobeRadiusX = Math.max(1, radiusX * (2 + random.nextInt(2)) / 4);
+			int lobeRadiusZ = Math.max(1, radiusZ * (2 + random.nextInt(2)) / 4);
+			lobes[lobe] = new MoundLobe(centerX + offsetX, centerZ + offsetZ, lobeRadiusX, lobeRadiusZ,
+				random.nextDouble() * Math.PI * 2.0d, random.nextDouble() * Math.PI * 2.0d);
+			scanRadiusX = Math.max(scanRadiusX, Math.abs(offsetX) + lobeRadiusX);
+			scanRadiusZ = Math.max(scanRadiusZ, Math.abs(offsetZ) + lobeRadiusZ);
+		}
+
+		for (int x = Math.max(minX, centerX - scanRadiusX); x <= Math.min(maxX, centerX + scanRadiusX); x++)
+			for (int z = Math.max(minZ, centerZ - scanRadiusZ); z <= Math.min(maxZ, centerZ + scanRadiusZ); z++) {
+				double distance = normalizedMoundDistance(x, z, lobes);
+				if (distance > 1.0d)
+					continue;
+
+				int columnHeight = moundColumnHeight(distance, height);
+				for (int dy = 1; dy <= columnHeight; dy++) {
+					p.set(x, floorY + dy, z);
+					if (level.getBlockState(p).isAir())
+						level.setBlock(p, secretion, Block.UPDATE_CLIENTS);
+				}
+			}
+	}
+
+	private static double normalizedMoundDistance(int x, int z, MoundLobe[] lobes) {
+		double nearest = Double.POSITIVE_INFINITY;
+		for (MoundLobe lobe : lobes) {
+			double dx = (x - lobe.centerX()) / (double) lobe.radiusX();
+			double dz = (z - lobe.centerZ()) / (double) lobe.radiusZ();
+			double angle = Math.atan2(dz, dx);
+			double outline = 1.0d
+				+ 0.16d * Math.sin(angle * 3.0d + lobe.firstPhase())
+				+ 0.10d * Math.sin(angle * 5.0d + lobe.secondPhase());
+			nearest = Math.min(nearest, Math.sqrt(dx * dx + dz * dz) / outline);
+		}
+		return nearest;
+	}
+
+	private static int moundColumnHeight(double distance, int maximumHeight) {
+		if (maximumHeight <= 1)
+			return 1;
+		if (maximumHeight == 2)
+			return distance <= 0.42d ? 2 : 1;
+		if (distance <= 0.30d)
+			return 3;
+		return distance <= 0.66d ? 2 : 1;
+	}
+
+	private record MoundLobe(int centerX, int centerZ, int radiusX, int radiusZ,
+		double firstPhase, double secondPhase) {}
+
+	private static void clearPortalAccess(ServerLevel level, long index, PortalType type) {
+		BlockState air = Blocks.AIR.defaultBlockState();
+		BlockPos portal = portalPos(index, type);
+		for (BlockPos portalBlock : portalPositions(index, type))
+			level.setBlock(portalBlock, air, Block.UPDATE_CLIENTS);
+
+		int frontStep = type == PortalType.MOUTH ? 1 : -1;
+		int border = (PORTAL_FRONT_SIZE - PORTAL_SIZE) / 2;
+		for (int x = -border; x < PORTAL_SIZE + border; x++)
+			for (int y = -border; y < PORTAL_SIZE + border; y++)
+				level.setBlock(portal.offset(x, y, frontStep), air, Block.UPDATE_CLIENTS);
 	}
 
 	/**

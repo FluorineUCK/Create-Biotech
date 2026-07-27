@@ -177,6 +177,10 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> FROG_STOMACH_WALL = ITEMS.register("frog_stomach_wall",
 		() -> new BlockItem(CBBlocks.FROG_STOMACH_WALL.get(), new Item.Properties()));
 
+	public static final DeferredHolder<Item, Item> FROG_STOMACH_SECRETION =
+		ITEMS.register("frog_stomach_secretion",
+			() -> new BlockItem(CBBlocks.FROG_STOMACH_SECRETION.get(), new Item.Properties()));
+
 	public static final DeferredHolder<Item, Item> FROG_DIGESTIVE_TRACT = ITEMS.register("frog_digestive_tract",
 		() -> new BlockItem(CBBlocks.FROG_DIGESTIVE_TRACT.get(), new Item.Properties()));
 

@@ -21,6 +21,7 @@ import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionPro
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractWallBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSecretionBlock;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
@@ -300,6 +301,11 @@ public class CBBlocks {
 			() -> new Block(Block.Properties.ofFullCopy(Blocks.ORANGE_CONCRETE)
 				.strength(-1.0f, 3600000.0f)
 				.noLootTable()));
+
+	// Slime-like secretion generated in flat-topped piles on the floor of every new Frog Stomach room.
+	public static final DeferredHolder<Block, FrogStomachSecretionBlock> FROG_STOMACH_SECRETION =
+		BLOCKS.register("frog_stomach_secretion",
+			() -> new FrogStomachSecretionBlock(Block.Properties.ofFullCopy(Blocks.SLIME_BLOCK)));
 
 	// Indestructible return portal inside every Frog Stomach room; placed with the room, never obtainable.
 	public static final DeferredHolder<Block, FrogDigestiveTractBlock> FROG_DIGESTIVE_TRACT =
