@@ -20,6 +20,7 @@ import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlock;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlock;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogEsophagusFrameBlock;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
@@ -83,7 +84,7 @@ public class CBBlocks {
 	public static final DeferredHolder<Block, EvokerEnchantingChamberBlock> EVOKER_ENCHANTING_CHAMBER =
 		BLOCKS.register("evoker_enchanting_chamber",
 			() -> new EvokerEnchantingChamberBlock(Block.Properties.of()
-				.sound(SoundType.COPPER)
+				.sound(Blocks.ENCHANTING_TABLE.defaultBlockState().getSoundType())
 				.strength(2.5f)
 				.mapColor(MapColor.METAL)
 				.noOcclusion()));
@@ -310,6 +311,13 @@ public class CBBlocks {
 				.noCollission()
 				.lightLevel(state -> 11)
 				.noOcclusion()
+				.noLootTable()));
+
+	// Upright End Portal-style frame; generated with each Frog Stomach room and filled with slimeballs.
+	public static final DeferredHolder<Block, FrogEsophagusFrameBlock> FROG_ESOPHAGUS_FRAME =
+		BLOCKS.register("frog_esophagus_frame",
+			() -> new FrogEsophagusFrameBlock(Block.Properties.ofFullCopy(Blocks.END_PORTAL_FRAME)
+				.strength(-1.0f, 3600000.0f)
 				.noLootTable()));
 
 	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported

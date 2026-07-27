@@ -1,6 +1,6 @@
 {
   "textures": {
-    "particle": "create:block/fluid_tank"
+    "particle": "minecraft:block/enchanting_table_top"
   },
   "elements": []
 }

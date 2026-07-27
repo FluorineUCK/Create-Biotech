@@ -1,0 +1,12 @@
+{
+  "variants": {
+    "slime=false": {
+      "model": "minecraft:block/end_portal_frame",
+      "x": 90
+    },
+    "slime=true": {
+      "model": "create_biotech:block/frog_esophagus_frame_filled",
+      "x": 90
+    }
+  }
+}
