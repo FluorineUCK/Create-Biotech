@@ -12,6 +12,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -39,6 +41,8 @@ public final class FrogStomachSpace {
 	private static final int RANDOM_PILE_VARIATION = 5;
 	private static final int MAX_PILE_HEIGHT = 3;
 	private static final int MAX_PILE_RADIUS = 6;
+	private static final int MIN_INITIAL_SLIMES = 3;
+	private static final int INITIAL_SLIME_VARIATION = 3;
 	private static final int ENCLOSED_FROGLIGHT_CHANCE = 20;
 	private static final BlockState[] FROGLIGHTS = {
 		Blocks.OCHRE_FROGLIGHT.defaultBlockState(),
@@ -172,6 +176,9 @@ public final class FrogStomachSpace {
 		BlockPos legacyPortal = o.offset(2, 1, 2);
 		if (level.getBlockState(legacyPortal).is(CBBlocks.FROG_DIGESTIVE_TRACT.get()))
 			level.setBlock(legacyPortal, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
+
+		if (generateSecretions)
+			spawnInitialSlimes(level, o, size);
 	}
 
 	private static void generateSecretionPiles(ServerLevel level, long index, BlockPos origin, int size) {
@@ -273,6 +280,40 @@ public final class FrogStomachSpace {
 				return false;
 		}
 		return true;
+	}
+
+	private static void spawnInitialSlimes(ServerLevel level, BlockPos origin, int size) {
+		RandomSource random = level.getRandom();
+		int targetCount = MIN_INITIAL_SLIMES + random.nextInt(INITIAL_SLIME_VARIATION);
+		List<BlockPos> spawnPositions = findSlimeSpawnPositions(level, origin, size, true);
+		if (spawnPositions.size() < targetCount)
+			spawnPositions.addAll(findSlimeSpawnPositions(level, origin, size, false));
+
+		int spawned = 0;
+		while (spawned < targetCount && !spawnPositions.isEmpty()) {
+			BlockPos spawnPos = spawnPositions.remove(random.nextInt(spawnPositions.size()));
+			if (EntityType.SLIME.spawn(level, spawnPos, MobSpawnType.STRUCTURE) != null)
+				spawned++;
+		}
+	}
+
+	private static List<BlockPos> findSlimeSpawnPositions(ServerLevel level, BlockPos origin, int size,
+		boolean secretionOnly) {
+		List<BlockPos> positions = new ArrayList<>();
+		BlockPos.MutableBlockPos spawnPos = new BlockPos.MutableBlockPos();
+		for (int x = origin.getX() + 1; x < origin.getX() + size - 1; x++)
+			for (int z = origin.getZ() + 1; z < origin.getZ() + size - 1; z++)
+				for (int y = origin.getY() + 1; y <= origin.getY() + MAX_PILE_HEIGHT + 1; y++) {
+					spawnPos.set(x, y, z);
+					BlockState support = level.getBlockState(spawnPos.below());
+					boolean validSupport = secretionOnly
+						? support.is(CBBlocks.FROG_STOMACH_SECRETION.get())
+						: support.is(CBBlocks.FROG_STOMACH_WALL.get());
+					if (validSupport && level.getBlockState(spawnPos).isAir()
+						&& level.getBlockState(spawnPos.above()).isAir())
+						positions.add(spawnPos.immutable());
+				}
+		return positions;
 	}
 
 	private static double normalizedMoundDistance(int x, int z, MoundLobe[] lobes) {
