@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
+    "create_biotech:automatic_fish_release_machine",
     "create_biotech:experience_pump",
     "create_biotech:budding_experience",
     "create_biotech:small_experience_bud",

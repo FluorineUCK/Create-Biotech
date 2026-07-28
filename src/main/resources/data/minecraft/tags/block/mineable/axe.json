@@ -1,6 +1,7 @@
 {
   "replace": false,
   "values": [
+    "create_biotech:automatic_fish_release_machine",
     "create_biotech:asurine_casing",
     "create_biotech:biotech_casing",
     "create_biotech:explosion_proof_casing",

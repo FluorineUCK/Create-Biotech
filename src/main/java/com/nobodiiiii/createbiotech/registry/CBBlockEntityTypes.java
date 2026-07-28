@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.registry;
 import net.minecraft.core.registries.Registries;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineBlockEntity;
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetBlockEntity;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerBlockEntity;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlockEntity;
@@ -44,6 +45,12 @@ public class CBBlockEntityTypes {
 
 	public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
 		DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, CreateBiotech.MOD_ID);
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AutomaticFishReleaseMachineBlockEntity>>
+		AUTOMATIC_FISH_RELEASE_MACHINE = BLOCK_ENTITY_TYPES.register("automatic_fish_release_machine",
+			() -> BlockEntityType.Builder
+				.of(AutomaticFishReleaseMachineBlockEntity::new, CBBlocks.AUTOMATIC_FISH_RELEASE_MACHINE.get())
+				.build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SlimeBeltBlockEntity>> SLIME_BELT =
 		BLOCK_ENTITY_TYPES.register("slime_belt",

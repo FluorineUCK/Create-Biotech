@@ -33,6 +33,7 @@ import com.nobodiiiii.createbiotech.content.slimearmor.SlimeArmorItem;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterItem;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointItem;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessTerminalItem;
+import com.simibubi.create.content.kinetics.waterwheel.LargeWaterWheelBlockItem;
 import com.yision.allay.block.allayport.AllayPortItem;
 import com.yision.allay.item.allaycourier.AllayCourierItem;
 import com.yision.allay.item.allaycourier.IncompleteAllayCourierItem;
@@ -52,6 +53,11 @@ public class CBItems {
 
 	public static final DeferredRegister<Item> ITEMS =
 		DeferredRegister.create(BuiltInRegistries.ITEM, CreateBiotech.MOD_ID);
+
+	public static final DeferredHolder<Item, Item> AUTOMATIC_FISH_RELEASE_MACHINE =
+		ITEMS.register("automatic_fish_release_machine",
+			() -> new LargeWaterWheelBlockItem(CBBlocks.AUTOMATIC_FISH_RELEASE_MACHINE.get(),
+				new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> EVOKER_ENCHANTING_CHAMBER = ITEMS.register("evoker_enchanting_chamber",
 		() -> new EvokerEnchantingChamberItem(CBBlocks.EVOKER_ENCHANTING_CHAMBER.get(), new Item.Properties()));

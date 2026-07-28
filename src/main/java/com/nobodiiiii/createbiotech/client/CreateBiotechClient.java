@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.client;
 
 import java.util.function.Predicate;
 
+import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineRenderer;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberRenderer;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpRenderer;
 import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
@@ -82,6 +83,7 @@ import com.simibubi.create.content.fluids.PipeAttachmentModel;
 import com.simibubi.create.content.kinetics.base.SingleAxisRotatingVisual;
 import com.simibubi.create.content.kinetics.simpleRelays.encased.EncasedCogVisual;
 import com.simibubi.create.content.kinetics.transmission.SplitShaftVisual;
+import com.simibubi.create.content.kinetics.waterwheel.WaterWheelVisual;
 import com.simibubi.create.foundation.block.connected.CTModel;
 import com.simibubi.create.foundation.block.connected.SimpleCTBehaviour;
 import com.simibubi.create.foundation.data.CreateRegistrate;
@@ -126,6 +128,8 @@ public class CreateBiotechClient {
 
 	@SubscribeEvent
 	public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+		event.registerBlockEntityRenderer(CBBlockEntityTypes.AUTOMATIC_FISH_RELEASE_MACHINE.get(),
+			AutomaticFishReleaseMachineRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get(),
 			EvokerEnchantingChamberRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.EXPERIENCE_PUMP.get(), ExperiencePumpRenderer::new);
@@ -176,6 +180,7 @@ public class CreateBiotechClient {
 		java.util.function.Consumer<net.minecraft.resources.ResourceLocation> register = location ->
 			event.register(new ModelResourceLocation(location, ModelResourceLocation.STANDALONE_VARIANT));
 		register.accept(CreateBiotech.asResource("block/universal_joint_endpoint_slime_overlay"));
+		register.accept(AutomaticFishReleaseMachineRenderer.BLADE_CLAMP_MODEL_LOCATION);
 		register.accept(CreateBiotech.asResource("block/blast_chamber_display/panel"));
 		register.accept(CreateBiotech.asResource("block/blast_chamber_display/dial"));
 		register.accept(CreateBiotech.asResource("block/blast_chamber_display/creeper_face"));
@@ -275,6 +280,10 @@ public class CreateBiotechClient {
 				.accept(CBBlocks.EXPERIENCE_PUMP.get());
 			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.EXPERIENCE_PUMP.get())
 				.factory(SingleAxisRotatingVisual.ofZ(ExperiencePumpRenderer.COG))
+				.apply();
+			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.AUTOMATIC_FISH_RELEASE_MACHINE.get())
+				.factory(WaterWheelVisual::large)
+				.neverSkipVanillaRender()
 				.apply();
 			SimpleEntityVisualizer.<GhastHotAirBalloonEntity>builder(CBEntityTypes.GHAST_HOT_AIR_BALLOON.get())
 				.factory(ContraptionVisual::new)
@@ -387,6 +396,7 @@ public class CreateBiotechClient {
 
 		registerCreateStyleTooltip(CBFluids.TELEPORTATION_BUCKET.get());
 		registerCreateStyleTooltip(CBItems.BUDDING_EXPERIENCE.get());
+		registerCreateStyleTooltip(CBItems.AUTOMATIC_FISH_RELEASE_MACHINE.get());
 		registerCreateStyleTooltip(CBItems.SMALL_EXPERIENCE_BUD.get());
 		registerCreateStyleTooltip(CBItems.MEDIUM_EXPERIENCE_BUD.get());
 		registerCreateStyleTooltip(CBItems.LARGE_EXPERIENCE_BUD.get());

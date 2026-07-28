@@ -28,6 +28,7 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.LARGE_CARDBOARD_BOX.get());
 				output.accept(CBItems.SMART_SUPER_GLUE.get());
 				output.accept(CBItems.WIRELESS_TERMINAL.get());
+				output.accept(CBItems.AUTOMATIC_FISH_RELEASE_MACHINE.get());
 				output.accept(CBItems.BIO_PACKAGER.get());
 				output.accept(CBItems.SHULKER_PACKAGER.get());
 				output.accept(CBItems.SHULKER_TELEPORTER.get());

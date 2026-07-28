@@ -7,6 +7,7 @@ import java.util.EnumMap;
 import java.util.Map;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineBlock;
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetBlock;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerBlock;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlock;
@@ -82,6 +83,12 @@ public class CBBlocks {
 			.strength(0.8f)
 			.mapColor(MapColor.COLOR_GRAY)
 			.noOcclusion()));
+
+	public static final DeferredHolder<Block, AutomaticFishReleaseMachineBlock> AUTOMATIC_FISH_RELEASE_MACHINE =
+		BLOCKS.register("automatic_fish_release_machine",
+			() -> new AutomaticFishReleaseMachineBlock(Block.Properties.ofFullCopy(Blocks.STRIPPED_SPRUCE_WOOD)
+				.noOcclusion()
+				.mapColor(MapColor.DIRT)));
 
 	public static final DeferredHolder<Block, EvokerEnchantingChamberBlock> EVOKER_ENCHANTING_CHAMBER =
 		BLOCKS.register("evoker_enchanting_chamber",
