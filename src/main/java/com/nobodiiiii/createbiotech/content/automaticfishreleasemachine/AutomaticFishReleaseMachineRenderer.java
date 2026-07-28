@@ -1,22 +1,43 @@
 package com.nobodiiiii.createbiotech.content.automaticfishreleasemachine;
 
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.WeakHashMap;
+
+import org.joml.Matrix4f;
+import org.joml.Vector3f;
+
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import com.simibubi.create.content.kinetics.waterwheel.LargeWaterWheelBlock;
+import com.simibubi.create.content.kinetics.waterwheel.WaterWheelBlockEntity;
 import com.simibubi.create.content.kinetics.waterwheel.WaterWheelRenderer;
+import com.simibubi.create.foundation.fluid.FluidHelper;
 
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.createmod.catnip.render.CachedBuffers;
+import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.model.SalmonModel;
 import net.minecraft.client.model.geom.ModelLayers;
+import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.FluidTags;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.material.FluidState;
 
 public class AutomaticFishReleaseMachineRenderer
 	extends WaterWheelRenderer<AutomaticFishReleaseMachineBlockEntity> {
@@ -30,16 +51,27 @@ public class AutomaticFishReleaseMachineRenderer
 	private static final float FISH_RING_RADIUS = 2.47f;
 	private static final float FISH_SCALE = 0.8f;
 	private static final float FISH_IN_PLANE_ROTATION = -12.25f;
+	private static final float FISH_TAIL_OFFSET = 1.0f / 16.0f;
+	private static final float SWIM_TAIL_AMPLITUDE = 0.4f;
+	private static final float SWIM_TAIL_SPEED = 0.8f;
 	private static final float CARDINAL_BLADE_CLAMP_RADIUS = 2.125f;
 	private static final float INTERMEDIATE_BLADE_CLAMP_RADIUS = 2.1875f;
+	private static final float BLADE_CLAMP_OUTWARD_OFFSET = 6.0f / 16.0f;
 	private static final float SLOT_ANGLE = 360.0f / BLADE_COUNT;
 	private static final float FIRST_GAP_ANGLE = SLOT_ANGLE / 2.0f;
+	private static final float MAX_MERIT_TEXT_SPEED = 16.0f;
+	private static final float MERIT_TEXT_LIFETIME = 24.0f;
+	private static final Component MERIT_TEXT = Component.literal("功德+1");
 
 	private final SalmonModel<Entity> fishModel;
+	private final ModelPart fishBodyBack;
+	private final Map<AutomaticFishReleaseMachineBlockEntity, FishRenderState> fishRenderStates = new WeakHashMap<>();
 
 	public AutomaticFishReleaseMachineRenderer(BlockEntityRendererProvider.Context context) {
 		super(context, true);
 		fishModel = new SalmonModel<>(context.bakeLayer(ModelLayers.SALMON));
+		fishBodyBack = fishModel.root()
+			.getChild("body_back");
 	}
 
 	@Override
@@ -51,22 +83,37 @@ public class AutomaticFishReleaseMachineRenderer
 			.getValue(LargeWaterWheelBlock.AXIS);
 		float wheelAngle =
 			KineticBlockEntityRenderer.getAngleForBe(blockEntity, blockEntity.getBlockPos(), rotationAxis);
+		Level level = blockEntity.getLevel();
+		double renderTime = level == null ? 0 : level.getGameTime() + partialTicks;
+		float animationTime = (float) (renderTime % 10000.0);
+		FishRenderState renderState = fishRenderStates.computeIfAbsent(blockEntity, ignored -> new FishRenderState());
 
 		poseStack.pushPose();
 		poseStack.translate(0.5f, 0.5f, 0.5f);
 		alignVerticalModelToAxis(poseStack, rotationAxis);
 		poseStack.mulPose(Axis.YP.rotation(wheelAngle));
 
-		for (int fishIndex = 0; fishIndex < BLADE_COUNT; fishIndex++)
-			renderFishInGap(poseStack, buffer, light, overlay, FIRST_GAP_ANGLE + fishIndex * SLOT_ANGLE);
+		for (int fishIndex = 0; fishIndex < BLADE_COUNT; fishIndex++) {
+			float gapAngle = FIRST_GAP_ANGLE + fishIndex * SLOT_ANGLE;
+			Vector3f fishOffset = getFishOffset(rotationAxis, wheelAngle, gapAngle);
+			boolean inWater = isFishInWater(blockEntity, rotationAxis, fishOffset);
+			if (renderState.initialized && !renderState.swimming[fishIndex] && inWater
+				&& shouldSpawnMeritText(renderState, blockEntity.getSpeed()))
+				renderState.meritTexts.add(new FloatingMeritText(new Vector3f(fishOffset), renderTime));
+			renderState.swimming[fishIndex] = inWater;
+			renderFishInGap(poseStack, buffer, light, overlay, gapAngle, inWater,
+				animationTime + fishIndex * 1.5f);
+		}
+		renderState.initialized = true;
 		for (int bladeIndex = 0; bladeIndex < BLADE_COUNT; bladeIndex++)
 			renderBladeClamp(blockEntity, poseStack, buffer, light, bladeIndex);
 
 		poseStack.popPose();
+		renderMeritTexts(renderState, poseStack, buffer, renderTime);
 	}
 
 	private void renderFishInGap(PoseStack poseStack, MultiBufferSource buffer, int light, int overlay,
-		float gapAngle) {
+		float gapAngle, boolean inWater, float animationTime) {
 		poseStack.pushPose();
 		poseStack.mulPose(Axis.YP.rotationDegrees(gapAngle));
 		poseStack.translate(0, 0, -FISH_RING_RADIUS);
@@ -77,18 +124,123 @@ public class AutomaticFishReleaseMachineRenderer
 		poseStack.mulPose(Axis.YP.rotationDegrees(FISH_IN_PLANE_ROTATION));
 		poseStack.mulPose(Axis.YP.rotationDegrees(90));
 		poseStack.mulPose(Axis.ZP.rotationDegrees(-90));
+		poseStack.translate(0, 0, FISH_TAIL_OFFSET);
 		poseStack.scale(-FISH_SCALE, -FISH_SCALE, FISH_SCALE);
 		poseStack.translate(0, -1.501f, 0);
 
+		fishBodyBack.yRot =
+			inWater ? -SWIM_TAIL_AMPLITUDE * Mth.sin(SWIM_TAIL_SPEED * animationTime) : 0;
 		fishModel.renderToBuffer(poseStack, buffer.getBuffer(RenderType.entityCutoutNoCull(SALMON_TEXTURE)),
 			light, overlay, -1);
 		poseStack.popPose();
 	}
 
+	private static Vector3f getFishOffset(Direction.Axis rotationAxis, float wheelAngle, float gapAngle) {
+		Vector3f fishOffset = new Vector3f(0, 0, -FISH_RING_RADIUS)
+			.rotateY(wheelAngle + (float) Math.toRadians(gapAngle));
+		switch (rotationAxis) {
+		case X -> fishOffset.rotateZ(-Mth.HALF_PI);
+		case Z -> fishOffset.rotateX(Mth.HALF_PI);
+		default -> {
+		}
+		}
+		return fishOffset;
+	}
+
+	private static boolean isFishInWater(AutomaticFishReleaseMachineBlockEntity blockEntity,
+		Direction.Axis rotationAxis, Vector3f fishOffset) {
+		Level level = blockEntity.getLevel();
+		if (level == null)
+			return false;
+
+		BlockPos wheelPos = blockEntity.getBlockPos();
+		BlockPos directSample = BlockPos.containing(
+			wheelPos.getX() + 0.5 + fishOffset.x,
+			wheelPos.getY() + 0.5 + fishOffset.y,
+			wheelPos.getZ() + 0.5 + fishOffset.z);
+		if (isWater(level, directSample))
+			return true;
+
+		BlockPos nearestOffset = null;
+		float nearestDistance = Float.MAX_VALUE;
+		for (BlockPos offset : WaterWheelBlockEntity.LARGE_OFFSETS.get(rotationAxis)) {
+			float distance = fishOffset.distanceSquared(offset.getX(), offset.getY(), offset.getZ());
+			if (distance >= nearestDistance)
+				continue;
+			nearestDistance = distance;
+			nearestOffset = offset;
+		}
+
+		if (nearestOffset == null)
+			return false;
+		return isWater(level, wheelPos.offset(nearestOffset));
+	}
+
+	private static boolean isWater(Level level, BlockPos pos) {
+		FluidState fluidState = level.getFluidState(pos);
+		return fluidState.is(FluidTags.WATER) || FluidHelper.isWater(fluidState.getType());
+	}
+
+	private static boolean shouldSpawnMeritText(FishRenderState renderState, float speed) {
+		float absoluteSpeed = Math.abs(speed);
+		if (absoluteSpeed <= MAX_MERIT_TEXT_SPEED) {
+			renderState.meritEmissionRemainder = 0;
+			return true;
+		}
+
+		renderState.meritEmissionRemainder += MAX_MERIT_TEXT_SPEED / absoluteSpeed;
+		if (renderState.meritEmissionRemainder < 1)
+			return false;
+		renderState.meritEmissionRemainder -= 1;
+		return true;
+	}
+
+	private static void renderMeritTexts(FishRenderState renderState, PoseStack poseStack, MultiBufferSource buffer,
+		double renderTime) {
+		Minecraft minecraft = Minecraft.getInstance();
+		Font font = minecraft.font;
+		Iterator<FloatingMeritText> iterator = renderState.meritTexts.iterator();
+		while (iterator.hasNext()) {
+			FloatingMeritText floatingText = iterator.next();
+			float age = (float) (renderTime - floatingText.spawnTime);
+			if (age >= MERIT_TEXT_LIFETIME) {
+				iterator.remove();
+				continue;
+			}
+			if (age < 0)
+				continue;
+
+			float progress = age / MERIT_TEXT_LIFETIME;
+			float fade = 1.0f - Mth.clamp((progress - 0.35f) / 0.65f, 0, 1);
+			int alpha = Mth.clamp((int) (fade * 255), 0, 255);
+			if (alpha < Font.ALPHA_CUTOFF) {
+				iterator.remove();
+				continue;
+			}
+			int color = alpha << 24 | 0xFFE45A;
+
+			poseStack.pushPose();
+			poseStack.translate(
+				0.5f + floatingText.offset.x,
+				0.75f + floatingText.offset.y + progress * 0.75f,
+				0.5f + floatingText.offset.z);
+			poseStack.mulPose(minecraft.getEntityRenderDispatcher()
+				.cameraOrientation());
+			poseStack.scale(0.02f, -0.02f, 0.02f);
+			Matrix4f matrix = poseStack.last()
+				.pose();
+			float textX = -font.width(MERIT_TEXT) / 2.0f;
+			font.drawInBatch(MERIT_TEXT, textX, 0, color, false, matrix, buffer, Font.DisplayMode.NORMAL, 0,
+				LightTexture.FULL_BRIGHT);
+			poseStack.popPose();
+		}
+	}
+
 	private static void renderBladeClamp(AutomaticFishReleaseMachineBlockEntity blockEntity, PoseStack poseStack,
 		MultiBufferSource buffer, int light, int bladeIndex) {
 		float clampRadius =
-			(bladeIndex & 1) == 0 ? CARDINAL_BLADE_CLAMP_RADIUS : INTERMEDIATE_BLADE_CLAMP_RADIUS;
+			((bladeIndex & 1) == 0 ? CARDINAL_BLADE_CLAMP_RADIUS : INTERMEDIATE_BLADE_CLAMP_RADIUS)
+				+ BLADE_CLAMP_OUTWARD_OFFSET;
 		poseStack.pushPose();
 		poseStack.mulPose(Axis.YP.rotationDegrees(bladeIndex * SLOT_ANGLE));
 		poseStack.translate(-0.5f, -0.5f, -clampRadius - 0.5f);
@@ -105,5 +257,15 @@ public class AutomaticFishReleaseMachineRenderer
 		default -> {
 		}
 		}
+	}
+
+	private static class FishRenderState {
+		private final boolean[] swimming = new boolean[BLADE_COUNT];
+		private final List<FloatingMeritText> meritTexts = new ArrayList<>();
+		private float meritEmissionRemainder;
+		private boolean initialized;
+	}
+
+	private record FloatingMeritText(Vector3f offset, double spawnTime) {
 	}
 }
