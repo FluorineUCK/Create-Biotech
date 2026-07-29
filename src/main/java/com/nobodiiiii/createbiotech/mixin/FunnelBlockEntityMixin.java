@@ -12,6 +12,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
+import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlockEntity;
+import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltHelper;
 import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.logistics.funnel.AbstractFunnelBlock;
@@ -78,11 +80,21 @@ public abstract class FunnelBlockEntityMixin {
 			return;
 
 		BeltSurface surface = BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos());
-		if (surface == null || surface.host() == null)
+		if (surface == null)
 			return;
 
 		Direction facing = surface.worldize(blockState.getValue(BeltFunnelBlock.HORIZONTAL_FACING));
-		cir.setReturnValue(getMode(surface.movementFacing() == facing ? "PUSHING_TO_BELT" : "TAKING_FROM_BELT"));
+		Direction movementFacing;
+		if (surface.host() != null) {
+			movementFacing = surface.movementFacing();
+		} else {
+			MagmaBeltBlockEntity magmaBelt =
+				MagmaBeltHelper.getSegmentBE(funnel.getLevel(), surface.beltPos());
+			if (magmaBelt == null)
+				return;
+			movementFacing = magmaBelt.getMovementFacing();
+		}
+		cir.setReturnValue(getMode(movementFacing == facing ? "PUSHING_TO_BELT" : "TAKING_FROM_BELT"));
 	}
 
 	@Inject(method = "addBehaviours(Ljava/util/List;)V", at = @At("TAIL"), remap = false)
