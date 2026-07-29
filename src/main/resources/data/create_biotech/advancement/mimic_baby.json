@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:petri_dish",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.mimic_baby.desc"
+    },
+    "frame": "goal",
+    "hidden": true,
+    "icon": {
+      "id": "minecraft:egg"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.mimic_baby"
+    },
+    "x": 6,
+    "y": 13
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

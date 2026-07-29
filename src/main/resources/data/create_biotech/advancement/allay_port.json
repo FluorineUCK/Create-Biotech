@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:packager_compat",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.allay_port.desc"
+    },
+    "frame": "task",
+    "hidden": false,
+    "icon": {
+      "id": "create_biotech:allay_port"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.allay_port"
+    },
+    "x": 2,
+    "y": 18
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

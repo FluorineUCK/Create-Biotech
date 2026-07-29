@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:allay_port",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.allay_courier.desc"
+    },
+    "frame": "task",
+    "hidden": false,
+    "icon": {
+      "id": "create_biotech:allay_courier"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.allay_courier"
+    },
+    "x": 4,
+    "y": 18
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

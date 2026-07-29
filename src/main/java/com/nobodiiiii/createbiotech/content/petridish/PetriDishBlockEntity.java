@@ -13,7 +13,9 @@ import java.util.UUID;
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
+import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.advancement.PlacedByPlayerAdvancementTracker;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBFluids;
@@ -45,6 +47,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
@@ -540,9 +543,20 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		emergenceTicksRemaining = 0;
 		fluidTank.drain(required, FluidAction.EXECUTE);
 		inventory.extractItem(0, 1, false);
+		awardCultivationAdvancements(serverLevel, livingEntity);
 		clearRecordedEntity();
 		level.playSound(null, worldPosition, SoundEvents.SLIME_BLOCK_PLACE, SoundSource.BLOCKS, 0.7f, 0.9f);
 		sendData();
+	}
+
+	private void awardCultivationAdvancements(ServerLevel serverLevel, LivingEntity cultivatedEntity) {
+		Vec3 observationPosition =
+			SubLevelCompat.toWorld(serverLevel, worldPosition, Vec3.atCenterOf(worldPosition));
+		CBAdvancements.awardNearby(serverLevel, observationPosition, 16, CBAdvancements.PETRI_DISH);
+		if (cultivatedEntity.getType() == EntityType.SLIME)
+			CBAdvancements.awardNearby(serverLevel, observationPosition, 16, CBAdvancements.PERFECT_DISGUISE);
+		if (cultivatedEntity.isBaby())
+			CBAdvancements.awardNearby(serverLevel, observationPosition, 16, CBAdvancements.MIMIC_BABY);
 	}
 
 	private boolean hasClearEmergenceSpace() {

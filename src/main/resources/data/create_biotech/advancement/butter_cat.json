@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:shifting_gears_compat",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.butter_cat.desc"
+    },
+    "frame": "task",
+    "hidden": false,
+    "icon": {
+      "id": "create_biotech:butter_cat_engine"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.butter_cat"
+    },
+    "x": 2,
+    "y": -7
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

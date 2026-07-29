@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:liquid_living_slime_bucket",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.petri_dish.desc"
+    },
+    "frame": "task",
+    "hidden": false,
+    "icon": {
+      "id": "create_biotech:petri_dish"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.petri_dish"
+    },
+    "x": 4,
+    "y": 12
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:shulker_packager",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.shulker_teleporter.desc"
+    },
+    "frame": "task",
+    "hidden": false,
+    "icon": {
+      "id": "create_biotech:shulker_teleporter"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.shulker_teleporter"
+    },
+    "x": 4,
+    "y": 16
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

@@ -4,6 +4,7 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.simibubi.create.content.kinetics.waterwheel.LargeWaterWheelBlockEntity;
 import com.simibubi.create.foundation.fluid.FluidHelper;
@@ -33,6 +34,7 @@ public class AutomaticFishReleaseMachineBlockEntity extends LargeWaterWheelBlock
 	private static final int LAZY_TICK_INTERVAL = 60;
 	private static final int EMPTY_SCAN_RETRY_TICKS = 200;
 	private static final int REPUTATION_PER_PULSE = 2;
+	private static final int MERIT_ADVANCEMENT_REPUTATION = 25;
 	private static final double DIMINISHING_RETURNS_START_RPM = 16.0;
 	private static final double MAX_SUPPORTED_RPM = 256.0;
 	private static final double MINUTES_PER_PULSE_AT_16_RPM = 16.0;
@@ -84,9 +86,14 @@ public class AutomaticFishReleaseMachineBlockEntity extends LargeWaterWheelBlock
 			return;
 		}
 
-		for (Villager villager : villagers)
+		for (Villager villager : villagers) {
 			villager.getGossips()
 				.add(reputationOwner, GossipType.MINOR_POSITIVE, REPUTATION_PER_PULSE);
+			int reputation = villager.getGossips()
+				.getReputation(reputationOwner, type -> type == GossipType.MINOR_POSITIVE);
+			if (reputation >= MERIT_ADVANCEMENT_REPUTATION)
+				CBAdvancements.awardPlayer(serverLevel, reputationOwner, CBAdvancements.MERIT_MACHINE);
+		}
 
 		reputationProgress = Math.max(0, reputationProgress - REPUTATION_PER_PULSE);
 		savedProgressStep = 0;

@@ -54,10 +54,23 @@ public final class CBAdvancements {
 	public static final ResourceLocation SCHRODINGERS_CAT = CreateBiotech.asResource("schrodingers_cat");
 	public static final ResourceLocation LARGE_CARDBOARD_BOX = CreateBiotech.asResource("large_cardboard_box");
 	public static final ResourceLocation BIO_PACKAGER = CreateBiotech.asResource("bio_packager");
+	public static final ResourceLocation PACKAGER_COMPAT = CreateBiotech.asResource("packager_compat");
+	public static final ResourceLocation SHULKER_PACKAGER = CreateBiotech.asResource("shulker_packager");
+	public static final ResourceLocation SHULKER_TELEPORTER = CreateBiotech.asResource("shulker_teleporter");
+	public static final ResourceLocation ALLAY_PORT = CreateBiotech.asResource("allay_port");
+	public static final ResourceLocation ALLAY_COURIER = CreateBiotech.asResource("allay_courier");
+	public static final ResourceLocation LIQUID_LIVING_SLIME_BUCKET =
+		CreateBiotech.asResource("liquid_living_slime_bucket");
+	public static final ResourceLocation PETRI_DISH = CreateBiotech.asResource("petri_dish");
+	public static final ResourceLocation PERFECT_DISGUISE = CreateBiotech.asResource("perfect_disguise");
+	public static final ResourceLocation MIMIC_BABY = CreateBiotech.asResource("mimic_baby");
+	public static final ResourceLocation BUTTER_CAT = CreateBiotech.asResource("butter_cat");
+	public static final ResourceLocation MERIT_MACHINE = CreateBiotech.asResource("merit_machine");
 
 	private static final ResourceLocation CREATE_BELT = ResourceLocation.fromNamespaceAndPath("create", "belt");
 	private static final ResourceLocation CREATE_SHIFTING_GEARS = ResourceLocation.fromNamespaceAndPath("create", "shifting_gears");
 	private static final ResourceLocation CREATE_CARDBOARD = ResourceLocation.fromNamespaceAndPath("create", "cardboard");
+	private static final ResourceLocation CREATE_PACKAGER = ResourceLocation.fromNamespaceAndPath("create", "packager");
 
 	private CBAdvancements() {}
 
@@ -129,6 +142,8 @@ public final class CBAdvancements {
 		}
 		if (CREATE_CARDBOARD.equals(advancementId))
 			award(player, CARDBOARD_COMPAT);
+		if (CREATE_PACKAGER.equals(advancementId))
+			award(player, PACKAGER_COMPAT);
 	}
 
 	@SubscribeEvent
@@ -141,5 +156,7 @@ public final class CBAdvancements {
 			award(player, SHIFTING_GEARS_COMPAT);
 		if (has(player, CREATE_CARDBOARD))
 			award(player, CARDBOARD_COMPAT);
+		if (has(player, CREATE_PACKAGER))
+			award(player, PACKAGER_COMPAT);
 	}
 }

@@ -10,6 +10,7 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -374,6 +375,8 @@ public class ShulkerPackagerBlockEntity extends PackagerBlockEntity {
 		}
 
 		playTransferEffects(target);
+		CBAdvancements.awardNearby(level, getTransferEffectPos(this), 16, CBAdvancements.SHULKER_PACKAGER);
+		CBAdvancements.awardNearby(level, getTransferEffectPos(target), 16, CBAdvancements.SHULKER_PACKAGER);
 		heldBoxIdleTicks = 0;
 		setChanged();
 		return true;

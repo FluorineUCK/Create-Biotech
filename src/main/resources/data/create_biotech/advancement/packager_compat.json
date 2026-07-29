@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:root",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create.packager.desc"
+    },
+    "frame": "task",
+    "hidden": false,
+    "icon": {
+      "id": "create:packager"
+    },
+    "show_toast": false,
+    "title": {
+      "translate": "advancement.create.packager"
+    },
+    "x": 0,
+    "y": 17
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

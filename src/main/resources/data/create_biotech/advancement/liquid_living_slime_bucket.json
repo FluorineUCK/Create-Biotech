@@ -1,0 +1,41 @@
+{
+  "parent": "create_biotech:root",
+  "criteria": {
+    "has_liquid_living_slime_bucket": {
+      "conditions": {
+        "items": [
+          {
+            "items": [
+              "create_biotech:liquid_living_slime_bucket"
+            ]
+          }
+        ]
+      },
+      "trigger": "minecraft:inventory_changed"
+    }
+  },
+  "display": {
+    "announce_to_chat": false,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.liquid_living_slime_bucket.desc"
+    },
+    "frame": "task",
+    "hidden": false,
+    "icon": {
+      "id": "create_biotech:liquid_living_slime_bucket"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.liquid_living_slime_bucket"
+    },
+    "x": 2,
+    "y": 12
+  },
+  "requirements": [
+    [
+      "has_liquid_living_slime_bucket"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

@@ -1,0 +1,32 @@
+{
+  "parent": "create_biotech:root",
+  "criteria": {
+    "grant": {
+      "trigger": "minecraft:impossible"
+    }
+  },
+  "display": {
+    "announce_to_chat": true,
+    "description": {
+      "color": "#DBA213",
+      "translate": "advancement.create_biotech.merit_machine.desc"
+    },
+    "frame": "goal",
+    "hidden": true,
+    "icon": {
+      "id": "create_biotech:automatic_fish_release_machine"
+    },
+    "show_toast": true,
+    "title": {
+      "translate": "advancement.create_biotech.merit_machine"
+    },
+    "x": 2,
+    "y": 6
+  },
+  "requirements": [
+    [
+      "grant"
+    ]
+  ],
+  "sends_telemetry_event": true
+}

@@ -1,5 +1,6 @@
 package com.yision.allay.logistics.courier;
 
+import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.yision.allay.block.allayport.AllayPortBlockEntity;
@@ -74,6 +75,7 @@ public final class AllayCourierDispatchService {
 		}
 
 		AllayCourierTaskManager.addTask(level.getServer(), task);
+		CBAdvancements.award(player, CBAdvancements.ALLAY_COURIER);
 		return true;
 	}
 
