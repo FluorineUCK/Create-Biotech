@@ -61,6 +61,11 @@ public class SlimeBeltInventory {
 
 	TransportedItemStack lazyClientItem;
 
+	/**
+	 * {@code insertSide} is the side handed to the target's input behaviour (from
+	 * {@link SlimeBeltNeighbor#handoffInsertSide}); the corner side that resolved the
+	 * geometry is already folded into the contact fields.
+	 */
 	private record SideTransferCandidate(BlockPos targetPos, Direction insertSide,
 		float contactProgress, float contactParam, double distanceSqr) {
 	}
@@ -449,9 +454,9 @@ public class SlimeBeltInventory {
 			if (neighbor == null || neighbor.sameLoopAs(belt))
 				continue;
 
-			for (Direction insertSide : neighbor.sideTransferInsertSides(incomingFace)) {
-				SideTransferCandidate candidate = createSideTransferCandidate(targetPos, incomingFace,
-					insertSide, currentProgress, nextProgress, start, end);
+			for (Direction cornerSide : neighbor.sideTransferInsertSides(incomingFace)) {
+				SideTransferCandidate candidate = createSideTransferCandidate(targetPos, incomingFace, cornerSide,
+					neighbor.handoffInsertSide(incomingFace, cornerSide), currentProgress, nextProgress, start, end);
 				if (candidate != null && (bestCandidate == null || candidate.distanceSqr() < bestCandidate.distanceSqr()))
 					bestCandidate = candidate;
 			}
@@ -462,8 +467,8 @@ public class SlimeBeltInventory {
 
 	@Nullable
 	private SideTransferCandidate createSideTransferCandidate(BlockPos targetPos, Direction incomingFace,
-		Direction insertSide, float currentProgress, float nextProgress, Vec3 start, Vec3 end) {
-		Vec3 transferPoint = getTransferCorner(targetPos, incomingFace, insertSide);
+		Direction cornerSide, Direction insertSide, float currentProgress, float nextProgress, Vec3 start, Vec3 end) {
+		Vec3 transferPoint = getTransferCorner(targetPos, incomingFace, cornerSide);
 		float contactParam = getClosestPointParam(start, end, transferPoint);
 		Vec3 closestPoint = start.lerp(end, contactParam);
 		double distanceSqr = closestPoint.distanceToSqr(transferPoint);
@@ -474,10 +479,10 @@ public class SlimeBeltInventory {
 		return new SideTransferCandidate(targetPos, insertSide, contactProgress, contactParam, distanceSqr);
 	}
 
-	private Vec3 getTransferCorner(BlockPos targetPos, Direction incomingFace, Direction insertSide) {
+	private Vec3 getTransferCorner(BlockPos targetPos, Direction incomingFace, Direction cornerSide) {
 		return Vec3.atCenterOf(targetPos)
 			.add(incomingFace.getStepX() * .5, incomingFace.getStepY() * .5, incomingFace.getStepZ() * .5)
-			.add(insertSide.getStepX() * .5, insertSide.getStepY() * .5, insertSide.getStepZ() * .5);
+			.add(cornerSide.getStepX() * .5, cornerSide.getStepY() * .5, cornerSide.getStepZ() * .5);
 	}
 
 	private float getClosestPointParam(Vec3 start, Vec3 end, Vec3 point) {

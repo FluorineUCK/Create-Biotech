@@ -202,6 +202,13 @@ public final class SlimeBeltInsertionPlanner {
 		if (sourceController == null || sourceController.getController()
 			.equals(targetController.getController()))
 			return true;
+		// A perpendicular belt can occupy the block behind a horizontal endpoint and
+		// hand off around that shared corner. Its insertion side is the target track's
+		// travel direction, but it is not a chain continuation and its source segment
+		// does not need to be an endpoint.
+		if (SlimeBeltHelper.getChainBlockAxis(sourceController)
+			!= SlimeBeltHelper.getChainBlockAxis(targetController))
+			return true;
 		Track sourceTrack = SlimeBeltHelper.getEndpointOutputTrack(sourceController, sourceSegment.index);
 		return sourceTrack != null && sourceTrack == targetTrack;
 	}
@@ -332,7 +339,11 @@ public final class SlimeBeltInsertionPlanner {
 	private static boolean hasAdjacentBeltSegmentBehind(SlimeBeltBlockEntity controller, int segment) {
 		Direction movementFacing = controller.getMovementFacing();
 		BlockPos segmentPos = SlimeBeltHelper.getPositionForOffset(controller, segment);
-		return SlimeBeltHelper.getSegmentBE(controller.getLevel(), segmentPos.relative(movementFacing.getOpposite())) != null;
+		SlimeBeltBlockEntity sourceSegment =
+			SlimeBeltHelper.getSegmentBE(controller.getLevel(), segmentPos.relative(movementFacing.getOpposite()));
+		SlimeBeltBlockEntity sourceController = sourceSegment == null ? null : sourceSegment.getControllerBE();
+		return sourceController != null && SlimeBeltHelper.getChainBlockAxis(sourceController)
+			== SlimeBeltHelper.getChainBlockAxis(controller);
 	}
 
 	@Nullable

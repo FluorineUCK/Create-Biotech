@@ -39,6 +39,18 @@ public interface SlimeBeltNeighbor {
 	 */
 	List<Direction> sideTransferInsertSides(Direction incomingFace);
 
+	/**
+	 * Side actually passed to this belt's input behaviour for a corner handoff resolved
+	 * at {@code cornerSide}. The corner side still selects the contacted track surface.
+	 * Once the target is horizontal, however, the insertion itself is an in-line belt
+	 * handoff: passing that track's travel direction makes every belt implementation land
+	 * at the track entry instead of the segment center. Non-horizontal targets still need
+	 * the physical corner side for their height/track placement.
+	 */
+	default Direction handoffInsertSide(Direction incomingFace, Direction cornerSide) {
+		return slope() == BeltSlope.HORIZONTAL ? incomingFace.getOpposite() : cornerSide;
+	}
+
 	@Nullable
 	static SlimeBeltNeighbor at(Level level, BlockPos pos) {
 		BlockEntity blockEntity = level.getBlockEntity(pos);
