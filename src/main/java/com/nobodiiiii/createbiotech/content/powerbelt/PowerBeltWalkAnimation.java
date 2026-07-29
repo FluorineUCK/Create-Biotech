@@ -17,10 +17,11 @@ public class PowerBeltWalkAnimation {
 		SURFACE_MOVEMENT.merge(entity, distance, (current, candidate) -> Math.max(current, candidate));
 	}
 
-	public static float consumeAdjustedMovement(LivingEntity entity, float movementDistance) {
-		Float surfaceMovement = SURFACE_MOVEMENT.remove(entity);
-		if (surfaceMovement == null || surfaceMovement <= 0)
-			return movementDistance;
+	public static Float consumeSurfaceMovement(LivingEntity entity) {
+		return SURFACE_MOVEMENT.remove(entity);
+	}
+
+	public static float includeSurfaceMovement(float movementDistance, float surfaceMovement) {
 		return (float) Math.sqrt(movementDistance * movementDistance + surfaceMovement * surfaceMovement);
 	}
 }

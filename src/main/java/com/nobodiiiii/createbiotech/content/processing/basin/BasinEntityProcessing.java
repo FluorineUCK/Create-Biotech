@@ -137,9 +137,25 @@ public class BasinEntityProcessing {
 		return true;
 	}
 
-	public static boolean tryCaptureSmallSlimeFromFunnel(FunnelBlockEntity funnel) {
+	public static void handleFunnelEntityInside(Level level, BlockPos funnelPos, Entity entity) {
+		if (level.isClientSide || !(entity instanceof Slime slime))
+			return;
+		if (!slime.isAlive() || slime.getSize() != 1 || isCaptured(slime))
+			return;
+		if (!getSmallSlimeCaptureBounds(funnelPos).intersects(slime.getBoundingBox()))
+			return;
+
+		if (level.getBlockEntity(funnelPos) instanceof SlimeCaptureFunnelAccess captureFunnel)
+			captureFunnel.createBiotech$tryCaptureSmallSlime(slime);
+	}
+
+	public static boolean tryCaptureSmallSlimeFromFunnel(FunnelBlockEntity funnel, Slime slime) {
 		Level level = funnel.getLevel();
 		if (level == null || level.isClientSide)
+			return false;
+		if (slime.level() != level || !slime.isAlive() || slime.getSize() != 1 || isCaptured(slime))
+			return false;
+		if (!getSmallSlimeCaptureBounds(funnel.getBlockPos()).intersects(slime.getBoundingBox()))
 			return false;
 
 		BlockState blockState = funnel.getBlockState();
@@ -156,23 +172,7 @@ public class BasinEntityProcessing {
 		if (!(level.getBlockEntity(basinPos) instanceof BasinBlockEntity basin))
 			return false;
 
-		Slime slime = findSmallSlimeInFunnelCaptureArea(level, funnel.getBlockPos());
-		if (slime == null)
-			return false;
-
 		return captureSmallSlimeInBasinFromFunnel(basin, slime);
-	}
-
-	public static boolean isBeltFunnelSmallSlimeInput(FunnelBlockEntity funnel) {
-		Level level = funnel.getLevel();
-		if (level == null)
-			return false;
-
-		BlockState blockState = funnel.getBlockState();
-		if (!(blockState.getBlock() instanceof BeltFunnelBlock))
-			return false;
-
-		return getSmallSlimeInputFacing(level, funnel.getBlockPos(), blockState) != null;
 	}
 
 	public static void tickCapturedSmallSlime(Slime slime) {
@@ -458,13 +458,6 @@ public class BasinEntityProcessing {
 		if (!isInBasinProcessingArea(slime, basinPos))
 			return false;
 		return level.isClientSide || isCapturedInBasin(slime, basinPos);
-	}
-
-	private static Slime findSmallSlimeInFunnelCaptureArea(Level level, BlockPos funnelPos) {
-		AABB bounds = getSmallSlimeCaptureBounds(funnelPos);
-		List<Slime> slimes = level.getEntitiesOfClass(Slime.class, bounds,
-			slime -> slime.isAlive() && slime.getSize() == 1 && !isCaptured(slime));
-		return slimes.isEmpty() ? null : slimes.get(0);
 	}
 
 	private static AABB getEntityProcessingBounds(BlockPos basinPos) {

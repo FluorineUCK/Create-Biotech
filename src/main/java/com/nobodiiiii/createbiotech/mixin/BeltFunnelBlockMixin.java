@@ -9,6 +9,8 @@ import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelStateExtension
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceHost;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
+import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
+import com.simibubi.create.content.logistics.funnel.AbstractHorizontalFunnelBlock;
 import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock;
 import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock.Shape;
 import com.simibubi.create.content.logistics.funnel.FunnelBlock;
@@ -17,16 +19,28 @@ import com.simibubi.create.foundation.advancement.AllAdvancements;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockBehaviour.Properties;
 import net.minecraft.world.level.block.state.BlockState;
 
 @Mixin(BeltFunnelBlock.class)
-public abstract class BeltFunnelBlockMixin {
+public abstract class BeltFunnelBlockMixin extends AbstractHorizontalFunnelBlock {
+
+	protected BeltFunnelBlockMixin(Properties properties) {
+		super(properties);
+	}
+
+	@Override
+	public void entityInside(BlockState state, Level level, BlockPos pos, Entity entity) {
+		super.entityInside(state, level, pos, entity);
+		BasinEntityProcessing.handleFunnelEntityInside(level, pos, entity);
+	}
 
 	/**
 	 * Vanilla {@link BeltFunnelBlock#updateShape} reverts a BeltFunnel to its parent FunnelBlock when the belt is gone,
