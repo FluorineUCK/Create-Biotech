@@ -31,6 +31,8 @@ This is still a hobby project under active development. Content and balance may 
 
 ## Credits and Notice
 
-Parts of this mod's Butter Cat content were integrated and modified with permission from **[Sylvia](https://www.mcmod.cn/author/39181.html)**'s **[Create: Butter Cat](https://www.mcmod.cn/class/25765.html)**. The Allay logistics feature only references code, with permission, from bilibili creators **[@改名字困难户](https://space.bilibili.com/286926825)** and **[@咖喱之恶魔](https://space.bilibili.com/3493112578050237)**'s **[Create Phantom](https://github.com/yision1/CreatePhantom)**.
+Parts of this mod's Butter Cat content were integrated and modified with permission from **[Sylvia](https://www.mcmod.cn/author/39181.html)**'s **[Create: Butter Cat](https://www.mcmod.cn/class/25765.html)**. 
+The Allay logistics feature only references code, with permission, from bilibili creators **[@改名字困难户](https://space.bilibili.com/286926825)** and **[@咖喱之恶魔](https://space.bilibili.com/3493112578050237)**'s **[Create Phantom](https://github.com/yision1/CreatePhantom)**.
+Aeronautics-related compatibility was contributed by GitHub **[@FluorineUCK](https://github.com/Nobodiiiii/Create-Biotech/issues?q=is%3Apr+author%3AFluorineUCK)**.
 
 Thanks to the original creators for their work and for granting permission. The adapted content has been adjusted and modified to fit this mod's gameplay, while the rights to the original works and their assets remain with the original authors. See the separate [Permissions and Sources](https://github.com/Nobodiiiii/Create-Biotech/blob/main/docs/PERMISSIONS.md) page for details.

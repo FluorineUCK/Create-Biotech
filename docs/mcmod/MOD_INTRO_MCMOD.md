@@ -20,6 +20,8 @@
 <p>[h2=当前状态]</p>
 <p>这是一个还在持续开发中的兴趣项目，内容和数值都可能继续调整，有些地方也还比较粗糙。欢迎反馈和 bug 报告，更欢迎更多有趣新奇的想法。</p>
 <p>[h2=致谢与声明]</p>
-<p>本模组的黄油猫部分内容经授权整合并修改自 <strong><a href="https://www.mcmod.cn/author/39181.html">Sylvia</a></strong> 制作的 <strong><a href="https://www.mcmod.cn/class/25765.html">机械动力：黄油猫</a></strong>；悦灵物流功能经授权参考了 <strong>bilibili <a href="https://space.bilibili.com/286926825">@改名字困难户</a> <a href="https://space.bilibili.com/3493112578050237">@咖喱之恶魔</a></strong> 制作的 <strong><a href="https://github.com/yision1/CreatePhantom">Create Phantom</a></strong> 代码。</p>
+<p>本模组的黄油猫部分内容经授权整合并修改自 <strong><a href="https://www.mcmod.cn/author/39181.html">Sylvia</a></strong> 制作的 <strong><a href="https://www.mcmod.cn/class/25765.html">机械动力：黄油猫</a></strong>；</p>
+<p>悦灵物流功能经授权参考了 <strong>bilibili <a href="https://space.bilibili.com/286926825">@改名字困难户</a> <a href="https://space.bilibili.com/3493112578050237">@咖喱之恶魔</a></strong> 制作的 <strong><a href="https://github.com/yision1/CreatePhantom">Create Phantom</a></strong> 代码。</p>
+<p>航空学相关兼容来自 GitHub <strong><a href="https://github.com/Nobodiiiii/Create-Biotech/issues?q=is%3Apr+author%3AFluorineUCK">@FluorineUCK</a></strong>。</p>
 <p>感谢以上原作者的创作与授权支持。相关内容已根据本模组玩法进行适配与修改，原作及其资源权利仍归原作者所有。详见<a href="https://github.com/Nobodiiiii/Create-Biotech/blob/main/docs/PERMISSIONS.zh-CN.md">授权与来源说明</a>。</p>
 </body>

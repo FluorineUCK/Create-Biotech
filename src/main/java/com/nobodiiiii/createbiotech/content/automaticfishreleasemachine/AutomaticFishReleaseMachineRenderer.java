@@ -44,22 +44,22 @@ public class AutomaticFishReleaseMachineRenderer
 
 	public static final ResourceLocation BLADE_CLAMP_MODEL_LOCATION =
 		CreateBiotech.asResource("block/automatic_fish_release_machine/blade_clamp");
-	private static final PartialModel BLADE_CLAMP = PartialModel.of(BLADE_CLAMP_MODEL_LOCATION);
-	private static final ResourceLocation SALMON_TEXTURE =
+	static final PartialModel BLADE_CLAMP = PartialModel.of(BLADE_CLAMP_MODEL_LOCATION);
+	static final ResourceLocation SALMON_TEXTURE =
 		ResourceLocation.withDefaultNamespace("textures/entity/fish/salmon.png");
-	private static final int BLADE_COUNT = 16;
-	private static final float FISH_RING_RADIUS = 2.47f;
-	private static final float FISH_SCALE = 0.8f;
-	private static final float FISH_IN_PLANE_ROTATION = -12.25f;
-	private static final float FISH_TAIL_OFFSET = 1.0f / 16.0f;
+	static final int BLADE_COUNT = 16;
+	static final float FISH_RING_RADIUS = 2.47f;
+	static final float FISH_SCALE = 0.8f;
+	static final float FISH_IN_PLANE_ROTATION = -12.25f;
+	static final float FISH_TAIL_OFFSET = 1.0f / 16.0f;
 	private static final float FISH_LENGTH_CENTRE = 6.5f / 16.0f;
 	private static final float SWIM_TAIL_AMPLITUDE = 0.4f;
 	private static final float SWIM_TAIL_SPEED = 0.8f;
-	private static final float CARDINAL_BLADE_CLAMP_RADIUS = 2.125f;
-	private static final float INTERMEDIATE_BLADE_CLAMP_RADIUS = 2.1875f;
-	private static final float BLADE_CLAMP_OUTWARD_OFFSET = 6.0f / 16.0f;
-	private static final float SLOT_ANGLE = 360.0f / BLADE_COUNT;
-	private static final float FIRST_GAP_ANGLE = SLOT_ANGLE / 2.0f;
+	static final float CARDINAL_BLADE_CLAMP_RADIUS = 2.125f;
+	static final float INTERMEDIATE_BLADE_CLAMP_RADIUS = 2.1875f;
+	static final float BLADE_CLAMP_OUTWARD_OFFSET = 6.0f / 16.0f;
+	static final float SLOT_ANGLE = 360.0f / BLADE_COUNT;
+	static final float FIRST_GAP_ANGLE = SLOT_ANGLE / 2.0f;
 	private static final float MAX_MERIT_TEXT_SPEED = 16.0f;
 	private static final float MERIT_TEXT_LIFETIME = 24.0f;
 	private static final Component MERIT_TEXT = Component.literal("功德+1");

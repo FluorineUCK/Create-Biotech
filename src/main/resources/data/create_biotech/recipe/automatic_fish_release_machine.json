@@ -8,7 +8,8 @@
   ],
   "key": {
     "F": {
-      "item": "minecraft:salmon"
+      "type": "create_biotech:captured_entity_box",
+      "entity": "minecraft:salmon"
     },
     "W": {
       "item": "create:large_water_wheel"
