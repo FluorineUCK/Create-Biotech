@@ -37,6 +37,7 @@ public record BeltSurface(
 	Direction movementFacing,
 	Quaternionf surfaceToWorld
 ) {
+	private static final Quaternionf[] SURFACE_TO_WORLD = createSurfaceRotations();
 
 	public BeltSurface {
 		if (outwardNormal.getAxis() == movementFacing.getAxis())
@@ -47,7 +48,7 @@ public record BeltSurface(
 	public static BeltSurface of(BeltSurfaceHost host, BlockPos beltPos, int segmentIndex,
 		Direction outwardNormal, Direction movementFacing) {
 		return new BeltSurface(host, beltPos, segmentIndex, outwardNormal, movementFacing,
-			computeSurfaceToWorld(outwardNormal));
+			SURFACE_TO_WORLD[outwardNormal.ordinal()]);
 	}
 
 	/** The canonical {@code localForward} direction (in world frame) determined solely by {@code outwardNormal}. */
@@ -125,14 +126,26 @@ public record BeltSurface(
 
 	/** Rotate a position around the block centre {@code (.5, .5, .5)} by {@link #surfaceToWorld}. */
 	public Vec3 transformPosition(Vec3 position) {
+		return transformPosition(position, outwardNormal);
+	}
+
+	/** Rotate a position using only a surface normal, without constructing a {@link BeltSurface}. */
+	public static Vec3 transformPosition(Vec3 position, Direction outwardNormal) {
 		Vec3 local = position.subtract(.5d, .5d, .5d);
-		Vector3f rotated = new Vector3f((float) local.x, (float) local.y, (float) local.z).rotate(surfaceToWorld);
+		Vector3f rotated = new Vector3f((float) local.x, (float) local.y, (float) local.z)
+			.rotate(surfaceToWorld(outwardNormal));
 		return new Vec3(rotated.x() + .5d, rotated.y() + .5d, rotated.z() + .5d);
 	}
 
 	/** Rotate a direction vector (no translation) by {@link #surfaceToWorld}. */
 	public Vec3 transformDirection(Vec3 direction) {
-		Vector3f rotated = new Vector3f((float) direction.x, (float) direction.y, (float) direction.z).rotate(surfaceToWorld);
+		return transformDirection(direction, outwardNormal);
+	}
+
+	/** Rotate a direction using only a surface normal, without constructing a {@link BeltSurface}. */
+	public static Vec3 transformDirection(Vec3 direction, Direction outwardNormal) {
+		Vector3f rotated = new Vector3f((float) direction.x, (float) direction.y, (float) direction.z)
+			.rotate(surfaceToWorld(outwardNormal));
 		return new Vec3(rotated.x(), rotated.y(), rotated.z());
 	}
 
@@ -152,12 +165,25 @@ public record BeltSurface(
 
 	/** Rotate a VoxelShape around the block centre by {@link #surfaceToWorld}, then re-aabb each box. */
 	public VoxelShape transformShape(VoxelShape base) {
+		return transformShape(base, outwardNormal);
+	}
+
+	/** Rotate a shape using only a surface normal, without constructing a {@link BeltSurface}. */
+	public static VoxelShape transformShape(VoxelShape base, Direction outwardNormal) {
 		if (base.isEmpty())
 			return base;
+		Quaternionf rotation = surfaceToWorld(outwardNormal);
 		VoxelShape[] out = { Shapes.empty() };
 		base.forAllBoxes((x1, y1, z1, x2, y2, z2) -> out[0] =
-			Shapes.or(out[0], rotateBoxAabb(x1, y1, z1, x2, y2, z2, surfaceToWorld)));
+			Shapes.or(out[0], rotateBoxAabb(x1, y1, z1, x2, y2, z2, rotation)));
 		return out[0].optimize();
+	}
+
+	/**
+	 * Shared, read-only-by-convention rotation for an outward normal. Callers must never mutate the returned value.
+	 */
+	public static Quaternionf surfaceToWorld(Direction outwardNormal) {
+		return SURFACE_TO_WORLD[outwardNormal.ordinal()];
 	}
 
 	private static VoxelShape rotateBoxAabb(double x1, double y1, double z1, double x2, double y2, double z2,
@@ -197,5 +223,13 @@ public record BeltSurface(
 			-f.getX(), -f.getY(), -f.getZ()
 		);
 		return new Quaternionf().setFromUnnormalized(m);
+	}
+
+	private static Quaternionf[] createSurfaceRotations() {
+		Direction[] directions = Direction.values();
+		Quaternionf[] rotations = new Quaternionf[directions.length];
+		for (Direction direction : directions)
+			rotations[direction.ordinal()] = computeSurfaceToWorld(direction);
+		return rotations;
 	}
 }

@@ -11,6 +11,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelStateExtensions;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltHelper;
@@ -79,19 +80,23 @@ public abstract class FunnelBlockEntityMixin {
 		if (shape == Shape.PULLING || shape == Shape.PUSHING || funnel.getLevel() == null)
 			return;
 
-		BeltSurface surface = BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos());
-		if (surface == null)
-			return;
-
-		Direction facing = surface.worldize(blockState.getValue(BeltFunnelBlock.HORIZONTAL_FACING));
+		BeltSurface surface =
+			BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos(), blockState);
+		Direction facing;
 		Direction movementFacing;
-		if (surface.host() != null) {
+		if (surface != null) {
+			facing = surface.worldize(blockState.getValue(BeltFunnelBlock.HORIZONTAL_FACING));
 			movementFacing = surface.movementFacing();
 		} else {
+			Direction attachment =
+				blockState.getValue(BeltFunnelStateExtensions.ATTACHMENT_SURFACE);
+			if (attachment != Direction.DOWN)
+				return;
 			MagmaBeltBlockEntity magmaBelt =
-				MagmaBeltHelper.getSegmentBE(funnel.getLevel(), surface.beltPos());
+				MagmaBeltHelper.getSegmentBE(funnel.getLevel(), funnel.getBlockPos().below());
 			if (magmaBelt == null)
 				return;
+			facing = blockState.getValue(BeltFunnelBlock.HORIZONTAL_FACING);
 			movementFacing = magmaBelt.getMovementFacing();
 		}
 		cir.setReturnValue(getMode(movementFacing == facing ? "PUSHING_TO_BELT" : "TAKING_FROM_BELT"));
@@ -119,8 +124,9 @@ public abstract class FunnelBlockEntityMixin {
 		if (shape == Shape.PUSHING)
 			return;
 
-		BeltSurface surface = BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos());
-		if (surface != null && surface.host() != null)
+		BeltSurface surface =
+			BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos(), blockState);
+		if (surface != null)
 			cir.setReturnValue(true);
 	}
 
@@ -130,8 +136,10 @@ public abstract class FunnelBlockEntityMixin {
 		if (funnel.getLevel() == null)
 			return;
 
-		BeltSurface surface = BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos());
-		if (surface == null || surface.host() == null)
+		BlockState blockState = funnel.getBlockState();
+		BeltSurface surface =
+			BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos(), blockState);
+		if (surface == null)
 			return;
 
 		ci.cancel();
@@ -193,11 +201,10 @@ public abstract class FunnelBlockEntityMixin {
 	private static BlockFace createBiotech$getInventoryTarget(Level world, net.minecraft.core.BlockPos pos,
 		BlockState state) {
 		Direction facing = AbstractFunnelBlock.getFunnelFacing(state);
-		if (world != null && facing != null && state.getBlock() instanceof BeltFunnelBlock) {
-			BeltSurface surface = BeltSurfaceResolver.resolve(world, pos);
-			if (surface != null)
-				facing = surface.worldize(facing);
-		}
+		Direction outwardNormal = BeltFunnelStateExtensions.tiltedOutwardNormal(state);
+		if (world != null && facing != null && state.getBlock() instanceof BeltFunnelBlock
+			&& outwardNormal != null)
+			facing = BeltSurface.worldizeCanonical(facing, outwardNormal);
 		return new BlockFace(pos, facing == null ? Direction.DOWN : facing.getOpposite());
 	}
 

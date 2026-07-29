@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelStateExtensions;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceHost;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceProviderBlock;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
 import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock;
 import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock.Shape;
@@ -71,11 +72,9 @@ public abstract class BeltFunnelBlockMixin {
 		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos);
 		if (surface == null)
 			surface = BeltSurfaceResolver.resolveForPlacement(world, pos);
-		// Only claim authority over surfaces that have a real host (slime belt). For
-		// non-host belts (vanilla / magma / power), the resolver synthesises a allay surface with
-		// canonical movementFacing=NORTH which would give wrong RETRACTED/PUSHING answers — fall
-		// through to vanilla / MagmaBeltFunnelBlockMixin which read the actual belt facing.
-		if (surface == null || surface.host() == null)
+		// Only claim authority over live surface-host belts. Ordinary vanilla, magma, and power belts return null
+		// and fall through to their own implementations, which read the actual belt facing.
+		if (surface == null)
 			return;
 		// localFacing here is in surface-local (canonical) frame; project back to world to compare against
 		// the belt's actual movement axis. RETRACTED iff the funnel sits in-line with belt motion.
@@ -95,9 +94,8 @@ public abstract class BeltFunnelBlockMixin {
 	 * {@link #createBiotech$worldizeRevertFacing} {@code @WrapOperation} above feeds the original world facing back
 	 * into {@link FunnelBlock#FACING} using {@code worldizeCanonical(HORIZONTAL_FACING, outward)}.
 	 * <p>
-	 * Do <em>not</em> route this through {@link BeltSurfaceResolver#resolve}: that resolver's BeltFunnel fast path
-	 * synthesises a allay surface from the state alone (using canonical forward) and would always succeed even
-	 * after the belt is gone — defeating the revert.
+	 * This validity hook performs the provider check directly so a missing provider is rejected immediately and
+	 * the BeltFunnel can revert to its parent block.
 	 */
 	@Inject(method = "isOnValidBelt(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelReader;Lnet/minecraft/core/BlockPos;)Z",
 		at = @At("HEAD"), cancellable = true)
@@ -106,11 +104,13 @@ public abstract class BeltFunnelBlockMixin {
 		Direction attachment = state.getOptionalValue(BeltFunnelStateExtensions.ATTACHMENT_SURFACE).orElse(null);
 		if (attachment != null) {
 			BlockPos beltPos = pos.relative(attachment);
-			BlockEntity be = world.getBlockEntity(beltPos);
-			if (be instanceof BeltSurfaceHost host) {
+			BlockState beltState = world.getBlockState(beltPos);
+			if (beltState.getBlock() instanceof BeltSurfaceProviderBlock) {
 				// Surface-based belt (e.g. slime belt): authoritative answer comes from the host's surface
 				// table — covers lateral and vertical-track attachments that vanilla can't reason about.
-				cir.setReturnValue(host.surfaceFor(attachment.getOpposite()) != null);
+				BlockEntity be = world.getBlockEntity(beltPos);
+				cir.setReturnValue(be instanceof BeltSurfaceHost host
+					&& host.surfaceFor(attachment.getOpposite()) != null);
 				return;
 			}
 			// Not a surface host. For non-canonical attachments (lateral / top-of-vertical) vanilla's
@@ -135,11 +135,10 @@ public abstract class BeltFunnelBlockMixin {
 	private void createBiotech$onWrenched(BlockState state, UseOnContext context,
 		CallbackInfoReturnable<InteractionResult> cir) {
 		Level world = context.getLevel();
-		BeltSurface surface = BeltSurfaceResolver.resolve(world, context.getClickedPos());
-		// Only claim wrench authority over surface-host belts (slime belt). For vanilla / magma /
-		// power belts the resolver returns a allay surface with no host — defer to their own
-		// wrench handlers (e.g. MagmaBeltFunnelBlockMixin) which read the actual belt slope/facing.
-		if (surface == null || surface.host() == null)
+		BeltSurface surface = BeltSurfaceResolver.resolve(world, context.getClickedPos(), state);
+		// Only claim wrench authority over surface-host belts (slime belt). Vanilla, magma, and power belts
+		// return null and defer to their own wrench handlers.
+		if (surface == null)
 			return;
 		if (world.isClientSide) {
 			cir.setReturnValue(InteractionResult.SUCCESS);

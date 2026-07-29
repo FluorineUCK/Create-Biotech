@@ -35,7 +35,7 @@ public abstract class FunnelItemMixin {
 		at = @At("HEAD"), cancellable = true)
 	private void createBiotech$bypassVanillaSpecialization(BlockPlaceContext ctx,
 		CallbackInfoReturnable<BlockState> cir) {
-		BeltSurface surface = BeltSurfaceResolver.resolve(ctx.getLevel(), ctx.getClickedPos());
+		BeltSurface surface = BeltSurfaceResolver.resolveForPlacement(ctx.getLevel(), ctx.getClickedPos());
 		if (surface == null)
 			return; // foreign belt or no belt — let vanilla decide
 

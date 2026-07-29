@@ -5,6 +5,7 @@ import java.util.List;
 
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceProviderBlock;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -74,7 +75,8 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class SlimeBeltBlock extends HorizontalKineticBlock implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock {
+public class SlimeBeltBlock extends HorizontalKineticBlock
+	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);

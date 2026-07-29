@@ -15,15 +15,14 @@ import net.minecraft.world.level.block.state.BlockState;
  * Entry points with non-overlapping contracts:
  * <ul>
  *   <li>{@link #resolve(BlockGetter, BlockPos)} — query an <strong>already-placed</strong> {@link BeltFunnelBlock}'s
- *       attached surface. The attachment is read from {@link BeltFunnelStateExtensions#ATTACHMENT_SURFACE} encoded in
- *       the block state, so the answer survives the belt being destroyed (used by the revert hook). Returns
- *       {@code null} for anything that isn't a BeltFunnel — including a plain {@link com.simibubi.create.content.logistics.funnel.FunnelBlock}
- *       that happens to sit next to a belt. <strong>This is the entry point all runtime queries (rendering, mode
- *       determination, interaction handler) should use</strong>; the null return is what stops us from accidentally
- *       tilting a non-specialised funnel's flap (and similar leaks).</li>
+ *       live hosted surface. The attachment direction comes from
+ *       {@link BeltFunnelStateExtensions#ATTACHMENT_SURFACE}, but a result is returned only when the adjacent block
+ *       explicitly implements {@link BeltSurfaceProviderBlock} and exposes a matching live
+ *       {@link BeltSurfaceHost}. Ordinary Create, magma, and power belts return {@code null} without a block-entity
+ *       lookup.</li>
  *   <li>{@link #resolve(BlockGetter, BlockPos, BlockState)} — the same state-encoded lookup when the caller already has
- *       the authoritative state. Collision-shape callers must use this overload because physics engines can supply a
- *       context-free {@link BlockGetter} that has no state or block entities at the queried position.</li>
+ *       the authoritative state. Geometry and rendering must not call either resolver overload; their transform is
+ *       fully determined by the state property and is handled statelessly.</li>
  *   <li>{@link #resolveForPlacement(BlockGetter, BlockPos)} — used only during placement / state-conversion, when the
  *       block at {@code funnelPos} doesn't yet (or no longer) carry a BeltFunnel encoding. Scans the six orthogonal
  *       neighbours for a {@link BeltSurfaceHost} whose outward normal points back at {@code funnelPos}.</li>
@@ -35,7 +34,7 @@ public final class BeltSurfaceResolver {
 
 	/**
 	 * Resolve via the block state's encoded attachment. Returns {@code null} unless the block at {@code funnelPos}
-	 * is an {@link BeltFunnelBlock} carrying a valid {@link BeltFunnelStateExtensions#ATTACHMENT_SURFACE}.
+	 * is an {@link BeltFunnelBlock} attached to a live {@link BeltSurfaceHost}.
 	 */
 	@Nullable
 	public static BeltSurface resolve(BlockGetter world, BlockPos funnelPos) {
@@ -70,6 +69,8 @@ public final class BeltSurfaceResolver {
 			BlockPos neighbourPos = funnelPos.relative(d);
 			if (world instanceof Level level && !level.isLoaded(neighbourPos))
 				continue;
+			if (!(world.getBlockState(neighbourPos).getBlock() instanceof BeltSurfaceProviderBlock))
+				continue;
 			BlockEntity be = world.getBlockEntity(neighbourPos);
 			if (!(be instanceof BeltSurfaceHost host))
 				continue;
@@ -87,26 +88,17 @@ public final class BeltSurfaceResolver {
 			return null;
 		Direction outwardNormal = attachment.getOpposite();
 		BlockPos beltPos = funnelPos.relative(attachment);
+		if (world instanceof Level level && !level.isLoaded(beltPos))
+			return null;
 
-		// Try to find the belt host so we can carry a real movementFacing for behaviour decisions
-		// (mode determination, blocking-vs-perpendicular runtime checks). If the belt is gone, fall back
-		// to the canonical forward so the constructor invariant (outwardNormal.axis != movementFacing.axis)
-		// still holds — but consumers that actually rely on movementFacing during a tick will have already
-		// short-circuited via their own null/state checks before reaching this point.
-		BeltSurfaceHost host = null;
-		Direction movementFacing = BeltSurface.canonicalForward(outwardNormal);
-		int segmentIndex = 0;
-		if (!(world instanceof Level level) || level.isLoaded(beltPos)) {
-			BlockEntity be = world.getBlockEntity(beltPos);
-			if (be instanceof BeltSurfaceHost h) {
-				BeltSurface live = h.surfaceFor(outwardNormal);
-				if (live != null) {
-					host = h;
-					movementFacing = live.movementFacing();
-					segmentIndex = live.segmentIndex();
-				}
-			}
-		}
-		return BeltSurface.of(host, beltPos, segmentIndex, outwardNormal, movementFacing);
+		// Block-state rejection is intentionally before getBlockEntity. Every ordinary BeltFunnel carries the
+		// attachment property with DOWN as its default, but only explicit provider blocks can host a BeltSurface.
+		if (!(world.getBlockState(beltPos).getBlock() instanceof BeltSurfaceProviderBlock))
+			return null;
+
+		BlockEntity be = world.getBlockEntity(beltPos);
+		if (!(be instanceof BeltSurfaceHost host))
+			return null;
+		return host.surfaceFor(outwardNormal);
 	}
 }

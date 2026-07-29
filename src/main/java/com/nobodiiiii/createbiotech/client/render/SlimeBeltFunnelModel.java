@@ -8,7 +8,7 @@ import org.jetbrains.annotations.NotNull;
 import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
-import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelStateExtensions;
 import com.simibubi.create.foundation.model.BakedModelWrapperWithData;
 import com.simibubi.create.foundation.model.BakedQuadHelper;
 
@@ -27,7 +27,7 @@ import net.neoforged.neoforge.client.model.data.ModelProperty;
 
 public class SlimeBeltFunnelModel extends BakedModelWrapperWithData {
 
-	private static final ModelProperty<BeltSurface> SURFACE_PROPERTY = new ModelProperty<>();
+	private static final ModelProperty<Direction> OUTWARD_NORMAL_PROPERTY = new ModelProperty<>();
 
 	public SlimeBeltFunnelModel(BakedModel originalModel) {
 		super(originalModel);
@@ -36,15 +36,15 @@ public class SlimeBeltFunnelModel extends BakedModelWrapperWithData {
 	@Override
 	protected Builder gatherModelData(Builder builder, BlockAndTintGetter world, BlockPos pos, BlockState state,
 		ModelData blockEntityData) {
-		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos);
-		return surface == null ? builder : builder.with(SURFACE_PROPERTY, surface);
+		Direction outwardNormal = BeltFunnelStateExtensions.tiltedOutwardNormal(state);
+		return outwardNormal == null ? builder : builder.with(OUTWARD_NORMAL_PROPERTY, outwardNormal);
 	}
 
 	@Override
 	public @NotNull List<BakedQuad> getQuads(@Nullable BlockState state, @Nullable Direction side,
 		@NotNull RandomSource rand, @NotNull ModelData extraData, @Nullable RenderType renderType) {
-		BeltSurface surface = extraData.get(SURFACE_PROPERTY);
-		if (surface == null)
+		Direction outwardNormal = extraData.get(OUTWARD_NORMAL_PROPERTY);
+		if (outwardNormal == null)
 			return super.getQuads(state, side, rand, extraData, renderType);
 		if (state == null)
 			return Collections.emptyList();
@@ -57,14 +57,17 @@ public class SlimeBeltFunnelModel extends BakedModelWrapperWithData {
 		for (BakedQuad templateQuad : templateQuads) {
 			int[] transformedVertices = templateQuad.getVertices().clone();
 			for (int vertex = 0; vertex < 4; vertex++) {
-				Vec3 transformedPosition = surface.transformPosition(BakedQuadHelper.getXYZ(transformedVertices, vertex));
-				Vec3 transformedNormal = surface.transformDirection(BakedQuadHelper.getNormalXYZ(transformedVertices, vertex))
+				Vec3 transformedPosition = BeltSurface.transformPosition(
+					BakedQuadHelper.getXYZ(transformedVertices, vertex), outwardNormal);
+				Vec3 transformedNormal = BeltSurface.transformDirection(
+					BakedQuadHelper.getNormalXYZ(transformedVertices, vertex), outwardNormal)
 					.normalize();
 				BakedQuadHelper.setXYZ(transformedVertices, vertex, transformedPosition);
 				BakedQuadHelper.setNormalXYZ(transformedVertices, vertex, transformedNormal);
 			}
 
-			Vec3 quadNormal = surface.transformDirection(Vec3.atLowerCornerOf(templateQuad.getDirection().getNormal()))
+			Vec3 quadNormal = BeltSurface.transformDirection(
+				Vec3.atLowerCornerOf(templateQuad.getDirection().getNormal()), outwardNormal)
 				.normalize();
 			quads.add(new BakedQuad(transformedVertices, templateQuad.getTintIndex(),
 				BeltSurface.nearestDirection(quadNormal), templateQuad.getSprite(), templateQuad.isShade()));

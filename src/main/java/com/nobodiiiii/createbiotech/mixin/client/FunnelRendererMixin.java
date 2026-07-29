@@ -19,7 +19,7 @@ public abstract class FunnelRendererMixin {
 		at = @At("HEAD"))
 	private void createBiotech$pushSurface(FunnelBlockEntity be, float partialTicks, PoseStack ms,
 		MultiBufferSource buffer, int light, int overlay, CallbackInfo ci) {
-		BeltSurfaceRenderScope.push(be.getLevel(), be.getBlockPos());
+		BeltSurfaceRenderScope.push(be.getBlockState());
 	}
 
 	@Inject(method = "renderSafe(Lcom/simibubi/create/content/logistics/funnel/FunnelBlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V",

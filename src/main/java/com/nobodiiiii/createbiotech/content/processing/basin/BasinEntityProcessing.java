@@ -4,6 +4,7 @@ import java.util.Collections;
 import java.util.List;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelStateExtensions;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
@@ -46,11 +47,15 @@ public class BasinEntityProcessing {
 	private static final String CREATE_FUNNEL_PACKAGE = "com.simibubi.create.content.logistics.funnel.";
 	private static final String CREATE_BASIN_RECIPE = "com.simibubi.create.content.processing.basin.BasinRecipe";
 	private static final String FUNNEL_MIXIN = "com.nobodiiiii.createbiotech.mixin.FunnelBlockEntityMixin";
+	private static final ThreadLocal<Integer> CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH = new ThreadLocal<>();
 
 	private BasinEntityProcessing() {}
 
 	public static boolean isCapturedSmallSlimeItem(ItemStack stack) {
-		return stack.is(CBItems.CAPTURED_SMALL_SLIME.get());
+		// This is an entity-backed control item, not a tag/replacement-compatible ingredient.
+		// Use raw identity so ordinary basin traffic does not enter global ItemStack#is hooks
+		// such as One Enough Item's deep replacement checks.
+		return stack.getItem() == CBItems.CAPTURED_SMALL_SLIME.get();
 	}
 
 	public static boolean hasCapturedSmallSlimes(BasinBlockEntity basin) {
@@ -61,6 +66,10 @@ public class BasinEntityProcessing {
 	}
 
 	public static boolean canMoveCapturedSmallSlimeItems() {
+		Integer movementDepth = CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.get();
+		if (movementDepth != null && movementDepth > 0)
+			return true;
+
 		for (StackTraceElement frame : Thread.currentThread()
 			.getStackTrace()) {
 			String className = frame.getClassName();
@@ -119,6 +128,7 @@ public class BasinEntityProcessing {
 		if (outputItems.isEmpty())
 			return true;
 
+		beginCapturedSlimeItemMovement();
 		basin.getOutputInventory()
 			.allowInsertion();
 		try {
@@ -132,6 +142,7 @@ public class BasinEntityProcessing {
 		} finally {
 			basin.getOutputInventory()
 				.forbidInsertion();
+			endCapturedSlimeItemMovement();
 		}
 
 		return true;
@@ -342,19 +353,24 @@ public class BasinEntityProcessing {
 	}
 
 	private static int insertCapturedSmallSlimeItems(BasinBlockEntity basin, int count, boolean simulate) {
-		int inserted = 0;
-		int remaining = count;
-		int maxStackSize = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get()).getMaxStackSize();
-		while (remaining > 0) {
-			ItemStack stack = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get(), Math.min(remaining, maxStackSize));
-			ItemStack remainder = ItemHandlerHelper.insertItemStacked(basin.getInputInventory(), stack, simulate);
-			int insertedThisPass = stack.getCount() - remainder.getCount();
-			if (insertedThisPass <= 0)
-				break;
-			inserted += insertedThisPass;
-			remaining -= insertedThisPass;
+		beginCapturedSlimeItemMovement();
+		try {
+			int inserted = 0;
+			int remaining = count;
+			int maxStackSize = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get()).getMaxStackSize();
+			while (remaining > 0) {
+				ItemStack stack = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get(), Math.min(remaining, maxStackSize));
+				ItemStack remainder = ItemHandlerHelper.insertItemStacked(basin.getInputInventory(), stack, simulate);
+				int insertedThisPass = stack.getCount() - remainder.getCount();
+				if (insertedThisPass <= 0)
+					break;
+				inserted += insertedThisPass;
+				remaining -= insertedThisPass;
+			}
+			return inserted;
+		} finally {
+			endCapturedSlimeItemMovement();
 		}
-		return inserted;
 	}
 
 	private static int setCapturedSmallSlimeItemCount(BasinBlockEntity basin, int targetCount) {
@@ -375,18 +391,37 @@ public class BasinEntityProcessing {
 	}
 
 	private static int shrinkCapturedSmallSlimeItems(IItemHandlerModifiable inventory, int amount) {
-		int remaining = amount;
-		for (int slot = 0; slot < inventory.getSlots() && remaining > 0; slot++) {
-			ItemStack stack = inventory.getStackInSlot(slot);
-			if (!isCapturedSmallSlimeItem(stack))
-				continue;
+		beginCapturedSlimeItemMovement();
+		try {
+			int remaining = amount;
+			for (int slot = 0; slot < inventory.getSlots() && remaining > 0; slot++) {
+				ItemStack stack = inventory.getStackInSlot(slot);
+				if (!isCapturedSmallSlimeItem(stack))
+					continue;
 
-			int removed = Math.min(remaining, stack.getCount());
-			stack.shrink(removed);
-			inventory.setStackInSlot(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
-			remaining -= removed;
+				int removed = Math.min(remaining, stack.getCount());
+				stack.shrink(removed);
+				inventory.setStackInSlot(slot, stack.isEmpty() ? ItemStack.EMPTY : stack);
+				remaining -= removed;
+			}
+			return remaining;
+		} finally {
+			endCapturedSlimeItemMovement();
 		}
-		return remaining;
+	}
+
+	private static void beginCapturedSlimeItemMovement() {
+		Integer depth = CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.get();
+		CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.set(depth == null ? 1 : depth + 1);
+	}
+
+	private static void endCapturedSlimeItemMovement() {
+		Integer depth = CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.get();
+		if (depth == null || depth <= 1) {
+			CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.remove();
+			return;
+		}
+		CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.set(depth - 1);
 	}
 
 	private static int getCapturedSmallSlimeItemCount(BasinBlockEntity basin) {
@@ -420,13 +455,20 @@ public class BasinEntityProcessing {
 		if (facing == null)
 			return null;
 
-		BeltSurface surface = BeltSurfaceResolver.resolve(level, funnelPos);
-		if (surface != null)
-			facing = surface.worldize(facing);
+		Direction outwardNormal = BeltFunnelStateExtensions.tiltedOutwardNormal(blockState);
+		if (outwardNormal != null)
+			facing = BeltSurface.worldizeCanonical(facing, outwardNormal);
 		if (!facing.getAxis()
 			.isHorizontal())
 			return null;
 
+		Shape shape = blockState.getValue(BeltFunnelBlock.SHAPE);
+		if (shape == Shape.PULLING)
+			return facing;
+		if (shape == Shape.PUSHING)
+			return null;
+
+		BeltSurface surface = BeltSurfaceResolver.resolve(level, funnelPos, blockState);
 		return isTakingFromBelt(level, funnelPos, blockState, facing, surface) ? facing : null;
 	}
 
@@ -438,7 +480,7 @@ public class BasinEntityProcessing {
 		if (shape == Shape.PUSHING)
 			return false;
 
-		if (surface != null && surface.host() != null)
+		if (surface != null)
 			return surface.movementFacing() != worldFacing;
 
 		BeltBlockEntity belt = BeltHelper.getSegmentBE(level, funnelPos.below());
