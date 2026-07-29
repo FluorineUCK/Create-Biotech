@@ -10,7 +10,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.client.render.BeltSurfaceRenderScope;
-import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.simibubi.create.content.logistics.FlapStuffs;
 
 import net.createmod.catnip.render.SuperByteBuffer;
@@ -25,11 +24,11 @@ public abstract class FlapStuffsMixin {
 		at = @At("HEAD"))
 	private static void createBiotech$applySurfaceTilt(PoseStack ms, VertexConsumer vb, SuperByteBuffer flapBuffer,
 		Vec3 pivot, Direction funnelFacing, float flapness, float zOffset, int light, CallbackInfo ci) {
-		BeltSurface surface = BeltSurfaceRenderScope.current();
-		if (surface == null)
+		Direction outwardNormal = BeltSurfaceRenderScope.current();
+		if (outwardNormal == null)
 			return;
 		ms.pushPose();
-		BeltSurfaceRenderScope.applyTilt(ms, surface);
+		BeltSurfaceRenderScope.applyTilt(ms, outwardNormal);
 	}
 
 	@Inject(method = "renderFlaps(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;Lnet/createmod/catnip/render/SuperByteBuffer;Lnet/minecraft/world/phys/Vec3;Lnet/minecraft/core/Direction;FFI)V",
@@ -44,9 +43,10 @@ public abstract class FlapStuffsMixin {
 		at = @At("HEAD"), cancellable = true)
 	private static void createBiotech$tiltedCommonTransform(BlockPos visualPosition, Direction side, float baseZOffset,
 		CallbackInfoReturnable<Matrix4f> cir) {
-		BeltSurface surface = BeltSurfaceRenderScope.current();
-		if (surface == null)
+		Direction outwardNormal = BeltSurfaceRenderScope.current();
+		if (outwardNormal == null)
 			return;
-		cir.setReturnValue(BeltSurfaceRenderScope.tiltedCommonTransform(visualPosition, side, baseZOffset, surface));
+		cir.setReturnValue(
+			BeltSurfaceRenderScope.tiltedCommonTransform(visualPosition, side, baseZOffset, outwardNormal));
 	}
 }

@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.beltsurface;
 
 import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 
 /**
@@ -22,4 +23,16 @@ public final class BeltFunnelStateExtensions {
 		DirectionProperty.create("cb_attachment_surface", Direction.values());
 
 	private BeltFunnelStateExtensions() {}
+
+	/**
+	 * The outward normal needed by geometry-only paths, or {@code null} for the canonical identity transform.
+	 * This deliberately does not query the world or attempt to distinguish a horizontal slime-belt surface from
+	 * an ordinary belt: both use the same unrotated geometry.
+	 */
+	public static Direction tiltedOutwardNormal(BlockState state) {
+		if (state == null || !state.hasProperty(ATTACHMENT_SURFACE))
+			return null;
+		Direction attachment = state.getValue(ATTACHMENT_SURFACE);
+		return attachment == Direction.DOWN ? null : attachment.getOpposite();
+	}
 }

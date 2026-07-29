@@ -4,38 +4,20 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import com.nobodiiiii.createbiotech.content.processing.basin.BasinCapturedSlimeItemHandler;
 import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
 import com.nobodiiiii.createbiotech.content.processing.basin.CapturedSmallSlimeItem;
 import com.simibubi.create.content.processing.basin.BasinBlockEntity;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.block.entity.BlockEntityType;
-import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.fluids.FluidStack;
-import net.neoforged.neoforge.items.IItemHandlerModifiable;
-import net.neoforged.neoforge.items.wrapper.CombinedInvWrapper;
 
 @Mixin(value = BasinBlockEntity.class, priority = 1001)
 public abstract class BasinBlockEntityMixin {
-
-	@Shadow(remap = false)
-	protected IItemHandlerModifiable itemCapability;
-
-	@Inject(method = "<init>", at = @At("RETURN"))
-	private void createBiotech$includeCapturedSlimesInItemCapability(BlockEntityType<?> type, BlockPos pos,
-		BlockState state, CallbackInfo ci) {
-		BasinBlockEntity basin = (BasinBlockEntity) (Object) this;
-		itemCapability = new BasinCapturedSlimeItemHandler(basin,
-			new CombinedInvWrapper(basin.getInputInventory(), basin.getOutputInventory()));
-	}
 
 	@Inject(method = "tick()V", at = @At("TAIL"), remap = false)
 	private void createBiotech$materializeCapturedSmallSlimeItems(CallbackInfo ci) {

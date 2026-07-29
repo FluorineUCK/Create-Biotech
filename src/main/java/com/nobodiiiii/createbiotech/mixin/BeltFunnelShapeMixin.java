@@ -5,13 +5,14 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
-import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelShapeCache;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelStateExtensions;
 import com.simibubi.create.AllShapes;
 import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock;
 import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock.Shape;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.state.BlockState;
@@ -25,10 +26,10 @@ public abstract class BeltFunnelShapeMixin {
 	@Inject(method = "getShape", at = @At("RETURN"), cancellable = true)
 	private void createBiotech$tiltShape(BlockState state, BlockGetter world, BlockPos pos, CollisionContext context,
 		CallbackInfoReturnable<VoxelShape> cir) {
-		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos, state);
-		if (surface == null)
+		Direction outwardNormal = BeltFunnelStateExtensions.tiltedOutwardNormal(state);
+		if (outwardNormal == null)
 			return;
-		cir.setReturnValue(surface.transformShape(cir.getReturnValue()));
+		cir.setReturnValue(BeltFunnelShapeCache.outline(state, cir.getReturnValue(), outwardNormal));
 	}
 
 	@Inject(method = "getCollisionShape", at = @At("HEAD"), cancellable = true)
@@ -42,10 +43,10 @@ public abstract class BeltFunnelShapeMixin {
 		if (shape != Shape.PULLING && shape != Shape.PUSHING)
 			return;
 
-		BeltSurface surface = BeltSurfaceResolver.resolve(world, pos, state);
-		if (surface == null)
+		Direction outwardNormal = BeltFunnelStateExtensions.tiltedOutwardNormal(state);
+		if (outwardNormal == null)
 			return;
 		VoxelShape collision = AllShapes.FUNNEL_COLLISION.get(state.getValue(BeltFunnelBlock.HORIZONTAL_FACING));
-		cir.setReturnValue(surface.transformShape(collision));
+		cir.setReturnValue(BeltFunnelShapeCache.itemCollision(state, collision, outwardNormal));
 	}
 }
