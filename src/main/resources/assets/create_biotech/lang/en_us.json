@@ -1,9 +1,9 @@
 {
   "itemGroup.create_biotech.main": "Create: Biotech",
   "block.create_biotech.automatic_fish_release_machine": "Boundless Merit Fully Automatic Fish Release Machine",
-  "block.create_biotech.automatic_fish_release_machine.tooltip.summary": "Sixteen _Salmon_ ride a Large Water Wheel, generating boundless merit with every turn.",
-  "block.create_biotech.automatic_fish_release_machine.tooltip.condition1": "When exposed to flowing water",
-  "block.create_biotech.automatic_fish_release_machine.tooltip.behaviour1": "Provides exactly the same speed and stress capacity as a _Large Water Wheel_.",
+  "block.create_biotech.automatic_fish_release_machine.tooltip.summary": "Repeatedly release fish into the water to accumulate _merit_. If you feel guilty about how you treat living creatures, perhaps this will ease your _conscience_.",
+  "block.create_biotech.automatic_fish_release_machine.tooltip.condition1": "When near a Village",
+  "block.create_biotech.automatic_fish_release_machine.tooltip.behaviour1": "Slightly improves the placing player\u0027s _reputation_ among nearby Villagers.",
   "block.create_biotech.giant_frog": "Giant Frog",
   "block.create_biotech.giant_frog.tooltip.summary": "A _four-times-sized_ frog block. It eats nearby _small slimes_ and players crouching in a full _Slime Armor_ set, sending them into its _Frog Stomach_. Unfinished item.",
   "block.create_biotech.frog_stomach_wall": "Frog Stomach Wall",

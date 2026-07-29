@@ -52,6 +52,7 @@ public class AutomaticFishReleaseMachineRenderer
 	private static final float FISH_SCALE = 0.8f;
 	private static final float FISH_IN_PLANE_ROTATION = -12.25f;
 	private static final float FISH_TAIL_OFFSET = 1.0f / 16.0f;
+	private static final float FISH_LENGTH_CENTRE = 6.5f / 16.0f;
 	private static final float SWIM_TAIL_AMPLITUDE = 0.4f;
 	private static final float SWIM_TAIL_SPEED = 0.8f;
 	private static final float CARDINAL_BLADE_CLAMP_RADIUS = 2.125f;
@@ -87,6 +88,9 @@ public class AutomaticFishReleaseMachineRenderer
 		double renderTime = level == null ? 0 : level.getGameTime() + partialTicks;
 		float animationTime = (float) (renderTime % 10000.0);
 		FishRenderState renderState = fishRenderStates.computeIfAbsent(blockEntity, ignored -> new FishRenderState());
+		float speed = blockEntity.getSpeed();
+		if (speed != 0)
+			renderState.rotationDirection = Math.signum(speed);
 
 		poseStack.pushPose();
 		poseStack.translate(0.5f, 0.5f, 0.5f);
@@ -98,10 +102,10 @@ public class AutomaticFishReleaseMachineRenderer
 			Vector3f fishOffset = getFishOffset(rotationAxis, wheelAngle, gapAngle);
 			boolean inWater = isFishInWater(blockEntity, rotationAxis, fishOffset);
 			if (renderState.initialized && !renderState.swimming[fishIndex] && inWater
-				&& shouldSpawnMeritText(renderState, blockEntity.getSpeed()))
+				&& shouldSpawnMeritText(renderState, speed))
 				renderState.meritTexts.add(new FloatingMeritText(new Vector3f(fishOffset), renderTime));
 			renderState.swimming[fishIndex] = inWater;
-			renderFishInGap(poseStack, buffer, light, overlay, gapAngle, inWater,
+			renderFishInGap(poseStack, buffer, light, overlay, gapAngle, renderState.rotationDirection < 0, inWater,
 				animationTime + fishIndex * 1.5f);
 		}
 		renderState.initialized = true;
@@ -113,7 +117,7 @@ public class AutomaticFishReleaseMachineRenderer
 	}
 
 	private void renderFishInGap(PoseStack poseStack, MultiBufferSource buffer, int light, int overlay,
-		float gapAngle, boolean inWater, float animationTime) {
+		float gapAngle, boolean reverseDirection, boolean inWater, float animationTime) {
 		poseStack.pushPose();
 		poseStack.mulPose(Axis.YP.rotationDegrees(gapAngle));
 		poseStack.translate(0, 0, -FISH_RING_RADIUS);
@@ -126,6 +130,11 @@ public class AutomaticFishReleaseMachineRenderer
 		poseStack.mulPose(Axis.ZP.rotationDegrees(-90));
 		poseStack.translate(0, 0, FISH_TAIL_OFFSET);
 		poseStack.scale(-FISH_SCALE, -FISH_SCALE, FISH_SCALE);
+		if (reverseDirection) {
+			poseStack.translate(0, 0, FISH_LENGTH_CENTRE);
+			poseStack.mulPose(Axis.YP.rotationDegrees(180));
+			poseStack.translate(0, 0, -FISH_LENGTH_CENTRE);
+		}
 		poseStack.translate(0, -1.501f, 0);
 
 		fishBodyBack.yRot =
@@ -263,6 +272,7 @@ public class AutomaticFishReleaseMachineRenderer
 		private final boolean[] swimming = new boolean[BLADE_COUNT];
 		private final List<FloatingMeritText> meritTexts = new ArrayList<>();
 		private float meritEmissionRemainder;
+		private float rotationDirection = 1;
 		private boolean initialized;
 	}
 

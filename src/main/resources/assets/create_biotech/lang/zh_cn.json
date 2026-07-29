@@ -1,9 +1,9 @@
 {
   "itemGroup.create_biotech.main": "机械动力：生物科技",
   "block.create_biotech.automatic_fish_release_machine": "功德无量全自动放生机",
-  "block.create_biotech.automatic_fish_release_machine.tooltip.summary": "让_十六条鲑鱼_搭乘大型水车，功德随旋转力源源不绝。",
-  "block.create_biotech.automatic_fish_release_machine.tooltip.condition1": "接触水流时",
-  "block.create_biotech.automatic_fish_release_machine.tooltip.behaviour1": "拥有与_大型水车_完全相同的转速和应力生产能力。",
+  "block.create_biotech.automatic_fish_release_machine.tooltip.summary": "通过反复向水中放生鱼来积累_功德_，如果你为自己对待生物的方式感到_愧疚_，这或许会让你的_良心_好受一些。",
+  "block.create_biotech.automatic_fish_release_machine.tooltip.condition1": "在村庄附近时",
+  "block.create_biotech.automatic_fish_release_machine.tooltip.behaviour1": "略微提升放置者在周围村民中的_声望_。",
   "block.create_biotech.giant_frog": "巨型青蛙",
   "block.create_biotech.giant_frog.tooltip.summary": "_四倍体型_的青蛙方块。它会吃掉附近的_小型史莱姆_，也会吞下穿着全套_史莱姆套装_蹲下的玩家，并送入它的_青蛙胃袋_。未完成物品。",
   "block.create_biotech.frog_stomach_wall": "青蛙胃袋壁",
