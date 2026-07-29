@@ -7,12 +7,15 @@
     },
     "P": {
       "item": "create:packager"
+    },
+    "C": {
+      "item": "create_biotech:asurine_casing"
     }
   },
   "pattern": [
-    " A ",
-    "APA",
-    " A "
+    "A",
+    "P",
+    "C"
   ],
   "result": {
     "id": "create_biotech:bio_packager"

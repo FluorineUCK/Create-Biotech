@@ -640,8 +640,8 @@ public class SlimeBeltInventory {
 		return canInsertAtFromSide(segment, side, false);
 	}
 
-	public boolean canInsertAtFromSide(int segment, Direction side, boolean preferEndpointEntryTrack) {
-		return canInsert(planInsertion(segment, side, preferEndpointEntryTrack, null));
+	public boolean canInsertAtFromSide(int segment, Direction side, boolean verticalHorizontalBeltInput) {
+		return canInsert(planInsertion(segment, side, verticalHorizontalBeltInput, null));
 	}
 
 	/**
@@ -650,11 +650,11 @@ public class SlimeBeltInventory {
 	 * stack-independent so occupancy queries and real inserts agree.
 	 */
 	@Nullable
-	public InsertionPlan planInsertion(int segment, Direction side, boolean preferEndpointEntryTrack,
+	public InsertionPlan planInsertion(int segment, Direction side, boolean verticalHorizontalBeltInput,
 		@Nullable TransportedItemStack transported) {
 		refreshMovementDirection();
 		boolean cameFromBelt = transported != null && transported.prevBeltPosition != 0;
-		return SlimeBeltInsertionPlanner.plan(belt, frame(), segment, side, preferEndpointEntryTrack, cameFromBelt);
+		return SlimeBeltInsertionPlanner.plan(belt, frame(), segment, side, verticalHorizontalBeltInput, cameFromBelt);
 	}
 
 	/** Occupancy gate for a resolved plan; probes the same landing the item would take. */
@@ -683,8 +683,8 @@ public class SlimeBeltInventory {
 	}
 
 	public void prepareInsertedItem(TransportedItemStack transported, int segment, Direction side,
-		boolean preferEndpointEntryTrack) {
-		applyInsertion(transported, planInsertion(segment, side, preferEndpointEntryTrack, transported));
+		boolean verticalHorizontalBeltInput) {
+		applyInsertion(transported, planInsertion(segment, side, verticalHorizontalBeltInput, transported));
 	}
 
 	public void prepareInsertedItemOnTrack(TransportedItemStack transported, int segment, Track track) {

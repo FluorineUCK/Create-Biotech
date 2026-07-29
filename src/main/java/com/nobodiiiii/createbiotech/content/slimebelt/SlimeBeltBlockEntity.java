@@ -390,8 +390,7 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		SlimeBeltBlockEntity controllerBE = getControllerBE();
 		if (controllerBE == null)
 			return false;
-		boolean verticalHorizontalChainInput = SlimeBeltInsertionPlanner.isVerticalHorizontalChainInput(this, side);
-		Track target = SlimeBeltHelper.resolveIOTrack(controllerBE, index, side, verticalHorizontalChainInput);
+		Track target = SlimeBeltHelper.resolveIOTrack(controllerBE, index, side);
 		if (target == null)
 			return false;
 		return SlimeBeltInsertionPlanner.isCompatibleAdjacentChainInput(this, side, controllerBE, target);
@@ -400,21 +399,21 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	private boolean isOccupied(Direction side) {
 		side = SlimeBeltInsertionPlanner.resolvePhysicalSide(this, side);
 		SlimeBeltInventory beltInventory = getInventory();
-		boolean verticalHorizontalChainInput = SlimeBeltInsertionPlanner.isVerticalHorizontalChainInput(this, side);
+		boolean verticalHorizontalBeltInput = SlimeBeltInsertionPlanner.isVerticalHorizontalBeltInput(this, side);
 		return beltInventory == null || getSpeed() == 0
-			|| !beltInventory.canInsertAtFromSide(index, side, verticalHorizontalChainInput);
+			|| !beltInventory.canInsertAtFromSide(index, side, verticalHorizontalBeltInput);
 	}
 
 	private ItemStack tryInsertingFromSide(TransportedItemStack transportedStack, Direction side, boolean simulate) {
 		side = SlimeBeltInsertionPlanner.resolvePhysicalSide(this, side);
 		SlimeBeltInventory beltInventory = getInventory();
-		boolean verticalHorizontalChainInput = SlimeBeltInsertionPlanner.isVerticalHorizontalChainInput(this, side);
+		boolean verticalHorizontalBeltInput = SlimeBeltInsertionPlanner.isVerticalHorizontalBeltInput(this, side);
 		if (!SlimeBeltBlock.canTransportObjects(getBlockState()) || beltInventory == null)
 			return transportedStack.stack;
 		if (!canInsertFrom(side))
 			return transportedStack.stack;
 		SlimeBeltInsertionPlanner.InsertionPlan plan =
-			beltInventory.planInsertion(index, side, verticalHorizontalChainInput, transportedStack);
+			beltInventory.planInsertion(index, side, verticalHorizontalBeltInput, transportedStack);
 		if (!beltInventory.canInsert(plan))
 			return transportedStack.stack;
 		if (simulate)
