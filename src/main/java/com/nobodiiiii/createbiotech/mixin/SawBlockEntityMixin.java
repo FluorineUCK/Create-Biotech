@@ -32,9 +32,8 @@ public abstract class SawBlockEntityMixin {
 		Vec3 motion = saw.getItemMovementVec()
 			.scale(.0625)
 			.add(0, .125, 0);
-		if (CapturedEntityBoxHelper.releaseCapturedEntity(input, level, spawnPos, motion)) {
-			saw.inventory.clear();
-			ci.cancel();
-		}
+		CapturedEntityBoxHelper.releaseCapturedEntity(input, level, spawnPos, motion);
+		saw.inventory.clear();
+		ci.cancel();
 	}
 }
