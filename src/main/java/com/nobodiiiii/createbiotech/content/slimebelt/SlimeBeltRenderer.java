@@ -49,6 +49,12 @@ import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Loop
 
 public class SlimeBeltRenderer extends SafeBlockEntityRenderer<SlimeBeltBlockEntity> {
 
+	/**
+	 * Create's item-origin correction after rotating onto a diagonal belt surface.
+	 * The pre-loop renderer applied the same correction to both slime-belt tracks.
+	 */
+	private static final float SLOPE_ITEM_SURFACE_OFFSET = 1 / 8f;
+
 	public SlimeBeltRenderer(BlockEntityRendererProvider.Context context) {}
 
 	@Override
@@ -239,30 +245,31 @@ public class SlimeBeltRenderer extends SafeBlockEntityRenderer<SlimeBeltBlockEnt
 
 		// Items on the FRONT run of a diagonal belt keep vanilla Create's ±45° pose; every
 		// other section aligns items to the loop's local surface normal.
-		boolean vanillaSlopeTop = (slope == BeltSlope.DOWNWARD || slope == BeltSlope.UPWARD)
-			&& section == LoopSection.FRONT;
+		boolean diagonalSlope = slope == BeltSlope.DOWNWARD || slope == BeltSlope.UPWARD;
+		boolean onSlope = diagonalSlope && Mth.clamp(frontOffset, .5f, be.beltLength - .5f) == frontOffset;
+		boolean vanillaSlopeTop = diagonalSlope && section == LoopSection.FRONT;
 		if (vanillaSlopeTop) {
 			boolean slopeAlongX = be.getBeltFacing().getAxis() == Direction.Axis.X;
-			boolean onSlope = Mth.clamp(frontOffset, .5f, be.beltLength - .5f) == frontOffset;
 			boolean tiltForward = (slope == BeltSlope.DOWNWARD
 				^ be.getBeltFacing().getAxisDirection() == AxisDirection.POSITIVE)
 				== (be.getBeltFacing().getAxis() == Direction.Axis.Z);
 			float slopeAngle = onSlope ? tiltForward ? -45 : 45 : 0;
 			boolean slopeShadowOnly = renderUpright && onSlope;
-			float slopeOffset = 1 / 8f;
 			if (slopeShadowOnly)
 				ms.pushPose();
 			if (!renderUpright || slopeShadowOnly)
 				ms.mulPose((slopeAlongX ? Axis.ZP : Axis.XP).rotationDegrees(slopeAngle));
 			if (onSlope)
-				ms.translate(0, slopeOffset, 0);
+				ms.translate(0, SLOPE_ITEM_SURFACE_OFFSET, 0);
 			renderItemShadow(ms, buffer);
 			if (slopeShadowOnly) {
 				ms.popPose();
-				ms.translate(0, slopeOffset, 0);
+				ms.translate(0, SLOPE_ITEM_SURFACE_OFFSET, 0);
 			}
 		} else {
 			applyTrackNormal(ms, SlimeBeltHelper.getTrackNormal(be, loopPosition));
+			if (section == LoopSection.BACK && onSlope)
+				ms.translate(0, SLOPE_ITEM_SURFACE_OFFSET, 0);
 			renderItemShadow(ms, buffer);
 		}
 

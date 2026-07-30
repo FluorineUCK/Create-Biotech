@@ -9,20 +9,18 @@
   "ignoredFindings": [],
   "sceneOutcomes": [
     {
-      "sceneId": "ponderer:shulker_teleporter",
-      "sceneKey": "ponderer:shulker_teleporter",
-      "className": "GeneratedShulkerTeleporter_b7851042",
+      "sceneId": "ponderer:petri_dish",
+      "sceneKey": "ponderer:petri_dish",
+      "className": "GeneratedPetriDish_22adcbfa",
       "status": "COMPLETE",
       "replaced": false,
-      "exportedSegments": 1,
+      "exportedSegments": 2,
       "blankSegments": 0,
       "omittedSteps": 0,
       "ownedFiles": [
-        "src/main/java/com/nobodiiiii/createbiotech/ponder/generated/scenes/GeneratedShulkerTeleporter_b7851042.java",
-        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/basic.nbt",
-        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/shulker_teleporter_station.nbt",
-        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/shulker_teleporter_drive_stopped.nbt",
-        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/shulker_teleporter_drive_running.nbt"
+        "src/main/java/com/nobodiiiii/createbiotech/ponder/generated/scenes/GeneratedPetriDish_22adcbfa.java",
+        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/petri_dish.nbt",
+        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/basic_l.nbt"
       ],
       "messages": []
     }

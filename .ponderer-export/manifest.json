@@ -645,6 +645,50 @@
           "create_biotech.ponder.shulker_teleporter.text_6": "闭合完成后，站内实体会被传送到目标站点"
         }
       }
+    },
+    "ponderer:petri_dish": {
+      "sceneId": "ponderer:petri_dish",
+      "sceneKey": "ponderer:petri_dish",
+      "className": "com.nobodiiiii.createbiotech.ponder.generated.scenes.GeneratedPetriDish_22adcbfa",
+      "status": "COMPLETE",
+      "contentHash": "c308523f10b8ed991e20ec854d0211bbccd9649f8e0b678c061077b7d529f3d8",
+      "javaFiles": [
+        "src/main/java/com/nobodiiiii/createbiotech/ponder/generated/scenes/GeneratedPetriDish_22adcbfa.java"
+      ],
+      "resourceFiles": [
+        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/petri_dish.nbt",
+        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/basic_l.nbt"
+      ],
+      "langEntries": {
+        "zh_cn": {
+          "create_biotech.ponder.petri_dish_scene_1.header": "培养拟态生物",
+          "create_biotech.ponder.petri_dish_scene_1.text_1": "史莱姆培养皿可以用来培养拟态生物",
+          "create_biotech.ponder.petri_dish_scene_1.text_2": "在培养皿中放入活体构件...",
+          "create_biotech.ponder.petri_dish_scene_1.text_3": "然后通入液态活体史莱姆...",
+          "create_biotech.ponder.petri_dish_scene_1.text_4": "液态活体史莱姆会模仿附近的生物并长大",
+          "create_biotech.ponder.petri_dish_scene_1.text_5": "被模仿的生物血量上限越高，所需的液态活体史莱姆越多",
+          "create_biotech.ponder.petri_dish_s_e7373.header": "为拟态生物缠魂",
+          "create_biotech.ponder.petri_dish_s_e7373.text_1": "击杀拟态生物只会掉落黏液球",
+          "create_biotech.ponder.petri_dish_s_e7373.text_2": "与拟态村民交易也只能买到黏液球",
+          "create_biotech.ponder.petri_dish_s_e7373.text_3": "对拟态生物施加再生效果...",
+          "create_biotech.ponder.petri_dish_s_e7373.text_4": "再使用鼓风机和灵魂营火进行“缠魂”",
+          "create_biotech.ponder.petri_dish_s_e7373.text_5": "即可将拟态生物转化为普通生物"
+        },
+        "en_us": {
+          "create_biotech.ponder.petri_dish_scene_1.header": "Cultivating Mimic Creatures",
+          "create_biotech.ponder.petri_dish_scene_1.text_1": "Slime Petri Dishes can be used to cultivate mimic creatures",
+          "create_biotech.ponder.petri_dish_scene_1.text_2": "Insert a Living Mechanism into the Petri Dish...",
+          "create_biotech.ponder.petri_dish_scene_1.text_3": "Then pipe in Liquid Living Slime...",
+          "create_biotech.ponder.petri_dish_scene_1.text_4": "The Liquid Living Slime mimics a nearby mob and grows",
+          "create_biotech.ponder.petri_dish_scene_1.text_5": "Mobs with more maximum health require more Liquid Living Slime to mimic",
+          "create_biotech.ponder.petri_dish_s_e7373.header": "Haunting Mimic Creatures",
+          "create_biotech.ponder.petri_dish_s_e7373.text_1": "Killing mimic creatures only drops Slimeballs",
+          "create_biotech.ponder.petri_dish_s_e7373.text_2": "Trading with mimic villagers only yields Slimeballs as well",
+          "create_biotech.ponder.petri_dish_s_e7373.text_3": "Apply Regeneration to a mimic creature...",
+          "create_biotech.ponder.petri_dish_s_e7373.text_4": "Then use an Encased Fan and Soul Campfire to haunt it",
+          "create_biotech.ponder.petri_dish_s_e7373.text_5": "This transforms the mimic creature into a normal mob"
+        }
+      }
     }
   }
 }
