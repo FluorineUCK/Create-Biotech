@@ -134,8 +134,9 @@ The Sable mixins themselves remain necessary:
 
 - `UniversalJointEndpointBlockSableMixin` supplies optional movement callbacks
   and endpoint air drag.
-- `UniversalJointBlockEntitySableMixin` supplies physics impulses and Sable
-  connection dependencies.
+- `UniversalJointBlockEntitySableMixin` supplies physics impulses. It leaves
+  Sable's loading-dependency chain untouched so linked sublevels retain their
+  normal independent serialization and unloading behavior.
 - `SableMixinPlugin` prevents hard loading optional Sable API classes.
 
 ## Connection and Dismantling

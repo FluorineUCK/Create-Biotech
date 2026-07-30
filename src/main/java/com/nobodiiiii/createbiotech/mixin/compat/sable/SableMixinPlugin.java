@@ -21,7 +21,6 @@ public final class SableMixinPlugin implements IMixinConfigPlugin {
 		"dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle",
 		"dev.ryanhcode.sable.api.physics.mass.MassData",
 		"dev.ryanhcode.sable.api.sublevel.SubLevelContainer",
-		"dev.ryanhcode.sable.sublevel.SubLevel",
 		"dev.ryanhcode.sable.sublevel.ServerSubLevel"
 	};
 
