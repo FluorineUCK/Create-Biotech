@@ -27,6 +27,7 @@ import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimeclutch.SlimeClutchBlockEntity;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlockEntity;
+import com.nobodiiiii.createbiotech.content.universaljoint.HalfShaftBlockEntity;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointBlockEntity;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.BlastProofChainDriveBlockEntity;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastChamberBlockEntity;
@@ -118,6 +119,11 @@ public class CBBlockEntityTypes {
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<UniversalJointBlockEntity>> UNIVERSAL_JOINT =
 		BLOCK_ENTITY_TYPES.register("universal_joint",
 			() -> BlockEntityType.Builder.of(UniversalJointBlockEntity::new, CBBlocks.UNIVERSAL_JOINT.get())
+				.build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<HalfShaftBlockEntity>> HALF_SHAFT =
+		BLOCK_ENTITY_TYPES.register("half_shaft",
+			() -> BlockEntityType.Builder.of(HalfShaftBlockEntity::new, CBBlocks.HALF_SHAFT.get())
 				.build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SlimeClutchBlockEntity>> SLIME_CLUTCH =

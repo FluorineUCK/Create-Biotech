@@ -418,14 +418,68 @@ public class CBConfigs {
 	}
 
 	public static class UniversalJoint {
+		private static final double DEFAULT_STRAIN_START_DISTANCE = 4.675d;
+		private static final int LEGACY_DEFAULT_MAX_CONNECTION_RANGE = 2;
+
+		@Deprecated(forRemoval = true)
 		public final ModConfigSpec.IntValue maxConnectionRange;
 		public final ModConfigSpec.IntValue itemCooldownTicks;
+		public final ModConfigSpec.DoubleValue strainStartDistance;
+		public final ModConfigSpec.DoubleValue disconnectDistance;
+		public final ModConfigSpec.DoubleValue peakTension;
+		public final ModConfigSpec.DoubleValue separationDamping;
+		public final ModConfigSpec.DoubleValue endpointAirDrag;
+		public final ModConfigSpec.DoubleValue maxImpulse;
+		public final ModConfigSpec.DoubleValue shaftSlowdownMultiplier;
 
 		UniversalJoint(ModConfigSpec.Builder builder) {
 			builder.push("universalJoint");
-			maxConnectionRange = builder.defineInRange("maxConnectionRange", 2, 0, 64);
+			maxConnectionRange = builder
+				.comment("Deprecated compatibility value. Custom values migrate to strainStartDistance "
+					+ "while the new setting remains at its default.")
+				.defineInRange("maxConnectionRange", LEGACY_DEFAULT_MAX_CONNECTION_RANGE, 0, 64);
 			itemCooldownTicks = builder.defineInRange("itemCooldownTicks", 5, 0, Integer.MAX_VALUE);
+			strainStartDistance = builder
+				.comment("World-space placement/repair radius and distance where stretching begins, in blocks.")
+				.defineInRange("strainStartDistance", DEFAULT_STRAIN_START_DISTANCE, 0.0d, 128.0d);
+			disconnectDistance = builder
+				.comment("World-space distance that breaks an overstretched joint, in blocks.")
+				.defineInRange("disconnectDistance", 5.5d, 0.01d, 128.0d);
+			peakTension = builder
+				.comment("Maximum spring force reached at the disconnect distance.")
+				.defineInRange("peakTension", 8192.0d, 0.0d, 1000000.0d);
+			separationDamping = builder
+				.comment("Radial damping force per block/second of relative endpoint speed.")
+				.defineInRange("separationDamping", 320.0d, 0.0d, 100000.0d);
+			endpointAirDrag = builder
+				.comment("Directionless Sable air-drag coefficient contributed by each joint endpoint block. "
+					+ "Sable scales it by local air pressure and physics timestep.")
+				.defineInRange("endpointAirDrag", 0.75d, 0.0d, 16.0d);
+			maxImpulse = builder
+				.comment("Maximum elastic impulse applied to either structure in one physics step.")
+				.defineInRange("maxImpulse", 1024.0d, 0.01d, 1000000.0d);
+			shaftSlowdownMultiplier = builder
+				.comment("Per-axis player movement multiplier while intersecting the slime shaft. "
+					+ "Use 1.0 to disable the slowdown; lower values apply stronger slowdown.")
+				.defineInRange("shaftSlowdownMultiplier", 0.4d, 0.01d, 1.0d);
 			builder.pop();
+		}
+
+		public double effectiveStrainStartDistance() {
+			return selectStrainStartDistance(strainStartDistance.get(),
+				maxConnectionRange.get());
+		}
+
+		static double selectStrainStartDistance(double configured, int legacy) {
+			if (Double.compare(configured, DEFAULT_STRAIN_START_DISTANCE) == 0
+				&& legacy != LEGACY_DEFAULT_MAX_CONNECTION_RANGE)
+				return Math.max(0.0d, legacy);
+			return Math.max(0.0d, configured);
+		}
+
+		public double effectiveDisconnectRange() {
+			return Math.max(0.01d, Math.max(disconnectDistance.get(),
+				effectiveStrainStartDistance() + 0.01d));
 		}
 	}
 

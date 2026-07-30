@@ -1,7 +1,6 @@
 package com.nobodiiiii.createbiotech.content.universaljoint;
 
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
-import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.content.kinetics.base.DirectionalKineticBlock;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
@@ -9,31 +8,34 @@ import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
 import net.createmod.catnip.math.VoxelShaper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition.Builder;
 import net.minecraft.world.level.material.FluidState;
 import net.minecraft.world.level.pathfinder.PathComputationType;
-import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-public class UniversalJointBlock extends DirectionalKineticBlock
-	implements IBE<UniversalJointBlockEntity>, ProperWaterloggedBlock {
+/**
+ * The intact support-side half left behind when a universal joint snaps.
+ *
+ * <p>The facing points back towards the supporting kinetic block. Consequently
+ * only that face exposes a shaft connection; the cut face remains inert until
+ * another half is repaired into a complete universal joint.</p>
+ */
+public class HalfShaftBlock extends DirectionalKineticBlock
+	implements IBE<HalfShaftBlockEntity>, ProperWaterloggedBlock {
 
 	private static final VoxelShaper SHAPE =
-		VoxelShaper.forDirectional(Block.box(6, 10, 6, 10, 16, 10), Direction.UP);
+		VoxelShaper.forDirectional(Block.box(6, 8, 6, 10, 16, 10), Direction.UP);
 
-	public UniversalJointBlock(Properties properties) {
+	public HalfShaftBlock(Properties properties) {
 		super(properties);
 		registerDefaultState(defaultBlockState()
 			.setValue(FACING, Direction.NORTH)
@@ -46,7 +48,7 @@ public class UniversalJointBlock extends DirectionalKineticBlock
 	}
 
 	@Override
-	public boolean hasShaftTowards(LevelReader world, BlockPos pos, BlockState state, Direction face) {
+	public boolean hasShaftTowards(LevelReader level, BlockPos pos, BlockState state, Direction face) {
 		return face == state.getValue(FACING);
 	}
 
@@ -56,26 +58,10 @@ public class UniversalJointBlock extends DirectionalKineticBlock
 	}
 
 	@Override
-	public boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
-		return true;
-	}
-
-	@Override
 	public BlockState updateShape(BlockState state, Direction direction, BlockState neighbourState,
 		LevelAccessor level, BlockPos currentPos, BlockPos neighbourPos) {
 		updateWater(level, state, currentPos);
 		return state;
-	}
-
-	@Override
-	public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
-		if (!level.isClientSide && state.getBlock() != newState.getBlock() && !isMoving) {
-			BlockEntity blockEntity = level.getBlockEntity(pos);
-			if (blockEntity instanceof UniversalJointBlockEntity joint)
-				joint.handleBlockRemoval();
-		}
-
-		super.onRemove(state, level, pos, newState, isMoving);
 	}
 
 	@Override
@@ -91,12 +77,6 @@ public class UniversalJointBlock extends DirectionalKineticBlock
 	@Override
 	public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
 		return getShape(state, level, pos, context);
-	}
-
-	@Override
-	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader level, BlockPos pos,
-		net.minecraft.world.entity.player.Player player) {
-		return new ItemStack(CBItems.UNIVERSAL_JOINT.get());
 	}
 
 	@Override
@@ -116,12 +96,12 @@ public class UniversalJointBlock extends DirectionalKineticBlock
 	}
 
 	@Override
-	public Class<UniversalJointBlockEntity> getBlockEntityClass() {
-		return UniversalJointBlockEntity.class;
+	public Class<HalfShaftBlockEntity> getBlockEntityClass() {
+		return HalfShaftBlockEntity.class;
 	}
 
 	@Override
-	public BlockEntityType<? extends UniversalJointBlockEntity> getBlockEntityType() {
-		return CBBlockEntityTypes.UNIVERSAL_JOINT.get();
+	public BlockEntityType<? extends HalfShaftBlockEntity> getBlockEntityType() {
+		return CBBlockEntityTypes.HALF_SHAFT.get();
 	}
 }

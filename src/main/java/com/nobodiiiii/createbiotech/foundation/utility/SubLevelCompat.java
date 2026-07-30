@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.foundation.utility;
 
+import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.BiConsumer;
@@ -14,9 +15,14 @@ import dev.ryanhcode.sable.companion.math.BoundingBox3d;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Position;
+import net.minecraft.core.SectionPos;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.chunk.ChunkAccess;
+import net.minecraft.world.level.chunk.LevelChunk;
+import net.minecraft.world.level.chunk.status.ChunkStatus;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -27,6 +33,8 @@ import net.minecraft.world.phys.Vec3;
 public final class SubLevelCompat {
 
 	private static final SableCompanion COMPANION = SableCompanion.INSTANCE;
+	private static final String SUB_LEVEL_CONTAINER_CLASS =
+		"dev.ryanhcode.sable.api.sublevel.SubLevelContainer";
 
 	private SubLevelCompat() {}
 
@@ -45,9 +53,24 @@ public final class SubLevelCompat {
 		return subLevel == null ? null : subLevel.getUniqueId();
 	}
 
+	/**
+	 * Resolves a Sable sublevel by persistent identity without creating a hard dependency on
+	 * Sable's runtime API. Companion deliberately exposes only spatial queries, so UUID lookup
+	 * uses the optional {@code SubLevelContainer} reflectively.
+	 */
+	@Nullable
+	public static SubLevelAccess findSubLevel(Level level, @Nullable UUID subLevelId) {
+		return subLevelId == null ? null : SableContainerLookup.find(level, subLevelId);
+	}
+
 	@Nullable
 	public static SubLevelAccess getTrackingOrVehicleSubLevel(Entity entity) {
 		return COMPANION.getTrackingOrVehicleSubLevel(entity);
+	}
+
+	/** Returns the interpolated outer-world eye position used by Sable-aware client picking. */
+	public static Vec3 getEyePositionInterpolated(Entity entity, float partialTicks) {
+		return COMPANION.getEyePositionInterpolated(entity, partialTicks);
 	}
 
 	public static boolean isValidSpacePosition(Level level, BlockPos pos) {
@@ -59,6 +82,43 @@ public final class SubLevelCompat {
 		if (expectedSubLevelId != null)
 			return subLevel != null && expectedSubLevelId.equals(subLevel.getUniqueId());
 		return subLevel == null && !COMPANION.isInPlotGrid(level, pos);
+	}
+
+	/**
+	 * Validates a saved raw block-storage position against its persistent space identity.
+	 *
+	 * <p>A {@code null} UUID explicitly means the outer world. Plot-grid positions are therefore
+	 * rejected rather than accidentally being treated as ordinary world coordinates. Callers
+	 * holding an outer-world position must convert it explicitly before using this method.</p>
+	 */
+	@Nullable
+	public static BlockPos resolveRawPosition(Level level, BlockPos rawPos,
+		@Nullable UUID expectedSubLevelId) {
+		return level.isInWorldBounds(rawPos) && matchesSpace(level, rawPos, expectedSubLevelId)
+			? rawPos : null;
+	}
+
+	/**
+	 * Strictly resolves a block entity by raw position and optional sublevel UUID. It performs only
+	 * address validation and one non-loading chunk lookup; it never scans neighboring spaces.
+	 */
+	@Nullable
+	public static BlockEntity resolveBlockEntityFast(Level level, BlockPos rawPos,
+		@Nullable UUID expectedSubLevelId) {
+		BlockPos resolvedPos = resolveRawPosition(level, rawPos, expectedSubLevelId);
+		return resolvedPos == null ? null : getLoadedBlockEntity(level, resolvedPos);
+	}
+
+	/** Reads a block entity at an already-resolved raw position without loading its chunk. */
+	@Nullable
+	public static BlockEntity getLoadedBlockEntity(Level level, BlockPos pos) {
+		if (!level.isInWorldBounds(pos))
+			return null;
+		ChunkAccess chunk = level.getChunk(SectionPos.blockToSectionCoord(pos.getX()),
+			SectionPos.blockToSectionCoord(pos.getZ()), ChunkStatus.FULL, false);
+		if (!(chunk instanceof LevelChunk levelChunk))
+			return null;
+		return levelChunk.getBlockEntity(pos, LevelChunk.EntityCreationType.CHECK);
 	}
 
 	public static boolean sameSpace(Level level, BlockPos first, BlockPos second) {
@@ -140,6 +200,19 @@ public final class SubLevelCompat {
 			.transformPosition(position);
 	}
 
+	/** Inverse of {@link #toRenderWorld(SubLevelAccess, Position, float)}. */
+	public static Vec3 toRenderLocal(@Nullable SubLevelAccess subLevel, Position worldPos, float partialTick) {
+		Vec3 position = worldPos instanceof Vec3 vec ? vec
+			: new Vec3(worldPos.x(), worldPos.y(), worldPos.z());
+		if (subLevel == null)
+			return position;
+		if (subLevel instanceof ClientSubLevelAccess clientSubLevel)
+			return clientSubLevel.renderPose(partialTick)
+				.transformPositionInverse(position);
+		return subLevel.logicalPose()
+			.transformPositionInverse(position);
+	}
+
 	/** Returns the outer-world velocity of a local point in blocks per second. */
 	public static Vec3 getWorldVelocity(Level level, @Nullable SubLevelAccess subLevel, Position localPos) {
 		return subLevel == null ? Vec3.ZERO : COMPANION.getVelocity(level, subLevel, localPos);
@@ -170,6 +243,18 @@ public final class SubLevelCompat {
 
 	public static Vec3 worldNormalToLocal(@Nullable SubLevelAccess subLevel, Vec3 worldNormal) {
 		return subLevel == null ? worldNormal : subLevel.logicalPose().transformNormalInverse(worldNormal);
+	}
+
+	/** Projects a local normal with the same interpolated pose used to render its sublevel. */
+	public static Vec3 renderNormalToWorld(@Nullable SubLevelAccess subLevel, Vec3 localNormal,
+		float partialTick) {
+		if (subLevel == null)
+			return localNormal;
+		if (subLevel instanceof ClientSubLevelAccess clientSubLevel)
+			return clientSubLevel.renderPose(partialTick)
+				.transformNormal(localNormal);
+		return subLevel.logicalPose()
+			.transformNormal(localNormal);
 	}
 
 	/** Returns the outer-world velocity of an anchored local point in blocks per second. */
@@ -227,13 +312,7 @@ public final class SubLevelCompat {
 
 	public static Vec3 localOffsetToRenderWorld(@Nullable SubLevelAccess subLevel, Vec3 localOffset,
 		float partialTick) {
-		if (subLevel == null)
-			return localOffset;
-		if (subLevel instanceof ClientSubLevelAccess clientSubLevel)
-			return clientSubLevel.renderPose(partialTick)
-				.transformNormal(localOffset);
-		return subLevel.logicalPose()
-			.transformNormal(localOffset);
+		return renderNormalToWorld(subLevel, localOffset, partialTick);
 	}
 
 	public static AABB toWorldBounds(Level level, BlockPos blockPos, AABB localBounds) {
@@ -254,7 +333,55 @@ public final class SubLevelCompat {
 		// Companion 1.6.0's no-Sable Position overload drops the Y/Z deltas. The
 		// primitive overload has the same Sable-aware semantics and is correct in both
 		// the bundled fallback and Sable's runtime implementation.
-		return COMPANION.distanceSquaredWithSubLevels(level, first.x(), first.y(), first.z(),
+		return distanceSquared(level, first.x(), first.y(), first.z(),
 			second.x(), second.y(), second.z());
+	}
+
+	public static double distanceSquared(Level level, double firstX, double firstY, double firstZ,
+		double secondX, double secondY, double secondZ) {
+		return COMPANION.distanceSquaredWithSubLevels(level, firstX, firstY, firstZ,
+			secondX, secondY, secondZ);
+	}
+
+	/**
+	 * Isolates all references to Sable's optional full API. Loading this class when Sable is absent
+	 * only initializes the Companion facade; this nested holder is initialized lazily on the first
+	 * UUID lookup.
+	 */
+	private static final class SableContainerLookup {
+
+		@Nullable
+		private static final Method GET_CONTAINER;
+		@Nullable
+		private static final Method GET_SUB_LEVEL;
+
+		static {
+			Method getContainer = null;
+			Method getSubLevel = null;
+			try {
+				Class<?> containerClass = Class.forName(SUB_LEVEL_CONTAINER_CLASS, false,
+					SubLevelCompat.class.getClassLoader());
+				getContainer = containerClass.getMethod("getContainer", Level.class);
+				getSubLevel = containerClass.getMethod("getSubLevel", UUID.class);
+			} catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
+				// Sable is optional, or this runtime exposes an incompatible API.
+			}
+			GET_CONTAINER = getContainer;
+			GET_SUB_LEVEL = getSubLevel;
+		}
+
+		@Nullable
+		private static SubLevelAccess find(Level level, UUID subLevelId) {
+			if (GET_CONTAINER == null || GET_SUB_LEVEL == null)
+				return null;
+			try {
+				Object container = GET_CONTAINER.invoke(null, level);
+				Object subLevel = container == null ? null : GET_SUB_LEVEL.invoke(container, subLevelId);
+				return subLevel instanceof SubLevelAccess access ? access : null;
+			} catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
+				return null;
+			}
+		}
+
 	}
 }

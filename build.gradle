@@ -89,6 +89,9 @@ dependencies {
         }
         transitive = false
     }
+    compileOnly(sable_compile_coordinate) {
+        transitive = false
+    }
 
     implementation("com.tterrag.registrate:Registrate:${registrate_version}")
     compileOnly("dev.engine-room.flywheel:flywheel-neoforge-api-${minecraft_version}:${flywheel_version}")
@@ -135,6 +138,7 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             mod_license            : mod_license,
             mod_description        : mod_description,
             create_version_range   : create_version_range,
+            sable_version_range    : sable_version_range,
             jei_version            : jei_version,
             jade_version           : jade_version
     ]

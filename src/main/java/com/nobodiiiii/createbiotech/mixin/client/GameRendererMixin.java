@@ -7,6 +7,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBFluids;
 
 import net.minecraft.client.Minecraft;
@@ -32,7 +33,7 @@ public abstract class GameRendererMixin {
 			return;
 
 		double reach = minecraft.player.blockInteractionRange();
-		Vec3 start = entity.getEyePosition(partialTicks);
+		Vec3 start = SubLevelCompat.getEyePositionInterpolated(entity, partialTicks);
 		Vec3 direction = entity.getViewVector(1.0F);
 		Vec3 end = start.add(direction.scale(reach));
 		HitResult fluidHit =
@@ -50,8 +51,12 @@ public abstract class GameRendererMixin {
 			return;
 		}
 
-		double fluidDistance = start.distanceToSqr(blockHitResult.getLocation());
-		double currentDistance = start.distanceToSqr(currentHit.getLocation());
+		Vec3 fluidLocation = blockHitResult.getLocation();
+		Vec3 currentLocation = currentHit.getLocation();
+		double fluidDistance = SubLevelCompat.distanceSquared(minecraft.level,
+			start.x, start.y, start.z, fluidLocation.x, fluidLocation.y, fluidLocation.z);
+		double currentDistance = SubLevelCompat.distanceSquared(minecraft.level,
+			start.x, start.y, start.z, currentLocation.x, currentLocation.y, currentLocation.z);
 		if (fluidDistance <= currentDistance)
 			minecraft.hitResult = blockHitResult;
 	}
