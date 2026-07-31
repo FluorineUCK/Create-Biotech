@@ -689,6 +689,59 @@
           "create_biotech.ponder.petri_dish_s_e7373.text_5": "This transforms the mimic creature into a normal mob"
         }
       }
+    },
+    "ponderer:allay_port": {
+      "sceneId": "ponderer:allay_port",
+      "sceneKey": "ponderer:allay_port",
+      "className": "com.nobodiiiii.createbiotech.ponder.generated.scenes.GeneratedAllayPort_ffe8c4c2",
+      "status": "COMPLETE",
+      "contentHash": "de2ec52a17d6b9a9f505fbcfa6ff6c8498dddbcdaa5e0536f02a0cd41eca5249",
+      "javaFiles": [
+        "src/main/java/com/nobodiiiii/createbiotech/ponder/generated/scenes/GeneratedAllayPort_ffe8c4c2.java"
+      ],
+      "resourceFiles": [
+        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/basic_xl.nbt",
+        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/allay_port_sender.nbt",
+        "src/main/resources/assets/create_biotech/ponder/generated/ponderer/allay_port_nether.nbt"
+      ],
+      "langEntries": {
+        "zh_cn": {
+          "create_biotech.ponder.allay_port_scene_1.header": "悦灵速递",
+          "create_biotech.ponder.allay_port_scene_1.text_1": "悦灵驿站可以用来远程派送包裹",
+          "create_biotech.ponder.allay_port_scene_1.text_2": "在界面中设置本站地址",
+          "create_biotech.ponder.allay_port_scene_1.text_3": "李华",
+          "create_biotech.ponder.allay_port_scene_1.text_4": "王芳",
+          "create_biotech.ponder.allay_port_scene_1.text_5": "放入悦灵快递员",
+          "create_biotech.ponder.allay_port_scene_1.text_6": "悦灵驿站会自动拉取下方打包机或容器中的包裹，并派出悦灵快递员送往指定悦灵驿站",
+          "create_biotech.ponder.allay_port_scene_1.text_7": "→王芳",
+          "create_biotech.ponder.allay_port_scene_1.text_8": "在界面中可以配置悦灵快递员是否返航",
+          "create_biotech.ponder.allay_port_scene_1.text_9": "悦灵快递员运输没有距离限制，甚至可以跨越维度",
+          "create_biotech.ponder.allay_port_scene_1.text_10": "但是需要确保涉及的站点位于被加载的区块中",
+          "create_biotech.ponder.allay_port_s_21db7.header": "悦灵快递员与玩家",
+          "create_biotech.ponder.allay_port_s_21db7.text_1": "悦灵快递员可以指定玩家为运输目标",
+          "create_biotech.ponder.allay_port_s_21db7.text_2": "Nobodiiiii",
+          "create_biotech.ponder.allay_port_s_21db7.text_3": "在地址栏中使用\"@玩家\"来匹配玩家",
+          "create_biotech.ponder.allay_port_s_21db7.text_4": "→Nobodiiiii"
+        },
+        "en_us": {
+          "create_biotech.ponder.allay_port_scene_1.header": "Scene 1",
+          "create_biotech.ponder.allay_port_scene_1.text_1": "悦灵驿站可以用来远程派送包裹",
+          "create_biotech.ponder.allay_port_scene_1.text_2": "在界面中设置本站地址",
+          "create_biotech.ponder.allay_port_scene_1.text_3": "李华",
+          "create_biotech.ponder.allay_port_scene_1.text_4": "王芳",
+          "create_biotech.ponder.allay_port_scene_1.text_5": "放入悦灵快递员",
+          "create_biotech.ponder.allay_port_scene_1.text_6": "悦灵驿站会自动拉取下方打包机或容器中的包裹，并派出悦灵快递员送往指定悦灵驿站",
+          "create_biotech.ponder.allay_port_scene_1.text_7": "→王芳",
+          "create_biotech.ponder.allay_port_scene_1.text_8": "在界面中可以配置悦灵快递员是否返航",
+          "create_biotech.ponder.allay_port_scene_1.text_9": "悦灵快递员运输没有距离限制，甚至可以跨越维度",
+          "create_biotech.ponder.allay_port_scene_1.text_10": "但是需要确保涉及的站点位于被加载的区块中",
+          "create_biotech.ponder.allay_port_s_21db7.header": "悦灵快递员与玩家",
+          "create_biotech.ponder.allay_port_s_21db7.text_1": "悦灵快递员可以指定玩家为运输目标",
+          "create_biotech.ponder.allay_port_s_21db7.text_2": "Nobodiiiii",
+          "create_biotech.ponder.allay_port_s_21db7.text_3": "在地址栏中使用\"@玩家\"来匹配玩家",
+          "create_biotech.ponder.allay_port_s_21db7.text_4": "→Nobodiiiii"
+        }
+      }
     }
   }
 }

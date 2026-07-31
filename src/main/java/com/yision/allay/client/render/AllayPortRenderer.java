@@ -13,6 +13,7 @@ import com.yision.allay.block.allayport.AllayPortBlockEntity;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import dev.engine_room.flywheel.lib.transform.TransformStack;
+import net.createmod.ponder.api.level.PonderLevel;
 import net.createmod.catnip.math.AngleHelper;
 import net.createmod.catnip.math.VecHelper;
 import net.createmod.catnip.render.CachedBuffers;
@@ -57,9 +58,14 @@ public class AllayPortRenderer extends SmartBlockEntityRenderer<AllayPortBlockEn
 		float flapness = be.getFlap(partialTicks);
 		float flapWaveStrength = Mth.clamp((Math.abs(flapness) - 0.25f) * 4.0f, 0.0f, 1.0f);
 		float waveStrength = be.isCourierWaving() ? 1.0f : flapWaveStrength;
-		float animationTime = be.getLevel() == null
-			? partialTicks
-			: be.getLevel().getGameTime() % 24_000L + partialTicks;
+		float animationTime;
+		if (be.getLevel() instanceof PonderLevel ponderLevel && ponderLevel.scene != null) {
+			animationTime = ponderLevel.scene.getCurrentTime() + partialTicks;
+		} else {
+			animationTime = be.getLevel() == null
+				? partialTicks
+				: be.getLevel().getGameTime() % 24_000L + partialTicks;
+		}
 		greetingAllayRenderer.render(ms, buffer, light, facing, animationTime, waveStrength);
 
 		if (VisualizationManager.supportsVisualization(be.getLevel())) {
