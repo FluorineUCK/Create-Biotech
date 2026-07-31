@@ -5,7 +5,7 @@
       "item": "create_biotech:asurine_casing"
     },
     {
-      "item": "create_biotech:zinc_sheet"
+      "tag": "c:plates/zinc"
     }
   ],
   "results": [
