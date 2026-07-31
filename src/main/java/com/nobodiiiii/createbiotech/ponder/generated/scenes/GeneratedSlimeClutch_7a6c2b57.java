@@ -4,6 +4,7 @@ package com.nobodiiiii.createbiotech.ponder.generated.scenes;
 
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderAttribution;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderSupport;
+import com.simibubi.create.infrastructure.ponder.AllCreatePonderTags;
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.createmod.ponder.api.registration.PonderTagRegistrationHelper;
 import net.createmod.ponder.api.scene.SceneBuilder;
@@ -18,7 +19,7 @@ public final class GeneratedSlimeClutch_7a6c2b57 {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        ResourceLocation[] tags = new ResourceLocation[]{GeneratedPonderAttribution.tag(), AllCreatePonderTags.KINETIC_RELAYS};
         var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "slime_clutch")));
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/slime_clutch_base"), GeneratedSlimeClutch_7a6c2b57::storyboard$0, tags);
     }

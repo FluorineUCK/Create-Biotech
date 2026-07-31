@@ -4,6 +4,7 @@ package com.nobodiiiii.createbiotech.ponder.generated.scenes;
 
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderAttribution;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderSupport;
+import com.simibubi.create.infrastructure.ponder.AllCreatePonderTags;
 import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.content.logistics.box.PackageStyles;
@@ -38,7 +39,7 @@ public final class GeneratedAllayPort_ffe8c4c2 {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        ResourceLocation[] tags = new ResourceLocation[]{GeneratedPonderAttribution.tag(), AllCreatePonderTags.HIGH_LOGISTICS};
         var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "allay_port")));
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/basic_xl"), GeneratedAllayPort_ffe8c4c2::storyboard$0, tags);
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/basic_xl"), GeneratedAllayPort_ffe8c4c2::storyboard$1, tags);

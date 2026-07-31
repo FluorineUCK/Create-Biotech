@@ -4,6 +4,7 @@ package com.nobodiiiii.createbiotech.ponder.generated.scenes;
 
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderAttribution;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderSupport;
+import com.simibubi.create.infrastructure.ponder.AllCreatePonderTags;
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.createmod.ponder.api.registration.PonderTagRegistrationHelper;
 import net.createmod.ponder.api.scene.SceneBuilder;
@@ -18,7 +19,7 @@ public final class GeneratedSquidPrinter_68898fcb {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        ResourceLocation[] tags = new ResourceLocation[]{GeneratedPonderAttribution.tag(), AllCreatePonderTags.FLUIDS};
         var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "squid_printer")));
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/enchanting_line_base"), GeneratedSquidPrinter_68898fcb::storyboard$0, tags);
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/enchanting_line_base"), GeneratedSquidPrinter_68898fcb::storyboard$1, tags);

@@ -4,6 +4,7 @@ package com.nobodiiiii.createbiotech.ponder.generated.scenes;
 
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderAttribution;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderSupport;
+import com.simibubi.create.infrastructure.ponder.AllCreatePonderTags;
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.createmod.ponder.api.registration.PonderTagRegistrationHelper;
 import net.createmod.ponder.api.scene.SceneBuilder;
@@ -18,7 +19,7 @@ public final class GeneratedBioPackager_bad667d8 {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        ResourceLocation[] tags = new ResourceLocation[]{GeneratedPonderAttribution.tag(), AllCreatePonderTags.CONTRAPTION_ACTOR};
         var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "bio_packager")));
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/basic"), GeneratedBioPackager_bad667d8::storyboard$0, tags);
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/bio_packager_capture"), GeneratedBioPackager_bad667d8::storyboard$1, tags);

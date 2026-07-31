@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.ponder.generated.scenes;
 import com.nobodiiiii.createbiotech.ponder.PonderSupportExt;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderAttribution;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderSupport;
+import com.simibubi.create.infrastructure.ponder.AllCreatePonderTags;
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
 import net.createmod.ponder.api.registration.PonderTagRegistrationHelper;
 import net.createmod.ponder.api.scene.SceneBuilder;
@@ -17,7 +18,7 @@ public final class GeneratedCreeperBlastChamber_685cd207 {
     }
 
     public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
-        ResourceLocation[] tags = new ResourceLocation[]{ResourceLocation.fromNamespaceAndPath("create_biotech", "ponderer_exported")};
+        ResourceLocation[] tags = new ResourceLocation[]{GeneratedPonderAttribution.tag(), AllCreatePonderTags.KINETIC_APPLIANCES};
         var multi = helper.forComponents(java.util.List.of(ResourceLocation.fromNamespaceAndPath("create_biotech", "creeper_blast_chamber")));
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/creeper_blast_chamber_base_xl"), GeneratedCreeperBlastChamber_685cd207::storyboard$0, tags);
         multi.addStoryBoard(ResourceLocation.fromNamespaceAndPath("create_biotech", "generated/ponderer/creeper_blast_chamber_base_xl"), GeneratedCreeperBlastChamber_685cd207::storyboard$1, tags);
