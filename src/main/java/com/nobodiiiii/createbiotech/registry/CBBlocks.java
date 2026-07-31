@@ -23,6 +23,7 @@ import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFis
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractWallBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSecretionBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachMucosaBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachWallBlock;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
@@ -320,9 +321,9 @@ public class CBBlocks {
 				.noLootTable()));
 
 	// Pink living terrain lining the floor, ceiling, walls, and shelves of every new stomach room.
-	public static final DeferredHolder<Block, Block> FROG_STOMACH_MUCOSA =
+	public static final DeferredHolder<Block, FrogStomachMucosaBlock> FROG_STOMACH_MUCOSA =
 		BLOCKS.register("frog_stomach_mucosa",
-			() -> new Block(Block.Properties.ofFullCopy(Blocks.PINK_CONCRETE)
+			() -> new FrogStomachMucosaBlock(Block.Properties.ofFullCopy(Blocks.PINK_CONCRETE)
 				.strength(0.8f)
 				.sound(SoundType.SLIME_BLOCK)));
 

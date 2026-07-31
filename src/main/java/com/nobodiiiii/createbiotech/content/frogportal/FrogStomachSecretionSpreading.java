@@ -30,8 +30,8 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 /**
  * Sculk-catalyst-style spreading for Frog Stomach Secretion. A dying vanilla slime contributes its
  * normal experience value as charge to the nearest secretion block within eight blocks. Persistent
- * cursors then walk through connected secretion and spend one charge for each new floor-supported
- * secretion block.
+ * cursors then walk through connected secretion in all six directions and spend one charge for
+ * each new three-dimensionally supported secretion block.
  */
 public final class FrogStomachSecretionSpreading {
 
@@ -43,13 +43,6 @@ public final class FrogStomachSecretionSpreading {
 	private static final int MAX_CURSOR_CHARGE = 1000;
 	private static final int SPREAD_DELAY = 1;
 	private static final int MAX_STALLED_UPDATES = 32;
-	private static final Direction[] HORIZONTAL_DIRECTIONS = {
-		Direction.NORTH,
-		Direction.SOUTH,
-		Direction.WEST,
-		Direction.EAST
-	};
-
 	private FrogStomachSecretionSpreading() {}
 
 	public static void register() {
@@ -112,8 +105,8 @@ public final class FrogStomachSecretionSpreading {
 	private static void sendSecretionParticles(ServerLevel level, BlockPos pos, int count) {
 		BlockParticleOption particle = new BlockParticleOption(ParticleTypes.BLOCK,
 			CBBlocks.FROG_STOMACH_SECRETION.get().defaultBlockState());
-		level.sendParticles(particle, pos.getX() + 0.5d, pos.getY() + 1.05d, pos.getZ() + 0.5d,
-			count, 0.3d, 0.1d, 0.3d, 0.05d);
+		level.sendParticles(particle, pos.getX() + 0.5d, pos.getY() + 0.5d, pos.getZ() + 0.5d,
+			count, 0.3d, 0.3d, 0.3d, 0.05d);
 	}
 
 	private static final class SpreadingData extends SavedData {
@@ -226,18 +219,25 @@ public final class FrogStomachSecretionSpreading {
 		}
 
 		private static BlockPos findSpreadPos(ServerLevel level, BlockPos pos, RandomSource random) {
-			int offset = random.nextInt(HORIZONTAL_DIRECTIONS.length);
-			for (int i = 0; i < HORIZONTAL_DIRECTIONS.length; i++) {
-				Direction direction = HORIZONTAL_DIRECTIONS[(i + offset) % HORIZONTAL_DIRECTIONS.length];
+			for (Direction direction : Direction.allShuffled(random)) {
 				BlockPos candidate = pos.relative(direction);
-				BlockPos supportPos = candidate.below();
 				if (!level.isInWorldBounds(candidate)
 					|| !level.getBlockState(candidate).isAir()
-					|| !level.getBlockState(supportPos).isFaceSturdy(level, supportPos, Direction.UP))
+					|| !hasSturdyNeighbour(level, candidate))
 					continue;
 				return candidate.immutable();
 			}
 			return null;
+		}
+
+		private static boolean hasSturdyNeighbour(ServerLevel level, BlockPos candidate) {
+			for (Direction direction : Direction.values()) {
+				BlockPos supportPos = candidate.relative(direction);
+				if (level.getBlockState(supportPos)
+					.isFaceSturdy(level, supportPos, direction.getOpposite()))
+					return true;
+			}
+			return false;
 		}
 
 		private static BlockPos findMovementPos(ServerLevel level, BlockPos pos, RandomSource random) {

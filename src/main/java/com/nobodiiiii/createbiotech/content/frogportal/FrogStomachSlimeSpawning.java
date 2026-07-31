@@ -16,8 +16,8 @@ import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
 /**
- * Restricts natural spawning on the Frog Stomach's living terrain to slimes and gives those slimes
- * the fixed 50% placement probability of a swamp surface spawn under a full moon.
+ * Restricts natural spawning on Frog Stomach Secretion to slimes and gives those slimes the fixed
+ * 50% placement probability of a swamp surface spawn under a full moon.
  */
 public final class FrogStomachSlimeSpawning {
 
@@ -60,7 +60,6 @@ public final class FrogStomachSlimeSpawning {
 	}
 
 	private static boolean isStomachSpawnSurface(BlockState state) {
-		return state.is(CBBlocks.FROG_STOMACH_MUCOSA.get())
-			|| state.is(CBBlocks.FROG_STOMACH_SECRETION.get());
+		return state.is(CBBlocks.FROG_STOMACH_SECRETION.get());
 	}
 }

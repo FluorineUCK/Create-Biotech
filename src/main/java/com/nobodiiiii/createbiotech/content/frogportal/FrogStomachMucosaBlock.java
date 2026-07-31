@@ -8,19 +8,17 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 
-/**
- * Indestructible, fully opaque shell enclosing each generated Frog Stomach room.
- */
-public class FrogStomachWallBlock extends Block {
+/** Pink living terrain that cushions anything landing inside a Frog Stomach room. */
+public class FrogStomachMucosaBlock extends Block {
 
-	public static final MapCodec<FrogStomachWallBlock> CODEC = simpleCodec(FrogStomachWallBlock::new);
+	public static final MapCodec<FrogStomachMucosaBlock> CODEC = simpleCodec(FrogStomachMucosaBlock::new);
 
-	public FrogStomachWallBlock(Properties properties) {
+	public FrogStomachMucosaBlock(Properties properties) {
 		super(properties);
 	}
 
 	@Override
-	protected MapCodec<? extends FrogStomachWallBlock> codec() {
+	protected MapCodec<? extends FrogStomachMucosaBlock> codec() {
 		return CODEC;
 	}
 

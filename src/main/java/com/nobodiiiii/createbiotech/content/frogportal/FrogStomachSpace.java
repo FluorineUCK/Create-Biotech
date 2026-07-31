@@ -193,15 +193,15 @@ public final class FrogStomachSpace {
 		List<BlockPos> positions = new ArrayList<>();
 		BlockPos.MutableBlockPos spawnPos = new BlockPos.MutableBlockPos();
 		int maxSpawnY = Math.min(origin.getY() + size - 2,
-			origin.getY() + FrogStomachEcology.MAX_FLOOR_SURFACE_OFFSET + 1);
+			origin.getY() + FrogStomachEcology.MAX_FLOOR_SURFACE_OFFSET
+				+ FrogStomachEcology.MAX_SECRETION_GROWTH_DEPTH + 1);
 		for (int x = origin.getX() + 1; x < origin.getX() + size - 1; x++)
 			for (int z = origin.getZ() + 1; z < origin.getZ() + size - 1; z++)
 				for (int y = origin.getY() + 1; y <= maxSpawnY; y++) {
 					spawnPos.set(x, y, z);
 					BlockState support = level.getBlockState(spawnPos.below());
 					boolean validSupport = ecologySurfaceOnly
-						? support.is(CBBlocks.FROG_STOMACH_MUCOSA.get())
-							|| support.is(CBBlocks.FROG_STOMACH_SECRETION.get())
+						? support.is(CBBlocks.FROG_STOMACH_SECRETION.get())
 						: support.is(CBBlocks.FROG_STOMACH_WALL.get());
 					if (validSupport && level.getBlockState(spawnPos).isAir()
 						&& level.getBlockState(spawnPos.above()).isAir())

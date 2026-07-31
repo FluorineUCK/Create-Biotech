@@ -9,6 +9,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -131,5 +132,10 @@ public class FrogDigestiveTractWallBlock extends Block {
 	@Override
 	protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
 		builder.add(HAS_SLIME, FACING);
+	}
+
+	@Override
+	public void fallOn(Level level, BlockState state, BlockPos pos, Entity entity, float fallDistance) {
+		entity.causeFallDamage(fallDistance, 0.0f, level.damageSources().fall());
 	}
 }
