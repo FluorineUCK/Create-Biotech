@@ -11,17 +11,16 @@ import java.util.stream.Stream;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.nobodiiiii.createbiotech.registry.CBIngredients;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.component.CustomData;
 import net.neoforged.neoforge.common.crafting.ICustomIngredient;
 import net.neoforged.neoforge.common.crafting.IngredientType;
 
@@ -104,7 +103,7 @@ public class CapturedEntityBoxIngredient implements ICustomIngredient {
 		entityData.putString("id", entityId.toString());
 		tag.put("CapturedEntity", entityData);
 		tag.putString("CapturedEntityDescId", entityType.getDescriptionId());
-		stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
+		CBItemData.set(stack, tag);
 		return stack;
 	}
 

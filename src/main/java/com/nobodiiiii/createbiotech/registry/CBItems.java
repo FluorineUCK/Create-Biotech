@@ -112,7 +112,7 @@ public class CBItems {
 		() -> new WirelessTerminalItem(new Item.Properties().stacksTo(1)));
 
 	public static final DeferredHolder<Item, Item> HALF_SHAFT = ITEMS.register("half_shaft",
-		() -> new Item(new Item.Properties()));
+		() -> new BlockItem(CBBlocks.HALF_SHAFT.get(), new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> CAPTURED_SMALL_SLIME = ITEMS.register("captured_small_slime",
 		() -> new CapturedSmallSlimeItem(new Item.Properties().stacksTo(4)));

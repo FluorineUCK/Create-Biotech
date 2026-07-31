@@ -38,6 +38,7 @@ import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerBlock
 import com.nobodiiiii.createbiotech.content.shulkerteleporter.ShulkerTeleporterBlock;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableBlock;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableCogBlock;
+import com.nobodiiiii.createbiotech.content.universaljoint.HalfShaftBlock;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointBlock;
 import com.yision.allay.block.allayport.AllayPortBlock;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.BlastProofChainDriveBlock;
@@ -142,6 +143,13 @@ public class CBBlocks {
 
 	public static final DeferredHolder<Block, UniversalJointBlock> UNIVERSAL_JOINT = BLOCKS.register("universal_joint",
 		() -> new UniversalJointBlock(Block.Properties.of()
+			.sound(SoundType.STONE)
+			.strength(0.8f)
+			.mapColor(MapColor.METAL)
+			.noOcclusion()));
+
+	public static final DeferredHolder<Block, HalfShaftBlock> HALF_SHAFT = BLOCKS.register("half_shaft",
+		() -> new HalfShaftBlock(Block.Properties.of()
 			.sound(SoundType.STONE)
 			.strength(0.8f)
 			.mapColor(MapColor.METAL)

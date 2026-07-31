@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.cardboardbox;
 import java.util.List;
 import java.util.function.Consumer;
 
+import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointRepair;
 import com.simibubi.create.foundation.item.render.SimpleCustomRenderer;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.content.logistics.box.PackageStyles;
@@ -53,10 +54,18 @@ public abstract class CapturedEntityBoxItem extends PackageItem {
 			return InteractionResult.PASS;
 
 		ItemStack stack = context.getItemInHand();
-		if (!player.isShiftKeyDown() || !hasCapturedEntity(stack))
+		if (!player.isShiftKeyDown()) {
+			InteractionResult repairResult = UniversalJointRepair.useOn(context);
+			if (repairResult != InteractionResult.PASS)
+				return repairResult;
+			return InteractionResult.PASS;
+		}
+		Level level = context.getLevel();
+		if (!level.isClientSide())
+			UniversalJointRepair.clearSelection(stack);
+		if (!hasCapturedEntity(stack))
 			return InteractionResult.PASS;
 
-		Level level = context.getLevel();
 		if (!level.isClientSide())
 			CapturedEntityBoxHelper.releaseCapturedEntity(context);
 		return InteractionResult.sidedSuccess(level.isClientSide());
@@ -74,7 +83,8 @@ public abstract class CapturedEntityBoxItem extends PackageItem {
 
 	@Override
 	public Entity createEntity(Level world, Entity location, ItemStack itemstack) {
-		return hasCapturedEntity(itemstack) ? CardboardBoxEntity.fromDroppedItem(world, location, itemstack) : null;
+		return hasCapturedEntity(itemstack)
+			? CardboardBoxEntity.fromDroppedItem(world, location, itemstack) : null;
 	}
 
 	@Override

@@ -1,0 +1,14 @@
+{
+  "required": false,
+  "minVersion": "0.8",
+  "package": "com.nobodiiiii.createbiotech.mixin.compat.sable",
+  "plugin": "com.nobodiiiii.createbiotech.mixin.compat.sable.SableMixinPlugin",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "UniversalJointEndpointBlockSableMixin",
+    "UniversalJointBlockEntitySableMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -9,12 +9,13 @@ import java.util.List;
 import java.util.function.Function;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointRepair;
+import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.simibubi.create.content.logistics.box.PackageItem;
 
 import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
@@ -25,7 +26,6 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
-import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.context.UseOnContext;
@@ -97,11 +97,11 @@ public class CapturedEntityBoxHelper {
 		entityData.putString("id", entityId.toString());
 		restoreAiInSavedEntityData(entityData);
 
-		CompoundTag stackTag = getCustomData(stack);
+		CompoundTag stackTag = CBItemData.getOrEmpty(stack);
 		stackTag.put(CAPTURED_ENTITY_TAG, entityData);
 		stackTag.putString(CAPTURED_ENTITY_DESC_ID_TAG, target.getType().getDescriptionId());
 		stackTag.putFloat(CAPTURED_ENTITY_HEALTH_TAG, target.getHealth());
-		setCustomData(stack, stackTag);
+		CBItemData.set(stack, stackTag);
 		return true;
 	}
 
@@ -148,7 +148,7 @@ public class CapturedEntityBoxHelper {
 		if (entity == null)
 			return false;
 
-		CompoundTag stackTag = getCustomData(stack);
+		CompoundTag stackTag = CBItemData.getOrEmpty(stack);
 		if (stackTag.isEmpty())
 			return false;
 
@@ -203,7 +203,7 @@ public class CapturedEntityBoxHelper {
 		if (entity == null)
 			return null;
 
-		CompoundTag stackTag = getCustomData(stack);
+		CompoundTag stackTag = CBItemData.getOrEmpty(stack);
 		if (entity instanceof LivingEntity living
 			&& stackTag.contains(CAPTURED_ENTITY_HEALTH_TAG, Tag.TAG_ANY_NUMERIC))
 			living.setHealth(Math.min(living.getMaxHealth(), stackTag.getFloat(CAPTURED_ENTITY_HEALTH_TAG)));
@@ -212,16 +212,17 @@ public class CapturedEntityBoxHelper {
 	}
 
 	public static void clearCapturedEntity(ItemStack stack) {
-		CompoundTag tag = getCustomData(stack);
+		CompoundTag tag = CBItemData.getOrEmpty(stack);
 
 		tag.remove(CAPTURED_ENTITY_TAG);
 		tag.remove(CAPTURED_ENTITY_DESC_ID_TAG);
 		tag.remove(CAPTURED_ENTITY_HEALTH_TAG);
-		setCustomData(stack, tag);
+		UniversalJointRepair.clearSelection(tag);
+		CBItemData.set(stack, tag);
 	}
 
 	public static boolean hasCapturedEntity(ItemStack stack) {
-		return getCustomData(stack).contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND);
+		return CBItemData.getOrEmpty(stack).contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND);
 	}
 
 	public static ItemStackHandler applyVirtualSelfFallbackContents(ItemStack box, ItemStackHandler contents) {
@@ -246,21 +247,10 @@ public class CapturedEntityBoxHelper {
 	}
 
 	private static CompoundTag getCapturedEntityData(ItemStack stack) {
-		CompoundTag tag = getCustomData(stack);
+		CompoundTag tag = CBItemData.getOrEmpty(stack);
 		if (!tag.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND))
 			return null;
 		return tag.getCompound(CAPTURED_ENTITY_TAG);
-	}
-
-	private static CompoundTag getCustomData(ItemStack stack) {
-		return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
-	}
-
-	private static void setCustomData(ItemStack stack, CompoundTag tag) {
-		if (tag.isEmpty())
-			stack.remove(DataComponents.CUSTOM_DATA);
-		else
-			stack.set(DataComponents.CUSTOM_DATA, CustomData.of(tag));
 	}
 
 	private static boolean hasAnyPackageContents(ItemStackHandler contents) {
@@ -333,7 +323,7 @@ public class CapturedEntityBoxHelper {
 	}
 
 	private static void collectCapturedEntityEntry(ItemStack stack, List<TooltipEntry> entries) {
-		CompoundTag tag = getCustomData(stack);
+		CompoundTag tag = CBItemData.getOrEmpty(stack);
 		if (!tag.contains(CAPTURED_ENTITY_DESC_ID_TAG, Tag.TAG_STRING))
 			return;
 
