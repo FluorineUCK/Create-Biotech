@@ -319,7 +319,14 @@ public class CBBlocks {
 				.sound(SoundType.SLIME_BLOCK)
 				.noLootTable()));
 
-	// Slime-like secretion generated in flat-topped piles on the floor of every new Frog Stomach room.
+	// Pink living terrain lining the floor, ceiling, walls, and shelves of every new stomach room.
+	public static final DeferredHolder<Block, Block> FROG_STOMACH_MUCOSA =
+		BLOCKS.register("frog_stomach_mucosa",
+			() -> new Block(Block.Properties.ofFullCopy(Blocks.PINK_CONCRETE)
+				.strength(0.8f)
+				.sound(SoundType.SLIME_BLOCK)));
+
+	// Slime-like secretion that absorbs slime experience and spreads across supported surfaces.
 	public static final DeferredHolder<Block, FrogStomachSecretionBlock> FROG_STOMACH_SECRETION =
 		BLOCKS.register("frog_stomach_secretion",
 			() -> new FrogStomachSecretionBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)));

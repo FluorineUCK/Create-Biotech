@@ -22,8 +22,9 @@ import net.minecraft.world.phys.Vec3;
 /**
  * Pure geometry + builder for the private rooms in the Frog Stomach dimension. Each space index maps
  * to a fixed, non-overlapping cube laid out on a grid so coordinates stay bounded. A room is a hollow
- * cube walled with the indestructible {@link CBBlocks#FROG_STOMACH_WALL}. Its north wall contains a
- * high, pre-activated mouth portal and its south wall contains a low, slimeball-activated tail portal.
+ * cube walled with the indestructible {@link CBBlocks#FROG_STOMACH_WALL} and lined with generated
+ * living terrain. Its north wall contains a high, pre-activated mouth portal and its south wall
+ * contains a low, slimeball-activated tail portal.
  */
 public final class FrogStomachSpace {
 
@@ -37,18 +38,8 @@ public final class FrogStomachSpace {
 	private static final int PORTAL_FRONT_SIZE = 5;
 	private static final int BOTTOM_WALL_Y_OFFSET = 1;
 	private static final int TAIL_PORTAL_Y_OFFSET = BOTTOM_WALL_Y_OFFSET + 1;
-	private static final int MIN_RANDOM_PILES = 4;
-	private static final int RANDOM_PILE_VARIATION = 5;
-	private static final int MAX_PILE_HEIGHT = 3;
-	private static final int MAX_PILE_RADIUS = 6;
 	private static final int MIN_INITIAL_SLIMES = 3;
 	private static final int INITIAL_SLIME_VARIATION = 3;
-	private static final int ENCLOSED_FROGLIGHT_CHANCE = 20;
-	private static final BlockState[] FROGLIGHTS = {
-		Blocks.OCHRE_FROGLIGHT.defaultBlockState(),
-		Blocks.PEARLESCENT_FROGLIGHT.defaultBlockState(),
-		Blocks.VERDANT_FROGLIGHT.defaultBlockState()
-	};
 	private static final double MOUTH_ENTRY_SPEED = 0.5d;
 
 	private FrogStomachSpace() {}
@@ -135,10 +126,11 @@ public final class FrogStomachSpace {
 
 	/**
 	 * Build (or repair) the room for {@code index}: force-loads the covered chunks, places the six
-	 * indestructible wall faces, optionally generates secretion piles for a newly allocated room,
-	 * and places a pre-activated high mouth portal plus an inactive low tail portal.
+	 * indestructible wall faces, optionally generates the mucosa ecology for a newly allocated room,
+	 * and places a pre-activated high mouth portal plus an inactive low tail portal. Repairing an
+	 * existing room deliberately leaves player changes to its interior untouched.
 	 */
-	public static void buildRoom(ServerLevel level, long index, boolean generateSecretions) {
+	public static void buildRoom(ServerLevel level, long index, boolean generateEcology) {
 		int size = boxSize();
 		BlockPos o = origin(index);
 		int minX = o.getX(), minY = o.getY(), minZ = o.getZ();
@@ -160,8 +152,8 @@ public final class FrogStomachSpace {
 					}
 				}
 
-		if (generateSecretions)
-			generateSecretionPiles(level, index, o, size);
+		if (generateEcology)
+			FrogStomachEcology.generate(level, index, o, size);
 
 		// Keep a 5x5 plane in front of each portal and its 3x3 field clear. The mouth field is
 		// installed again below, after the generated terrain has been removed from its opening.
@@ -177,109 +169,8 @@ public final class FrogStomachSpace {
 		if (level.getBlockState(legacyPortal).is(CBBlocks.FROG_DIGESTIVE_TRACT.get()))
 			level.setBlock(legacyPortal, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
 
-		if (generateSecretions)
+		if (generateEcology)
 			spawnInitialSlimes(level, o, size);
-	}
-
-	private static void generateSecretionPiles(ServerLevel level, long index, BlockPos origin, int size) {
-		long seed = level.getSeed() ^ Long.rotateLeft(index * 0x9E3779B97F4A7C15L, 17);
-		RandomSource random = RandomSource.create(seed);
-		int minX = origin.getX() + 1;
-		int maxX = origin.getX() + size - 2;
-		int minZ = origin.getZ() + 1;
-		int maxZ = origin.getZ() + size - 2;
-		int floorY = origin.getY();
-
-		int cornerRadius = Math.max(1, Math.min(2, (size - 2) / 3));
-		placeNaturalMound(level, random, minX, minZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
-			minX, maxX, minZ, maxZ);
-		placeNaturalMound(level, random, maxX, minZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
-			minX, maxX, minZ, maxZ);
-		placeNaturalMound(level, random, minX, maxZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
-			minX, maxX, minZ, maxZ);
-		placeNaturalMound(level, random, maxX, maxZ, floorY, cornerRadius, cornerRadius, 1 + random.nextInt(2),
-			minX, maxX, minZ, maxZ);
-
-		int interiorWidth = Math.max(1, size - 2);
-		int maxRadius = Math.max(1, Math.min(MAX_PILE_RADIUS, interiorWidth / 4));
-		int minRadius = Math.min(3, maxRadius);
-		int pileCount = MIN_RANDOM_PILES + random.nextInt(RANDOM_PILE_VARIATION);
-		for (int pile = 0; pile < pileCount; pile++) {
-			int centerX = minX + random.nextInt(interiorWidth);
-			int centerZ = minZ + random.nextInt(interiorWidth);
-			int radiusX = minRadius + random.nextInt(maxRadius - minRadius + 1);
-			int radiusZ = minRadius + random.nextInt(maxRadius - minRadius + 1);
-			int height = Math.min(MAX_PILE_HEIGHT, 2 + random.nextInt(2));
-			placeNaturalMound(level, random, centerX, centerZ, floorY, radiusX, radiusZ, height,
-				minX, maxX, minZ, maxZ);
-		}
-
-		replaceEnclosedSecretionsWithFroglights(level, random, origin, size);
-	}
-
-	private static void placeNaturalMound(ServerLevel level, RandomSource random, int centerX, int centerZ, int floorY,
-		int radiusX, int radiusZ, int height, int minX, int maxX, int minZ, int maxZ) {
-		BlockState secretion = CBBlocks.FROG_STOMACH_SECRETION.get().defaultBlockState();
-		BlockPos.MutableBlockPos p = new BlockPos.MutableBlockPos();
-
-		int lobeCount = 2 + random.nextInt(2);
-		MoundLobe[] lobes = new MoundLobe[lobeCount];
-		lobes[0] = new MoundLobe(centerX, centerZ, radiusX, radiusZ,
-			random.nextDouble() * Math.PI * 2.0d, random.nextDouble() * Math.PI * 2.0d);
-		int scanRadiusX = radiusX;
-		int scanRadiusZ = radiusZ;
-		for (int lobe = 1; lobe < lobeCount; lobe++) {
-			int offsetX = random.nextInt(radiusX + 1) - radiusX / 2;
-			int offsetZ = random.nextInt(radiusZ + 1) - radiusZ / 2;
-			int lobeRadiusX = Math.max(1, radiusX * (2 + random.nextInt(2)) / 4);
-			int lobeRadiusZ = Math.max(1, radiusZ * (2 + random.nextInt(2)) / 4);
-			lobes[lobe] = new MoundLobe(centerX + offsetX, centerZ + offsetZ, lobeRadiusX, lobeRadiusZ,
-				random.nextDouble() * Math.PI * 2.0d, random.nextDouble() * Math.PI * 2.0d);
-			scanRadiusX = Math.max(scanRadiusX, Math.abs(offsetX) + lobeRadiusX);
-			scanRadiusZ = Math.max(scanRadiusZ, Math.abs(offsetZ) + lobeRadiusZ);
-		}
-
-		for (int x = Math.max(minX, centerX - scanRadiusX); x <= Math.min(maxX, centerX + scanRadiusX); x++)
-			for (int z = Math.max(minZ, centerZ - scanRadiusZ); z <= Math.min(maxZ, centerZ + scanRadiusZ); z++) {
-				double distance = normalizedMoundDistance(x, z, lobes);
-				if (distance > 1.0d)
-					continue;
-
-				int columnHeight = moundColumnHeight(distance, height);
-				for (int dy = 1; dy <= columnHeight; dy++) {
-					p.set(x, floorY + dy, z);
-					if (level.getBlockState(p).isAir())
-						level.setBlock(p, secretion, Block.UPDATE_CLIENTS);
-				}
-			}
-	}
-
-	private static void replaceEnclosedSecretionsWithFroglights(ServerLevel level, RandomSource random,
-		BlockPos origin, int size) {
-		List<BlockPos> enclosedSecretions = new ArrayList<>();
-		BlockPos.MutableBlockPos candidate = new BlockPos.MutableBlockPos();
-		for (int x = origin.getX() + 1; x < origin.getX() + size - 1; x++)
-			for (int y = origin.getY() + 1; y <= origin.getY() + MAX_PILE_HEIGHT; y++)
-				for (int z = origin.getZ() + 1; z < origin.getZ() + size - 1; z++) {
-					candidate.set(x, y, z);
-					if (level.getBlockState(candidate).is(CBBlocks.FROG_STOMACH_SECRETION.get())
-						&& isEnclosedBySecretionOrWall(level, candidate))
-						enclosedSecretions.add(candidate.immutable());
-				}
-
-		for (BlockPos pos : enclosedSecretions)
-			if (random.nextInt(ENCLOSED_FROGLIGHT_CHANCE) == 0)
-				level.setBlock(pos, FROGLIGHTS[random.nextInt(FROGLIGHTS.length)], Block.UPDATE_CLIENTS);
-	}
-
-	private static boolean isEnclosedBySecretionOrWall(ServerLevel level, BlockPos pos) {
-		for (Direction direction : Direction.values()) {
-			BlockState neighbour = level.getBlockState(pos.relative(direction));
-			if (!neighbour.is(CBBlocks.FROG_STOMACH_SECRETION.get())
-				&& !neighbour.is(CBBlocks.FROG_STOMACH_WALL.get()))
-				return false;
-		}
-		return true;
 	}
 
 	private static void spawnInitialSlimes(ServerLevel level, BlockPos origin, int size) {
@@ -298,16 +189,19 @@ public final class FrogStomachSpace {
 	}
 
 	private static List<BlockPos> findSlimeSpawnPositions(ServerLevel level, BlockPos origin, int size,
-		boolean secretionOnly) {
+		boolean ecologySurfaceOnly) {
 		List<BlockPos> positions = new ArrayList<>();
 		BlockPos.MutableBlockPos spawnPos = new BlockPos.MutableBlockPos();
+		int maxSpawnY = Math.min(origin.getY() + size - 2,
+			origin.getY() + FrogStomachEcology.MAX_FLOOR_SURFACE_OFFSET + 1);
 		for (int x = origin.getX() + 1; x < origin.getX() + size - 1; x++)
 			for (int z = origin.getZ() + 1; z < origin.getZ() + size - 1; z++)
-				for (int y = origin.getY() + 1; y <= origin.getY() + MAX_PILE_HEIGHT + 1; y++) {
+				for (int y = origin.getY() + 1; y <= maxSpawnY; y++) {
 					spawnPos.set(x, y, z);
 					BlockState support = level.getBlockState(spawnPos.below());
-					boolean validSupport = secretionOnly
-						? support.is(CBBlocks.FROG_STOMACH_SECRETION.get())
+					boolean validSupport = ecologySurfaceOnly
+						? support.is(CBBlocks.FROG_STOMACH_MUCOSA.get())
+							|| support.is(CBBlocks.FROG_STOMACH_SECRETION.get())
 						: support.is(CBBlocks.FROG_STOMACH_WALL.get());
 					if (validSupport && level.getBlockState(spawnPos).isAir()
 						&& level.getBlockState(spawnPos.above()).isAir())
@@ -315,33 +209,6 @@ public final class FrogStomachSpace {
 				}
 		return positions;
 	}
-
-	private static double normalizedMoundDistance(int x, int z, MoundLobe[] lobes) {
-		double nearest = Double.POSITIVE_INFINITY;
-		for (MoundLobe lobe : lobes) {
-			double dx = (x - lobe.centerX()) / (double) lobe.radiusX();
-			double dz = (z - lobe.centerZ()) / (double) lobe.radiusZ();
-			double angle = Math.atan2(dz, dx);
-			double outline = 1.0d
-				+ 0.16d * Math.sin(angle * 3.0d + lobe.firstPhase())
-				+ 0.10d * Math.sin(angle * 5.0d + lobe.secondPhase());
-			nearest = Math.min(nearest, Math.sqrt(dx * dx + dz * dz) / outline);
-		}
-		return nearest;
-	}
-
-	private static int moundColumnHeight(double distance, int maximumHeight) {
-		if (maximumHeight <= 1)
-			return 1;
-		if (maximumHeight == 2)
-			return distance <= 0.42d ? 2 : 1;
-		if (distance <= 0.30d)
-			return 3;
-		return distance <= 0.66d ? 2 : 1;
-	}
-
-	private record MoundLobe(int centerX, int centerZ, int radiusX, int radiusZ,
-		double firstPhase, double secondPhase) {}
 
 	private static void clearPortalAccess(ServerLevel level, long index, PortalType type) {
 		BlockState air = Blocks.AIR.defaultBlockState();

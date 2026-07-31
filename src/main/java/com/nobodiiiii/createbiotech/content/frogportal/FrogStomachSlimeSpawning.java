@@ -4,18 +4,20 @@ import java.util.List;
 
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.level.biome.MobSpawnSettings;
+import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
 /**
- * Restricts natural spawning on Frog Stomach Secretion to slimes and gives those slimes the
- * fixed 50% placement probability of a swamp surface spawn under a full moon.
+ * Restricts natural spawning on the Frog Stomach's living terrain to slimes and gives those slimes
+ * the fixed 50% placement probability of a swamp surface spawn under a full moon.
  */
 public final class FrogStomachSlimeSpawning {
 
@@ -31,7 +33,9 @@ public final class FrogStomachSlimeSpawning {
 	}
 
 	private static void onPotentialSpawns(LevelEvent.PotentialSpawns event) {
-		if (!event.getLevel().getBlockState(event.getPos().below()).is(CBBlocks.FROG_STOMACH_SECRETION.get()))
+		if (!(event.getLevel() instanceof ServerLevel level)
+			|| !level.dimension().equals(FrogStomachDimensions.FROG_STOMACH)
+			|| !isStomachSpawnSurface(level.getBlockState(event.getPos().below())))
 			return;
 
 		for (MobSpawnSettings.SpawnerData spawn : List.copyOf(event.getSpawnerDataList()))
@@ -42,7 +46,8 @@ public final class FrogStomachSlimeSpawning {
 
 	private static void onSpawnPlacementCheck(MobSpawnEvent.SpawnPlacementCheck event) {
 		if (event.getSpawnType() != MobSpawnType.NATURAL
-			|| !event.getLevel().getBlockState(event.getPos().below()).is(CBBlocks.FROG_STOMACH_SECRETION.get()))
+			|| !event.getLevel().getLevel().dimension().equals(FrogStomachDimensions.FROG_STOMACH)
+			|| !isStomachSpawnSurface(event.getLevel().getBlockState(event.getPos().below())))
 			return;
 
 		if (event.getEntityType() != EntityType.SLIME) {
@@ -52,5 +57,10 @@ public final class FrogStomachSlimeSpawning {
 		event.setResult(event.getRandom().nextFloat() < FULL_MOON_SWAMP_CHANCE
 			? MobSpawnEvent.SpawnPlacementCheck.Result.SUCCEED
 			: MobSpawnEvent.SpawnPlacementCheck.Result.FAIL);
+	}
+
+	private static boolean isStomachSpawnSurface(BlockState state) {
+		return state.is(CBBlocks.FROG_STOMACH_MUCOSA.get())
+			|| state.is(CBBlocks.FROG_STOMACH_SECRETION.get());
 	}
 }
