@@ -447,9 +447,8 @@ final class FrogStomachEcology {
 			}
 		}
 
-		BlockPos sourceSupport = new BlockPos(edge.x(), topY, edge.z());
-		setMucosa(level, sourceSupport, mucosa);
-		BlockPos sourcePos = sourceSupport.above();
+		BlockPos sourcePos = new BlockPos(edge.x(), topY, edge.z());
+		setMucosa(level, sourcePos.below(), mucosa);
 		for (Direction blockedSide : new Direction[] {
 			edge.inward().getOpposite(),
 			edge.inward().getClockWise(),

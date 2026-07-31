@@ -130,7 +130,7 @@ public class CBConfigs {
 
 		FrogStomach(ModConfigSpec.Builder builder) {
 			builder.push("frogStomach");
-			boxSize = builder.defineInRange("boxSize", 48, 7, 256);
+			boxSize = builder.defineInRange("boxSize", 48, 16, 256);
 			builder.pop();
 		}
 	}

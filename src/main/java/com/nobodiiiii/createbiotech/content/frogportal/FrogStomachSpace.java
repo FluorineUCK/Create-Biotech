@@ -34,10 +34,10 @@ public final class FrogStomachSpace {
 	private static final int ROW = 4096;
 	/** Y of the room's floor shell. */
 	private static final int BASE_Y = 0;
-	private static final int PORTAL_SIZE = 3;
-	private static final int PORTAL_FRONT_SIZE = 5;
-	private static final int BOTTOM_WALL_Y_OFFSET = 1;
-	private static final int TAIL_PORTAL_Y_OFFSET = BOTTOM_WALL_Y_OFFSET + 1;
+	private static final int PORTAL_SECTION_SIZE = 16;
+	private static final int PORTAL_SIZE = 4;
+	private static final int PORTAL_SECTION_PADDING = (PORTAL_SECTION_SIZE - PORTAL_SIZE) / 2;
+	private static final int PORTAL_CLEARANCE_DEPTH = 5;
 	private static final int MIN_INITIAL_SLIMES = 3;
 	private static final int INITIAL_SLIME_VARIATION = 3;
 	private static final double MOUTH_ENTRY_SPEED = 0.5d;
@@ -51,7 +51,7 @@ public final class FrogStomachSpace {
 
 	/** Edge length of a room in blocks, from server config (default 48 = 3x3 chunks). */
 	public static int boxSize() {
-		return Math.max(7, CBConfigs.SERVER.frogStomach.boxSize.get());
+		return Math.max(PORTAL_SECTION_SIZE, CBConfigs.SERVER.frogStomach.boxSize.get());
 	}
 
 	/** Lowest-corner (min x/y/z) block position of the room for {@code index}. */
@@ -62,24 +62,32 @@ public final class FrogStomachSpace {
 		return new BlockPos(col * spacing, BASE_Y, row * spacing);
 	}
 
-	/** Bottom-left portal block of the low tail exit, viewed from inside the room. */
+	/** Bottom-left block of the 4x4 tail exit, centred in the lower 16x16 wall section. */
 	public static BlockPos tailPortalPos(long index) {
 		BlockPos o = origin(index);
-		return new BlockPos(o.getX() + boxSize() / 2 - 1, o.getY() + TAIL_PORTAL_Y_OFFSET,
-			o.getZ() + boxSize() - 2);
+		int size = boxSize();
+		return new BlockPos(portalSectionX(o, size), o.getY() + PORTAL_SECTION_PADDING,
+			o.getZ() + size - 2);
 	}
 
-	/** Bottom-left portal block of the high mouth entrance, viewed from inside the room. */
+	/** Bottom-left block of the 4x4 mouth entrance, centred in the upper 16x16 wall section. */
 	public static BlockPos mouthPortalPos(long index) {
 		BlockPos o = origin(index);
 		int size = boxSize();
-		return new BlockPos(o.getX() + size / 2 - 1, o.getY() + size - PORTAL_SIZE - 2,
+		return new BlockPos(portalSectionX(o, size),
+			o.getY() + size - PORTAL_SECTION_SIZE + PORTAL_SECTION_PADDING,
 			o.getZ() + 1);
 	}
 
 	/** Exact centre of the mouth portal, used by everything entering through the Giant Frog's mouth. */
 	public static Vec3 mouthPortalCenter(long index) {
-		return Vec3.atCenterOf(mouthPortalPos(index).offset(1, 1, 0));
+		BlockPos portal = mouthPortalPos(index);
+		return new Vec3(portal.getX() + PORTAL_SIZE / 2.0d,
+			portal.getY() + PORTAL_SIZE / 2.0d, portal.getZ() + 0.5d);
+	}
+
+	private static int portalSectionX(BlockPos origin, int size) {
+		return origin.getX() + (size - PORTAL_SECTION_SIZE) / 2 + PORTAL_SECTION_PADDING;
 	}
 
 	/** The southward impulse applied after an entity or item arrives through the mouth. */
@@ -155,8 +163,8 @@ public final class FrogStomachSpace {
 		if (generateEcology)
 			FrogStomachEcology.generate(level, index, o, size);
 
-		// Keep a 5x5 plane in front of each portal and its 3x3 field clear. The mouth field is
-		// installed again below, after the generated terrain has been removed from its opening.
+		// Keep the full 6x6 framed area clear for five blocks in front, while preserving vines.
+		// The mouth field is installed again below after generated terrain is removed from its opening.
 		clearPortalAccess(level, index, PortalType.TAIL);
 		clearPortalAccess(level, index, PortalType.MOUTH);
 
@@ -216,16 +224,29 @@ public final class FrogStomachSpace {
 		for (BlockPos portalBlock : portalPositions(index, type))
 			level.setBlock(portalBlock, air, Block.UPDATE_CLIENTS);
 
-		int frontStep = type == PortalType.MOUTH ? 1 : -1;
-		int border = (PORTAL_FRONT_SIZE - PORTAL_SIZE) / 2;
-		for (int x = -border; x < PORTAL_SIZE + border; x++)
-			for (int y = -border; y < PORTAL_SIZE + border; y++)
-				level.setBlock(portal.offset(x, y, frontStep), air, Block.UPDATE_CLIENTS);
+		Direction front = type == PortalType.MOUTH ? Direction.SOUTH : Direction.NORTH;
+		for (int depth = 1; depth <= PORTAL_CLEARANCE_DEPTH; depth++)
+			for (int x = -1; x <= PORTAL_SIZE; x++)
+				for (int y = -1; y <= PORTAL_SIZE; y++) {
+					BlockPos accessPos = portal.offset(x, y, 0).relative(front, depth);
+					if (!isVine(level.getBlockState(accessPos)))
+						level.setBlock(accessPos, air, Block.UPDATE_CLIENTS);
+				}
+	}
+
+	private static boolean isVine(BlockState state) {
+		return state.is(Blocks.VINE)
+			|| state.is(Blocks.CAVE_VINES)
+			|| state.is(Blocks.CAVE_VINES_PLANT)
+			|| state.is(Blocks.WEEPING_VINES)
+			|| state.is(Blocks.WEEPING_VINES_PLANT)
+			|| state.is(Blocks.TWISTING_VINES)
+			|| state.is(Blocks.TWISTING_VINES_PLANT);
 	}
 
 	/**
-	 * Activates the generated room exit containing {@code filledWallPos}, if all twelve
-	 * digestive-tract wall blocks have received slimeballs.
+	 * Activates the generated room exit containing {@code filledWallPos}, if every digestive-tract
+	 * wall block has received a slimeball.
 	 */
 	public static boolean tryActivatePortal(ServerLevel level, BlockPos filledWallPos) {
 		if (!level.dimension().equals(FrogStomachDimensions.FROG_STOMACH))
@@ -265,7 +286,8 @@ public final class FrogStomachSpace {
 				digestiveTract.setBinding(index, type);
 		}
 		if (playEffect)
-			level.globalLevelEvent(1038, portalPos(index, type).offset(1, 1, 0), 0);
+			level.globalLevelEvent(1038,
+				portalPos(index, type).offset(PORTAL_SIZE / 2, PORTAL_SIZE / 2, 0), 0);
 	}
 
 	private static BlockPos[] wallPositions(long index, PortalType type) {
