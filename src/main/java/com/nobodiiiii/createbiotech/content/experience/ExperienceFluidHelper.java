@@ -9,10 +9,12 @@ import com.nobodiiiii.createbiotech.registry.CBFluids;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.material.Fluid;
+import net.neoforged.fml.ModList;
 import net.neoforged.neoforge.fluids.FluidStack;
 
 
 public final class ExperienceFluidHelper {
+	private static final String CEI_MOD_ID = "create_enchantment_industry";
 	private static final ResourceLocation OWN_EXPERIENCE = CreateBiotech.asResource("experience");
 	private static final ResourceLocation OWN_FLOWING_EXPERIENCE = CreateBiotech.asResource("flowing_experience");
 	private static final ResourceLocation CEI_EXPERIENCE =
@@ -26,7 +28,7 @@ public final class ExperienceFluidHelper {
 	public static FluidStack experienceStack(int amount) {
 		if (amount <= 0)
 			return FluidStack.EMPTY;
-		return new FluidStack(CBFluids.EXPERIENCE.get(), amount);
+		return new FluidStack(generatedExperienceFluid(), amount);
 	}
 
 	public static boolean isExperience(FluidStack stack) {
@@ -41,11 +43,23 @@ public final class ExperienceFluidHelper {
 			|| CEI_FLOWING_EXPERIENCE.equals(id);
 	}
 
-	public static boolean isPrimaryExperience(FluidStack stack) {
+	public static boolean isOwnExperience(FluidStack stack) {
 		if (stack.isEmpty())
 			return false;
 		ResourceLocation id = BuiltInRegistries.FLUID.getKey(stack.getFluid());
 		return OWN_EXPERIENCE.equals(id) || OWN_FLOWING_EXPERIENCE.equals(id);
+	}
+
+	public static boolean isGeneratedExperience(FluidStack stack) {
+		return !stack.isEmpty() && stack.getFluid() == generatedExperienceFluid();
+	}
+
+	private static Fluid generatedExperienceFluid() {
+		if (ModList.get().isLoaded(CEI_MOD_ID)) {
+			return BuiltInRegistries.FLUID.getOptional(CEI_EXPERIENCE)
+				.orElseGet(CBFluids.EXPERIENCE::get);
+		}
+		return CBFluids.EXPERIENCE.get();
 	}
 
 	public static int fluidAmountToXp(int amount) {

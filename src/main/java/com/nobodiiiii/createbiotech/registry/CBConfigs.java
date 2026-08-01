@@ -62,6 +62,7 @@ public class CBConfigs {
 	public static class Client {
 		public final ModConfigSpec.BooleanValue enableShulkerTeleporterCameraOffset;
 		public final ModConfigSpec.BooleanValue enableShulkerTeleporterPlayerClipping;
+		public final ModConfigSpec.BooleanValue renderExperienceAsFluid;
 		public final ClientCreeperBlastChamber creeperBlastChamber;
 		public final ClientUniversalJoint universalJoint;
 		public final BeltParticles beltParticles;
@@ -69,6 +70,9 @@ public class CBConfigs {
 		Client(ModConfigSpec.Builder builder) {
 			enableShulkerTeleporterCameraOffset = builder.define("enableShulkerTeleporterCameraOffset", true);
 			enableShulkerTeleporterPlayerClipping = builder.define("enableShulkerTeleporterPlayerClipping", true);
+			renderExperienceAsFluid = builder
+				.comment("Render experience in Create fluid tanks as a conventional fluid instead of experience orbs.")
+				.define("renderExperienceAsFluid", false);
 			creeperBlastChamber = new ClientCreeperBlastChamber(builder);
 			universalJoint = new ClientUniversalJoint(builder);
 			beltParticles = new BeltParticles(builder);

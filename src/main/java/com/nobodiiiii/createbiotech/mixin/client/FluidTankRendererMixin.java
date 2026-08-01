@@ -7,6 +7,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.logging.LogUtils;
 import com.nobodiiiii.createbiotech.content.experience.ExperienceFluidHelper;
 import com.nobodiiiii.createbiotech.content.experience.FluidTankExperienceOrbRenderer;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.content.fluids.tank.FluidTankBlockEntity;
 import com.simibubi.create.content.fluids.tank.FluidTankRenderer;
 
@@ -37,7 +38,9 @@ public abstract class FluidTankRendererMixin {
 		float xMin, float yMin, float zMin, float xMax, float yMax, float zMax, MultiBufferSource buffer,
 		PoseStack poseStack, int packedLight, boolean renderBottom, boolean invertGases, Operation<Void> original,
 		@Local(argsOnly = true) FluidTankBlockEntity be, @Local(argsOnly = true) float partialTicks) {
-		if (fluidStackObject instanceof FluidStack fluidStack && ExperienceFluidHelper.isExperience(fluidStack)) {
+		if (!CBConfigs.CLIENT.renderExperienceAsFluid.get()
+			&& fluidStackObject instanceof FluidStack fluidStack
+			&& ExperienceFluidHelper.isExperience(fluidStack)) {
 			try {
 				if (FluidTankExperienceOrbRenderer.render(be, fluidStack, partialTicks, poseStack, buffer, packedLight,
 					xMin, yMin, zMin, xMax, yMax, zMax))

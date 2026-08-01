@@ -4,7 +4,6 @@ import java.util.List;
 
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
 import net.minecraft.world.entity.MobSpawnType;
@@ -16,8 +15,8 @@ import net.neoforged.neoforge.event.entity.living.MobSpawnEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
 /**
- * Restricts natural spawning on Frog Stomach Secretion to slimes and gives those slimes the fixed
- * 50% placement probability of a swamp surface spawn under a full moon.
+ * Restricts natural spawning on Frog Stomach Secretion in every dimension to slimes and gives
+ * those slimes the fixed 50% placement probability of a swamp surface spawn under a full moon.
  */
 public final class FrogStomachSlimeSpawning {
 
@@ -33,9 +32,7 @@ public final class FrogStomachSlimeSpawning {
 	}
 
 	private static void onPotentialSpawns(LevelEvent.PotentialSpawns event) {
-		if (!(event.getLevel() instanceof ServerLevel level)
-			|| !level.dimension().equals(FrogStomachDimensions.FROG_STOMACH)
-			|| !isStomachSpawnSurface(level.getBlockState(event.getPos().below())))
+		if (!isSecretionSpawnSurface(event.getLevel().getBlockState(event.getPos().below())))
 			return;
 
 		for (MobSpawnSettings.SpawnerData spawn : List.copyOf(event.getSpawnerDataList()))
@@ -46,8 +43,7 @@ public final class FrogStomachSlimeSpawning {
 
 	private static void onSpawnPlacementCheck(MobSpawnEvent.SpawnPlacementCheck event) {
 		if (event.getSpawnType() != MobSpawnType.NATURAL
-			|| !event.getLevel().getLevel().dimension().equals(FrogStomachDimensions.FROG_STOMACH)
-			|| !isStomachSpawnSurface(event.getLevel().getBlockState(event.getPos().below())))
+			|| !isSecretionSpawnSurface(event.getLevel().getBlockState(event.getPos().below())))
 			return;
 
 		if (event.getEntityType() != EntityType.SLIME) {
@@ -59,7 +55,7 @@ public final class FrogStomachSlimeSpawning {
 			: MobSpawnEvent.SpawnPlacementCheck.Result.FAIL);
 	}
 
-	private static boolean isStomachSpawnSurface(BlockState state) {
+	private static boolean isSecretionSpawnSurface(BlockState state) {
 		return state.is(CBBlocks.FROG_STOMACH_SECRETION.get());
 	}
 }

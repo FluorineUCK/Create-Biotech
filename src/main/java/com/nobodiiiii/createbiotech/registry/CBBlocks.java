@@ -48,11 +48,12 @@ import com.nobodiiiii.createbiotech.content.creeperblastchamber.ExplosionProofCa
 import com.simibubi.create.content.decoration.encasing.CasingBlock;
 import com.simibubi.create.content.decoration.palettes.ConnectedGlassBlock;
 
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.block.SoundType;
-import net.minecraft.world.item.DyeColor;
+import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.material.MapColor;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -328,9 +329,11 @@ public class CBBlocks {
 				.sound(SoundType.SLIME_BLOCK)));
 
 	// Slime-like secretion that absorbs slime experience and spreads across supported surfaces.
+	// Honey's inset collision shape is not a valid ON_GROUND spawn surface, so permit slimes explicitly.
 	public static final DeferredHolder<Block, FrogStomachSecretionBlock> FROG_STOMACH_SECRETION =
 		BLOCKS.register("frog_stomach_secretion",
-			() -> new FrogStomachSecretionBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)));
+			() -> new FrogStomachSecretionBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)
+				.isValidSpawn((state, level, pos, entityType) -> entityType == EntityType.SLIME)));
 
 	// Indestructible return portal inside every Frog Stomach room; placed with the room, never obtainable.
 	public static final DeferredHolder<Block, FrogDigestiveTractBlock> FROG_DIGESTIVE_TRACT =

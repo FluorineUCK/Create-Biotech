@@ -28,7 +28,7 @@ public class ExperienceOpenPipeEffectHandler implements OpenPipeEffectHandler {
 	public void apply(Level level, AABB area, FluidStack fluid) {
 		if (!(level instanceof ServerLevel serverLevel))
 			return;
-		if (!ExperienceFluidHelper.isPrimaryExperience(fluid))
+		if (!ExperienceFluidHelper.isOwnExperience(fluid))
 			return;
 
 		int xp = ExperienceFluidHelper.fluidAmountToXp(fluid.getAmount());
