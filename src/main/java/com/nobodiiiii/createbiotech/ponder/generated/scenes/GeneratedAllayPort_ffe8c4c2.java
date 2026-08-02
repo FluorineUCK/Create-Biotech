@@ -2,6 +2,7 @@
 // 由思索者自动生成 — 请勿手动修改；下次导出时会被覆盖。
 package com.nobodiiiii.createbiotech.ponder.generated.scenes;
 
+import com.nobodiiiii.createbiotech.foundation.ponder.PonderPlayerSupport;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderAttribution;
 import com.nobodiiiii.createbiotech.ponder.generated.GeneratedPonderSupport;
 import com.simibubi.create.infrastructure.ponder.AllCreatePonderTags;
@@ -103,7 +104,7 @@ public final class GeneratedAllayPort_ffe8c4c2 {
         scene.idle(20);
         GeneratedPonderSupport.showExtraStructure(scene, context, ResourceLocation.fromNamespaceAndPath("create_biotech", "ponder/generated/ponderer/allay_port_sender.nbt"), new BlockPos(6, 1, 7), 0, false, false, false, "simultaneous", 20, 1, false, null, "north");
         GeneratedPonderSupport.setBlock(scene, context, "create_biotech:allay_port", Map.ofEntries(Map.entry("facing", "north")), new BlockPos(7, 2, 7), null, "{AcceptsPackages:1b,AddressFilter:\"\",CarrierInventory:{Items:[],Size:1},Inventory:{Items:[],Size:18},ReturnMode:\"always_return\"}", false, false, "simultaneous", 20, 1, false, null, "north");
-        GeneratedPonderSupport.createEntity(scene, context, "minecraft:skeleton", new Vec3(1.5, 1.0, 1.5), null, 180.0f, 0.0f, "{AbsorptionAmount:0.0f,ArmorDropChances:[0.085f,0.085f,0.085f,0.085f],ArmorItems:[{},{},{},{}],Brain:{memories:{}},CanPickUpLoot:0b,FallFlying:0b,HandDropChances:[0.085f,0.085f],HandItems:[{count:1,id:\"minecraft:bow\"},{}],Health:20.0f,HurtByTimestamp:0,Invulnerable:0b,LeftHanded:0b,NeoForgeData:{create_biotech.previous_liquid_living_slime_vertical_speed:-0.078375d,create_biotech.was_touching_liquid_living_slime:0b},PersistenceRequired:0b,StrayConversionTime:-1,attributes:[{base:0.0d,id:\"minecraft:generic.oxygen_bonus\"},{base:0.25d,id:\"minecraft:generic.movement_speed\"}]}", null, "simultaneous", null, "down");
+        PonderPlayerSupport.addPlayer(scene, new Vec3(1.5, 1.0, 1.5), 180f);
         scene.idle(20);
         scene.addKeyframe();
         GeneratedPonderSupport.showText(scene, "悦灵快递员可以指定玩家为运输目标", new Vec3(7.0, 2.5, 7.5), 120, null, true);

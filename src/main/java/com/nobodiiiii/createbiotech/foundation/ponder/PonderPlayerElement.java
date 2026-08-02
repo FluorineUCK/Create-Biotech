@@ -6,10 +6,8 @@ import javax.annotation.Nullable;
 
 import com.mojang.authlib.GameProfile;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 
 import net.createmod.catnip.levelWrappers.WrappedClientLevel;
-import net.createmod.catnip.math.AngleHelper;
 import net.createmod.ponder.api.level.PonderLevel;
 import net.createmod.ponder.foundation.PonderScene;
 import net.createmod.ponder.foundation.element.AnimatedSceneElementBase;
@@ -146,9 +144,6 @@ public class PonderPlayerElement extends AnimatedSceneElementBase {
 		poseStack.translate(location.x, location.y, location.z);
 		poseStack.translate(Mth.lerp(pt, puppet.xo, puppet.getX()), Mth.lerp(pt, puppet.yo, puppet.getY()),
 			Mth.lerp(pt, puppet.zo, puppet.getZ()));
-
-		float angle = AngleHelper.angleLerp(pt, puppet.yRotO, puppet.getYRot());
-		poseStack.mulPose(Axis.YP.rotationDegrees(angle));
 
 		dispatcher.render(puppet, 0, 0, 0, 0, pt, poseStack, buffer, lightCoordsFromFade(fade));
 		poseStack.popPose();

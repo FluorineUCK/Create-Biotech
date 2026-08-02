@@ -32,7 +32,11 @@ public final class PonderPlayerSupport {
 	}
 
 	public static ElementLink<PonderPlayerElement> addPlayer(SceneBuilder scene, Vec3 location) {
-		return addPlayer(scene, location, 180f, 180f, 0f, null);
+		return addPlayer(scene, location, 180f);
+	}
+
+	public static ElementLink<PonderPlayerElement> addPlayer(SceneBuilder scene, Vec3 location, float yaw) {
+		return addPlayer(scene, location, yaw, yaw, 0f, null);
 	}
 
 	public static void removePlayer(SceneBuilder scene, ElementLink<PonderPlayerElement> link, int fadeOutTicks) {
