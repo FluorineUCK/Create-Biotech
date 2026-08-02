@@ -53,6 +53,9 @@ public class AutomaticFishReleaseMachineRenderer
 	static final float FISH_IN_PLANE_ROTATION = -12.25f;
 	static final float FISH_TAIL_OFFSET = 1.0f / 16.0f;
 	private static final float FISH_LENGTH_CENTRE = 6.5f / 16.0f;
+	private static final float FISH_MODEL_Y_OFFSET = -1.501f;
+	private static final float FISH_HEAD_Y = 20.0f / 16.0f;
+	private static final float FISH_HEAD_Z = -1.5f / 16.0f;
 	private static final float SWIM_TAIL_AMPLITUDE = 0.4f;
 	private static final float SWIM_TAIL_SPEED = 0.8f;
 	static final float CARDINAL_BLADE_CLAMP_RADIUS = 2.125f;
@@ -101,11 +104,13 @@ public class AutomaticFishReleaseMachineRenderer
 			float gapAngle = FIRST_GAP_ANGLE + fishIndex * SLOT_ANGLE;
 			Vector3f fishOffset = getFishOffset(rotationAxis, wheelAngle, gapAngle);
 			boolean inWater = isFishInWater(blockEntity, rotationAxis, fishOffset);
+			boolean reverseDirection = renderState.rotationDirection < 0;
 			if (renderState.initialized && !renderState.swimming[fishIndex] && inWater
 				&& shouldSpawnMeritText(renderState, speed))
-				renderState.meritTexts.add(new FloatingMeritText(new Vector3f(fishOffset), renderTime));
+				renderState.meritTexts.add(new FloatingMeritText(
+					getFishHeadOffset(rotationAxis, wheelAngle, gapAngle, reverseDirection), renderTime));
 			renderState.swimming[fishIndex] = inWater;
-			renderFishInGap(poseStack, buffer, light, overlay, gapAngle, renderState.rotationDirection < 0, inWater,
+			renderFishInGap(poseStack, buffer, light, overlay, gapAngle, reverseDirection, inWater,
 				animationTime + fishIndex * 1.5f);
 		}
 		renderState.initialized = true;
@@ -135,7 +140,7 @@ public class AutomaticFishReleaseMachineRenderer
 			poseStack.mulPose(Axis.YP.rotationDegrees(180));
 			poseStack.translate(0, 0, -FISH_LENGTH_CENTRE);
 		}
-		poseStack.translate(0, -1.501f, 0);
+		poseStack.translate(0, FISH_MODEL_Y_OFFSET, 0);
 
 		fishBodyBack.yRot =
 			inWater ? -SWIM_TAIL_AMPLITUDE * Mth.sin(SWIM_TAIL_SPEED * animationTime) : 0;
@@ -154,6 +159,31 @@ public class AutomaticFishReleaseMachineRenderer
 		}
 		}
 		return fishOffset;
+	}
+
+	private static Vector3f getFishHeadOffset(Direction.Axis rotationAxis, float wheelAngle, float gapAngle,
+		boolean reverseDirection) {
+		// Mirror the fish render transforms from the vanilla salmon head cube centre.
+		Vector3f headOffset = new Vector3f(0, FISH_HEAD_Y + FISH_MODEL_Y_OFFSET, FISH_HEAD_Z);
+		if (reverseDirection)
+			headOffset.sub(0, 0, FISH_LENGTH_CENTRE)
+				.rotateY(Mth.PI)
+				.add(0, 0, FISH_LENGTH_CENTRE);
+
+		headOffset.mul(-FISH_SCALE, -FISH_SCALE, FISH_SCALE)
+			.add(0, 0, FISH_TAIL_OFFSET)
+			.rotateZ(-Mth.HALF_PI)
+			.rotateY(Mth.HALF_PI)
+			.rotateY((float) Math.toRadians(FISH_IN_PLANE_ROTATION))
+			.add(0, 0, -FISH_RING_RADIUS)
+			.rotateY(wheelAngle + (float) Math.toRadians(gapAngle));
+		switch (rotationAxis) {
+		case X -> headOffset.rotateZ(-Mth.HALF_PI);
+		case Z -> headOffset.rotateX(Mth.HALF_PI);
+		default -> {
+		}
+		}
+		return headOffset;
 	}
 
 	private static boolean isFishInWater(AutomaticFishReleaseMachineBlockEntity blockEntity,
@@ -231,7 +261,7 @@ public class AutomaticFishReleaseMachineRenderer
 			poseStack.pushPose();
 			poseStack.translate(
 				0.5f + floatingText.offset.x,
-				0.75f + floatingText.offset.y + progress * 0.75f,
+				0.5f + floatingText.offset.y + progress * 0.75f,
 				0.5f + floatingText.offset.z);
 			poseStack.mulPose(minecraft.getEntityRenderDispatcher()
 				.cameraOrientation());

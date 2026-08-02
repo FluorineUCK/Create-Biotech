@@ -105,8 +105,12 @@ public enum CBFeature {
 		};
 	}
 
+	public static @Nullable CBFeature bySerializedName(String name) {
+		return BY_NAME.get(name);
+	}
+
 	private static DataResult<CBFeature> decode(String name) {
-		CBFeature feature = BY_NAME.get(name);
+		CBFeature feature = bySerializedName(name);
 		return feature == null
 			? DataResult.error(() -> "Unknown Create: Biotech feature: " + name.toLowerCase(Locale.ROOT))
 			: DataResult.success(feature);
