@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBFluids;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.content.fluids.FluidPropagator;
 import com.simibubi.create.content.fluids.FluidTransportBehaviour;
 import com.simibubi.create.content.fluids.pump.PumpBlockEntity;
@@ -22,10 +23,10 @@ import net.neoforged.neoforge.fluids.FluidStack;
 import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 
 public class NetherPortalFluidBlockEntity extends BlockEntity {
-	public static final int CAPACITY = 250;
+	public static final int DEFAULT_CAPACITY = 250;
 
 	private final PortalFluidHandler fluidHandler = new PortalFluidHandler();
-	private int remainingFluid = CAPACITY;
+	private int remainingFluid = capacity();
 
 	public NetherPortalFluidBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.NETHER_PORTAL_FLUID.get(), pos, state);
@@ -41,8 +42,8 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 	protected void loadAdditional(CompoundTag tag, HolderLookup.Provider registries) {
 		super.loadAdditional(tag, registries);
 		remainingFluid = tag.contains("RemainingFluid", Tag.TAG_INT)
-			? Mth.clamp(tag.getInt("RemainingFluid"), 0, CAPACITY)
-			: CAPACITY;
+			? Mth.clamp(tag.getInt("RemainingFluid"), 0, capacity())
+			: capacity();
 	}
 
 	@Override
@@ -53,17 +54,20 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 	}
 
 	public IFluidHandler getFluidCapability(@Nullable Direction side) {
-		return fluidHandler;
+		return CBConfigs.SERVER.teleportationFluid.enablePortalExtraction.get() ? fluidHandler : null;
 	}
 
 	private FluidStack drain(int requestedAmount, IFluidHandler.FluidAction action) {
-		int drainedAmount = Math.min(Math.max(requestedAmount, 0), remainingFluid);
+		if (!CBConfigs.SERVER.teleportationFluid.enablePortalExtraction.get())
+			return FluidStack.EMPTY;
+		int available = Math.min(remainingFluid, capacity());
+		int drainedAmount = Math.min(Math.max(requestedAmount, 0), available);
 		if (drainedAmount == 0)
 			return FluidStack.EMPTY;
 
 		FluidStack drained = new FluidStack(CBFluids.TELEPORTATION.get(), drainedAmount);
 		if (action.execute()) {
-			remainingFluid -= drainedAmount;
+			remainingFluid = available - drainedAmount;
 			setChanged();
 			destroyPortalIfEmpty();
 		}
@@ -71,7 +75,9 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 	}
 
 	private void destroyPortalIfEmpty() {
-		if (remainingFluid > 0 || level == null || level.isClientSide || isRemoved())
+		if (!CBConfigs.SERVER.teleportationFluid.enablePortalExtraction.get()
+			|| !CBConfigs.SERVER.teleportationFluid.destroyPortalBlockWhenDrained.get()
+			|| remainingFluid > 0 || level == null || level.isClientSide || isRemoved())
 			return;
 		if (level.getBlockState(worldPosition)
 			.is(Blocks.NETHER_PORTAL))
@@ -79,7 +85,8 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 	}
 
 	private void refreshAdjacentCreateFluidNetworks() {
-		if (remainingFluid <= 0 || level == null || level.isClientSide || isRemoved())
+		if (!CBConfigs.SERVER.teleportationFluid.enablePortalExtraction.get()
+			|| remainingFluid <= 0 || level == null || level.isClientSide || isRemoved())
 			return;
 
 		for (Direction direction : Direction.values()) {
@@ -97,6 +104,10 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 		}
 	}
 
+	private static int capacity() {
+		return CBConfigs.SERVER.teleportationFluid.fluidPerPortalBlock.get();
+	}
+
 	private class PortalFluidHandler implements IFluidHandler {
 		@Override
 		public int getTanks() {
@@ -105,14 +116,15 @@ public class NetherPortalFluidBlockEntity extends BlockEntity {
 
 		@Override
 		public FluidStack getFluidInTank(int tank) {
-			return tank == 0 && remainingFluid > 0
-				? new FluidStack(CBFluids.TELEPORTATION.get(), remainingFluid)
+			return CBConfigs.SERVER.teleportationFluid.enablePortalExtraction.get()
+				&& tank == 0 && remainingFluid > 0
+				? new FluidStack(CBFluids.TELEPORTATION.get(), Math.min(remainingFluid, capacity()))
 				: FluidStack.EMPTY;
 		}
 
 		@Override
 		public int getTankCapacity(int tank) {
-			return tank == 0 ? CAPACITY : 0;
+			return tank == 0 ? capacity() : 0;
 		}
 
 		@Override

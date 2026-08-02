@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.advancement.PlacedByPlayerAdvancementTracker;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.content.fluids.FluidPropagator;
@@ -44,7 +45,6 @@ import net.neoforged.neoforge.items.IItemHandler;
 
 public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	private static final double OPEN_INPUT_HALF_EXTENT = 0.75d;
-	private static final double NOZZLE_ATTRACTION_SIZE_AT_256_RPM = 33d;
 	private static final double NOZZLE_ATTRACTION_ACCELERATION_AT_256_RPM = 0.05d;
 	private static final double NOZZLE_ATTRACTION_MAX_SPEED_AT_256_RPM = 0.7d;
 	private static final double MIN_ATTRACTION_DISTANCE_SQR = 1.0E-4d;
@@ -146,12 +146,12 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	}
 
 	private boolean hasOpenExperienceSource(Direction input) {
-		if (level == null)
+		if (level == null || !canDrainOpenExperience())
 			return false;
 		BlockPos inputPos = worldPosition.relative(input);
 		if (FluidPropagator.getPipe(level, inputPos) != null)
 			return false;
-		if (hasExperienceItemEndpoint(input))
+		if (hasItemEndpoint(input))
 			return false;
 		if (FluidPropagator.hasFluidCapability(level, inputPos, input.getOpposite()))
 			return false;
@@ -166,6 +166,10 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	}
 
 	private boolean hasExperienceItemEndpoint(Direction input) {
+		return CBConfigs.SERVER.experiencePump.allowItemXpDrain.get() && hasItemEndpoint(input);
+	}
+
+	private boolean hasItemEndpoint(Direction input) {
 		if (level == null)
 			return false;
 		return level.getCapability(Capabilities.ItemHandler.BLOCK, worldPosition.relative(input),
@@ -173,6 +177,7 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	}
 
 	private FluidStack drainSpecialSource(int maxAmount, IFluidHandler.FluidAction action) {
+		maxAmount = limitTransferAmount(maxAmount);
 		if (maxAmount <= 0 || level == null)
 			return FluidStack.EMPTY;
 
@@ -187,7 +192,7 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	}
 
 	private void attractOpenInputExperienceOrbs(Direction input) {
-		if (!hasInputNozzle(input))
+		if (!CBConfigs.SERVER.experiencePump.allowOrbDrain.get() || !hasInputNozzle(input))
 			return;
 		Vec3 center = getEndpointCenter(input);
 		attractInputOrbs(center, cubeAround(center, OPEN_INPUT_HALF_EXTENT));
@@ -197,7 +202,8 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 		if (level == null || level.isClientSide)
 			return;
 		double speedScale = Math.abs(getSpeed()) / 256d;
-		double attractionHalfExtent = NOZZLE_ATTRACTION_SIZE_AT_256_RPM * speedScale / 2d;
+		double attractionHalfExtent = CBConfigs.SERVER.experiencePump.nozzleAttractionRangeAt256Rpm.get()
+			* speedScale;
 		if (attractionHalfExtent <= OPEN_INPUT_HALF_EXTENT)
 			return;
 
@@ -232,11 +238,13 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 		int remaining = maxAmount;
 		int absorbed = 0;
 
-		int orbXp = drainExperienceOrbs(absorbBox, remaining, action);
-		remaining -= orbXp;
-		absorbed += orbXp;
+		if (CBConfigs.SERVER.experiencePump.allowOrbDrain.get()) {
+			int orbXp = drainExperienceOrbs(absorbBox, remaining, action);
+			remaining -= orbXp;
+			absorbed += orbXp;
+		}
 
-		if (remaining <= 0)
+		if (remaining <= 0 || !CBConfigs.SERVER.experiencePump.allowPlayerXpDrain.get())
 			return absorbed;
 
 		List<Player> players = level.getEntitiesOfClass(Player.class, absorbBox,
@@ -337,7 +345,17 @@ public class ExperiencePumpBlockEntity extends PumpBlockEntity {
 	}
 
 	private int getFluidPumpRatePerTick() {
-		return Math.max(1, (int) (Math.abs(getSpeed()) / 2f));
+		return limitTransferAmount(Math.max(1, (int) (Math.abs(getSpeed()) / 2f)));
+	}
+
+	private static boolean canDrainOpenExperience() {
+		return CBConfigs.SERVER.experiencePump.allowOrbDrain.get()
+			|| CBConfigs.SERVER.experiencePump.allowPlayerXpDrain.get();
+	}
+
+	private static int limitTransferAmount(int requested) {
+		int maximum = CBConfigs.SERVER.experiencePump.maxTransferPerTick.get();
+		return maximum > 0 ? Math.min(requested, maximum) : requested;
 	}
 
 	private Vec3 getEndpointCenter(Direction side) {

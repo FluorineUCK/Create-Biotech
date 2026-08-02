@@ -1,6 +1,6 @@
 package com.yision.allay.logistics.courier;
 
-import com.yision.allay.config.AllConfigs;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
@@ -9,7 +9,7 @@ public final class AllayCourierDimensionRules {
 	private AllayCourierDimensionRules() {}
 
 	public static boolean allowCrossDimensionDelivery() {
-		return AllConfigs.server().allowCrossDimensionDelivery.get();
+		return CBConfigs.SERVER.allayCourier.allowCrossDimensionDelivery.get();
 	}
 
 	public static boolean canTarget(ServerLevel originLevel, ResourceKey<Level> targetDimension) {

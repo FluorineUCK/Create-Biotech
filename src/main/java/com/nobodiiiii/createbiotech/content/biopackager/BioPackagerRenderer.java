@@ -59,7 +59,7 @@ public class BioPackagerRenderer extends SmartBlockEntityRenderer<BioPackagerBlo
 
 	public static boolean isHatchOpen(boolean animationInward, int animationTicks) {
 		return animationTicks > (animationInward ? 1 : 5)
-			&& animationTicks < BioPackagerBlockEntity.CYCLE - (animationInward ? 5 : 1);
+			&& animationTicks < BioPackagerBlockEntity.getCycleTicks() - (animationInward ? 5 : 1);
 	}
 
 	public static void renderAnimated(BlockState blockState, Level level, ItemStack renderedBox, float trayOffset,

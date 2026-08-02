@@ -184,7 +184,7 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 
 	public boolean receivePackageAndScheduleCarrierReturnToPlayer(ItemStack box, UUID playerId) {
 		return returnQueue.receivePackageAndScheduleCarrierReturnToPlayer(
-			box, playerId, AllayPortReturnQueue.RETURN_LAUNCH_DELAY_TICKS);
+			box, playerId, AllayPortReturnQueue.returnLaunchDelayTicks());
 	}
 
 	public boolean tryQueueReturnCarrier(@Nullable ResourceKey<net.minecraft.world.level.Level> returnDimension,

@@ -6,6 +6,7 @@ import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CardboardBoxHandler;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.content.contraptions.AbstractContraptionEntity;
 import com.simibubi.create.content.contraptions.Contraption;
 
@@ -36,7 +37,11 @@ public class BioPackagerContraptionCaptureHandler {
 			return;
 		if (!(target instanceof Mob mob))
 			return;
+		if (!CBConfigs.SERVER.bioPackager.enableContraptionLethalCapture.get())
+			return;
 		if (mob.getHealth() > event.getNewDamage())
+			return;
+		if (!CBConfigs.SERVER.cardboardBox.lethalCaptureEnabled.get())
 			return;
 
 		AbstractContraptionEntity contraptionEntity =
@@ -48,11 +53,18 @@ public class BioPackagerContraptionCaptureHandler {
 			return;
 
 		boolean smallMob = CardboardBoxHandler.isSmallMobType(mob);
+		boolean largeBoxAllowed = CBConfigs.isEntityTypeAllowed(mob.getType(),
+			CBConfigs.SERVER.cardboardBox.largeBoxEntityListMode.get(),
+			CBConfigs.SERVER.cardboardBox.largeBoxEntityAllowlist.get(),
+			CBConfigs.SERVER.cardboardBox.largeBoxEntityDenylist.get());
+		if (!smallMob && !largeBoxAllowed)
+			return;
 		BlockPos freePackagerLocal = findFreePackager(contraption, contraptionEntity.getUUID());
 		if (freePackagerLocal == null)
 			return;
 
-		ItemStack emptyBox = BioPackagerContraptionTracker.consumeBoxFromContraption(contraptionEntity, smallMob);
+		ItemStack emptyBox = BioPackagerContraptionTracker.consumeBoxFromContraption(
+			contraptionEntity, smallMob, largeBoxAllowed);
 		if (emptyBox.isEmpty())
 			return;
 

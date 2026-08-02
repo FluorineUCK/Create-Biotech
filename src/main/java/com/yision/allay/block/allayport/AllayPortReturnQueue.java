@@ -1,6 +1,7 @@
 package com.yision.allay.block.allayport;
 
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.yision.allay.logistics.courier.AllayCourierTask;
 import com.yision.allay.logistics.courier.AllayCourierTaskManager;
 import net.minecraft.core.BlockPos;
@@ -23,9 +24,6 @@ import java.util.Deque;
 import java.util.UUID;
 
 final class AllayPortReturnQueue {
-
-	static final int RETURN_RETRY_TICKS = 100;
-	static final int RETURN_LAUNCH_DELAY_TICKS = 40;
 
 	private final AllayPortBlockEntity port;
 	private final AllayPortInventory inventory;
@@ -97,11 +95,10 @@ final class AllayPortReturnQueue {
 		if (!(port.getLevel() instanceof ServerLevel serverLevel) || returnDimension == null || returnPos == null) {
 			return false;
 		}
-		launchTask(serverLevel, AllayCourierTask.forCarrierReturn(
+		return launchTask(serverLevel, AllayCourierTask.forCarrierReturn(
 			UUID.randomUUID(), serverLevel, returnDimension, returnPos,
 			resolveSpaceId(serverLevel, returnDimension, returnPos),
 			port.getCourierSpawnPosition(), port.getCourierLaunchDirection()));
-		return true;
 	}
 
 	boolean receivePackageAndScheduleCarrierReturnToPlayer(ItemStack box, UUID playerId, int delayTicks) {
@@ -143,7 +140,7 @@ final class AllayPortReturnQueue {
 			ServerLevel serverLevel = port.getLevel() instanceof ServerLevel level ? level : null;
 			schedulePendingReturnCarrier(returnDimension, returnPos,
 				serverLevel == null ? null : resolveSpaceId(serverLevel, returnDimension, returnPos),
-				RETURN_LAUNCH_DELAY_TICKS);
+				returnLaunchDelayTicks());
 			return AllayPortBlockEntity.CourierReceiveResult.CARRIER_STORED;
 		}
 
@@ -155,13 +152,13 @@ final class AllayPortReturnQueue {
 	private void schedulePendingReturnCarrier(ResourceKey<Level> returnDimension, BlockPos returnPos,
 		@Nullable UUID returnSubLevelId, int delayTicks) {
 		pendingReturnCarriers.addLast(PendingReturnCarrier.toAllayPort(
-			returnDimension, returnPos, returnSubLevelId, Math.max(0, delayTicks), RETURN_RETRY_TICKS));
+			returnDimension, returnPos, returnSubLevelId, Math.max(0, delayTicks), returnRetryTicks()));
 		port.markPortContentsChanged();
 	}
 
 	private void schedulePendingReturnToPlayer(UUID playerId, int delayTicks) {
 		pendingReturnCarriers.addLast(PendingReturnCarrier.toPlayer(
-			playerId, Math.max(0, delayTicks), RETURN_RETRY_TICKS));
+			playerId, Math.max(0, delayTicks), returnRetryTicks()));
 		port.markPortContentsChanged();
 	}
 
@@ -177,9 +174,13 @@ final class AllayPortReturnQueue {
 		if (storedCarrier.isEmpty()) {
 			return false;
 		}
-		launchTask(serverLevel, AllayCourierTask.forCarrierReturn(
+		if (!launchTask(serverLevel, AllayCourierTask.forCarrierReturn(
 			UUID.randomUUID(), serverLevel, returnDimension, returnPos, returnSubLevelId,
-			port.getCourierSpawnPosition(), port.getCourierLaunchDirection()));
+			port.getCourierSpawnPosition(), port.getCourierLaunchDirection()))) {
+			inventory.returnCarrier(storedCarrier);
+			port.markPortContentsChanged();
+			return false;
+		}
 		port.markPortContentsChanged();
 		return true;
 	}
@@ -199,16 +200,31 @@ final class AllayPortReturnQueue {
 		if (storedCarrier.isEmpty()) {
 			return false;
 		}
-		launchTask(serverLevel, AllayCourierTask.forCarrierReturnToPlayer(
+		if (!launchTask(serverLevel, AllayCourierTask.forCarrierReturnToPlayer(
 			UUID.randomUUID(), serverLevel, player.getUUID(), player.serverLevel().dimension(),
-			port.getCourierSpawnPosition(), port.getCourierLaunchDirection()));
+			port.getCourierSpawnPosition(), port.getCourierLaunchDirection()))) {
+			inventory.returnCarrier(storedCarrier);
+			port.markPortContentsChanged();
+			return false;
+		}
 		port.markPortContentsChanged();
 		return true;
 	}
 
-	private void launchTask(ServerLevel serverLevel, AllayCourierTask task) {
-		AllayCourierTaskManager.addTask(serverLevel.getServer(), port.prepareCourierDeparture(task));
+	private boolean launchTask(ServerLevel serverLevel, AllayCourierTask task) {
+		if (!AllayCourierTaskManager.addTask(serverLevel.getServer(), port.prepareCourierDeparture(task))) {
+			return false;
+		}
 		port.flap(false);
+		return true;
+	}
+
+	static int returnRetryTicks() {
+		return CBConfigs.SERVER.allayCourier.returnRetryTicks.get();
+	}
+
+	static int returnLaunchDelayTicks() {
+		return CBConfigs.SERVER.allayCourier.returnLaunchDelayTicks.get();
 	}
 
 	private static @Nullable UUID resolveSpaceId(ServerLevel originLevel,
@@ -271,8 +287,9 @@ final class AllayPortReturnQueue {
 			for (int i = 0; i < list.size(); i++) {
 				CompoundTag entry = list.getCompound(i);
 				String type = entry.getString("Type");
-				int delay = entry.contains("DelayTicks") ? entry.getInt("DelayTicks") : 0;
-				int retry = entry.contains("RetryTicks") ? entry.getInt("RetryTicks") : RETURN_RETRY_TICKS;
+				int delay = Math.max(0, entry.contains("DelayTicks") ? entry.getInt("DelayTicks") : 0);
+				int retry = Math.max(1,
+					entry.contains("RetryTicks") ? entry.getInt("RetryTicks") : returnRetryTicks());
 				if ("player".equals(type) && entry.hasUUID("PlayerId")) {
 					pendingReturnCarriers.addLast(PendingReturnCarrier.toPlayer(entry.getUUID("PlayerId"), delay, retry));
 				} else if ("allay_port".equals(type)) {

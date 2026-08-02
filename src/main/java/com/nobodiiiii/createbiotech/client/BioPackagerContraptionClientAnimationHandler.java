@@ -54,13 +54,13 @@ public final class BioPackagerContraptionClientAnimationHandler {
 			AnimationState state = entry.getValue();
 			long elapsed = level.getGameTime() - state.startTick;
 			if (level.getEntity(key.entityId) == null) {
-				if (elapsed < BioPackagerBlockEntity.CYCLE)
+				if (elapsed < BioPackagerBlockEntity.getCycleTicks())
 					continue;
 				iterator.remove();
 				continue;
 			}
 
-			if (elapsed >= BioPackagerBlockEntity.CYCLE) {
+			if (elapsed >= BioPackagerBlockEntity.getCycleTicks()) {
 				resetAnimation(level, key);
 				iterator.remove();
 				continue;
@@ -75,7 +75,8 @@ public final class BioPackagerContraptionClientAnimationHandler {
 		if (packager == null)
 			return;
 
-		int remainingTicks = (int) Math.max(0, BioPackagerBlockEntity.CYCLE - (level.getGameTime() - state.startTick));
+		int remainingTicks = (int) Math.max(0,
+			BioPackagerBlockEntity.getCycleTicks() - (level.getGameTime() - state.startTick));
 		packager.animationInward = state.animationInward;
 		packager.animationTicks = remainingTicks;
 		packager.heldBox = state.heldBox.copy();

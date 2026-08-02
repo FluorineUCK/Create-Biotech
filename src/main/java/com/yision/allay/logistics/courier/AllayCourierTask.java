@@ -29,10 +29,12 @@ import org.jetbrains.annotations.Nullable;
 import java.util.Objects;
 import java.util.UUID;
 
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
+
 public final class AllayCourierTask {
 
-	public static final int TELEPORT_AFTER_TICKS = 300;
-	public static final int FORCE_ARRIVAL_TICKS = 600;
+	public static final int DEFAULT_TELEPORT_AFTER_TICKS = 300;
+	public static final int DEFAULT_FORCE_ARRIVAL_TICKS = 600;
 
 	private static final int TAKEOFF_PHASE_TICKS = 20;
 	private static final int LOST_TARGET_RESCAN_INTERVAL_TICKS = 20;
@@ -360,7 +362,7 @@ public final class AllayCourierTask {
 			return;
 		}
 
-		if (deliveryElapsedTicks > FORCE_ARRIVAL_TICKS && !isGuidedPortArrival()) {
+		if (deliveryElapsedTicks > forceArrivalTicks() && !isGuidedPortArrival()) {
 			if (hasActiveEntity && teleportToForcedArrivalTarget(server)) {
 				return;
 			}
@@ -368,7 +370,7 @@ public final class AllayCourierTask {
 			return;
 		}
 
-		if (!teleportedNearTarget && deliveryElapsedTicks >= TELEPORT_AFTER_TICKS) {
+		if (!teleportedNearTarget && deliveryElapsedTicks >= teleportAfterTicks()) {
 			teleportNearTarget(server);
 			return;
 		}
@@ -477,7 +479,7 @@ public final class AllayCourierTask {
 			lastKnownTargetPosition = position;
 		}
 
-		if (lostTargetTicks > FORCE_ARRIVAL_TICKS) {
+		if (lostTargetTicks > forceArrivalTicks()) {
 			if (recoverBeforePlacement(server, currentLevel)) {
 				return;
 			}
@@ -486,7 +488,7 @@ public final class AllayCourierTask {
 		}
 
 		if (!lastKnownTargetDimension.equals(currentDimension)) {
-			if (lostTargetTicks >= TELEPORT_AFTER_TICKS) {
+			if (lostTargetTicks >= teleportAfterTicks()) {
 				teleportNearLastKnownTarget(server, currentLevel);
 			} else {
 				tickCrossDimensionExit(entity, hasActiveEntity);
@@ -1301,10 +1303,10 @@ public final class AllayCourierTask {
 			return 0;
 		}
 
-		int forceRemaining = Math.max(0, FORCE_ARRIVAL_TICKS - deliveryElapsedTicks);
+		int forceRemaining = Math.max(0, forceArrivalTicks() - deliveryElapsedTicks);
 		Vec3 previewPosition = previewNearTargetPosition(target.allayPort, target.player);
 		int afterRelocation = estimateTravelTicksFrom(previewPosition, target.allayPort, target.player, false);
-		int untilRelocation = Math.max(0, TELEPORT_AFTER_TICKS - deliveryElapsedTicks);
+		int untilRelocation = Math.max(0, teleportAfterTicks() - deliveryElapsedTicks);
 
 		if (!teleportedNearTarget && !target.level.dimension().equals(currentDimension)) {
 			return Math.min(forceRemaining, untilRelocation + afterRelocation);
@@ -1494,6 +1496,18 @@ public final class AllayCourierTask {
 			return null;
 		}
 		return sourcePlayerId != null ? sourcePlayerId : targetPlayerId;
+	}
+
+	public @Nullable UUID sourcePlayerId() {
+		return sourcePlayerId;
+	}
+
+	private static int teleportAfterTicks() {
+		return CBConfigs.SERVER.allayCourier.teleportAfterTicks.get();
+	}
+
+	private static int forceArrivalTicks() {
+		return Math.max(teleportAfterTicks(), CBConfigs.SERVER.allayCourier.forceArrivalTicks.get());
 	}
 
 	public boolean hudIncoming() {

@@ -24,10 +24,11 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 
 public class BioPackagerBlockEntity extends SmartBlockEntity {
 
-	public static final int CYCLE = 20;
+	public static final int DEFAULT_CYCLE_TICKS = 20;
 
 	public ItemStack heldBox;
 	public ItemStack previouslyUnwrapped;
@@ -66,7 +67,7 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 		}
 
 		if (level.isClientSide) {
-			if (animationTicks == CYCLE - (animationInward ? 5 : 1))
+			if (animationTicks == getCycleTicks() - (animationInward ? 5 : 1))
 				level.playLocalSound(worldPosition, SoundEvents.UI_TOAST_IN, SoundSource.BLOCKS, 0.5f, 1f, true);
 			if (animationTicks == (animationInward ? 1 : 5))
 				level.playLocalSound(worldPosition, SoundEvents.IRON_TRAPDOOR_CLOSE, SoundSource.BLOCKS, 0.25f, 0.75f,
@@ -80,7 +81,7 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 				if (!animationInward) {
 					releaseCapturedEntityForReturn();
 					animationInward = true;
-					animationTicks = CYCLE;
+					animationTicks = getCycleTicks();
 					notifyUpdate();
 				} else {
 					depositReturnedBox();
@@ -119,7 +120,7 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 		heldBox = box.copy();
 		previouslyUnwrapped = ItemStack.EMPTY;
 		animationInward = false;
-		animationTicks = CYCLE;
+		animationTicks = getCycleTicks();
 		chainReturnAnimation = true;
 		notifyUpdate();
 		return true;
@@ -225,7 +226,7 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 		super.read(compound, registries, clientPacket);
 		redstonePowered = compound.getBoolean("Active");
 		animationInward = compound.getBoolean("AnimationInward");
-		animationTicks = compound.getInt("AnimationTicks");
+		animationTicks = Mth.clamp(compound.getInt("AnimationTicks"), 0, getCycleTicks());
 		chainReturnAnimation = compound.getBoolean("ChainReturnAnimation");
 		heldBox = ItemStack.parseOptional(registries, compound.getCompound("HeldBox"));
 		previouslyUnwrapped = ItemStack.parseOptional(registries, compound.getCompound("InsertedBox"));
@@ -248,7 +249,7 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 
 	public static float calculateTrayOffset(boolean animationInward, float remainingTicks) {
 		float tickCycle = animationInward ? remainingTicks : remainingTicks - 5;
-		float progress = Mth.clamp(tickCycle / (CYCLE - 5) * 2 - 1, -1, 1);
+		float progress = Mth.clamp(tickCycle / (getCycleTicks() - 5) * 2 - 1, -1, 1);
 		progress = 1 - progress * progress;
 		return progress * progress;
 	}
@@ -260,8 +261,12 @@ public class BioPackagerBlockEntity extends SmartBlockEntity {
 	public static ItemStack getRenderedBox(boolean animationInward, int animationTicks, ItemStack heldBox,
 		ItemStack previouslyUnwrapped) {
 		if (animationInward)
-			return animationTicks <= CYCLE / 2 ? ItemStack.EMPTY
+			return animationTicks <= getCycleTicks() / 2 ? ItemStack.EMPTY
 				: previouslyUnwrapped.isEmpty() ? heldBox : previouslyUnwrapped;
-		return animationTicks >= CYCLE / 2 ? ItemStack.EMPTY : heldBox;
+		return animationTicks >= getCycleTicks() / 2 ? ItemStack.EMPTY : heldBox;
+	}
+
+	public static int getCycleTicks() {
+		return CBConfigs.SERVER.bioPackager.cycleTicks.get();
 	}
 }

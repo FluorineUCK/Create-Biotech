@@ -1,5 +1,6 @@
 package com.yision.allay.logistics.courier;
 
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.yision.allay.entity.courier.AllayCourierEntity;
 import com.yision.allay.logistics.courier.hud.AllayCourierHudSync;
 import net.minecraft.core.BlockPos;
@@ -94,15 +95,28 @@ public final class AllayCourierTaskManager {
 		AllayCourierHudSync.sync(server, tasks);
 	}
 
-	public static void addTask(MinecraftServer server, AllayCourierTask task) {
+	public static boolean addTask(MinecraftServer server, AllayCourierTask task) {
 		if (savedData == null) {
 			savedData = AllayCourierTaskSavedData.getOrCreate(server);
+		}
+		List<AllayCourierTask> tasks = savedData.getTasks();
+		int maximum = CBConfigs.SERVER.allayCourier.maxActiveTasks.get();
+		if (maximum > 0 && tasks.stream().filter(existing -> !existing.isRemoved()).count() >= maximum) {
+			return false;
+		}
+		UUID owner = task.sourcePlayerId();
+		int perPlayerMaximum = CBConfigs.SERVER.allayCourier.maxActiveTasksPerPlayer.get();
+		if (owner != null && perPlayerMaximum > 0
+			&& tasks.stream().filter(existing -> !existing.isRemoved())
+				.filter(existing -> owner.equals(existing.sourcePlayerId())).count() >= perPlayerMaximum) {
+			return false;
 		}
 		savedData.addTask(task);
 		ServerLevel level = server.getLevel(task.currentDimension());
 		if (level != null && canShowEntity(level, task.position())) {
 			spawnCourier(level, task);
 		}
+		return true;
 	}
 
 	public static boolean isCourierValidationReady() {

@@ -46,7 +46,10 @@ final class AllayPortDispatchAccess {
 			restoreFailedDispatch(candidate.packageSlot(), extractedPackage, extractedCarrier);
 			return false;
 		}
-		AllayCourierTaskManager.addTask(serverLevel.getServer(), candidate.task());
+		if (!AllayCourierTaskManager.addTask(serverLevel.getServer(), candidate.task())) {
+			restoreFailedDispatch(candidate.packageSlot(), extractedPackage, extractedCarrier);
+			return false;
+		}
 
 		port.flap(false);
 		port.markPortContentsChanged();

@@ -36,8 +36,6 @@ import net.neoforged.neoforge.items.ItemHandlerHelper;
  */
 public final class BioPackagerContraptionTracker {
 
-	public static final int CYCLE = BioPackagerBlockEntity.CYCLE;
-
 	private static final Map<UUID, ContraptionEntry> ACTIVE = new ConcurrentHashMap<>();
 
 	private BioPackagerContraptionTracker() {}
@@ -52,7 +50,7 @@ public final class BioPackagerContraptionTracker {
 		UUID id = contraptionEntity.getUUID();
 		ContraptionEntry entry = ACTIVE.computeIfAbsent(id, k -> new ContraptionEntry(contraptionEntity));
 		entry.entityRef = new WeakReference<>(contraptionEntity);
-		entry.states.put(localPos, new PackagingState(filledBox.copy(), CYCLE));
+		entry.states.put(localPos, new PackagingState(filledBox.copy(), BioPackagerBlockEntity.getCycleTicks()));
 		CBPackets.sendToTrackingEntity(
 			new BioPackagerContraptionAnimationPacket(contraptionEntity.getId(), localPos, filledBox, ItemStack.EMPTY,
 				true),
@@ -142,7 +140,7 @@ public final class BioPackagerContraptionTracker {
 	 * Returns the consumed stack (with count=1) or empty if none found / unsuitable.
 	 */
 	public static ItemStack consumeBoxFromContraption(AbstractContraptionEntity contraptionEntity,
-		boolean preferSmall) {
+		boolean preferSmall, boolean allowLargeBox) {
 		Contraption contraption = contraptionEntity.getContraption();
 		if (contraption == null)
 			return ItemStack.EMPTY;
@@ -153,9 +151,9 @@ public final class BioPackagerContraptionTracker {
 			ItemStack small = findAndExtract(allItems, true);
 			if (!small.isEmpty())
 				return small;
-			return findAndExtract(allItems, false);
+			return allowLargeBox ? findAndExtract(allItems, false) : ItemStack.EMPTY;
 		}
-		return findAndExtract(allItems, false);
+		return allowLargeBox ? findAndExtract(allItems, false) : ItemStack.EMPTY;
 	}
 
 	private static ItemStack findAndExtract(IItemHandler inv, boolean smallBox) {

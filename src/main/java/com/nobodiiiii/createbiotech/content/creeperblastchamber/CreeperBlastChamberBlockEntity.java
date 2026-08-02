@@ -1391,7 +1391,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			if (pending.ticksRemaining > 0)
 				pending.ticksRemaining--;
 
-			if (!pending.transitioned && pending.ticksRemaining <= BioPackagerBlockEntity.CYCLE) {
+			if (!pending.transitioned && pending.ticksRemaining <= BioPackagerBlockEntity.getCycleTicks()) {
 				if (!completePendingUnpack(pending)) {
 					dropBox(pending);
 					clearPackagerAnimationState(pending.packagerPos);
@@ -1406,7 +1406,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 				packager.heldBox = emptyBox;
 				packager.previouslyUnwrapped = ItemStack.EMPTY;
 				packager.animationInward = true;
-				packager.animationTicks = BioPackagerBlockEntity.CYCLE;
+				packager.animationTicks = BioPackagerBlockEntity.getCycleTicks();
 				packager.notifyUpdate();
 				packager.setChanged();
 			}
@@ -1470,7 +1470,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			if (pending.ticksRemaining > 0)
 				pending.ticksRemaining--;
 
-			if (!pending.transitioned && pending.ticksRemaining <= BioPackagerBlockEntity.CYCLE) {
+			if (!pending.transitioned && pending.ticksRemaining <= BioPackagerBlockEntity.getCycleTicks()) {
 				pending.transitioned = true;
 				Creeper creeper = findMarkedCreeperByUuid(pending.creeperUuid, pending.packagerPos);
 				if (creeper != null) {
@@ -1481,7 +1481,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 				packager.heldBox = pending.boxStack.copy();
 				packager.previouslyUnwrapped = ItemStack.EMPTY;
 				packager.animationInward = true;
-				packager.animationTicks = BioPackagerBlockEntity.CYCLE;
+				packager.animationTicks = BioPackagerBlockEntity.getCycleTicks();
 				packager.notifyUpdate();
 				packager.setChanged();
 			}
@@ -1941,13 +1941,13 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		packager.heldBox = boxStack.copy();
 		packager.previouslyUnwrapped = ItemStack.EMPTY;
 		packager.animationInward = false;
-		packager.animationTicks = BioPackagerBlockEntity.CYCLE;
+		packager.animationTicks = BioPackagerBlockEntity.getCycleTicks();
 		packager.chainReturnAnimation = false;
 		packager.notifyUpdate();
 		packager.setChanged();
 
 		pendingUnpacks.add(new PendingUnpack(packagerPos, boxStack.copy(),
-			BioPackagerBlockEntity.CYCLE * 2, false, returnBox));
+			BioPackagerBlockEntity.getCycleTicks() * 2, false, returnBox));
 		setChanged();
 		return true;
 	}
@@ -2071,12 +2071,12 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		packager.heldBox = createEmptyPackageVisual();
 		packager.previouslyUnwrapped = ItemStack.EMPTY;
 		packager.animationInward = false;
-		packager.animationTicks = BioPackagerBlockEntity.CYCLE;
+		packager.animationTicks = BioPackagerBlockEntity.getCycleTicks();
 		packager.chainReturnAnimation = false;
 		packager.notifyUpdate();
 		packager.setChanged();
 		pendingPackagings.add(new PendingPackaging(target.packagerPos, output.copy(), target.creeper.getUUID(),
-			BioPackagerBlockEntity.CYCLE * 2, false));
+			BioPackagerBlockEntity.getCycleTicks() * 2, false));
 		setChanged();
 		notifyUpdate();
 		return true;
@@ -2779,11 +2779,11 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			animations.add(new RenderCreeperAnimation(pending.packagerPos, pending.creeperUuid, pending.ticksRemaining,
 				pending.totalTicks, false));
 		for (PendingPackaging pending : pendingPackagings) {
-			if (pending.ticksRemaining <= BioPackagerBlockEntity.CYCLE)
+			if (pending.ticksRemaining <= BioPackagerBlockEntity.getCycleTicks())
 				continue;
-			int outwardTicksRemaining = pending.ticksRemaining - BioPackagerBlockEntity.CYCLE;
+			int outwardTicksRemaining = pending.ticksRemaining - BioPackagerBlockEntity.getCycleTicks();
 			animations.add(new RenderCreeperAnimation(pending.packagerPos, pending.creeperUuid, outwardTicksRemaining,
-				BioPackagerBlockEntity.CYCLE, true));
+				BioPackagerBlockEntity.getCycleTicks(), true));
 		}
 		return animations;
 	}
@@ -3027,7 +3027,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 
 		private PendingPackaging(BlockPos packagerPos, ItemStack boxStack, UUID creeperUuid, int ticksRemaining,
 			boolean transitioned) {
-			super(ticksRemaining, BioPackagerBlockEntity.CYCLE * 2);
+			super(ticksRemaining, BioPackagerBlockEntity.getCycleTicks() * 2);
 			this.packagerPos = packagerPos;
 			this.boxStack = boxStack;
 			this.creeperUuid = creeperUuid;

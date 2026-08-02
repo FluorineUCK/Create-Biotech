@@ -9,6 +9,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -17,6 +18,7 @@ import javax.annotation.Nullable;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
@@ -57,7 +59,7 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 
 	public static final int CLOSE_TICKS = 80;
 	public static final int SEALED_HOLD_TICKS = 10;
-	public static final int ARRIVAL_COOLDOWN_TICKS = 80;
+	public static final int DEFAULT_ARRIVAL_COOLDOWN_TICKS = 80;
 	public static final float TOP_SHELL_OPEN_Y = -1.0f;
 	public static final float TOP_SHELL_CLOSED_Y = -2.0f;
 	public static final int MAX_ADDRESS_LENGTH = 32;
@@ -108,6 +110,9 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 
 		List<Entity> entitiesInside = level.getEntitiesOfClass(Entity.class, getWorldTeleportArea(),
 			this::canTeleportEntity);
+		int maximumEntities = CBConfigs.SERVER.shulkerTeleporter.maxEntitiesPerTeleport.get();
+		if (maximumEntities > 0 && entitiesInside.size() > maximumEntities)
+			entitiesInside = new ArrayList<>(entitiesInside.subList(0, maximumEntities));
 		boolean shouldClose = !entitiesInside.isEmpty() && hasUsableTarget() && Math.abs(getSpeed()) > 0;
 
 		if (shouldClose) {
@@ -326,13 +331,25 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	private boolean hasUsableTarget() {
 		if (targetAddress.isBlank() || !(level instanceof ServerLevel serverLevel))
 			return false;
-		return ShulkerTeleporterSavedData.get(serverLevel.getServer())
-			.hasTarget(targetAddress, getSavedLocation());
+		ShulkerTeleporterSavedData.Location source = getSavedLocation();
+		return ShulkerTeleporterSavedData.get(serverLevel.getServer()).getTargets(targetAddress, source)
+			.stream().anyMatch(target -> isTargetAllowed(source, target)
+				&& isTargetAvailableWithoutTeleport(serverLevel, target));
 	}
 
 	private boolean canTeleportEntity(Entity entity) {
-		if (!(entity instanceof LivingEntity) && !(entity instanceof ItemEntity))
+		if (entity instanceof Player) {
+			if (!CBConfigs.SERVER.shulkerTeleporter.allowPlayers.get())
+				return false;
+		} else if (entity instanceof ItemEntity) {
+			if (!CBConfigs.SERVER.shulkerTeleporter.allowItems.get())
+				return false;
+		} else if (entity instanceof LivingEntity) {
+			if (!CBConfigs.SERVER.shulkerTeleporter.allowMobs.get())
+				return false;
+		} else {
 			return false;
+		}
 		if (!isEntityInTeleportArea(entity))
 			return false;
 		return !arrivalCooldowns.containsKey(entity.getUUID());
@@ -382,7 +399,9 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	}
 
 	private void markArrivalCooldown(UUID uuid) {
-		arrivalCooldowns.put(uuid, ARRIVAL_COOLDOWN_TICKS);
+		int cooldown = CBConfigs.SERVER.shulkerTeleporter.arrivalCooldownTicks.get();
+		if (cooldown > 0)
+			arrivalCooldowns.put(uuid, cooldown);
 	}
 
 	private void tickArrivalCooldowns() {
@@ -403,8 +422,10 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 			return null;
 
 		ShulkerTeleporterSavedData savedData = ShulkerTeleporterSavedData.get(serverLevel.getServer());
-		for (ShulkerTeleporterSavedData.Location location : savedData.getTargets(targetAddress,
-			getSavedLocation())) {
+		ShulkerTeleporterSavedData.Location source = getSavedLocation();
+		for (ShulkerTeleporterSavedData.Location location : savedData.getTargets(targetAddress, source)) {
+			if (!isTargetAllowed(source, location))
+				continue;
 			ServerLevel candidateLevel = serverLevel.getServer().getLevel(location.dimension());
 			if (candidateLevel == null) {
 				savedData.unregister(location);
@@ -417,9 +438,14 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 
 			if (location.subLevelId() == null) {
 				ChunkPos targetChunk = new ChunkPos(location.pos());
-				// Static-world endpoints can be loaded with a vanilla ticket. Sublevels own their plot lifecycle.
-				candidateLevel.getChunkSource()
-					.addRegionTicket(TicketType.POST_TELEPORT, targetChunk, 1, ticketOwner);
+				if (!CBConfigs.SERVER.shulkerTeleporter.allowDestinationChunkLoading.get()
+					&& !candidateLevel.isLoaded(location.pos()))
+					continue;
+				if (CBConfigs.SERVER.shulkerTeleporter.allowDestinationChunkLoading.get()) {
+					// Static-world endpoints can be loaded with a vanilla ticket. Sublevels own their plot lifecycle.
+					candidateLevel.getChunkSource()
+						.addRegionTicket(TicketType.POST_TELEPORT, targetChunk, 1, ticketOwner);
+				}
 			} else if (!candidateLevel.isLoaded(location.pos())) {
 				continue;
 			}
@@ -437,6 +463,29 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 			return target;
 		}
 		return null;
+	}
+
+	private static boolean isTargetAllowed(ShulkerTeleporterSavedData.Location source,
+		ShulkerTeleporterSavedData.Location target) {
+		if (!source.dimension().equals(target.dimension())
+			&& !CBConfigs.SERVER.shulkerTeleporter.allowCrossDimension.get())
+			return false;
+		if (!source.dimension().equals(target.dimension())
+			|| !Objects.equals(source.subLevelId(), target.subLevelId()))
+			return true;
+		double maximum = CBConfigs.SERVER.shulkerTeleporter.maxSameSpaceDistance.get();
+		return maximum <= 0 || source.pos().distSqr(target.pos()) <= maximum * maximum;
+	}
+
+	private static boolean isTargetAvailableWithoutTeleport(ServerLevel sourceLevel,
+		ShulkerTeleporterSavedData.Location target) {
+		ServerLevel targetLevel = sourceLevel.getServer().getLevel(target.dimension());
+		if (targetLevel == null)
+			return false;
+		if (target.subLevelId() != null)
+			return targetLevel.isLoaded(target.pos());
+		return CBConfigs.SERVER.shulkerTeleporter.allowDestinationChunkLoading.get()
+			|| targetLevel.isLoaded(target.pos());
 	}
 
 	private boolean canReceiveTeleport() {

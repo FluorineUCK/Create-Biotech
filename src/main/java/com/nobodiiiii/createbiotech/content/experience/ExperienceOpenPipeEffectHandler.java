@@ -6,6 +6,7 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 import com.nobodiiiii.createbiotech.registry.CBFluids;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.api.effect.OpenPipeEffectHandler;
 
 import net.minecraft.server.level.ServerLevel;
@@ -26,6 +27,8 @@ public class ExperienceOpenPipeEffectHandler implements OpenPipeEffectHandler {
 
 	@Override
 	public void apply(Level level, AABB area, FluidStack fluid) {
+		if (!CBConfigs.SERVER.experiencePump.emitOrbsFromOpenPipes.get())
+			return;
 		if (!(level instanceof ServerLevel serverLevel))
 			return;
 		if (!ExperienceFluidHelper.isOwnExperience(fluid))

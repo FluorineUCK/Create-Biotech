@@ -1,6 +1,7 @@
 package com.yision.allay.logistics.courier;
 
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.yision.allay.block.allayport.AllayPortBlockEntity;
@@ -42,13 +43,13 @@ public final class AllayCourierDispatchService {
 		}
 
 		if (AllayAddressRules.isExplicitPlayerAddress(rawAddress)) {
-			return findPlayer(level, AllayAddressRules.explicitPlayerName(rawAddress), box);
+			return findPlayer(level, AllayAddressRules.explicitPlayerName(rawAddress), box, origin);
 		}
 
 		AllayCourierTarget.AllayPortTarget allayPort =
 			findAllayPortExcludingSource(level, address, box, origin, sourceDimension, sourcePos,
 				allayPortPredicate);
-		return allayPort != null ? allayPort : findPlayer(level, address, box);
+		return allayPort != null ? allayPort : findPlayer(level, address, box, origin);
 	}
 
 	public static boolean dispatchFromPlayer(ServerPlayer player, ItemStack box,
@@ -74,12 +75,15 @@ public final class AllayCourierDispatchService {
 			return false;
 		}
 
-		AllayCourierTaskManager.addTask(level.getServer(), task);
+		if (!AllayCourierTaskManager.addTask(level.getServer(), task)) {
+			return false;
+		}
 		CBAdvancements.award(player, CBAdvancements.ALLAY_COURIER);
 		return true;
 	}
 
-	private static @Nullable AllayCourierTarget.PlayerTarget findPlayer(ServerLevel level, String playerName, ItemStack box) {
+	private static @Nullable AllayCourierTarget.PlayerTarget findPlayer(ServerLevel level, String playerName,
+		ItemStack box, Vec3 origin) {
 		ServerPlayer player = AllayCourierDimensionRules.allowCrossDimensionDelivery()
 			? AllayCourierHelper.findTargetPlayerAnyDimension(level, playerName)
 			: AllayCourierHelper.findTargetPlayer(level, playerName);
@@ -88,7 +92,8 @@ public final class AllayCourierDispatchService {
 		}
 		AllayCourierTarget.PlayerTarget target =
 			new AllayCourierTarget.PlayerTarget(player.getUUID(), player.serverLevel().dimension());
-		return canReceivePackageTarget(level, target, box) ? target : null;
+		return canReceivePackageTarget(level, target, box) && withinDeliveryDistance(level, player.serverLevel(),
+			player.position(), origin) ? target : null;
 	}
 
 	private static @Nullable AllayCourierTarget.AllayPortTarget findAllayPortExcludingSource(ServerLevel level,
@@ -97,6 +102,7 @@ public final class AllayCourierDispatchService {
 		TargetLocation location = AllayPortTargetRegistry.findMatchingAnyDimension(level, address, origin,
 			sourceDimension, sourcePos, target -> AllayCourierDimensionRules.canTarget(level, target.dimension())
 					&& canReceiveAllayPortTarget(level, target, box)
+					&& withinDeliveryDistance(level, target, origin)
 					&& allayPortPredicate.test(new AllayCourierTarget.AllayPortTarget(
 						target.dimension(), target.pos(), target.subLevelId())));
 		if (location == null) {
@@ -104,6 +110,32 @@ public final class AllayCourierDispatchService {
 		}
 		return new AllayCourierTarget.AllayPortTarget(location.dimension(), location.pos(),
 			location.subLevelId());
+	}
+
+	private static boolean withinDeliveryDistance(ServerLevel originLevel, TargetLocation target, Vec3 origin) {
+		ServerLevel targetLevel = originLevel.getServer().getLevel(target.dimension());
+		if (targetLevel == null || !originLevel.dimension().equals(target.dimension())) {
+			return targetLevel != null;
+		}
+		UUID originSpace = SubLevelCompat.getSpaceId(originLevel, BlockPos.containing(origin));
+		if (!java.util.Objects.equals(originSpace, target.subLevelId())) {
+			return true;
+		}
+		return withinDeliveryDistance(originLevel, targetLevel, Vec3.atCenterOf(target.pos()), origin);
+	}
+
+	private static boolean withinDeliveryDistance(ServerLevel originLevel, ServerLevel targetLevel,
+		Vec3 targetPosition, Vec3 origin) {
+		if (originLevel != targetLevel) {
+			return true;
+		}
+		UUID originSpace = SubLevelCompat.getSpaceId(originLevel, BlockPos.containing(origin));
+		UUID targetSpace = SubLevelCompat.getSpaceId(targetLevel, BlockPos.containing(targetPosition));
+		if (!java.util.Objects.equals(originSpace, targetSpace)) {
+			return true;
+		}
+		double maximum = CBConfigs.SERVER.allayCourier.maxDeliveryDistance.get();
+		return maximum <= 0 || origin.distanceToSqr(targetPosition) <= maximum * maximum;
 	}
 
 	public static boolean canReceivePackageTarget(ServerLevel level, AllayCourierTarget target, ItemStack box) {
