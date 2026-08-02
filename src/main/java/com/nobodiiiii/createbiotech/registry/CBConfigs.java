@@ -5,6 +5,9 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.List;
+import java.util.EnumMap;
+
+import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 
 import org.apache.commons.lang3.tuple.Pair;
 
@@ -107,6 +110,7 @@ public class CBConfigs {
 		public final ShulkerTeleporter shulkerTeleporter;
 		public final TeleportationFluid teleportationFluid;
 		public final AllayCourier allayCourier;
+		public final Features features;
 
 		Server(ModConfigSpec.Builder builder) {
 			experience = new Experience(builder);
@@ -136,6 +140,25 @@ public class CBConfigs {
 			shulkerTeleporter = new ShulkerTeleporter(builder);
 			teleportationFluid = new TeleportationFluid(builder);
 			allayCourier = new AllayCourier(builder);
+			features = new Features(builder);
+		}
+	}
+
+	public static class Features {
+		private final EnumMap<CBFeature, ModConfigSpec.BooleanValue> enabled = new EnumMap<>(CBFeature.class);
+
+		Features(ModConfigSpec.Builder builder) {
+			builder.comment("Master content-family switches. Disabled families keep their registry entries and existing "
+				+ "world blocks, but their output recipes will not load and players cannot place new blocks. "
+				+ "Run /reload or restart the server after changing these values.")
+				.push("features");
+			for (CBFeature feature : CBFeature.values())
+				enabled.put(feature, builder.define(feature.serializedName(), true));
+			builder.pop();
+		}
+
+		public boolean isEnabled(CBFeature feature) {
+			return enabled.get(feature).get();
 		}
 	}
 

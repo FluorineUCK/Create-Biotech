@@ -8,6 +8,7 @@ import javax.annotation.Nonnull;
 import com.simibubi.create.AllBlocks;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
+import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlock;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
@@ -50,6 +51,8 @@ public class MagmaBeltConnectorItem extends BlockItem {
 	@Nonnull
 	@Override
 	public InteractionResult useOn(UseOnContext context) {
+		if (!CBFeature.MAGMA_BELT.isEnabled())
+			return InteractionResult.FAIL;
 		Player playerEntity = context.getPlayer();
 		if (playerEntity != null && playerEntity.isShiftKeyDown()) {
 			CBItemData.set(context.getItemInHand(), null);

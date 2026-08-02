@@ -9,6 +9,7 @@ import javax.annotation.Nonnull;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
+import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
 import com.simibubi.create.content.kinetics.belt.BeltSlope;
@@ -52,6 +53,8 @@ public class PowerBeltConnectorItem extends BlockItem {
 	@Nonnull
 	@Override
 	public InteractionResult useOn(UseOnContext context) {
+		if (!CBFeature.POWER_BELT.isEnabled())
+			return InteractionResult.FAIL;
 		Player player = context.getPlayer();
 		if (player != null && player.isShiftKeyDown()) {
 			CBItemData.set(context.getItemInHand(), null);

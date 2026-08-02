@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.explosionproofitemvault;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.api.connectivity.ConnectivityHandler;
@@ -30,6 +31,8 @@ public class ExplosionProofItemVaultConversionHandler {
 
 	@SubscribeEvent(priority = EventPriority.HIGH)
 	public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+		if (!CBFeature.CREEPER_BLAST_CHAMBER.isEnabled())
+			return;
 		Player player = event.getEntity();
 		if (player.isShiftKeyDown() || !player.mayBuild())
 			return;

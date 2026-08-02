@@ -1,4 +1,10 @@
 {
+  "neoforge:conditions": [
+    {
+      "type": "create_biotech:feature_enabled",
+      "feature": "universalJoint"
+    }
+  ],
   "type": "create:cutting",
   "ingredients": [
     {

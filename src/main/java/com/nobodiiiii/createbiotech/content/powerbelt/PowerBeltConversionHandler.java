@@ -5,6 +5,7 @@ import java.util.List;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
@@ -36,6 +37,8 @@ public class PowerBeltConversionHandler {
 
 	@SubscribeEvent(priority = EventPriority.HIGHEST)
 	public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+		if (!CBFeature.POWER_BELT.isEnabled())
+			return;
 		Player player = event.getEntity();
 		if (player.isShiftKeyDown() || !player.mayBuild())
 			return;

@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.shulkerpackager;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.logistics.packager.PackagerBlock;
 import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
@@ -30,6 +31,8 @@ public class ShulkerPackagerConversionHandler {
 
 	@SubscribeEvent(priority = EventPriority.HIGH)
 	public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
+		if (!CBFeature.SHULKER_PACKAGER.isEnabled())
+			return;
 		Player player = event.getEntity();
 		if (!player.mayBuild())
 			return;

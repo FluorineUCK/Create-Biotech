@@ -1,4 +1,10 @@
 {
+  "neoforge:conditions": [
+    {
+      "type": "create_biotech:feature_enabled",
+      "feature": "experience"
+    }
+  ],
   "type": "create_biotech:creeper_blast_chamber_high_pressure",
   "ingredients": [
     {

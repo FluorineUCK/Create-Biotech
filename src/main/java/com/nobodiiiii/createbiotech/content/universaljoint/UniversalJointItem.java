@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
+import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -47,6 +48,8 @@ public class UniversalJointItem extends BlockItem {
 	@Nonnull
 	@Override
 	public InteractionResult useOn(UseOnContext context) {
+		if (!CBFeature.UNIVERSAL_JOINT.isEnabled())
+			return InteractionResult.FAIL;
 		Player player = context.getPlayer();
 		if (player != null && player.isShiftKeyDown()) {
 			CBItemData.set(context.getItemInHand(), null);
