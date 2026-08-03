@@ -1,0 +1,17 @@
+{
+  "values": [
+    "create_biotech:slime_belt",
+    "create_biotech:magma_belt",
+    "create_biotech:power_belt",
+    "create_biotech:automatic_fish_release_machine",
+    "create_biotech:slime_clutch",
+    "create_biotech:bone_ratchet",
+    "create_biotech:fixed_carrot_fishing_rod",
+    "create_biotech:ghast_hot_air_balloon_assembly_station",
+    "create_biotech:schrodingers_cat",
+    "create_biotech:spider_assembly_table",
+    "create_biotech:spider_assembly_table_cog",
+    "create_biotech:asurine_casing",
+    "create_biotech:biotech_casing"
+  ]
+}

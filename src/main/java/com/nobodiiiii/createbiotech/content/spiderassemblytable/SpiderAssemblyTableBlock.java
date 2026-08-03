@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.spiderassemblytable;
 
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -84,6 +85,8 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 	@Override
 	protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
 		Player player, InteractionHand hand, BlockHitResult hit) {
+		if (CBWrenchHelper.isWrench(stack))
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		if (!player.isShiftKeyDown() && player.mayBuild() && stack.is(CBItems.SPIDER_ASSEMBLY_TABLE.get()))
 			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		InteractionResult result = openMenu(level, pos, player);

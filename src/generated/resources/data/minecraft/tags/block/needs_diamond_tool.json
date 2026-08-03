@@ -1,0 +1,10 @@
+{
+  "values": [
+    "create_biotech:creeper_blast_chamber",
+    "create_biotech:explosion_proof_casing",
+    "create_biotech:explosion_proof_item_vault",
+    "create_biotech:blast_proof_glass",
+    "create_biotech:blast_proof_framed_glass",
+    "create_biotech:blast_proof_chain_drive"
+  ]
+}

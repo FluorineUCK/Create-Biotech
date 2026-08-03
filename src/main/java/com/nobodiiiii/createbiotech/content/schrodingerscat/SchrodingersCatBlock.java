@@ -2,10 +2,13 @@ package com.nobodiiiii.createbiotech.content.schrodingerscat;
 
 import com.mojang.serialization.MapCodec;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -23,7 +26,7 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-public class SchrodingersCatBlock extends BaseEntityBlock {
+public class SchrodingersCatBlock extends BaseEntityBlock implements IWrenchable {
 	public static final MapCodec<SchrodingersCatBlock> CODEC = simpleCodec(SchrodingersCatBlock::new);
 
 	private static final VoxelShape SHAPE = Block.box(2, 0, 2, 14, 12, 14);
@@ -58,6 +61,23 @@ public class SchrodingersCatBlock extends BaseEntityBlock {
 	@Override
 	public BlockState mirror(BlockState state, Mirror mirror) {
 		return rotate(state, mirror.getRotation(state.getValue(FACING)));
+	}
+
+	@Override
+	public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+		if (context.getClickedFace().getAxis() != Direction.Axis.Y)
+			return InteractionResult.PASS;
+		BlockState rotated = state.setValue(FACING,
+			state.getValue(FACING).getClockWise(context.getClickedFace().getAxis()));
+		Level level = context.getLevel();
+		BlockPos pos = context.getClickedPos();
+		if (!rotated.canSurvive(level, pos))
+			return InteractionResult.PASS;
+		if (level.isClientSide())
+			return InteractionResult.SUCCESS;
+		level.setBlock(pos, rotated, Block.UPDATE_ALL);
+		IWrenchable.playRotateSound(level, pos);
+		return InteractionResult.SUCCESS;
 	}
 
 	@Override

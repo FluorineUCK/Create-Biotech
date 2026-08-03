@@ -1,7 +1,6 @@
 package com.nobodiiiii.createbiotech.content.creeperblastchamber;
 
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
-import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.simibubi.create.content.kinetics.chainDrive.ChainDriveBlock;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 
@@ -28,7 +27,7 @@ public class BlastProofChainDriveBlock extends ChainDriveBlock {
 
 	@Override
 	public BlockState updateAfterWrenched(BlockState newState, UseOnContext context) {
-		return CBBlocks.EXPLOSION_PROOF_CASING.get().defaultBlockState();
+		return super.updateAfterWrenched(newState, context);
 	}
 
 	@Override

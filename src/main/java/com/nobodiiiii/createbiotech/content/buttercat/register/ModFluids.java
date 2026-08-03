@@ -4,6 +4,8 @@ import com.nobodiiiii.createbiotech.content.buttercat.datagen.other.ModTags;
 import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.simibubi.create.AllFluids;
 import com.tterrag.registrate.util.entry.FluidEntry;
+import com.tterrag.registrate.providers.ProviderType;
+import com.tterrag.registrate.util.nullness.NonNullBiConsumer;
 
 import net.createmod.catnip.theme.Color;
 import net.minecraft.core.BlockPos;
@@ -41,8 +43,13 @@ public class ModFluids {
                     .source(BaseFlowingFluid.Flowing.Source::new)
                     .block()
                     .properties(p -> p.mapColor(MapColor.TERRACOTTA_WHITE))
+                    .setData(ProviderType.BLOCKSTATE, NonNullBiConsumer.noop())
+                    .setData(ProviderType.LOOT, NonNullBiConsumer.noop())
+                    .setData(ProviderType.LANG, NonNullBiConsumer.noop())
                     .build()
                     .bucket()
+                    .setData(ProviderType.ITEM_MODEL, NonNullBiConsumer.noop())
+                    .setData(ProviderType.LANG, NonNullBiConsumer.noop())
                     .onRegister(ModFluids::registerFluidDispenseBehavior)
                     .build()
                     .register();

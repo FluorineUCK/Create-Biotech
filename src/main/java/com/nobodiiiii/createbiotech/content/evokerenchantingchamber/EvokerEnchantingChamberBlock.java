@@ -1,7 +1,9 @@
 package com.nobodiiiii.createbiotech.content.evokerenchantingchamber;
 
 import com.mojang.serialization.MapCodec;
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -15,6 +17,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -36,8 +39,10 @@ import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.phys.BlockHitResult;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.level.BlockEvent;
 
-public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
+public class EvokerEnchantingChamberBlock extends BaseEntityBlock implements IWrenchable {
 	public static final MapCodec<EvokerEnchantingChamberBlock> CODEC =
 		simpleCodec(EvokerEnchantingChamberBlock::new);
 
@@ -157,6 +162,8 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 	@Override
 	protected ItemInteractionResult useItemOn(ItemStack heldStack, BlockState state, Level level, BlockPos pos,
 		Player player, InteractionHand hand, BlockHitResult hit) {
+		if (CBWrenchHelper.isWrench(heldStack))
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		InteractionResult result = interact(state, level, pos, player, hand, heldStack);
 		return result.consumesAction()
 			? ItemInteractionResult.sidedSuccess(level.isClientSide)
@@ -185,6 +192,72 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 			return InteractionResult.CONSUME;
 		}
 		return InteractionResult.PASS;
+	}
+
+	@Override
+	public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+		Level level = context.getLevel();
+		BlockPos clickedPos = context.getClickedPos();
+		BlockPos lowerPos = state.getValue(HALF) == DoubleBlockHalf.LOWER ? clickedPos : clickedPos.below();
+		BlockPos upperPos = lowerPos.above();
+		BlockState lowerState = level.getBlockState(lowerPos);
+		BlockState upperState = level.getBlockState(upperPos);
+		if (!isCompleteStructure(lowerState, upperState))
+			return IWrenchable.super.onWrenched(state, context);
+		if (context.getClickedFace().getAxis() != Direction.Axis.Y)
+			return InteractionResult.PASS;
+
+		Direction rotatedFacing = lowerState.getValue(FACING)
+			.getClockWise(context.getClickedFace().getAxis());
+		BlockState rotatedLower = lowerState.setValue(FACING, rotatedFacing);
+		BlockState rotatedUpper = upperState.setValue(FACING, rotatedFacing);
+		if (!rotatedLower.canSurvive(level, lowerPos) || !rotatedUpper.canSurvive(level, upperPos))
+			return InteractionResult.PASS;
+		if (level.isClientSide())
+			return InteractionResult.SUCCESS;
+
+		level.setBlock(lowerPos, rotatedLower, Block.UPDATE_ALL);
+		level.setBlock(upperPos, rotatedUpper, Block.UPDATE_ALL);
+		IWrenchable.playRotateSound(level, clickedPos);
+		return InteractionResult.SUCCESS;
+	}
+
+	@Override
+	public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
+		Level level = context.getLevel();
+		BlockPos clickedPos = context.getClickedPos();
+		BlockPos lowerPos = state.getValue(HALF) == DoubleBlockHalf.LOWER ? clickedPos : clickedPos.below();
+		BlockPos upperPos = lowerPos.above();
+		BlockState lowerState = level.getBlockState(lowerPos);
+		BlockState upperState = level.getBlockState(upperPos);
+		if (!isCompleteStructure(lowerState, upperState))
+			return IWrenchable.super.onSneakWrenched(state, context);
+		if (!(level instanceof ServerLevel serverLevel))
+			return InteractionResult.SUCCESS;
+
+		Player player = context.getPlayer();
+		BlockEvent.BreakEvent event = new BlockEvent.BreakEvent(level, clickedPos, state, player);
+		NeoForge.EVENT_BUS.post(event);
+		if (event.isCanceled())
+			return InteractionResult.SUCCESS;
+
+		if (player != null && !player.isCreative()) {
+			Block.getDrops(lowerState, serverLevel, lowerPos, level.getBlockEntity(lowerPos), player,
+				context.getItemInHand()).forEach(player.getInventory()::placeItemBackInInventory);
+		}
+		lowerState.spawnAfterBreak(serverLevel, lowerPos, ItemStack.EMPTY, true);
+		level.setBlock(upperPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
+		level.setBlock(lowerPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
+		IWrenchable.playRemoveSound(level, lowerPos);
+		return InteractionResult.SUCCESS;
+	}
+
+	private static boolean isCompleteStructure(BlockState lowerState, BlockState upperState) {
+		return lowerState.getBlock() instanceof EvokerEnchantingChamberBlock
+			&& upperState.getBlock() instanceof EvokerEnchantingChamberBlock
+			&& lowerState.getValue(HALF) == DoubleBlockHalf.LOWER
+			&& upperState.getValue(HALF) == DoubleBlockHalf.UPPER
+			&& lowerState.getValue(FACING) == upperState.getValue(FACING);
 	}
 
 	@Override

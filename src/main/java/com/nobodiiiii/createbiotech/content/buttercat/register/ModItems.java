@@ -9,7 +9,9 @@ import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterSeq
 
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Rarity;
+import com.tterrag.registrate.providers.ProviderType;
 import com.tterrag.registrate.util.entry.ItemEntry;
+import com.tterrag.registrate.util.nullness.NonNullBiConsumer;
 
 import static com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule.REGISTRATE;
 

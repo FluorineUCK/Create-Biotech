@@ -1,8 +1,8 @@
 package com.nobodiiiii.createbiotech.content.shulkerpackager;
 
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.simibubi.create.AllBlocks;
-import com.simibubi.create.AllItems;
 import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.content.logistics.box.PackageItem;
@@ -98,7 +98,7 @@ public class ShulkerPackagerBlock extends WrenchableDirectionalBlock
 	@Override
 	protected ItemInteractionResult useItemOn(ItemStack itemInHand, BlockState state, Level worldIn, BlockPos pos,
 		Player player, InteractionHand handIn, BlockHitResult hit) {
-		if (AllItems.WRENCH.isIn(itemInHand))
+		if (CBWrenchHelper.isWrench(itemInHand))
 			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		if (AllBlocks.FACTORY_GAUGE.isIn(itemInHand))
 			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;

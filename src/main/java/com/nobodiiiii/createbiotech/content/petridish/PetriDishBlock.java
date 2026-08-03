@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.petridish;
 
 import com.mojang.serialization.MapCodec;
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.foundation.block.IBE;
@@ -106,6 +107,8 @@ public class PetriDishBlock extends HorizontalDirectionalBlock implements IBE<Pe
 	@Override
 	protected ItemInteractionResult useItemOn(ItemStack stack, BlockState state, Level level, BlockPos pos,
 		Player player, InteractionHand hand, BlockHitResult hit) {
+		if (CBWrenchHelper.isWrench(stack))
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		InteractionResult result = onBlockEntityUse(level, pos, be -> be.use(player, hand));
 		return result.consumesAction()
 			? ItemInteractionResult.sidedSuccess(level.isClientSide)
