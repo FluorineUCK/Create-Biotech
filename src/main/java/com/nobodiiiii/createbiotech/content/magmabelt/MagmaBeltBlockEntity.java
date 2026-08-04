@@ -212,6 +212,10 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		if (inventory == null)
 			return;
 		itemHandler = new MagmaItemHandlerBeltSegment(inventory, index);
+		// The chain just became able to accept items. Nothing about the block state changed, so NeoForge
+		// will not invalidate on its own — neighbours holding a BlockCapabilityCache (chutes, mechanical
+		// arms) would keep the null they cached before the chain was wired up.
+		invalidateCapabilities();
 	}
 
 	public IItemHandler getItemCapability(Direction side) {
@@ -232,7 +236,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	@Override
 	public void invalidate() {
 		super.invalidate();
-		itemHandler = null;
+		invalidateItemHandler();
 	}
 
 	@Override
@@ -597,6 +601,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	}
 
 	public void invalidateItemHandler() {
+		invalidateCapabilities();
 		itemHandler = null;
 	}
 

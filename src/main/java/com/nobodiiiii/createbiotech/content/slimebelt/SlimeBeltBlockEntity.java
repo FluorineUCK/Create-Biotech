@@ -359,9 +359,18 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		return inventory;
 	}
 
+	/**
+	 * Drops the cached per-side handlers and tells NeoForge that the capability at this position changed.
+	 * Handlers capture the segment's inventory and index, so anything that rewires the chain has to call this.
+	 *
+	 * <p>The invalidation matters even when nothing was cached: the chain only exposes a handler once its
+	 * controller inventory exists, and becoming ready changes no block state, so neighbours holding a
+	 * {@code BlockCapabilityCache} would otherwise keep the null they cached before the chain was wired up.</p>
+	 */
 	public void invalidateItemHandlers() {
 		sidedHandlers.clear();
 		nullSideHandler = null;
+		invalidateCapabilities();
 	}
 
 	private IItemHandler getItemHandler(Direction side) {

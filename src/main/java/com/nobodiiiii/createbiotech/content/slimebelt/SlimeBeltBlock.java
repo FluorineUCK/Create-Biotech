@@ -445,6 +445,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 			be.setController(currentPos);
 			be.beltLength = beltChain.size();
 			be.index = index;
+			be.invalidateItemHandlers();
 			be.attachKinetics();
 			be.setChanged();
 			be.sendData();

@@ -481,6 +481,8 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 				be.setController(currentPos);
 				be.beltLength = beltChain.size();
 				be.index = index;
+				// The segment's cached handler captures the old index; drop it and let the next tick rebuild.
+				be.invalidateItemHandler();
 				be.attachKinetics();
 				be.setChanged();
 				be.sendData();
