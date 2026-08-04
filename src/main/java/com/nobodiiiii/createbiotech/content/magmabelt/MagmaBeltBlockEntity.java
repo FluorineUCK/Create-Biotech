@@ -60,6 +60,10 @@ import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaBeltBlockEntity extends KineticBlockEntity {
+
+	/** Ticks to wait before re-attempting a chain init that already failed once. */
+	private static final int INIT_RETRY_INTERVAL = 20;
+
 	public Map<Entity, TransportedEntityInfo> passengers;
 	public Optional<DyeColor> color;
 	public int beltLength;
@@ -71,6 +75,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	protected BlockPos controller;
 	protected MagmaBeltInventory inventory;
 	protected IItemHandler itemHandler;
+	private int initRetryCooldown;
 	public VersionedInventoryTrackerBehaviour invVersionTracker;
 
 	public CompoundTag trackerUpdateTag;
@@ -102,7 +107,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	public void tick() {
 		// Init belt
 		if (beltLength == 0)
-			MagmaBeltBlock.initBelt(level, worldPosition);
+			tryInitBelt();
 
 		super.tick();
 
@@ -145,6 +150,23 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 			MagmaBeltMovementHandler.transportEntity(this, entity, info);
 		});
 		toRemove.forEach(passengers::remove);
+	}
+
+	/**
+	 * Chain init is retried from the tick because the chain can span a chunk that was not loaded yet. A failed
+	 * attempt walks the chain from this segment back to its start, and every segment attempts it, so retrying
+	 * every tick costs O(n²) block lookups per tick for as long as the far end stays unloaded. Only repeated
+	 * failures back off — the attempt right after placement, slicing or a contraption disassembly still runs
+	 * on the very next tick.
+	 */
+	private void tryInitBelt() {
+		if (initRetryCooldown > 0) {
+			initRetryCooldown--;
+			return;
+		}
+		MagmaBeltBlock.initBelt(level, worldPosition);
+		if (beltLength == 0)
+			initRetryCooldown = INIT_RETRY_INTERVAL;
 	}
 
 	private void spawnFlameParticles() {
@@ -303,6 +325,8 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		index = 0;
 		controller = null;
 		trackerUpdateTag = new CompoundTag();
+		// Whatever cleared the chain deserves a fresh attempt on the next tick, not a leftover backoff.
+		initRetryCooldown = 0;
 	}
 
 	public boolean applyColor(DyeColor colorIn) {

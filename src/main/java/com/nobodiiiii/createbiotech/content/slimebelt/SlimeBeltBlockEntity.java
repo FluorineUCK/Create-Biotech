@@ -58,6 +58,9 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	/** {@code Track.values()} clones its array on every call; the surface lookups run per funnel per tick. */
 	private static final Track[] TRACKS = Track.values();
 
+	/** Ticks to wait before re-attempting a chain init that already failed once. */
+	private static final int INIT_RETRY_INTERVAL = 20;
+
 	public Map<Entity, TransportedEntityInfo> passengers;
 	public int beltLength;
 	public int index;
@@ -69,6 +72,7 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	private final Map<Direction, IItemHandler> sidedHandlers;
 	private IItemHandler nullSideHandler;
 	private SlimeBeltLoopGeometry loopGeometry;
+	private int initRetryCooldown;
 
 	public SlimeBeltBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
@@ -96,7 +100,7 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	@Override
 	public void tick() {
 		if (beltLength == 0)
-			SlimeBeltBlock.initBelt(level, worldPosition);
+			tryInitBelt();
 
 		super.tick();
 
@@ -139,6 +143,23 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	@Override
 	public float calculateStressApplied() {
 		return isController() ? super.calculateStressApplied() : 0;
+	}
+
+	/**
+	 * Chain init is retried from the tick because the chain can span a chunk that was not loaded yet. A failed
+	 * attempt walks the chain from this segment back to its start, and every segment attempts it, so retrying
+	 * every tick costs O(n²) block lookups per tick for as long as the far end stays unloaded. Only repeated
+	 * failures back off — the attempt right after placement, slicing or a contraption disassembly still runs
+	 * on the very next tick.
+	 */
+	private void tryInitBelt() {
+		if (initRetryCooldown > 0) {
+			initRetryCooldown--;
+			return;
+		}
+		SlimeBeltBlock.initBelt(level, worldPosition);
+		if (beltLength == 0)
+			initRetryCooldown = INIT_RETRY_INTERVAL;
 	}
 
 	@Override
@@ -205,6 +226,8 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		index = 0;
 		controller = null;
 		trackerUpdateTag = new CompoundTag();
+		// Whatever cleared the chain deserves a fresh attempt on the next tick, not a leftover backoff.
+		initRetryCooldown = 0;
 		// The cached handlers captured the index this just reset, so they have to go. `passengers`
 		// deliberately survives: KineticBlockEntity#read calls this on every read, and the belt syncs on
 		// every insertion, so clearing the map here would drop the client's riders several times a second.
