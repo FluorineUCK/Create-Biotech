@@ -11,6 +11,7 @@ import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -670,90 +671,7 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 		if (transform.rotationAxis == Direction.Axis.Y) {
 			return rotate(state, transform.rotation);
 		}
-		return transformInner(state, transform);
-	}
-
-	protected BlockState transformInner(BlockState state, StructureTransform transform) {
-		boolean halfTurn = transform.rotation == Rotation.CLOCKWISE_180;
-
-		Direction initialDirection = state.getValue(HORIZONTAL_FACING);
-		boolean diagonal =
-			state.getValue(SLOPE) == BeltSlope.DOWNWARD || state.getValue(SLOPE) == BeltSlope.UPWARD;
-
-		if (!diagonal) {
-			for (int i = 0; i < transform.rotation.ordinal(); i++) {
-				Direction direction = state.getValue(HORIZONTAL_FACING);
-				BeltSlope slope = state.getValue(SLOPE);
-				boolean vertical = slope == BeltSlope.VERTICAL;
-				boolean horizontal = slope == BeltSlope.HORIZONTAL;
-				boolean sideways = slope == BeltSlope.SIDEWAYS;
-
-				Direction newDirection = direction.getOpposite();
-				BeltSlope newSlope = BeltSlope.VERTICAL;
-
-				if (vertical) {
-					if (direction.getAxis() == transform.rotationAxis) {
-						newDirection = direction.getCounterClockWise();
-						newSlope = BeltSlope.SIDEWAYS;
-					} else {
-						newSlope = BeltSlope.HORIZONTAL;
-						newDirection = direction;
-						if (direction.getAxis() == Axis.Z)
-							newDirection = direction.getOpposite();
-					}
-				}
-
-				if (sideways) {
-					newDirection = direction;
-					if (direction.getAxis() == transform.rotationAxis)
-						newSlope = BeltSlope.HORIZONTAL;
-					else
-						newDirection = direction.getCounterClockWise();
-				}
-
-				if (horizontal) {
-					newDirection = direction;
-					if (direction.getAxis() == transform.rotationAxis)
-						newSlope = BeltSlope.SIDEWAYS;
-					else if (direction.getAxis() != Axis.Z)
-						newDirection = direction.getOpposite();
-				}
-
-				state = state.setValue(HORIZONTAL_FACING, newDirection);
-				state = state.setValue(SLOPE, newSlope);
-			}
-
-		} else if (initialDirection.getAxis() != transform.rotationAxis) {
-			for (int i = 0; i < transform.rotation.ordinal(); i++) {
-				Direction direction = state.getValue(HORIZONTAL_FACING);
-				Direction newDirection = direction.getOpposite();
-				BeltSlope slope = state.getValue(SLOPE);
-				boolean upward = slope == BeltSlope.UPWARD;
-				boolean downward = slope == BeltSlope.DOWNWARD;
-
-				// Rotate diagonal
-				if (direction.getAxisDirection() == AxisDirection.POSITIVE ^ downward ^ direction.getAxis() == Axis.Z) {
-					state = state.setValue(SLOPE, upward ? BeltSlope.DOWNWARD : BeltSlope.UPWARD);
-				} else {
-					state = state.setValue(HORIZONTAL_FACING, newDirection);
-				}
-			}
-
-		} else if (halfTurn) {
-			Direction direction = state.getValue(HORIZONTAL_FACING);
-			Direction newDirection = direction.getOpposite();
-			BeltSlope slope = state.getValue(SLOPE);
-			boolean vertical = slope == BeltSlope.VERTICAL;
-
-			if (diagonal) {
-				state = state.setValue(SLOPE, slope == BeltSlope.UPWARD ? BeltSlope.DOWNWARD
-					: slope == BeltSlope.DOWNWARD ? BeltSlope.UPWARD : slope);
-			} else if (vertical) {
-				state = state.setValue(HORIZONTAL_FACING, newDirection);
-			}
-		}
-
-		return state;
+		return CBBeltTransform.transformInner(state, transform, SLOPE);
 	}
 
 	@Override

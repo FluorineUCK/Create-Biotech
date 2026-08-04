@@ -6,6 +6,7 @@ import java.util.List;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceProviderBlock;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -14,6 +15,8 @@ import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInvento
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
+import com.simibubi.create.api.contraption.transformable.TransformableBlock;
+import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
 import com.simibubi.create.content.fluids.transfer.GenericItemEmptying;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
@@ -76,7 +79,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlock extends HorizontalKineticBlock
-	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock {
+	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock, TransformableBlock {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);
@@ -545,6 +548,15 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 				return rotated.setValue(PART, BeltPart.START);
 		}
 		return rotated;
+	}
+
+	@Override
+	public BlockState transform(BlockState state, StructureTransform transform) {
+		if (transform.mirror != null)
+			state = mirror(state, transform.mirror);
+		if (transform.rotationAxis == Axis.Y)
+			return rotate(state, transform.rotation);
+		return CBBeltTransform.transformInner(state, transform, SLOPE);
 	}
 
 	@Override
