@@ -20,6 +20,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -386,7 +387,7 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 		}
 
 		if (casing != CasingType.NONE)
-			level.levelEvent(2001, worldPosition,
+			level.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, worldPosition,
 				Block.getId(casing == CasingType.ANDESITE ? AllBlocks.ANDESITE_CASING.getDefaultState()
 					: AllBlocks.BRASS_CASING.getDefaultState()));
 		if (blockState.getValue(PowerBeltBlock.CASING) != shouldBlockHaveCasing)

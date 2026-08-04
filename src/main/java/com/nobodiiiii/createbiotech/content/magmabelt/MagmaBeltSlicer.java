@@ -37,6 +37,7 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -99,7 +100,7 @@ public class MagmaBeltSlicer {
 			world.setBlock(pos, ProperWaterloggedBlock.withWater(world, Blocks.AIR.defaultBlockState(), pos),
 				Block.UPDATE_ALL | Block.UPDATE_MOVE_BY_PISTON);
 			world.removeBlockEntity(pos);
-			world.levelEvent(2001, pos, Block.getId(state));
+			world.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, pos, Block.getId(state));
 
 			if (!creative && MagmaBeltBlock.isMagmaBelt(replacedState)
 				&& replacedState.getValue(MagmaBeltBlock.PART) == BeltPart.PULLEY)
