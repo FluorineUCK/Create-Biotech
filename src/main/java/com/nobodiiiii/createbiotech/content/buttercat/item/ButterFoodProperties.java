@@ -1,7 +1,7 @@
 package com.nobodiiiii.createbiotech.content.buttercat.item;
 
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModEffects;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
+import com.nobodiiiii.createbiotech.registry.CBMobEffects;
 
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -34,13 +34,13 @@ public final class ButterFoodProperties {
 		case BUTTER -> food(value(config.butterNutrition, useDefaults), value(config.butterSaturation, useDefaults));
 		case SUPER_BUTTER -> food(value(config.superButterNutrition, useDefaults),
 			value(config.superButterSaturation, useDefaults))
-			.withEffect(ModEffects.BUTTER_ROTATION_EFFECT, value(config.superButterRotationDuration, useDefaults),
+			.withEffect(CBMobEffects.BUTTER_ROTATION, value(config.superButterRotationDuration, useDefaults),
 				value(config.superButterRotationAmplifier, useDefaults))
 			.withEffect(MobEffects.LEVITATION, value(config.superButterLevitationDuration, useDefaults),
 				value(config.superButterLevitationAmplifier, useDefaults));
 		case INCOMPLETE_SUPER_BUTTER -> food(value(config.incompleteSuperButterNutrition, useDefaults),
 			value(config.incompleteSuperButterSaturation, useDefaults))
-				.withEffect(ModEffects.BUTTER_ROTATION_EFFECT,
+				.withEffect(CBMobEffects.BUTTER_ROTATION,
 					value(config.incompleteSuperButterRotationDuration, useDefaults),
 					value(config.incompleteSuperButterRotationAmplifier, useDefaults));
 		};

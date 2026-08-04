@@ -9,7 +9,7 @@
 3. 方块继承与 `IWrenchable`：复用 Create 的默认旋转、潜行拆除和声音逻辑。
 4. loot table 或方块自定义掉落：决定是否掉落自身、是否需要精准采集、是否只掉经验。
 
-主注册表继续使用 `DeferredRegister`，不为本次改造整体迁移到 Registrate。Butter Cat 模块已经使用 `CreateRegistrate`，可直接复用 Create 的 `TagGen`。这样既最大限度复用 Create 的行为，又避免把 `RegistryObject` 全面替换成 `BlockEntry` 所带来的无关重构。
+主注册表继续统一使用 `DeferredRegister`，不为本次改造整体迁移到 Registrate。Butter Cat 原有的独立 `CreateRegistrate` 注册链也已收敛到主 `registry`：方块、物品、流体、方块实体、效果和药水均由主注册表声明，压力/RPM、机械臂、客户端渲染和 Ponder 挂接由主入口统一完成；`content/buttercat` 只保留玩法、渲染与兼容行为逻辑。
 
 目标结果：玩家面对一个看起来或功能上对应原版/Create 的方块时，挖掘工具、掉落要求、扳手旋转和潜行拆除都符合对应方块的直觉；特殊行为只保留有明确玩法理由的例外。
 
@@ -126,11 +126,7 @@ public static Block.Properties withObsidianDurability(Block.Properties propertie
 
 主注册表仍是 `DeferredRegister`，因此不能直接使用面向 Registrate `BlockBuilder` 的 `TagGen.axeOrPickaxe()`。`CBBlockTagsProvider` 应复刻它的最小语义：把同一组方块同时加入斧和镐标签，不复制 Create 的内部生成框架。
 
-Butter Cat 已使用 `CreateRegistrate`，其注册项直接追加：
-
-```java
-.transform(TagGen.pickaxeOnly())
-```
+Butter Cat 已迁移到主 `DeferredRegister`，两种动力方块也由同一个 `CBBlockTagsProvider` 加入 `mineable/pickaxe`。因此最终工具标签只有一个 provider/输出路径，不再由 Registrate `TagGen` 和 Forge provider 同时写入同一 JSON。
 
 datagen 接入完成后，删除当前手写的三个工具标签 JSON，让生成代码成为唯一来源。生成结果可以继续提交到仓库，但 CI 应执行 datagen 后检查工作区无差异。
 
@@ -225,7 +221,7 @@ return AllItems.WRENCH.isIn(stack)
 | `shulker_teleporter` | `createStone()`，覆盖紫色地图色和透明 | `PICKAXE` | `MULTIBLOCK` | 三格任意部分使用扳手都路由控制器，避免只有顶部放行、下部打开 GUI |
 | `allay_port` | `createSoftMetal()`，复用 Create `PACKAGE_FROGPORT` 外观属性 | `PICKAXE` | `CUSTOM_DIRECTIONAL` | 保留自定义反向旋转；调用 BE GUI 前先放行扳手 |
 | 16 色 `buffer_pad` | 保留羊毛音效、0.4 硬度 | `NONE` | 现有 `WrenchableDirectionalBlock` | 作为软质垫块，不强加斧/镐；当前扳手行为保持 |
-| `cute_cat_on_shaft`、`butter_cat_engine` | Create `SHAFT`：`SharedProperties::stone`、金属地图色和轴式实体属性；不覆盖羊毛音效 | `PICKAXE` | `KINETIC_DEFAULT` | 两者与传动轴使用相同属性和 `TagGen.pickaxeOnly()`；只保留模型渲染确实需要的 `noOcclusion()`；将扳手分支的 `FAIL` 改为 `PASS` |
+| `cute_cat_on_shaft`、`butter_cat_engine` | Create `SHAFT`：`CBSharedProperties.createStone()`、金属地图色和轴式实体属性；不覆盖羊毛音效 | `PICKAXE` | `KINETIC_DEFAULT` | 两者与传动轴使用相同属性，并由 `CBBlockTagsProvider` 加入镐标签；只保留模型渲染确实需要的 `noOcclusion()`；将扳手分支的 `FAIL` 改为 `PASS` |
 
 ## 6. 扳手专项改造清单
 
@@ -309,7 +305,12 @@ return AllItems.WRENCH.isIn(stack)
 ### 修改
 
 - `src/main/java/com/nobodiiiii/createbiotech/registry/CBBlocks.java`
-- `src/main/java/com/nobodiiiii/createbiotech/content/buttercat/register/ModBlocks.java`
+- `src/main/java/com/nobodiiiii/createbiotech/registry/CBBlocks.java`
+- `src/main/java/com/nobodiiiii/createbiotech/registry/CBItems.java`
+- `src/main/java/com/nobodiiiii/createbiotech/registry/CBFluids.java`
+- `src/main/java/com/nobodiiiii/createbiotech/registry/CBBlockEntityTypes.java`
+- `src/main/java/com/nobodiiiii/createbiotech/registry/CBMobEffects.java`
+- `src/main/java/com/nobodiiiii/createbiotech/registry/CBPotions.java`
 - 表 6.1 中列出的六个交互方块类
 - `EvokerEnchantingChamberBlock` 和 `ShulkerTeleporterBlock` 的多方块扳手处理
 - `SchrodingersCatBlock`、`GhastHotAirBalloonAssemblyStationBlock`、`FixedCarrotFishingRodBlock` 的 `IWrenchable` 支持
@@ -353,7 +354,7 @@ return AllItems.WRENCH.isIn(stack)
 
 1. 接入 Forge datagen 和生成资源 source set。
 2. 建立 `CBBlockTagsProvider`。
-3. Butter Cat 使用与传动轴相同的 Create `TagGen.pickaxeOnly()`。
+3. Butter Cat 两种方块由 `CBBlockTagsProvider` 使用与传动轴相同的镐策略。
 4. 运行 datagen，检查差异后移除手写工具标签。
 
 ### 阶段 D：非动力有向方块扳手一致性
@@ -426,7 +427,7 @@ return AllItems.WRENCH.isIn(stack)
 - [ ] 所有实现或继承 `IWrenchable` 且具有自定义 `use()` 的方块都先放行扳手。
 - [ ] 多方块结构从任意组成部分使用扳手时结果一致，且只掉落一次。
 - [ ] 防爆链式传动箱结构外普通旋转不会变成 casing。
-- [ ] 两种 Butter Cat 方块使用与 Create 传动轴相同的属性和 `TagGen.pickaxeOnly()`。
+- [ ] 两种 Butter Cat 方块使用与 Create 传动轴相同的属性，并且只由 `CBBlockTagsProvider` 写入镐标签。
 - [ ] 蜘蛛装配台及齿轮不再覆盖羊毛音效。
 - [ ] 培养皿普通扳手可旋转、潜行扳手可拆除，且业务交互不会抢先消费扳手。
 - [ ] 两种防爆玻璃使用钻石镐可直接掉落自身，不需要精准采集。
@@ -441,3 +442,12 @@ return AllItems.WRENCH.isIn(stack)
 - 不把扳手行为绑定到材料属性模板。
 - 不在本次改造中更改方块 ID、BlockState 属性名或网络协议。
 - 不默认改变经验母岩的现有掉落；严格原版掉落作为独立玩法决策。
+
+## 13. 实施记录（2026-08-03）
+
+- 方块属性、工具标签、掉落与扳手改造已经落地；`schrodingers_cat` 的显式硬度已补为 `0.8`。
+- `bone_ratchet` 已补入最终 `mineable/pickaxe`，并保留在 `mineable/axe`，符合 `AXE_OR_PICKAXE` 策略。
+- Butter Cat 的 Registrate 注册链已经删除，原有 ID 由主 `registry` 的 DeferredRegister 保持；`content/buttercat` 静态扫描不再包含注册调用或注册对象。
+- 工具标签只由 `CBBlockTagsProvider` 生成；datagen 缓存和最终 JAR 中的 `mineable/pickaxe.json` 均只有一个输出来源/条目。
+- 已通过 `compileJava`、`runData` 和 `build`；最终 JAR 为 `build/libs/create_biotech-1.20.1-1.2.2.jar`。
+- 本次不涉及新的 Mixin，按项目规则未运行 `quickPlayClient`；第 10.2、10.3 节的游戏内手工矩阵仍需人工回归。

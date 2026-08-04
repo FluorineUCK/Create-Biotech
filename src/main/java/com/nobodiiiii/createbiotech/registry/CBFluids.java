@@ -7,13 +7,13 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import java.util.function.Consumer;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModFluids;
+import com.nobodiiiii.createbiotech.content.buttercat.fluid.CreamBucketDispenseBehavior;
+import com.nobodiiiii.createbiotech.content.buttercat.fluid.CreamFluidType;
 import com.nobodiiiii.createbiotech.content.fluid.LiquidLivingSlimeBlock;
 import com.nobodiiiii.createbiotech.content.fluid.LiquidLivingSlimeFluidType;
 import com.nobodiiiii.createbiotech.content.fluid.TeleportationFluid;
 import com.nobodiiiii.createbiotech.content.fluid.TeleportationLiquidBlock;
 import com.simibubi.create.content.fluids.VirtualFluid;
-import com.tterrag.registrate.util.entry.FluidEntry;
 import org.joml.Vector3f;
 
 import com.mojang.blaze3d.shaders.FogShape;
@@ -28,6 +28,8 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.material.PushReaction;
@@ -62,6 +64,10 @@ public class CBFluids {
 		CreateBiotech.asResource("fluid/experience_flow");
 	private static final ResourceLocation NETHER_PORTAL_TEXTURE =
 		ResourceLocation.fromNamespaceAndPath("minecraft", "block/nether_portal");
+	private static final ResourceLocation CREAM_STILL_TEXTURE =
+		CreateBiotech.asResource("fluid/cream_still");
+	private static final ResourceLocation CREAM_FLOW_TEXTURE =
+		CreateBiotech.asResource("fluid/cream_flow");
 	private static final Vector3f TELEPORTATION_SUBMERGED_FOG_COLOR = new Vector3f(0.72F, 0.48F, 0.86F);
 	private static final float TELEPORTATION_FOG_DISTANCE_MODIFIER = 1F / 10F;
 
@@ -190,9 +196,26 @@ public class CBFluids {
 				.craftRemainder(Items.BUCKET)
 				.stacksTo(1)));
 
-	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
-	// here so the project's primary fluid registry remains the place to inspect mod fluids.
-	public static final FluidEntry<BaseFlowingFluid.Flowing> CREAM = ModFluids.CREAM;
+	public static final DeferredHolder<FluidType, CreamFluidType> CREAM_TYPE = FLUID_TYPES.register("cream",
+		() -> new CreamFluidType(FluidType.Properties.create()
+			.viscosity(100)
+			.canSwim(false)
+			.canPushEntity(false), CREAM_STILL_TEXTURE, CREAM_FLOW_TEXTURE));
+
+	public static final DeferredHolder<Fluid, BaseFlowingFluid.Source> CREAM = FLUIDS.register("cream",
+		() -> new BaseFlowingFluid.Source(creamProperties()));
+
+	public static final DeferredHolder<Fluid, BaseFlowingFluid.Flowing> CREAM_FLOWING = FLUIDS.register("flowing_cream",
+		() -> new BaseFlowingFluid.Flowing(creamProperties()));
+
+	public static final DeferredHolder<Block, LiquidBlock> CREAM_BLOCK = FLUID_BLOCKS.register("cream",
+		() -> new LiquidBlock(CREAM.get(), Block.Properties.ofFullCopy(Blocks.WATER)
+			.mapColor(MapColor.TERRACOTTA_WHITE)));
+
+	public static final DeferredHolder<Item, BucketItem> CREAM_BUCKET = FLUID_ITEMS.register("cream_bucket",
+		() -> new BucketItem(CREAM.get(), new Item.Properties()
+			.craftRemainder(Items.BUCKET)
+			.stacksTo(1)));
 
 	private static BaseFlowingFluid.Properties experienceProperties() {
 		return new BaseFlowingFluid.Properties(EXPERIENCE_TYPE, EXPERIENCE, EXPERIENCE_FLOWING);
@@ -221,6 +244,16 @@ public class CBFluids {
 			.explosionResistance(100f);
 	}
 
+	private static BaseFlowingFluid.Properties creamProperties() {
+		return new BaseFlowingFluid.Properties(CREAM_TYPE, CREAM, CREAM_FLOWING)
+			.bucket(CREAM_BUCKET)
+			.block(CREAM_BLOCK)
+			.levelDecreasePerBlock(2)
+			.tickRate(60)
+			.slopeFindDistance(2)
+			.explosionResistance(50F);
+	}
+
 	private CBFluids() {}
 
 	public static void register(IEventBus modEventBus) {
@@ -228,5 +261,9 @@ public class CBFluids {
 		FLUIDS.register(modEventBus);
 		FLUID_BLOCKS.register(modEventBus);
 		FLUID_ITEMS.register(modEventBus);
+	}
+
+	public static void registerCreamDispenseBehavior() {
+		DispenserBlock.registerBehavior(CREAM_BUCKET.get(), new CreamBucketDispenseBehavior());
 	}
 }

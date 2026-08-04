@@ -3,8 +3,7 @@ package com.nobodiiiii.createbiotech.content.buttercat.ponder;
 import com.simibubi.create.content.kinetics.gauge.StressGaugeBlockEntity;
 import com.simibubi.create.foundation.ponder.CreateSceneBuilder;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlockEntity;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModBlocks;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModItems;
+import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import net.createmod.catnip.math.Pointing;
 import net.createmod.ponder.api.scene.SceneBuilder;
@@ -64,8 +63,8 @@ public class ModPonderScenes {
         scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.LEFT, 20).rightClick().withItem(boxedCat);
         scene.idle(5);
         scene.world().setBlock(enginePos,
-                ModBlocks.CUTE_CAT_ON_SHAFT
-                .getDefaultState()
+				CBBlocks.CUTE_CAT_ON_SHAFT.get()
+				.defaultBlockState()
                 .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST),
                 true);
         scene.idle(60);
@@ -81,13 +80,14 @@ public class ModPonderScenes {
         scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.DOWN, 20).rightClick().withItem(net.minecraft.world.item.Items.BREAD.getDefaultInstance());
         scene.idle(5);
         scene.world().setBlock(enginePos,
-                ModBlocks.BUTTER_CAT_ENGINE
-                        .getDefaultState()
+				CBBlocks.BUTTER_CAT_ENGINE.get()
+						.defaultBlockState()
                         .setValue(BlockStateProperties.HORIZONTAL_FACING, Direction.EAST),
                 true);
         scene.idle(40);
 
-        scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.DOWN, 20).rightClick().withItem(ModItems.BUTTER.asStack());
+        scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.DOWN, 20).rightClick()
+				.withItem(CBItems.BUTTER.get().getDefaultInstance());
         scene.idle(5);
         scene.world().modifyBlockEntity(enginePos,ButterCatEngineBlockEntity.class,(be)->be.addButterCount(1));
         scene.world().setKineticSpeed(util.select().everywhere(), 16);
@@ -103,7 +103,8 @@ public class ModPonderScenes {
 
         scene.idle(90);
         for (int i = 0;i<5 ;i ++){
-            scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.DOWN, 10).rightClick().withItem(ModItems.BUTTER.asStack());
+            scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.DOWN, 10).rightClick()
+					.withItem(CBItems.BUTTER.get().getDefaultInstance());
             scene.idle(5);
             scene.world().modifyBlockEntity(enginePos,ButterCatEngineBlockEntity.class,(be)->be.addButterCount(1));
 
@@ -125,7 +126,8 @@ public class ModPonderScenes {
                 .placeNearTarget()
                 .pointAt(util.vector().topOf(enginePos));
         scene.idle(90);
-        scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.DOWN, 20).rightClick().withItem(ModItems.SUPER_BUTTER.asStack());
+        scene.overlay().showControls(util.vector().topOf(enginePos), Pointing.DOWN, 20).rightClick()
+				.withItem(CBItems.SUPER_BUTTER.get().getDefaultInstance());
         scene.idle(5);
         scene.world().modifyBlockEntity(enginePos,ButterCatEngineBlockEntity.class,(be)->be.setInfinite(true));
         scene.world().setKineticSpeed(util.select().everywhere(), 256);

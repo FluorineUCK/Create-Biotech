@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.buttercat.block;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.nobodiiiii.createbiotech.client.ButterCatPartials;
 import com.nobodiiiii.createbiotech.mixin.client.LevelRendererAccessor;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import dev.engine_room.flywheel.api.visualization.VisualizationManager;
@@ -53,22 +54,26 @@ public class ButterCatEngineRenderer  extends KineticBlockEntityRenderer<ButterC
         float degree = getAttachmentAngleForBe(be, be.getBlockPos(), axis, partialTicks);
 
         //cat
-        SuperByteBuffer cat = CachedBuffers.partialFacing(be.getCatModel(), blockState, direction);
+        SuperByteBuffer cat = CachedBuffers.partialFacing(
+			ButterCatPartials.getCatModel(be.getCatVariant()), blockState, direction);
         cat.rotateCenteredDegrees(degree, positiveAxis);
         cat.light(light).overlay(overlay).renderInto(ms, buffer.getBuffer(RenderType.cutoutMipped()));
 
         //butter
-        SuperByteBuffer butter = CachedBuffers.partialFacing(be.getButterModel(), blockState, direction);
+        SuperByteBuffer butter = CachedBuffers.partialFacing(
+			ButterCatPartials.getButterModel(be.isInfinite(), be.getButterLevel()), blockState, direction);
         butter.rotateCenteredDegrees(degree, positiveAxis);
         butter.light(light).overlay(overlay).renderInto(ms, buffer.getBuffer(RenderType.solid()));
 
         //bread
-        SuperByteBuffer bread = CachedBuffers.partialFacing(be.getBreadModel(), blockState, direction);
+        SuperByteBuffer bread = CachedBuffers.partialFacing(
+			ButterCatPartials.getBreadModel(be.hasBread()), blockState, direction);
         bread.rotateCenteredDegrees(degree, positiveAxis);
         bread.light(light).overlay(overlay).renderInto(ms, buffer.getBuffer(RenderType.solid()));
 
         //rope
-        SuperByteBuffer rope = CachedBuffers.partialFacing(be.getRopeModel(), blockState, direction);
+        SuperByteBuffer rope = CachedBuffers.partialFacing(
+			ButterCatPartials.getRopeModel(be.hasBread()), blockState, direction);
         rope.rotateCenteredDegrees(degree, positiveAxis);
         rope.light(light).overlay(overlay).renderInto(ms, buffer.getBuffer(RenderType.solid()));
     }

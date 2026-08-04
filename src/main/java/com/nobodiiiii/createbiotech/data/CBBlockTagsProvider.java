@@ -53,6 +53,7 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 			CBBlocks.UNIVERSAL_JOINT.get(),
 			CBBlocks.HALF_SHAFT.get(),
 			CBBlocks.SLIME_CLUTCH.get(),
+			CBBlocks.BONE_RATCHET.get(),
 			CBBlocks.GHAST_HOT_AIR_BALLOON_ASSEMBLY_STATION.get(),
 			CBBlocks.GHAST_HELM.get(),
 			CBBlocks.SPIDER_ASSEMBLY_TABLE.get(),

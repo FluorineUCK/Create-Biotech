@@ -59,8 +59,8 @@ public final class CBSharedProperties {
 		return Block.Properties.ofFullCopy(Blocks.GLASS);
 	}
 
-	public static Block.Properties withObsidianDurability(Block.Properties properties) {
-		return properties.strength(50.0f, 1200.0f)
+	public static Block.Properties withExplosionProofResistance(Block.Properties properties) {
+		return properties.explosionResistance(1200.0f)
 			.requiresCorrectToolForDrops();
 	}
 }

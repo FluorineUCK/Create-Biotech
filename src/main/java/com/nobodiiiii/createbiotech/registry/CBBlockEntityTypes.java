@@ -7,7 +7,6 @@ import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.Automati
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetBlockEntity;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerBlockEntity;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlockEntity;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModBlockEnetities;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlockEntity;
 import com.nobodiiiii.createbiotech.content.experience.BuddingExperienceBlockEntity;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlockEntity;
@@ -40,7 +39,6 @@ import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import net.neoforged.neoforge.registries.DeferredHolder;
-import com.tterrag.registrate.util.entry.BlockEntityEntry;
 
 public class CBBlockEntityTypes {
 
@@ -210,10 +208,12 @@ public class CBBlockEntityTypes {
 				.of(FrogDigestiveTractBlockEntity::new, CBBlocks.FROG_DIGESTIVE_TRACT.get())
 				.build(null));
 
-	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
-	// here so the project's primary block entity registry remains the place to inspect mod blocks.
-	public static final BlockEntityEntry<ButterCatEngineBlockEntity> BUTTER_CAT_ENGINE =
-		ModBlockEnetities.BUTTER_CAT_ENGINE_BE;
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ButterCatEngineBlockEntity>>
+		BUTTER_CAT_ENGINE =
+		BLOCK_ENTITY_TYPES.register("butter_cat_engine_be",
+			() -> BlockEntityType.Builder.of(ButterCatEngineBlockEntity::new,
+				CBBlocks.CUTE_CAT_ON_SHAFT.get(), CBBlocks.BUTTER_CAT_ENGINE.get())
+				.build(null));
 
 	private CBBlockEntityTypes() {}
 

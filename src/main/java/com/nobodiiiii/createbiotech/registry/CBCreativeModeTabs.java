@@ -44,8 +44,8 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.SLIME_CLUTCH.get());
 				output.accept(CBItems.BONE_RATCHET.get());
 				output.accept(CBItems.SPIDER_ASSEMBLY_TABLE.get());
-				output.accept(CBBlocks.CUTE_CAT_ON_SHAFT.get().asItem(), TabVisibility.SEARCH_TAB_ONLY);
-				output.accept(CBBlocks.BUTTER_CAT_ENGINE.get().asItem());
+				output.accept(CBItems.CUTE_CAT_ON_SHAFT.get(), TabVisibility.SEARCH_TAB_ONLY);
+				output.accept(CBItems.BUTTER_CAT_ENGINE.get());
 				output.accept(CBItems.FIXED_CARROT_FISHING_ROD.get());
 				output.accept(CBItems.POWER_BELT_CONNECTOR.get());
 				output.accept(CBItems.SLIME_BELT_CONNECTOR.get());
@@ -86,7 +86,7 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.SLIME_BOOTS.get());
 				output.accept(CBFluids.TELEPORTATION_BUCKET.get());
 				output.accept(CBFluids.LIQUID_LIVING_SLIME_BUCKET.get());
-				CBFluids.CREAM.getBucket().ifPresent(output::accept);
+				output.accept(CBFluids.CREAM_BUCKET.get());
 			})
 			.build());
 
