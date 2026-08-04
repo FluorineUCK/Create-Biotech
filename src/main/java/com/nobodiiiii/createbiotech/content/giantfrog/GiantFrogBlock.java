@@ -3,12 +3,15 @@ package com.nobodiiiii.createbiotech.content.giantfrog;
 import java.util.List;
 
 import com.mojang.serialization.MapCodec;
+import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBDataComponents;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -19,7 +22,6 @@ import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.BaseEntityBlock;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.RenderShape;
@@ -74,8 +76,6 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	};
 	private static final VoxelShape[] COLLISION_SHAPES = makeCollisionShapes();
 	private static final AABB BODY_BOUNDS = BODY_BOX.boundsForAllFacings();
-	private static final ThreadLocal<Boolean> PLACING_STRUCTURE = ThreadLocal.withInitial(() -> false);
-	private static final ThreadLocal<Boolean> REMOVING_STRUCTURE = ThreadLocal.withInitial(() -> false);
 
 	public GiantFrogBlock(Properties properties) {
 		super(properties);
@@ -107,54 +107,76 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	@Override
 	public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
 		super.setPlacedBy(level, pos, state, placer, stack);
+
+		// Placed on both sides like vanilla doors do: leaving the client with a lone
+		// anchor makes the frog's shape pop in only once the server's updates arrive.
+		BlockState partState = defaultBlockState().setValue(FACING, state.getValue(FACING));
+		forEachOccupiedOffset((x, y, z) -> {
+			if (x == CENTER_OFFSET && y == 0 && z == CENTER_OFFSET)
+				return;
+			level.setBlock(pos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET),
+				partState.setValue(X_OFFSET, x).setValue(Y_OFFSET, y).setValue(Z_OFFSET, z),
+				Block.UPDATE_ALL);
+		});
+
 		if (level.isClientSide)
 			return;
 		Long index = stack.get(CBDataComponents.FROG_STOMACH_SPACE.get());
 		if (index != null && level.getBlockEntity(pos) instanceof GiantFrogBlockEntity frog)
 			frog.setSpaceIndex(index);
+	}
 
-		BlockState partState = defaultBlockState().setValue(FACING, state.getValue(FACING));
-		PLACING_STRUCTURE.set(true);
-		try {
-			forEachOccupiedOffset((x, y, z) -> {
-				if (x == CENTER_OFFSET && y == 0 && z == CENTER_OFFSET)
-					return;
-				level.setBlock(pos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET),
-					partState.setValue(X_OFFSET, x).setValue(Y_OFFSET, y).setValue(Z_OFFSET, z),
-					Block.UPDATE_ALL);
-			});
-		} finally {
-			PLACING_STRUCTURE.set(false);
-		}
+	@Override
+	public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
+		super.onPlace(state, level, pos, oldState, isMoving);
+		// Catches parts that arrive without going through setPlacedBy, such as a
+		// /setblock of a single leg, which would otherwise linger as a ghost block.
+		scheduleStructureCheck(level, pos, state);
 	}
 
 	@Override
 	public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor level,
 		BlockPos pos, BlockPos neighborPos) {
-		if (!PLACING_STRUCTURE.get() && !REMOVING_STRUCTURE.get() && !isValidStructure(level, pos, state))
-			return Blocks.AIR.defaultBlockState();
+		// Deferred on purpose: validating here would run the 18-position scan on the
+		// client too, force-load whichever chunk the far side of the frog sits in, and
+		// repeat the whole scan once per neighbour update instead of once per tick.
+		scheduleStructureCheck(level, pos, state);
 		return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
 	}
 
 	@Override
-	public boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
-		return isMain(state) || PLACING_STRUCTURE.get() || isValidStructure(level, pos, state);
+	public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+		if (isValidStructure(level, pos, state))
+			return;
+		removeStructure(level, pos, state);
 	}
 
 	@Override
 	public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
-		if (!level.isClientSide && !REMOVING_STRUCTURE.get() && !isMain(state))
-			removeStructure(level, pos, state, !player.isCreative());
+		// Survival breaks let the scheduled teardown destroy the anchor so its loot
+		// table decides what drops. Creative has to take the anchor out itself,
+		// without drops, exactly like vanilla's double blocks.
+		if (!level.isClientSide && !isMain(state) && player.isCreative()) {
+			BlockPos mainPos = getMainPos(pos, state);
+			if (belongsTo(level, mainPos, mainPos))
+				CBMultiBlockLifecycle.removeAnchorInCreative(level, mainPos, player);
+		}
 		return super.playerWillDestroy(level, pos, state, player);
 	}
 
 	@Override
 	public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
-		if (state.getBlock() == newState.getBlock())
+		if (state.getBlock() == newState.getBlock()) {
+			super.onRemove(state, level, pos, newState, isMoving);
 			return;
+		}
 
-		if (!REMOVING_STRUCTURE.get())
-			removeStructure(level, pos, state, !isMain(state) && !isMoving);
+		if (isMain(state) && level.getBlockEntity(pos) instanceof GiantFrogBlockEntity frog)
+			frog.dropBeltTransferItem();
+
+		// Neighbour updates only reach the parts touching this one, so the rest of the
+		// frog has to be told to re-check itself.
+		scheduleStructureCheck(level, pos, state);
 
 		super.onRemove(state, level, pos, newState, isMoving);
 	}
@@ -209,8 +231,8 @@ public class GiantFrogBlock extends BaseEntityBlock {
 
 	@Override
 	public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
-		if (!isMain(state))
-			return List.of();
+		// Which parts drop is the loot table's call; all this adds is the stomach the
+		// frog is bound to, which lives in the block entity rather than in a component.
 		List<ItemStack> drops = super.getDrops(state, builder);
 		if (builder.getOptionalParameter(LootContextParams.BLOCK_ENTITY) instanceof GiantFrogBlockEntity frog)
 			drops.forEach(stack -> addSpaceIndex(stack, frog));
@@ -242,6 +264,8 @@ public class GiantFrogBlock extends BaseEntityBlock {
 			for (int x = 0; x < OCCUPIED_WIDTH; x++) {
 				for (int z = 0; z < OCCUPIED_WIDTH; z++) {
 					BlockPos partPos = mainPos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET);
+					if (!level.getWorldBorder().isWithinBounds(partPos))
+						return false;
 					if (!level.getBlockState(partPos).canBeReplaced(context))
 						return false;
 				}
@@ -250,14 +274,19 @@ public class GiantFrogBlock extends BaseEntityBlock {
 		return true;
 	}
 
-	private static boolean isValidStructure(BlockGetter level, BlockPos pos, BlockState state) {
+	private static boolean isValidStructure(LevelReader level, BlockPos pos, BlockState state) {
 		BlockPos mainPos = getMainPos(pos, state);
 		Direction facing = state.getValue(FACING);
 
 		for (int y = 0; y < OCCUPIED_HEIGHT; y++) {
 			for (int x = 0; x < OCCUPIED_WIDTH; x++) {
 				for (int z = 0; z < OCCUPIED_WIDTH; z++) {
-					BlockState partState = level.getBlockState(mainPos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET));
+					BlockPos partPos = mainPos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET);
+					// An unloaded neighbour chunk is not evidence of a broken frog, and
+					// reading it would force it in from disk on a block-update path.
+					if (!CBMultiBlockLifecycle.isLoaded(level, partPos))
+						continue;
+					BlockState partState = level.getBlockState(partPos);
 					if (!(partState.getBlock() instanceof GiantFrogBlock))
 						return false;
 					if (partState.getValue(FACING) != facing
@@ -271,25 +300,53 @@ public class GiantFrogBlock extends BaseEntityBlock {
 		return true;
 	}
 
-	private static void removeStructure(Level level, BlockPos pos, BlockState state, boolean dropItem) {
+	/** Whether the frog part at {@code partPos}, if any, is part of the frog anchored at {@code mainPos}. */
+	private static boolean belongsTo(LevelReader level, BlockPos partPos, BlockPos mainPos) {
+		BlockState partState = level.getBlockState(partPos);
+		return partState.getBlock() instanceof GiantFrogBlock && getMainPos(partPos, partState).equals(mainPos);
+	}
+
+	/**
+	 * Asks every part of this frog to re-check itself next tick. The anchor's own check
+	 * already covers the whole structure, so while it stands it speaks for all of them -
+	 * which also collapses the eighteen updates a placement produces into one check.
+	 * Once the anchor is gone the orphans have to clean themselves up individually.
+	 */
+	private void scheduleStructureCheck(LevelAccessor level, BlockPos pos, BlockState state) {
+		if (level.isClientSide())
+			return;
+
 		BlockPos mainPos = getMainPos(pos, state);
-		if (level.getBlockEntity(mainPos) instanceof GiantFrogBlockEntity frog)
-			frog.dropBeltTransferItem();
-
-		if (!level.isClientSide && dropItem)
-			Block.popResource(level, mainPos, createDropStack(level, mainPos));
-
-		REMOVING_STRUCTURE.set(true);
-		try {
-			forEachOccupiedOffset((x, y, z) -> {
-				BlockPos partPos = mainPos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET);
-				BlockState partState = level.getBlockState(partPos);
-				if (partState.getBlock() instanceof GiantFrogBlock && getMainPos(partPos, partState).equals(mainPos))
-					level.setBlock(partPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-			});
-		} finally {
-			REMOVING_STRUCTURE.set(false);
+		if (CBMultiBlockLifecycle.isLoaded(level, mainPos) && belongsTo(level, mainPos, mainPos)) {
+			CBMultiBlockLifecycle.scheduleValidation(level, mainPos, this);
+			return;
 		}
+
+		forEachOccupiedOffset((x, y, z) -> {
+			BlockPos partPos = mainPos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET);
+			if (CBMultiBlockLifecycle.isLoaded(level, partPos) && belongsTo(level, partPos, mainPos))
+				CBMultiBlockLifecycle.scheduleValidation(level, partPos, this);
+		});
+	}
+
+	/**
+	 * Tears down every part of the frog anchored at this position. Only the anchor may
+	 * drop anything, and it does so through {@code destroyBlock} so that its loot table
+	 * - not this method - decides what the player gets. Runs from a scheduled tick, so
+	 * a second part reaching the same conclusion this tick finds nothing left to do.
+	 */
+	private static void removeStructure(Level level, BlockPos pos, BlockState state) {
+		BlockPos mainPos = getMainPos(pos, state);
+		boolean anchorPresent = belongsTo(level, mainPos, mainPos);
+
+		forEachOccupiedOffset((x, y, z) -> {
+			BlockPos partPos = mainPos.offset(x - CENTER_OFFSET, y, z - CENTER_OFFSET);
+			if (!partPos.equals(mainPos) && belongsTo(level, partPos, mainPos))
+				CBMultiBlockLifecycle.removeSilently(level, partPos);
+		});
+
+		if (anchorPresent)
+			level.destroyBlock(mainPos, true);
 	}
 
 	public static boolean isMain(BlockState state) {

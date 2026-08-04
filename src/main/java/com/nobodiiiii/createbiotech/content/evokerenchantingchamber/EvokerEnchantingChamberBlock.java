@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.evokerenchantingchamber;
 
 import com.mojang.serialization.MapCodec;
+import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
@@ -38,6 +39,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.BlockHitResult;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.BlockEvent;
@@ -66,6 +68,8 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock implements IWr
 		BlockPos pos = context.getClickedPos();
 		Level level = context.getLevel();
 		if (!hasSpaceForUpperHalf(level, pos))
+			return null;
+		if (!level.getWorldBorder().isWithinBounds(pos.above()))
 			return null;
 		if (!level.getBlockState(pos.above()).canBeReplaced(context))
 			return null;
@@ -110,23 +114,24 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock implements IWr
 
 	@Override
 	public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
-		if (!level.isClientSide() && state.getValue(HALF) == DoubleBlockHalf.UPPER) {
+		// Survival breaks let the lower half be destroyed by the shape cascade below, so
+		// its loot table decides what drops. Creative has to take it out itself, without
+		// drops, exactly like vanilla's double blocks.
+		if (!level.isClientSide() && state.getValue(HALF) == DoubleBlockHalf.UPPER && player.isCreative()) {
 			BlockPos lowerPos = pos.below();
 			BlockState lowerState = level.getBlockState(lowerPos);
-			if (lowerState.is(this) && lowerState.getValue(HALF) == DoubleBlockHalf.LOWER) {
-				if (player.isCreative()) {
-					level.setBlock(lowerPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-					level.levelEvent(player, 2001, lowerPos, Block.getId(lowerState));
-				} else {
-					BlockEntity lowerBlockEntity = level.getBlockEntity(lowerPos);
-					dropResources(lowerState, (ServerLevel) level, lowerPos, lowerBlockEntity, player,
-						player.getMainHandItem());
-					level.setBlock(lowerPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-				}
-			}
+			if (lowerState.is(this) && lowerState.getValue(HALF) == DoubleBlockHalf.LOWER)
+				CBMultiBlockLifecycle.removeAnchorInCreative(level, lowerPos, player);
 		}
 
 		return super.playerWillDestroy(level, pos, state, player);
+	}
+
+	@Override
+	public PushReaction getPistonPushReaction(BlockState state) {
+		// Without this a Create contraption would happily pick up one half and leave the
+		// other behind, and the leftover half deletes itself without dropping anything.
+		return PushReaction.BLOCK;
 	}
 
 	@Override

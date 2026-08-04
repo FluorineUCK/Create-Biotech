@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.spiderassemblytable;
 
+import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -10,7 +11,9 @@ import com.simibubi.create.foundation.item.ItemHelper;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
@@ -23,7 +26,6 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
@@ -41,8 +43,6 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 
 	public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 	private static final VoxelShape SHAPE = Block.box(0, 0, 0, 16, 9, 16);
-	private static final ThreadLocal<Boolean> REMOVING_MAIN_FROM_TAIL = ThreadLocal.withInitial(() -> false);
-	private static final ThreadLocal<Boolean> REMOVING_TAIL_FROM_MAIN = ThreadLocal.withInitial(() -> false);
 	private static final ThreadLocal<Direction> FORCED_PLACEMENT_FACING = new ThreadLocal<>();
 
 	public SpiderAssemblyTableBlock(Properties properties) {
@@ -54,6 +54,8 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 	public BlockState getStateForPlacement(BlockPlaceContext context) {
 		Direction facing = getPlacementFacing(context);
 		BlockPos tailPos = context.getClickedPos().relative(facing.getOpposite());
+		if (!context.getLevel().getWorldBorder().isWithinBounds(tailPos))
+			return null;
 		if (!context.getLevel().getBlockState(tailPos).canBeReplaced(context))
 			return null;
 		return defaultBlockState().setValue(FACING, facing);
@@ -72,13 +74,15 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 	@Override
 	public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
 		super.setPlacedBy(level, pos, state, placer, stack);
-		if (level.isClientSide)
-			return;
-		BlockPos tailPos = getTailPos(pos, state);
+		// Placed on both sides like vanilla doors do, so the client is never left
+		// holding a table with no cog until the server's updates arrive.
 		BlockState tailState = CBBlocks.SPIDER_ASSEMBLY_TABLE_COG.get()
 			.defaultBlockState()
 			.setValue(SpiderAssemblyTableCogBlock.FACING, state.getValue(FACING));
-		level.setBlock(tailPos, tailState, Block.UPDATE_ALL);
+		level.setBlock(getTailPos(pos, state), tailState, Block.UPDATE_ALL);
+
+		if (level.isClientSide)
+			return;
 		withBlockEntityDo(level, pos, be -> be.setAdvancementOwner(placer));
 	}
 
@@ -102,12 +106,28 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 	}
 
 	@Override
+	public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
+		super.onPlace(state, level, pos, oldState, isMoving);
+		// Catches tables that arrive without going through setPlacedBy, such as a
+		// /setblock, which would otherwise sit there cogless.
+		scheduleStructureCheck(level, pos, getTailPos(pos, state));
+	}
+
+	@Override
 	public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor level,
 		BlockPos pos, BlockPos neighborPos) {
-		if (direction == state.getValue(FACING).getOpposite()
-			&& !SpiderAssemblyTableCogBlock.isValidCogFor(level, neighborPos, state))
-			return Blocks.AIR.defaultBlockState();
+		// Deferred to the scheduled tick so the check never runs on the client and does
+		// not read across the chunk border the cog may sit behind.
+		scheduleStructureCheck(level, pos, getTailPos(pos, state));
 		return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
+	}
+
+	@Override
+	public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+		BlockPos tailPos = getTailPos(pos, state);
+		if (isValidStructure(level, pos, tailPos))
+			return;
+		removeStructure(level, pos, tailPos);
 	}
 
 	@Override
@@ -115,10 +135,11 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 		if (!state.hasBlockEntity() || state.getBlock() == newState.getBlock())
 			return;
 
-		if (!isRemovingMainFromTail()) {
-			removeTail(level, pos, state);
-			withBlockEntityDo(level, pos, be -> ItemHelper.dropContents(level, pos, be.getInventory()));
-		}
+		// Contents drop no matter who removed the table, matching vanilla containers.
+		// Gating this on the drop-the-block decision used to void the inventory when a
+		// creative player broke the cog.
+		withBlockEntityDo(level, pos, be -> ItemHelper.dropContents(level, pos, be.getInventory()));
+		scheduleStructureCheck(level, pos, getTailPos(pos, state));
 		IBE.onRemove(state, level, pos, newState);
 	}
 
@@ -169,32 +190,47 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 		return InteractionResult.SUCCESS;
 	}
 
-	static void removeMainFromTail(Level level, BlockPos mainPos, boolean dropMainBlock, boolean playBreakEffect) {
+	/**
+	 * Whether the table at {@code mainPos} and the cog at {@code tailPos} still form an
+	 * intact machine. A position whose chunk is not loaded counts as intact: it is not
+	 * evidence of a broken table, and reading it would force the chunk in from disk.
+	 */
+	static boolean isValidStructure(LevelReader level, BlockPos mainPos, BlockPos tailPos) {
+		if (!CBMultiBlockLifecycle.isLoaded(level, mainPos) || !CBMultiBlockLifecycle.isLoaded(level, tailPos))
+			return true;
+
 		BlockState mainState = level.getBlockState(mainPos);
 		if (!(mainState.getBlock() instanceof SpiderAssemblyTableBlock))
+			return false;
+		if (!getTailPos(mainPos, mainState).equals(tailPos))
+			return false;
+		return SpiderAssemblyTableCogBlock.isValidCogFor(level, tailPos, mainState);
+	}
+
+	/** Asks both halves to re-check themselves next tick. */
+	static void scheduleStructureCheck(LevelAccessor level, BlockPos mainPos, BlockPos tailPos) {
+		if (level.isClientSide())
 			return;
-
-		if (!level.isClientSide && dropMainBlock) {
-			Block.popResource(level, mainPos, new ItemStack(CBItems.SPIDER_ASSEMBLY_TABLE.get()));
-			BlockEntity blockEntity = level.getBlockEntity(mainPos);
-			if (blockEntity instanceof SpiderAssemblyTableBlockEntity be)
-				ItemHelper.dropContents(level, mainPos, be.getInventory());
-		}
-
-		REMOVING_MAIN_FROM_TAIL.set(true);
-		level.setBlock(mainPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-		REMOVING_MAIN_FROM_TAIL.set(false);
-
-		if (playBreakEffect)
-			level.levelEvent(null, 2001, mainPos, Block.getId(mainState));
+		CBMultiBlockLifecycle.scheduleValidation(level, mainPos, CBBlocks.SPIDER_ASSEMBLY_TABLE.get());
+		CBMultiBlockLifecycle.scheduleValidation(level, tailPos, CBBlocks.SPIDER_ASSEMBLY_TABLE_COG.get());
 	}
 
-	static boolean isRemovingMainFromTail() {
-		return REMOVING_MAIN_FROM_TAIL.get();
-	}
+	/**
+	 * Tears down both halves. Only the table may drop anything, and it does so through
+	 * {@code destroyBlock} so its loot table - not this method - decides what the
+	 * player gets. Runs from a scheduled tick, so the other half reaching the same
+	 * conclusion this tick finds nothing left to do.
+	 */
+	static void removeStructure(Level level, BlockPos mainPos, BlockPos tailPos) {
+		BlockState tailState = level.getBlockState(tailPos);
+		if (tailState.getBlock() instanceof SpiderAssemblyTableCogBlock
+			&& SpiderAssemblyTableCogBlock.getMainPos(tailPos, tailState).equals(mainPos))
+			CBMultiBlockLifecycle.removeSilently(level, tailPos);
 
-	static boolean isRemovingTailFromMain() {
-		return REMOVING_TAIL_FROM_MAIN.get();
+		BlockState mainState = level.getBlockState(mainPos);
+		if (mainState.getBlock() instanceof SpiderAssemblyTableBlock
+			&& getTailPos(mainPos, mainState).equals(tailPos))
+			level.destroyBlock(mainPos, true);
 	}
 
 	static BlockPos getTailPos(BlockPos pos, BlockState state) {
@@ -217,15 +253,5 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 
 	static void clearForcedPlacementFacing() {
 		FORCED_PLACEMENT_FACING.remove();
-	}
-
-	private static void removeTail(Level level, BlockPos pos, BlockState state) {
-		BlockPos tailPos = getTailPos(pos, state);
-		BlockState tailState = level.getBlockState(tailPos);
-		if (!SpiderAssemblyTableCogBlock.isValidCogFor(level, tailPos, state))
-			return;
-		REMOVING_TAIL_FROM_MAIN.set(true);
-		level.setBlock(tailPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-		REMOVING_TAIL_FROM_MAIN.set(false);
 	}
 }
