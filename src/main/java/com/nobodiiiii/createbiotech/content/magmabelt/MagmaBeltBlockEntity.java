@@ -45,6 +45,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -59,7 +60,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class MagmaBeltBlockEntity extends KineticBlockEntity {
+public class MagmaBeltBlockEntity extends KineticBlockEntity implements Clearable {
 
 	/** Ticks to wait before re-attempting a chain init that already failed once. */
 	private static final int INIT_RETRY_INTERVAL = 20;
@@ -248,6 +249,18 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		if (!isRemoved() && itemHandler == null)
 			initializeItemHandler();
 		return itemHandler;
+	}
+
+	/**
+	 * Commands that replace a block ({@code /setblock}, {@code /fill}, {@code /clone}) and structure
+	 * placement call this before the replacement so container contents vanish rather than pop out.
+	 * Create's belt does the same; without it the transported items survive into the removal path.
+	 */
+	@Override
+	public void clearContent() {
+		if (inventory != null)
+			inventory.getTransportedItems()
+				.clear();
 	}
 
 	@Override

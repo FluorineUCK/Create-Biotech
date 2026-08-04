@@ -43,6 +43,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -53,7 +54,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost {
+public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost, Clearable {
 
 	/** {@code Track.values()} clones its array on every call; the surface lookups run per funnel per tick. */
 	private static final Track[] TRACKS = Track.values();
@@ -171,6 +172,18 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		if (!SlimeBeltBlock.canTransportObjects(getBlockState()))
 			return null;
 		return getItemHandler(side);
+	}
+
+	/**
+	 * Commands that replace a block ({@code /setblock}, {@code /fill}, {@code /clone}) and structure
+	 * placement call this before the replacement so container contents vanish rather than pop out.
+	 * Create's belt does the same; without it the transported items survive into the removal path.
+	 */
+	@Override
+	public void clearContent() {
+		if (inventory != null)
+			inventory.getTransportedItems()
+				.clear();
 	}
 
 	@Override
