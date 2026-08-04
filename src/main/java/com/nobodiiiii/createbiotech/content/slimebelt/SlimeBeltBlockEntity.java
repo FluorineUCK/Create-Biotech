@@ -199,8 +199,11 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		beltLength = 0;
 		index = 0;
 		controller = null;
-		passengers = null;
 		trackerUpdateTag = new CompoundTag();
+		// The cached handlers captured the index this just reset, so they have to go. `passengers`
+		// deliberately survives: KineticBlockEntity#read calls this on every read, and the belt syncs on
+		// every insertion, so clearing the map here would drop the client's riders several times a second.
+		// Chain rewiring clears it through SlimeBeltSlicer#resetChain instead.
 		invalidateItemHandlers();
 	}
 
