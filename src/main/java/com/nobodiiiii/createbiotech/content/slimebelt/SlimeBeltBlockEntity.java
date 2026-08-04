@@ -97,7 +97,9 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 
 		super.tick();
 
-		if (!CBBlocks.SLIME_BELT.get().equals(level.getBlockState(worldPosition).getBlock()))
+		// The block entity's cached state is kept in sync by LevelChunk#setBlockState, so this needs no
+		// chunk lookup. Create reads through the level here; the power belt already relies on the cache.
+		if (!getBlockState().is(CBBlocks.SLIME_BELT.get()))
 			return;
 
 		if (!isController())

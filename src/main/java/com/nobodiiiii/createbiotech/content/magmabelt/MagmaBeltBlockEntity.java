@@ -106,7 +106,9 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 
 		super.tick();
 
-		if (!MagmaBeltBlock.isMagmaBelt(level.getBlockState(worldPosition)))
+		// The block entity's cached state is kept in sync by LevelChunk#setBlockState, so this needs no
+		// chunk lookup. Create reads through the level here; the power belt already relies on the cache.
+		if (!MagmaBeltBlock.isMagmaBelt(getBlockState()))
 			return;
 
 		initializeItemHandler();
