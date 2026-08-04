@@ -1,7 +1,10 @@
 package com.nobodiiiii.createbiotech.content.slimebelt;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
@@ -29,8 +32,11 @@ import com.simibubi.create.content.logistics.box.PackageEntity;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
+import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
+import com.simibubi.create.foundation.block.render.ReducedDestroyEffects;
 import com.simibubi.create.foundation.item.ItemHelper;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
@@ -60,6 +66,9 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition.Builder;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
@@ -89,6 +98,11 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		registerDefaultState(defaultBlockState().setValue(SLOPE, BeltSlope.HORIZONTAL)
 			.setValue(PART, BeltPart.START)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@OnlyIn(Dist.CLIENT)
+	public void initializeClient(Consumer<IClientBlockExtensions> consumer) {
+		consumer.accept(new RenderProperties());
 	}
 
 	@Override
@@ -567,5 +581,15 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	@Override
 	public FluidState getFluidState(BlockState state) {
 		return fluidState(state);
+	}
+
+	public static class RenderProperties extends ReducedDestroyEffects implements MultiPosDestructionHandler {
+		@Override
+		public Set<BlockPos> getExtraPositions(ClientLevel level, BlockPos pos, BlockState blockState, int progress) {
+			BlockEntity blockEntity = level.getBlockEntity(pos);
+			if (blockEntity instanceof SlimeBeltBlockEntity belt)
+				return new HashSet<>(SlimeBeltBlock.getBeltChain(level, belt.getController()));
+			return null;
+		}
 	}
 }

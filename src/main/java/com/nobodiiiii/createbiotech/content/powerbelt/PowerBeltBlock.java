@@ -1,7 +1,10 @@
 package com.nobodiiiii.createbiotech.content.powerbelt;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -28,10 +31,13 @@ import com.simibubi.create.content.logistics.funnel.FunnelBlock;
 import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlock;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
+import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
+import com.simibubi.create.foundation.block.render.ReducedDestroyEffects;
 import com.yision.allay.block.allayport.AllayPortBlock;
 
 import dev.ryanhcode.sable.companion.SubLevelAccess;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
@@ -79,6 +85,8 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 
 public class PowerBeltBlock extends HorizontalKineticBlock
 	implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock, TransformableBlock {
@@ -94,6 +102,11 @@ public class PowerBeltBlock extends HorizontalKineticBlock
 			.setValue(PART, BeltPart.PULLEY)
 			.setValue(CASING, false)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@OnlyIn(Dist.CLIENT)
+	public void initializeClient(Consumer<IClientBlockExtensions> consumer) {
+		consumer.accept(new RenderProperties());
 	}
 
 	@Override
@@ -594,5 +607,15 @@ public class PowerBeltBlock extends HorizontalKineticBlock
 
 	public static boolean isPowerBelt(BlockState state) {
 		return state.is(CBBlocks.POWER_BELT.get());
+	}
+
+	public static class RenderProperties extends ReducedDestroyEffects implements MultiPosDestructionHandler {
+		@Override
+		public Set<BlockPos> getExtraPositions(ClientLevel level, BlockPos pos, BlockState blockState, int progress) {
+			BlockEntity blockEntity = level.getBlockEntity(pos);
+			if (blockEntity instanceof PowerBeltBlockEntity belt)
+				return new HashSet<>(PowerBeltBlock.getBeltChain(level, belt.getController()));
+			return null;
+		}
 	}
 }
