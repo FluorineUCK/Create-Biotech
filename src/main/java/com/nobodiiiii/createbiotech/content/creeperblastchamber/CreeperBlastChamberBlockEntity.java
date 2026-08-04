@@ -3140,7 +3140,12 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		public ItemStack getStackInSlot(int slot) {
 			validateSlot(slot);
 			ItemStack output = getActualControllerOutput();
-			return output == null ? ItemStack.EMPTY : output;
+			if (output != null)
+				return output;
+
+			// Create 1.21 funnels skip simulated extraction for slots that report empty.
+			requestControllerOutput();
+			return ItemStack.EMPTY;
 		}
 
 		@Override
