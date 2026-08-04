@@ -55,6 +55,9 @@ import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost {
 
+	/** {@code Track.values()} clones its array on every call; the surface lookups run per funnel per tick. */
+	private static final Track[] TRACKS = Track.values();
+
 	public Map<Entity, TransportedEntityInfo> passengers;
 	public int beltLength;
 	public int index;
@@ -480,19 +483,54 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 
 	@Override
 	public List<BeltSurface> surfaces() {
-		if (level == null)
-			return List.of();
-		SlimeBeltBlockEntity controller = getControllerBE();
-		if (controller == null || controller.beltLength == 0)
+		SlimeBeltBlockEntity controller = surfaceController();
+		if (controller == null)
 			return List.of();
 		List<BeltSurface> result = new ArrayList<>(2);
-		for (Track track : Track.values()) {
-			Direction outwardNormal = SlimeBeltHelper.getRepresentativeSideForTrack(controller, index, track);
-			Direction movementFacing = SlimeBeltHelper.getMovementFacingForTrack(controller, track);
-			if (outwardNormal.getAxis() == movementFacing.getAxis())
-				continue;
-			result.add(BeltSurface.of(this, worldPosition, index, outwardNormal, movementFacing));
+		for (Track track : TRACKS) {
+			BeltSurface surface = surfaceOn(controller, track);
+			if (surface != null)
+				result.add(surface);
 		}
 		return result;
+	}
+
+	/**
+	 * Resolves a single side without materialising the list. Create's funnels call
+	 * {@code determineCurrentMode} every tick on both sides, and that lands here through
+	 * {@link com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver}, so the default
+	 * {@code surfaces()}-and-scan would allocate a list plus both surfaces per funnel per tick.
+	 */
+	@Override
+	public BeltSurface surfaceFor(Direction outwardNormal) {
+		SlimeBeltBlockEntity controller = surfaceController();
+		if (controller == null)
+			return null;
+		for (Track track : TRACKS) {
+			// Compare the normal before building anything; at most one surface is ever constructed.
+			if (SlimeBeltHelper.getRepresentativeSideForTrack(controller, index, track) != outwardNormal)
+				continue;
+			BeltSurface surface = surfaceOn(controller, track);
+			if (surface != null)
+				return surface;
+		}
+		return null;
+	}
+
+	/** The controller to read track geometry from, or null when this segment has no live chain. */
+	private SlimeBeltBlockEntity surfaceController() {
+		if (level == null)
+			return null;
+		SlimeBeltBlockEntity controller = getControllerBE();
+		return controller == null || controller.beltLength == 0 ? null : controller;
+	}
+
+	/** The surface this segment exposes on {@code track}, or null when the track faces along its own motion. */
+	private BeltSurface surfaceOn(SlimeBeltBlockEntity controller, Track track) {
+		Direction outwardNormal = SlimeBeltHelper.getRepresentativeSideForTrack(controller, index, track);
+		Direction movementFacing = SlimeBeltHelper.getMovementFacingForTrack(controller, track);
+		if (outwardNormal.getAxis() == movementFacing.getAxis())
+			return null;
+		return BeltSurface.of(this, worldPosition, index, outwardNormal, movementFacing);
 	}
 }
