@@ -161,6 +161,11 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock implements IWr
 
 	@Override
 	public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+		// Only the lower half owns state. The upper half used to carry a hollow proxy
+		// block entity purely so pipes could connect to it; that job now belongs to the
+		// block-level capability provider in CBCapabilities.
+		if (state.getValue(HALF) == DoubleBlockHalf.UPPER)
+			return null;
 		return CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get().create(pos, state);
 	}
 

@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlockEntity;
+
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 
@@ -12,10 +14,23 @@ public final class CBCapabilities {
 			(be, side) -> be.getItemCapability(side));
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.SHULKER_PACKAGER.get(),
 			(be, side) -> be.shulkerInventory);
-		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get(),
-			(be, side) -> be.getItemCapability(side));
-		event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get(),
-			(be, side) -> be.getFluidCapability(side));
+		// Registered per block rather than per block entity: the chamber's upper half has
+		// no block entity of its own, and pipes docking there still have to reach the
+		// controller below.
+		event.registerBlock(Capabilities.ItemHandler.BLOCK,
+			(level, pos, state, be, side) -> {
+				EvokerEnchantingChamberBlockEntity chamber =
+					EvokerEnchantingChamberBlockEntity.resolveController(level, pos, state, be);
+				return chamber == null ? null : chamber.getItemCapability(side);
+			},
+			CBBlocks.EVOKER_ENCHANTING_CHAMBER.get());
+		event.registerBlock(Capabilities.FluidHandler.BLOCK,
+			(level, pos, state, be, side) -> {
+				EvokerEnchantingChamberBlockEntity chamber =
+					EvokerEnchantingChamberBlockEntity.resolveController(level, pos, state, be);
+				return chamber == null ? null : chamber.getFluidCapability(side);
+			},
+			CBBlocks.EVOKER_ENCHANTING_CHAMBER.get());
 		event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, CBBlockEntityTypes.BUDDING_EXPERIENCE.get(),
 			(be, side) -> be.getFluidCapability(side));
 		event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, CBBlockEntityTypes.EXPERIENCE_PUMP.get(),

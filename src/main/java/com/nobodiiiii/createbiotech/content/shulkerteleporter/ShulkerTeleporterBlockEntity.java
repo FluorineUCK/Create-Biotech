@@ -257,7 +257,7 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	}
 
 	@Override
-	public AABB getRenderBoundingBox() {
+	protected AABB createRenderBoundingBox() {
 		return new AABB(getBottomPos()).expandTowards(0, 3, 0);
 	}
 

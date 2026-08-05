@@ -224,7 +224,12 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	@Override
 	public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state,
 		BlockEntityType<T> type) {
-		if (!isMain(state))
+		// Every position that gets a block entity gets a ticker: a SmartBlockEntity only
+		// runs initialize() - which fires BlockEntityBehaviourEvent and starts its
+		// behaviours - from its first tick, so an unticked mouth would keep a
+		// DirectBeltInputBehaviour that never came up. The tick body itself returns
+		// straight after the behaviour pass for anything but the anchor.
+		if (!isMain(state) && !isMouthInputPart(state))
 			return null;
 		return createTickerHelper(type, CBBlockEntityTypes.GIANT_FROG.get(), GiantFrogBlockEntity::tick);
 	}

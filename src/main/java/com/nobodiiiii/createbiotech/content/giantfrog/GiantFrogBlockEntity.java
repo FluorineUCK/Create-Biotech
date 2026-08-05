@@ -51,6 +51,8 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	private static final double CAPTURE_BOX_SIZE = 2.0d;
 	private static final double TONGUE_PULL_SPEED = 0.75d;
 	private static final double BELT_CONNECTION_FORWARD_DISTANCE = 1.5d;
+	/** Covers the legs, the extended tongue and the belt handoff, none of which are in the body box. */
+	private static final double RENDER_BOUNDS_PADDING = BELT_CONNECTION_FORWARD_DISTANCE;
 	private static final double BELT_ITEM_Y = 15.0d / 16.0d;
 	private static final double BELT_HANDOFF_DISTANCE = 0.26d;
 	private static final double BELT_TONGUE_TRANSFER_DISTANCE = 0.5d;
@@ -83,6 +85,17 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 				.considerOccupiedWhen(this::isBeltTransferOccupied)
 				.setInsertionHandler(this::handleBeltInsertion));
 		}
+	}
+
+	@Override
+	protected AABB createRenderBoundingBox() {
+		// The default single-block box would cull the frog as soon as its anchor left
+		// the frustum, even though the model covers three blocks. Padding covers the
+		// legs, the tongue and the item riding the handoff in front of the mouth.
+		if (!GiantFrogBlock.isMain(getBlockState()))
+			return super.createRenderBoundingBox();
+		return GiantFrogBlock.getBodyBounds(worldPosition, getBlockState())
+			.inflate(RENDER_BOUNDS_PADDING);
 	}
 
 	public static void tick(Level level, BlockPos pos, BlockState state, GiantFrogBlockEntity be) {
