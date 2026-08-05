@@ -1,9 +1,14 @@
 package com.nobodiiiii.createbiotech.mixin.compat.sable;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
+
+import org.joml.Vector3d;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointBlockEntity;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
@@ -14,12 +19,9 @@ import dev.ryanhcode.sable.api.physics.force.ForceTotal;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.api.physics.mass.MassData;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
-import org.joml.Vector3d;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(UniversalJointBlockEntity.class)
 public abstract class UniversalJointBlockEntitySableMixin implements BlockEntitySubLevelActor {
@@ -116,6 +118,21 @@ public abstract class UniversalJointBlockEntitySableMixin implements BlockEntity
 
 		createBiotech$applyImpulse(currentSubLevel, currentHandle, localPoint,
 			peerSpace, peerLocalPoint, direction.scale(impulse));
+	}
+
+	@Override
+	@Nullable
+	public Iterable<SubLevel> sable$getConnectionDependencies() {
+		UniversalJointBlockEntity endpoint = (UniversalJointBlockEntity) (Object) this;
+		Level level = endpoint.getLevel();
+		if (level == null || !endpoint.isAtExpectedOwnAddress() || !endpoint.hasLink())
+			return null;
+		UUID peerSpaceId = endpoint.getLinkedSubLevelId();
+		if (peerSpaceId == null)
+			return null;
+		if (!(SubLevelCompat.findSubLevel(level, peerSpaceId) instanceof SubLevel dependency))
+			return null;
+		return List.of(dependency);
 	}
 
 	@Unique
