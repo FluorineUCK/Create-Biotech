@@ -1,6 +1,5 @@
 package com.nobodiiiii.createbiotech.foundation.utility;
 
-import java.lang.reflect.Method;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.function.BiConsumer;
@@ -33,9 +32,6 @@ import net.minecraft.world.phys.Vec3;
 public final class SubLevelCompat {
 
 	private static final SableCompanion COMPANION = SableCompanion.INSTANCE;
-	private static final String SUB_LEVEL_CONTAINER_CLASS =
-		"dev.ryanhcode.sable.api.sublevel.SubLevelContainer";
-
 	private SubLevelCompat() {}
 
 	@Nullable
@@ -51,16 +47,6 @@ public final class SubLevelCompat {
 	public static UUID getSpaceId(Level level, BlockPos pos) {
 		SubLevelAccess subLevel = getContaining(level, pos);
 		return subLevel == null ? null : subLevel.getUniqueId();
-	}
-
-	/**
-	 * Resolves a Sable sublevel by persistent identity without creating a hard dependency on
-	 * Sable's runtime API. Companion deliberately exposes only spatial queries, so UUID lookup
-	 * uses the optional {@code SubLevelContainer} reflectively.
-	 */
-	@Nullable
-	public static SubLevelAccess findSubLevel(Level level, @Nullable UUID subLevelId) {
-		return subLevelId == null ? null : SableContainerLookup.find(level, subLevelId);
 	}
 
 	@Nullable
@@ -343,45 +329,4 @@ public final class SubLevelCompat {
 			secondX, secondY, secondZ);
 	}
 
-	/**
-	 * Isolates all references to Sable's optional full API. Loading this class when Sable is absent
-	 * only initializes the Companion facade; this nested holder is initialized lazily on the first
-	 * UUID lookup.
-	 */
-	private static final class SableContainerLookup {
-
-		@Nullable
-		private static final Method GET_CONTAINER;
-		@Nullable
-		private static final Method GET_SUB_LEVEL;
-
-		static {
-			Method getContainer = null;
-			Method getSubLevel = null;
-			try {
-				Class<?> containerClass = Class.forName(SUB_LEVEL_CONTAINER_CLASS, false,
-					SubLevelCompat.class.getClassLoader());
-				getContainer = containerClass.getMethod("getContainer", Level.class);
-				getSubLevel = containerClass.getMethod("getSubLevel", UUID.class);
-			} catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
-				// Sable is optional, or this runtime exposes an incompatible API.
-			}
-			GET_CONTAINER = getContainer;
-			GET_SUB_LEVEL = getSubLevel;
-		}
-
-		@Nullable
-		private static SubLevelAccess find(Level level, UUID subLevelId) {
-			if (GET_CONTAINER == null || GET_SUB_LEVEL == null)
-				return null;
-			try {
-				Object container = GET_CONTAINER.invoke(null, level);
-				Object subLevel = container == null ? null : GET_SUB_LEVEL.invoke(container, subLevelId);
-				return subLevel instanceof SubLevelAccess access ? access : null;
-			} catch (ReflectiveOperationException | LinkageError | RuntimeException ignored) {
-				return null;
-			}
-		}
-
-	}
 }

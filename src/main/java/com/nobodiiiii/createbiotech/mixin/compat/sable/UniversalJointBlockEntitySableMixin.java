@@ -18,6 +18,7 @@ import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.force.ForceTotal;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.api.physics.mass.MassData;
+import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
 import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.world.level.Level;
@@ -55,9 +56,11 @@ public abstract class UniversalJointBlockEntitySableMixin implements BlockEntity
 			return;
 
 		UUID peerSpaceId = peer.getContainingSubLevelId();
-		ServerSubLevel peerSpace = peerSpaceId == null ? null
-			: SubLevelCompat.findSubLevel(level, peerSpaceId) instanceof ServerSubLevel server
-				? server : null;
+		SubLevelContainer container = SubLevelContainer.getContainer(level);
+		SubLevel resolvedPeerSpace = peerSpaceId == null || container == null ? null
+			: container.getSubLevel(peerSpaceId);
+		ServerSubLevel peerSpace = resolvedPeerSpace instanceof ServerSubLevel server
+			? server : null;
 		if (peerSpaceId != null && peerSpace == null)
 			return;
 		if (peerSpace == currentSubLevel)
@@ -130,7 +133,11 @@ public abstract class UniversalJointBlockEntitySableMixin implements BlockEntity
 		UUID peerSpaceId = endpoint.getLinkedSubLevelId();
 		if (peerSpaceId == null)
 			return null;
-		if (!(SubLevelCompat.findSubLevel(level, peerSpaceId) instanceof SubLevel dependency))
+		SubLevelContainer container = SubLevelContainer.getContainer(level);
+		if (container == null)
+			return null;
+		SubLevel dependency = container.getSubLevel(peerSpaceId);
+		if (dependency == null)
 			return null;
 		return List.of(dependency);
 	}
