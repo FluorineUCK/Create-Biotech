@@ -53,6 +53,7 @@
     "client.FunnelRendererMixin",
     "client.FunnelVisualMixin",
     "client.GoggleOverlayRendererMixin",
+    "client.HumanoidArmorLayerMixin",
     "client.ItemApplicationCategoryMixin",
     "client.JeiRecipeLayoutMixin",
     "client.JeiRecipeSlotMixin",
