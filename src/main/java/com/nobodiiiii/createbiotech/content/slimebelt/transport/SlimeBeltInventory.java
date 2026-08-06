@@ -281,6 +281,19 @@ public class SlimeBeltInventory {
 				return;
 			}
 
+			if (horizontalProcessing && track == Track.FRONT) {
+				if (SlimeBeltTunnelInteractionHandler.flapTunnelsAndCheckIfStuck(SlimeBeltInventory.this,
+					currentItem, nextFrontOffset)) {
+					stackInFront = currentItem;
+					return;
+				}
+				if (SlimeBeltCrusherInteractionHandler.checkForCrushers(SlimeBeltInventory.this, currentItem,
+					nextFrontOffset)) {
+					stackInFront = currentItem;
+					return;
+				}
+			}
+
 			setLoopPositionFromTrackProgress(currentItem, track, nextProgress);
 			float diffToMiddle = currentItem.getTargetSideOffset() - currentItem.sideOffset;
 			currentItem.sideOffset += Mth.clamp(diffToMiddle * Math.abs(limitedMovement) * 6f,
@@ -866,8 +879,14 @@ public class SlimeBeltInventory {
 		ItemStack ejected = stack.stack;
 		Vec3 outPos = SlimeBeltHelper.getVectorForOffset(belt, stack.beltPosition);
 		float movementSpeed = Math.max(Math.abs(belt.getBeltMovementSpeed()), 1 / 8f);
-		Vec3 outMotion = Vec3.atLowerCornerOf(belt.getBeltChainDirection())
-			.scale(movementSpeed)
+		float tangentStep = beltMovementPositive ? .001f : -.001f;
+		Vec3 tangent = belt.getLoop().worldPos(stack.beltPosition + tangentStep)
+			.subtract(outPos);
+		if (tangent.lengthSqr() < 1.0E-8d)
+			tangent = Vec3.atLowerCornerOf(belt.getBeltChainDirection());
+		else
+			tangent = tangent.normalize();
+		Vec3 outMotion = tangent.scale(movementSpeed)
 			.add(0, 1 / 8f, 0);
 		outPos = outPos.add(outMotion.normalize()
 			.scale(0.001));

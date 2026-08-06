@@ -19,6 +19,7 @@ import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovemen
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.api.contraption.transformable.TransformableBlock;
+import com.simibubi.create.api.schematic.requirement.SpecialBlockItemRequirement;
 import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
@@ -29,6 +30,9 @@ import com.simibubi.create.content.kinetics.belt.behaviour.TransportedItemStackH
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.logistics.box.PackageEntity;
 import com.simibubi.create.content.logistics.box.PackageItem;
+import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlock;
+import com.simibubi.create.content.schematics.requirement.ItemRequirement;
+import com.simibubi.create.content.schematics.requirement.ItemRequirement.ItemUseType;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
 import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
@@ -87,7 +91,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlock extends HorizontalKineticBlock
-	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock, TransformableBlock {
+	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock, TransformableBlock,
+	SpecialBlockItemRequirement {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);
@@ -248,6 +253,11 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		return beltInventory.canInsertAtOnTrack(belt.index, nearest) ? nearest : null;
 	}
 
+	@Override
+	public boolean isFlammable(BlockState state, BlockGetter world, BlockPos pos, Direction face) {
+		return false;
+	}
+
 	// Dropped items can touch either exposed belt surface, so choose the insertion point on the nearest track.
 	private static Vec3 getCaptureTarget(SlimeBeltBlockEntity belt, SlimeBeltBlockEntity controller,
 		Track track) {
@@ -294,8 +304,14 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		SlimeBeltBlockEntity belt = SlimeBeltHelper.getSegmentBE(world, pos);
 		if (belt == null)
 			return InteractionResult.PASS;
+		SlimeBeltBlockEntity controllerBelt = belt.getControllerBE();
+		if (controllerBelt == null)
+			return InteractionResult.PASS;
+		Track clickedTrack = getNearestTrack(hit.getLocation(), belt, controllerBelt);
 
 		if (PackageItem.isPackage(heldItem)) {
+			if (clickedTrack != Track.FRONT)
+				return InteractionResult.PASS;
 			IItemHandler handler = belt.getItemCapability(Direction.UP);
 			if (handler == null)
 				return InteractionResult.PASS;
@@ -307,18 +323,13 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		}
 
 		if (isHand) {
-			SlimeBeltBlockEntity controllerBelt = belt.getControllerBE();
-			if (controllerBelt == null)
+			if (clickedTrack != Track.FRONT)
 				return InteractionResult.PASS;
 			if (world.isClientSide)
 				return InteractionResult.SUCCESS;
 
 			SlimeBeltInventory beltInventory = controllerBelt.getInventory();
-			Track clickedTrack = getNearestTrack(hit.getLocation(), belt, controllerBelt);
 			MutableBoolean success = tryPickupItemFromTrack(player, belt, beltInventory, clickedTrack);
-			if (!success.isTrue())
-				success = tryPickupItemFromTrack(player, belt, beltInventory,
-					clickedTrack == Track.FRONT ? Track.BACK : Track.FRONT);
 
 			if (success.isTrue())
 				world.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, .2f,
@@ -495,7 +506,15 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	public BlockState updateShape(BlockState state, Direction side, BlockState neighbourState, LevelAccessor world,
 		BlockPos pos, BlockPos neighbourPos) {
 		updateWater(world, state, pos);
+		if (side.getAxis().isHorizontal())
+			updateTunnelConnections(world, pos.above());
 		return state;
+	}
+
+	private static void updateTunnelConnections(LevelAccessor world, BlockPos pos) {
+		Block block = world.getBlockState(pos).getBlock();
+		if (block instanceof BeltTunnelBlock tunnel)
+			tunnel.updateTunnel(world, pos);
 	}
 
 	public static List<BlockPos> getBeltChain(LevelAccessor world, BlockPos controllerPos) {
@@ -530,6 +549,18 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		if (slope != BeltSlope.HORIZONTAL && slope != BeltSlope.SIDEWAYS)
 			return pos.above(slope == BeltSlope.UPWARD ? offset : -offset);
 		return pos;
+	}
+
+	@Override
+	public ItemRequirement getRequiredItems(BlockState state, BlockEntity be) {
+		List<ItemStack> required = new LinkedList<>();
+		if (state.getValue(PART) != BeltPart.MIDDLE)
+			required.add(AllBlocks.SHAFT.asStack());
+		if (state.getValue(PART) == BeltPart.START)
+			required.add(new ItemStack(CBItems.SLIME_BELT_CONNECTOR.get()));
+		if (required.isEmpty())
+			return ItemRequirement.NONE;
+		return new ItemRequirement(ItemUseType.CONSUME, required);
 	}
 
 	@Override

@@ -279,6 +279,7 @@ public class SlimeBeltSlicer {
 		for (List<Placement> placements : groupedPlacements.values()) {
 			placements.sort(Comparator.comparingDouble(Placement::loopPosition));
 			float previousPosition = Float.NEGATIVE_INFINITY;
+			SlimeBeltBlockEntity updatedController = null;
 
 			for (Placement placement : placements) {
 				SlimeBeltBlockEntity controller = placement.controller();
@@ -294,9 +295,13 @@ public class SlimeBeltSlicer {
 				updateInsertionData(controller, transported);
 
 				controller.getInventory().addItem(transported);
-				controller.setChanged();
-				controller.sendData();
+				updatedController = controller;
 				previousPosition = loopPosition;
+			}
+
+			if (updatedController != null) {
+				updatedController.setChanged();
+				updatedController.sendData();
 			}
 		}
 	}

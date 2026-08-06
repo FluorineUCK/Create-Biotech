@@ -16,6 +16,7 @@ import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
 import com.simibubi.create.foundation.render.ShadowRenderHelper;
 
+import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import dev.engine_room.flywheel.lib.transform.TransformStack;
 import net.createmod.catnip.animation.AnimationTickHolder;
@@ -69,6 +70,7 @@ public class SlimeBeltRenderer extends SafeBlockEntityRenderer<SlimeBeltBlockEnt
 		if (!blockState.is(com.nobodiiiii.createbiotech.registry.CBBlocks.SLIME_BELT.get()))
 			return;
 
+		if (!VisualizationManager.supportsVisualization(be.getLevel())) {
 		BeltSlope beltSlope = blockState.getValue(SlimeBeltBlock.SLOPE);
 		BeltPart part = blockState.getValue(SlimeBeltBlock.PART);
 		Direction facing = blockState.getValue(SlimeBeltBlock.HORIZONTAL_FACING);
@@ -150,11 +152,12 @@ public class SlimeBeltRenderer extends SafeBlockEntityRenderer<SlimeBeltBlockEnt
 				CachedBuffers.partialDirectional(AllPartialModels.BELT_PULLEY, blockState, dir, matrixStackSupplier);
 			KineticBlockEntityRenderer.standardKineticRotationTransform(superBuffer, be, light).renderInto(ms, vb);
 		}
+		}
 
 		renderItems(be, partialTicks, ms, buffer, light, overlay);
 	}
 
-	private static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
+	public static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
 		return diagonal ? SlimeBeltSpriteShifts.BELT_DIAGONAL
 			: bottom ? SlimeBeltSpriteShifts.BELT_OFFSET : SlimeBeltSpriteShifts.BELT;
 	}

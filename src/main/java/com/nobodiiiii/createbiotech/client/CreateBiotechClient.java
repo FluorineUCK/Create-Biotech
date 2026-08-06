@@ -43,6 +43,7 @@ import com.nobodiiiii.createbiotech.content.shulkerteleporter.ShulkerTeleporterR
 import com.nobodiiiii.createbiotech.content.shulkerteleporter.ShulkerTeleporterScreen;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltRenderer;
+import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltVisual;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltSpriteShifts;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableCogRenderer;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableRenderer;
@@ -290,6 +291,10 @@ public class CreateBiotechClient {
 				.apply();
 			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.MAGMA_BELT.get())
 				.factory(MagmaBeltVisual::new)
+				.skipVanillaRender(be -> !be.shouldRenderNormally())
+				.apply();
+			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.SLIME_BELT.get())
+				.factory(SlimeBeltVisual::new)
 				.skipVanillaRender(be -> !be.shouldRenderNormally())
 				.apply();
 			SimpleEntityVisualizer.<GhastHotAirBalloonEntity>builder(CBEntityTypes.GHAST_HOT_AIR_BALLOON.get())

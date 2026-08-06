@@ -22,6 +22,7 @@ import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBContraptionTypes;
 import com.nobodiiiii.createbiotech.registry.CBCreativeModeTabs;
 import com.nobodiiiii.createbiotech.registry.CBDataComponents;
+import com.nobodiiiii.createbiotech.registry.CBDisplaySources;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBFluids;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -93,6 +94,7 @@ public class CreateBiotech {
 
 	private static void onCommonSetup(FMLCommonSetupEvent event) {
 		event.enqueueWork(() -> {
+			CBDisplaySources.register();
 			ExperienceOpenPipeEffectHandler.register();
 			ExplosionProofItemVaultCompat.register();
 			BlockStressValues.IMPACTS.register(CBBlocks.EXPERIENCE_PUMP.get(), () -> 4.0d);

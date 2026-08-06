@@ -171,7 +171,10 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	public IItemHandler getItemCapability(Direction side) {
 		if (!SlimeBeltBlock.canTransportObjects(getBlockState()))
 			return null;
-		return getItemHandler(side);
+		// NeoForge's generic item capability is the vanilla belt work surface. The
+		// BACK loop is an internal transport track and is exposed only through the
+		// dedicated belt-funnel surface resolver.
+		return getItemHandler(Direction.UP);
 	}
 
 	/**
@@ -422,8 +425,8 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		// constructing a handler too early would create a SlimeItemHandlerBeltSegment whose
 		// beltInventory field is null, and subsequent getStackInSlot/insertItem/extractItem calls would NPE.
 		// This happens at world-load time when a neighbouring funnel ticks before the belt chain is wired up.
-		// Note: this preserves the per-side (FRONT/BACK track) routing — once the inventory is ready, the
-		// cached handler still holds a stable inventory ref, and `side` keeps directing each request to its track.
+		// The generic capability deliberately uses Direction.UP above, which resolves to FRONT. Keep the
+		// sided cache for the funnel/legacy callers that explicitly request a physical surface.
 		SlimeBeltInventory inv = getInventory();
 		if (inv == null)
 			return null;
