@@ -1,11 +1,15 @@
 package com.nobodiiiii.createbiotech.content.powerbelt;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.client.PowerBeltClientReporter;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -13,6 +17,8 @@ import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
+import com.simibubi.create.api.contraption.transformable.TransformableBlock;
+import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.fluids.transfer.GenericItemEmptying;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
@@ -25,10 +31,13 @@ import com.simibubi.create.content.logistics.funnel.FunnelBlock;
 import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlock;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
+import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
+import com.simibubi.create.foundation.block.render.ReducedDestroyEffects;
 import com.yision.allay.block.allayport.AllayPortBlock;
 
 import dev.ryanhcode.sable.companion.SubLevelAccess;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
@@ -51,6 +60,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
@@ -76,8 +86,11 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 
-public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock {
+public class PowerBeltBlock extends HorizontalKineticBlock
+	implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock, TransformableBlock {
 
 	public static final Property<BeltSlope> SLOPE = BeltBlock.SLOPE;
 	public static final Property<BeltPart> PART = BeltBlock.PART;
@@ -90,6 +103,11 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 			.setValue(PART, BeltPart.PULLEY)
 			.setValue(CASING, false)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@OnlyIn(Dist.CLIENT)
+	public void initializeClient(Consumer<IClientBlockExtensions> consumer) {
+		consumer.accept(new RenderProperties());
 	}
 
 	@Override
@@ -429,8 +447,8 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 			BlockState shaftState = AllBlocks.SHAFT.getDefaultState()
 				.setValue(BlockStateProperties.AXIS, getRotationAxis(currentState));
 			world.setBlock(currentPos,
-				ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), 3);
-			world.levelEvent(2001, currentPos, Block.getId(currentState));
+				ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), Block.UPDATE_ALL);
+			world.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, currentPos, Block.getId(currentState));
 		}
 	}
 
@@ -545,6 +563,15 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 		return rotated;
 	}
 
+	@Override
+	public BlockState transform(BlockState state, StructureTransform transform) {
+		if (transform.mirror != null)
+			state = mirror(state, transform.mirror);
+		if (transform.rotationAxis == Axis.Y)
+			return rotate(state, transform.rotation);
+		return CBBeltTransform.transformInner(state, transform, SLOPE);
+	}
+
 	@Nullable
 	public static PowerBeltBlockEntity getSegmentBE(BlockGetter world, BlockPos pos) {
 		if (world instanceof Level level && !level.isLoaded(pos))
@@ -581,5 +608,15 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 
 	public static boolean isPowerBelt(BlockState state) {
 		return state.is(CBBlocks.POWER_BELT.get());
+	}
+
+	public static class RenderProperties extends ReducedDestroyEffects implements MultiPosDestructionHandler {
+		@Override
+		public Set<BlockPos> getExtraPositions(ClientLevel level, BlockPos pos, BlockState blockState, int progress) {
+			BlockEntity blockEntity = level.getBlockEntity(pos);
+			if (blockEntity instanceof PowerBeltBlockEntity belt)
+				return new HashSet<>(PowerBeltBlock.getBeltChain(level, belt.getController()));
+			return null;
+		}
 	}
 }

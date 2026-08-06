@@ -1,11 +1,15 @@
 package com.nobodiiiii.createbiotech.content.slimebelt;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceProviderBlock;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -14,6 +18,8 @@ import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInvento
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
+import com.simibubi.create.api.contraption.transformable.TransformableBlock;
+import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
 import com.simibubi.create.content.fluids.transfer.GenericItemEmptying;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
@@ -26,8 +32,11 @@ import com.simibubi.create.content.logistics.box.PackageEntity;
 import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
+import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
+import com.simibubi.create.foundation.block.render.ReducedDestroyEffects;
 import com.simibubi.create.foundation.item.ItemHelper;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
@@ -49,6 +58,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
@@ -57,6 +67,9 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition.Builder;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
@@ -76,7 +89,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlock extends HorizontalKineticBlock
-	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock {
+	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock, TransformableBlock {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);
@@ -86,6 +99,11 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		registerDefaultState(defaultBlockState().setValue(SLOPE, BeltSlope.HORIZONTAL)
 			.setValue(PART, BeltPart.START)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@OnlyIn(Dist.CLIENT)
+	public void initializeClient(Consumer<IClientBlockExtensions> consumer) {
+		consumer.accept(new RenderProperties());
 	}
 
 	@Override
@@ -445,6 +463,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 			be.setController(currentPos);
 			be.beltLength = beltChain.size();
 			be.index = index;
+			be.invalidateItemHandlers();
 			be.attachKinetics();
 			be.setChanged();
 			be.sendData();
@@ -476,8 +495,8 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 
 			world.removeBlockEntity(currentPos);
 			BlockState shaftState = AllBlocks.SHAFT.getDefaultState().setValue(BlockStateProperties.AXIS, getRotationAxis(currentState));
-			world.setBlock(currentPos, ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), 3);
-			world.levelEvent(2001, currentPos, Block.getId(currentState));
+			world.setBlock(currentPos, ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), Block.UPDATE_ALL);
+			world.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, currentPos, Block.getId(currentState));
 		}
 	}
 
@@ -547,6 +566,15 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	}
 
 	@Override
+	public BlockState transform(BlockState state, StructureTransform transform) {
+		if (transform.mirror != null)
+			state = mirror(state, transform.mirror);
+		if (transform.rotationAxis == Axis.Y)
+			return rotate(state, transform.rotation);
+		return CBBeltTransform.transformInner(state, transform, SLOPE);
+	}
+
+	@Override
 	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
@@ -554,5 +582,15 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	@Override
 	public FluidState getFluidState(BlockState state) {
 		return fluidState(state);
+	}
+
+	public static class RenderProperties extends ReducedDestroyEffects implements MultiPosDestructionHandler {
+		@Override
+		public Set<BlockPos> getExtraPositions(ClientLevel level, BlockPos pos, BlockState blockState, int progress) {
+			BlockEntity blockEntity = level.getBlockEntity(pos);
+			if (blockEntity instanceof SlimeBeltBlockEntity belt)
+				return new HashSet<>(SlimeBeltBlock.getBeltChain(level, belt.getController()));
+			return null;
+		}
 	}
 }

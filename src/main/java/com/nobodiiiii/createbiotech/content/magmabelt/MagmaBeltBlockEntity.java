@@ -45,10 +45,12 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -59,7 +61,11 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class MagmaBeltBlockEntity extends KineticBlockEntity {
+public class MagmaBeltBlockEntity extends KineticBlockEntity implements Clearable {
+
+	/** Ticks to wait before re-attempting a chain init that already failed once. */
+	private static final int INIT_RETRY_INTERVAL = 20;
+
 	public Map<Entity, TransportedEntityInfo> passengers;
 	public Optional<DyeColor> color;
 	public int beltLength;
@@ -71,6 +77,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	protected BlockPos controller;
 	protected MagmaBeltInventory inventory;
 	protected IItemHandler itemHandler;
+	private int initRetryCooldown;
 	public VersionedInventoryTrackerBehaviour invVersionTracker;
 
 	public CompoundTag trackerUpdateTag;
@@ -102,11 +109,13 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	public void tick() {
 		// Init belt
 		if (beltLength == 0)
-			MagmaBeltBlock.initBelt(level, worldPosition);
+			tryInitBelt();
 
 		super.tick();
 
-		if (!MagmaBeltBlock.isMagmaBelt(level.getBlockState(worldPosition)))
+		// The block entity's cached state is kept in sync by LevelChunk#setBlockState, so this needs no
+		// chunk lookup. Create reads through the level here; the power belt already relies on the cache.
+		if (!MagmaBeltBlock.isMagmaBelt(getBlockState()))
 			return;
 
 		initializeItemHandler();
@@ -143,6 +152,23 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 			MagmaBeltMovementHandler.transportEntity(this, entity, info);
 		});
 		toRemove.forEach(passengers::remove);
+	}
+
+	/**
+	 * Chain init is retried from the tick because the chain can span a chunk that was not loaded yet. A failed
+	 * attempt walks the chain from this segment back to its start, and every segment attempts it, so retrying
+	 * every tick costs O(n²) block lookups per tick for as long as the far end stays unloaded. Only repeated
+	 * failures back off — the attempt right after placement, slicing or a contraption disassembly still runs
+	 * on the very next tick.
+	 */
+	private void tryInitBelt() {
+		if (initRetryCooldown > 0) {
+			initRetryCooldown--;
+			return;
+		}
+		MagmaBeltBlock.initBelt(level, worldPosition);
+		if (beltLength == 0)
+			initRetryCooldown = INIT_RETRY_INTERVAL;
 	}
 
 	private void spawnFlameParticles() {
@@ -212,6 +238,10 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		if (inventory == null)
 			return;
 		itemHandler = new MagmaItemHandlerBeltSegment(inventory, index);
+		// The chain just became able to accept items. Nothing about the block state changed, so NeoForge
+		// will not invalidate on its own — neighbours holding a BlockCapabilityCache (chutes, mechanical
+		// arms) would keep the null they cached before the chain was wired up.
+		invalidateCapabilities();
 	}
 
 	public IItemHandler getItemCapability(Direction side) {
@@ -220,6 +250,18 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		if (!isRemoved() && itemHandler == null)
 			initializeItemHandler();
 		return itemHandler;
+	}
+
+	/**
+	 * Commands that replace a block ({@code /setblock}, {@code /fill}, {@code /clone}) and structure
+	 * placement call this before the replacement so container contents vanish rather than pop out.
+	 * Create's belt does the same; without it the transported items survive into the removal path.
+	 */
+	@Override
+	public void clearContent() {
+		if (inventory != null)
+			inventory.getTransportedItems()
+				.clear();
 	}
 
 	@Override
@@ -232,7 +274,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	@Override
 	public void invalidate() {
 		super.invalidate();
-		itemHandler = null;
+		invalidateItemHandler();
 	}
 
 	@Override
@@ -297,6 +339,8 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		index = 0;
 		controller = null;
 		trackerUpdateTag = new CompoundTag();
+		// Whatever cleared the chain deserves a fresh attempt on the next tick, not a leftover backoff.
+		initRetryCooldown = 0;
 	}
 
 	public boolean applyColor(DyeColor colorIn) {
@@ -468,7 +512,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		}
 
 		if (casing != CasingType.NONE)
-			level.levelEvent(2001, worldPosition,
+			level.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, worldPosition,
 				Block.getId(casing == CasingType.ANDESITE ? AllBlocks.ANDESITE_CASING.getDefaultState()
 					: AllBlocks.BRASS_CASING.getDefaultState()));
 		if (blockState.getValue(MagmaBeltBlock.CASING) != shouldBlockHaveCasing)
@@ -597,6 +641,7 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 	}
 
 	public void invalidateItemHandler() {
+		invalidateCapabilities();
 		itemHandler = null;
 	}
 

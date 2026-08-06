@@ -20,6 +20,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.util.Mth;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -34,6 +35,9 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 	private static final float GENERATED_RPM_STEP = 4f;
 	private static final float TICKS_PER_SECOND = 20f;
 
+	/** Ticks to wait before re-attempting a chain init that already failed once. */
+	private static final int INIT_RETRY_INTERVAL = 20;
+
 	public int beltLength;
 	public int index;
 	protected BlockPos controller;
@@ -43,6 +47,7 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 
 	private long lastMovementGameTime = Long.MIN_VALUE;
 	private long nextDetectionGameTime = Long.MIN_VALUE;
+	private int initRetryCooldown;
 	private float collectedGeneratedSpeed;
 	private float collectedStressCapacity;
 	private float collectedDetectionGeneratedSpeed;
@@ -63,7 +68,7 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 	@Override
 	public void tick() {
 		if (beltLength == 0)
-			PowerBeltBlock.initBelt(level, worldPosition);
+			tryInitBelt();
 
 		super.tick();
 
@@ -75,6 +80,23 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 			return;
 
 		sampleSurfaceMovementBefore(level.getGameTime());
+	}
+
+	/**
+	 * Chain init is retried from the tick because the chain can span a chunk that was not loaded yet. A failed
+	 * attempt walks the chain from this segment back to its start, and every segment attempts it, so retrying
+	 * every tick costs O(n²) block lookups per tick for as long as the far end stays unloaded. Only repeated
+	 * failures back off — the attempt right after placement, slicing or a contraption disassembly still runs
+	 * on the very next tick.
+	 */
+	private void tryInitBelt() {
+		if (initRetryCooldown > 0) {
+			initRetryCooldown--;
+			return;
+		}
+		PowerBeltBlock.initBelt(level, worldPosition);
+		if (beltLength == 0)
+			initRetryCooldown = INIT_RETRY_INTERVAL;
 	}
 
 	public void addSurfaceMovement(float signedSurfaceSpeed) {
@@ -236,6 +258,8 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 		beltLength = 0;
 		index = 0;
 		controller = null;
+		// Whatever cleared the chain deserves a fresh attempt on the next tick, not a leftover backoff.
+		initRetryCooldown = 0;
 		lastMovementGameTime = Long.MIN_VALUE;
 		nextDetectionGameTime = Long.MIN_VALUE;
 		collectedGeneratedSpeed = 0;
@@ -363,7 +387,7 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 		}
 
 		if (casing != CasingType.NONE)
-			level.levelEvent(2001, worldPosition,
+			level.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, worldPosition,
 				Block.getId(casing == CasingType.ANDESITE ? AllBlocks.ANDESITE_CASING.getDefaultState()
 					: AllBlocks.BRASS_CASING.getDefaultState()));
 		if (blockState.getValue(PowerBeltBlock.CASING) != shouldBlockHaveCasing)
@@ -386,6 +410,7 @@ public class PowerBeltBlockEntity extends GeneratingKineticBlockEntity {
 		beltLength = 0;
 		index = 0;
 		controller = null;
+		initRetryCooldown = 0;
 		lastMovementGameTime = Long.MIN_VALUE;
 		nextDetectionGameTime = Long.MIN_VALUE;
 		collectedGeneratedSpeed = 0;
