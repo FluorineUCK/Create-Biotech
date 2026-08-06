@@ -19,6 +19,7 @@ import net.createmod.catnip.data.Iterate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -75,13 +76,20 @@ public final class SlimeBeltTunnelInteractionHandler {
 					BlockPos outputPos = nextTunnel.getBlockPos().below().relative(direction);
 					if (!world.isLoaded(outputPos))
 						return true;
-					DirectBeltInputBehaviour behaviour =
-						BlockEntityBehaviour.get(world, outputPos, DirectBeltInputBehaviour.TYPE);
-					if (behaviour == null || !behaviour.canInsertFromSide(direction))
-						continue;
-
 					ItemStack toInsert = current.stack.copyWithCount(1);
-					if (!behaviour.handleInsertion(toInsert, direction, false).isEmpty())
+					ItemStack remainder;
+					if (getHorizontalSlimeBelt(world, outputPos) != null) {
+						if (!canInsertIntoFront(world, outputPos, direction))
+							continue;
+						remainder = insertIntoFront(world, outputPos, toInsert, direction, false);
+					} else {
+						DirectBeltInputBehaviour behaviour =
+							BlockEntityBehaviour.get(world, outputPos, DirectBeltInputBehaviour.TYPE);
+						if (behaviour == null || !behaviour.canInsertFromSide(direction))
+							continue;
+						remainder = behaviour.handleInsertion(toInsert, direction, false);
+					}
+					if (!remainder.isEmpty())
 						return true;
 					if (onServer)
 						flapTunnel(beltInventory, upcomingSegment, direction, false);
@@ -136,6 +144,31 @@ public final class SlimeBeltTunnelInteractionHandler {
 			return null;
 		BlockEntity blockEntity = world.getBlockEntity(tunnelPos);
 		return blockEntity instanceof BeltTunnelBlockEntity tunnel ? tunnel : null;
+	}
+
+	public static SlimeBeltBlockEntity getHorizontalSlimeBelt(BlockGetter world, BlockPos pos) {
+		BlockState state = world.getBlockState(pos);
+		if (!state.is(com.nobodiiiii.createbiotech.registry.CBBlocks.SLIME_BELT.get())
+			|| state.getValue(SlimeBeltBlock.SLOPE)
+				!= com.simibubi.create.content.kinetics.belt.BeltSlope.HORIZONTAL)
+			return null;
+		return SlimeBeltHelper.getSegmentBE(world, pos);
+	}
+
+	public static boolean addressesFront(BlockGetter world, BlockPos pos, Direction side) {
+		SlimeBeltBlockEntity segment = getHorizontalSlimeBelt(world, pos);
+		return segment != null && segment.canTunnelAddressFront(side);
+	}
+
+	public static boolean canInsertIntoFront(BlockGetter world, BlockPos pos, Direction side) {
+		SlimeBeltBlockEntity segment = getHorizontalSlimeBelt(world, pos);
+		return segment != null && segment.canTunnelInsertIntoFront(side);
+	}
+
+	public static ItemStack insertIntoFront(BlockGetter world, BlockPos pos, ItemStack stack, Direction side,
+		boolean simulate) {
+		SlimeBeltBlockEntity segment = getHorizontalSlimeBelt(world, pos);
+		return segment == null ? stack : segment.insertFromTunnelIntoFront(stack, side, simulate);
 	}
 
 	private static void setFrontPosition(SlimeBeltInventory beltInventory, TransportedItemStack item,

@@ -1,7 +1,11 @@
 package com.nobodiiiii.createbiotech.registry;
 
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlockEntity;
+import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
+import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelInteractionHandler;
+import com.simibubi.create.AllBlockEntityTypes;
 
+import net.minecraft.core.Direction;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.capabilities.RegisterCapabilitiesEvent;
 
@@ -55,6 +59,14 @@ public final class CBCapabilities {
 			(be, side) -> be.getFluidCapability(side));
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.SLIME_BELT.get(),
 			(be, side) -> be.getItemCapability(side));
+		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, AllBlockEntityTypes.ANDESITE_TUNNEL.get(),
+			(be, side) -> {
+				if (be.getLevel() == null)
+					return null;
+				SlimeBeltBlockEntity belt = SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(be.getLevel(),
+					be.getBlockPos().below());
+				return belt == null ? null : belt.getItemCapability(Direction.UP);
+			});
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.MAGMA_BELT.get(),
 			(be, side) -> be.getItemCapability(side));
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.ALLAY_PORT.get(),

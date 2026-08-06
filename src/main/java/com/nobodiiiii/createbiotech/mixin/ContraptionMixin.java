@@ -11,14 +11,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.llamalad7.mixinextras.sugar.Local;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlock;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
 import com.simibubi.create.content.contraptions.Contraption;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
 @Mixin(Contraption.class)
@@ -32,10 +29,11 @@ public abstract class ContraptionMixin {
 		@Local BlockPos pos, @Local BlockState state) {
 		if (!state.is(com.nobodiiiii.createbiotech.registry.CBBlocks.SLIME_BELT.get()))
 			return;
-		SlimeBeltBlockEntity segment = SlimeBeltHelper.getSegmentBE(world, pos);
-		BlockPos controller = segment == null ? pos : segment.getController();
-		for (BlockPos chainPos : SlimeBeltBlock.getBeltChain(world, controller))
-			if (!visited.contains(chainPos) && !frontier.contains(chainPos))
-				frontier.add(chainPos);
+		BlockPos nextPos = SlimeBeltBlock.nextSegmentPosition(state, pos, true);
+		BlockPos prevPos = SlimeBeltBlock.nextSegmentPosition(state, pos, false);
+		if (nextPos != null && !visited.contains(nextPos))
+			frontier.add(nextPos);
+		if (prevPos != null && !visited.contains(prevPos))
+			frontier.add(prevPos);
 	}
 }

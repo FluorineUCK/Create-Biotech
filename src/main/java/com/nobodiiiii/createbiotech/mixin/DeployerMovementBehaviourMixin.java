@@ -23,10 +23,14 @@ import com.simibubi.create.foundation.item.ItemHelper.ExtractionCountMode;
 
 import net.createmod.catnip.levelWrappers.SchematicLevel;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
+import net.neoforged.neoforge.common.util.BlockSnapshot;
+import net.neoforged.neoforge.event.EventHooks;
 
 @Mixin(DeployerMovementBehaviour.class)
 public abstract class DeployerMovementBehaviourMixin {
@@ -67,20 +71,50 @@ public abstract class DeployerMovementBehaviourMixin {
 		}
 
 		List<ItemRequirement.StackRequirement> requirements = collectRequirements(schematicWorld, chain);
-		if (requirements == null || !hasAndConsume(context, requirements)) {
+		if (requirements == null || !hasRequirements(context, requirements)) {
 			ci.cancel();
 			return;
 		}
 
-		Axis shaftAxis = state.getValue(SlimeBeltBlock.SLOPE) == BeltSlope.SIDEWAYS ? Axis.Y
-			: state.getValue(SlimeBeltBlock.HORIZONTAL_FACING).getClockWise().getAxis();
-		for (BlockPos chainPos : chain) {
-			BlockState chainState = schematicWorld.getBlockState(chainPos);
-			if (chainState.getValue(SlimeBeltBlock.PART) != BeltPart.MIDDLE)
-				level.setBlockAndUpdate(chainPos, com.simibubi.create.AllBlocks.SHAFT.getDefaultState()
-					.setValue(com.simibubi.create.content.kinetics.simpleRelays.AbstractSimpleShaftBlock.AXIS, shaftAxis));
+		List<BlockSnapshot> snapshots = new ArrayList<>(chain.size());
+		for (BlockPos chainPos : chain)
+			snapshots.add(BlockSnapshot.create(level.dimension(), level, chainPos));
+
+		try {
+			Axis shaftAxis = state.getValue(SlimeBeltBlock.SLOPE) == BeltSlope.SIDEWAYS ? Axis.Y
+				: state.getValue(SlimeBeltBlock.HORIZONTAL_FACING).getClockWise().getAxis();
+			for (BlockPos chainPos : chain) {
+				BlockState chainState = schematicWorld.getBlockState(chainPos);
+				if (chainState.getValue(SlimeBeltBlock.PART) != BeltPart.MIDDLE)
+					level.setBlockAndUpdate(chainPos, com.simibubi.create.AllBlocks.SHAFT.getDefaultState()
+						.setValue(com.simibubi.create.content.kinetics.simpleRelays.AbstractSimpleShaftBlock.AXIS,
+							shaftAxis));
+			}
+			SlimeBeltConnectorItem.createBelts(level, start, chain.get(chain.size() - 1));
+
+			for (BlockPos chainPos : chain)
+				if (!level.getBlockState(chainPos).is(CBBlocks.SLIME_BELT.get())) {
+					restoreSnapshots(snapshots);
+					ci.cancel();
+					return;
+				}
+
+			for (BlockSnapshot snapshot : snapshots)
+				if (EventHooks.onBlockPlace(player, snapshot, Direction.UP)) {
+					restoreSnapshots(snapshots);
+					ci.cancel();
+					return;
+				}
+
+			if (!consumeRequirements(context, requirements)) {
+				restoreSnapshots(snapshots);
+				ci.cancel();
+				return;
+			}
+		} catch (RuntimeException exception) {
+			restoreSnapshots(snapshots);
+			throw exception;
 		}
-		SlimeBeltConnectorItem.createBelts(level, start, chain.get(chain.size() - 1));
 		ci.cancel();
 	}
 
@@ -138,7 +172,7 @@ public abstract class DeployerMovementBehaviourMixin {
 		return requirements;
 	}
 
-	private static boolean hasAndConsume(MovementContext context,
+	private static boolean hasRequirements(MovementContext context,
 		List<ItemRequirement.StackRequirement> requirements) {
 		if (context.contraption.hasUniversalCreativeCrate)
 			return true;
@@ -162,8 +196,25 @@ public abstract class DeployerMovementBehaviourMixin {
 			if (needed > 0)
 				return false;
 		}
-		for (ItemRequirement.StackRequirement required : requirements)
-			ItemHelper.extract(items, required::matches, ExtractionCountMode.EXACTLY, required.stack.getCount(), false);
 		return true;
+	}
+
+	private static boolean consumeRequirements(MovementContext context,
+		List<ItemRequirement.StackRequirement> requirements) {
+		if (context.contraption.hasUniversalCreativeCrate)
+			return true;
+		var items = context.contraption.getStorage().getAllItems();
+		for (ItemRequirement.StackRequirement required : requirements) {
+			ItemStack extracted = ItemHelper.extract(items, required::matches, ExtractionCountMode.EXACTLY,
+				required.stack.getCount(), false);
+			if (extracted.getCount() != required.stack.getCount())
+				return false;
+		}
+		return true;
+	}
+
+	private static void restoreSnapshots(List<BlockSnapshot> snapshots) {
+		for (int i = snapshots.size() - 1; i >= 0; i--)
+			snapshots.get(i).restore(Block.UPDATE_ALL);
 	}
 }
