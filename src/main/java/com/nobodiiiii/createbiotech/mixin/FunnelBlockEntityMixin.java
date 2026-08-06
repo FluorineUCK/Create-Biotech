@@ -139,7 +139,8 @@ public abstract class FunnelBlockEntityMixin implements SlimeCaptureFunnelAccess
 
 		BeltSurface surface =
 			BeltSurfaceResolver.resolve(funnel.getLevel(), funnel.getBlockPos(), blockState);
-		if (surface != null)
+		if (surface != null
+			|| MagmaBeltHelper.getSegmentBE(funnel.getLevel(), funnel.getBlockPos().below()) != null)
 			cir.setReturnValue(true);
 	}
 

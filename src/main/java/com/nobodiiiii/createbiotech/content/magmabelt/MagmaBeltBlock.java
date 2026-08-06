@@ -60,6 +60,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
@@ -99,6 +100,7 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
+import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaBeltBlock extends HorizontalKineticBlock
@@ -281,14 +283,19 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 		boolean isWrench = AllItems.WRENCH.isIn(heldItem);
 		boolean isConnector = heldItem.is(CBItems.MAGMA_BELT_CONNECTOR.get());
 		boolean isShaft = AllBlocks.SHAFT.isIn(heldItem);
+		boolean isDye = heldItem.is(Tags.Items.DYES);
 		boolean hasWater = GenericItemEmptying.emptyItem(world, heldItem, true)
 			.getFirst()
 			.getFluid()
 			.isSame(Fluids.WATER);
 		boolean isHand = heldItem.isEmpty() && handIn == InteractionHand.MAIN_HAND;
 
-		if (hasWater)
-			return InteractionResult.PASS;
+		if (isDye || hasWater) {
+			MagmaBeltBlockEntity segment = MagmaBeltHelper.getSegmentBE(world, pos);
+			return segment != null && segment.applyColor(DyeColor.getColor(heldItem))
+				? InteractionResult.SUCCESS
+				: InteractionResult.PASS;
+		}
 
 		if (isConnector)
 			return MagmaBeltSlicer.useConnector(state, world, pos, player, handIn, hit, new Feedback());

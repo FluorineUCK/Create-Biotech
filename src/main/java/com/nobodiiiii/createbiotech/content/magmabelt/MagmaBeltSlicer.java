@@ -307,6 +307,8 @@ public class MagmaBeltSlicer {
 							mergedBeltLength - transportedItemStack.prevBeltPosition;
 					}
 				}
+
+				beltChain = MagmaBeltBlock.getBeltChain(world, mergedController.getBlockPos());
 			}
 		}
 
@@ -357,6 +359,13 @@ public class MagmaBeltSlicer {
 				if (!creative) {
 					player.getInventory().placeItemBackInInventory(AllBlocks.SHAFT.asStack(2));
 					player.getInventory().placeItemBackInInventory(new ItemStack(CBItems.MAGMA_BELT_CONNECTOR.get()));
+				}
+
+				for (BlockPos blockPos : MagmaBeltBlock.getBeltChain(world, controllerBE.getBlockPos())) {
+					MagmaBeltBlockEntity belt = MagmaBeltHelper.getSegmentBE(world, blockPos);
+					if (belt == null)
+						continue;
+					belt.invalidateItemHandler();
 				}
 
 				// Transfer items to other controller

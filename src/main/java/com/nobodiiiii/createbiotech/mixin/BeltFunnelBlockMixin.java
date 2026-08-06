@@ -10,6 +10,7 @@ import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceHost;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceProviderBlock;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
+import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlock;
 import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
 import com.simibubi.create.content.logistics.funnel.AbstractHorizontalFunnelBlock;
 import com.simibubi.create.content.logistics.funnel.BeltFunnelBlock;
@@ -119,6 +120,10 @@ public abstract class BeltFunnelBlockMixin extends AbstractHorizontalFunnelBlock
 		if (attachment != null) {
 			BlockPos beltPos = pos.relative(attachment);
 			BlockState beltState = world.getBlockState(beltPos);
+			if (MagmaBeltBlock.isMagmaBelt(beltState)) {
+				cir.setReturnValue(MagmaBeltBlock.canTransportObjects(beltState));
+				return;
+			}
 			if (beltState.getBlock() instanceof BeltSurfaceProviderBlock) {
 				// Surface-based belt (e.g. slime belt): authoritative answer comes from the host's surface
 				// table — covers lateral and vertical-track attachments that vanilla can't reason about.
@@ -134,8 +139,7 @@ public abstract class BeltFunnelBlockMixin extends AbstractHorizontalFunnelBlock
 				return;
 			}
 			// Canonical DOWN attachment over a non-surface-host belt — fall through to vanilla's
-			// isOnValidBelt, which handles vanilla BeltBlock instanceof + DirectBeltInputBehaviour
-			// (magma / power belts opt in via allowingBeltFunnelsWhen).
+			// isOnValidBelt, which handles vanilla BeltBlock instanceof + DirectBeltInputBehaviour.
 			return;
 		}
 		// No attachment encoded yet (e.g. vanilla's placement-time check on a fresh default state):
