@@ -242,15 +242,12 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 
 	private static Track getClosestCaptureTrack(Entity entity, SlimeBeltBlockEntity belt, SlimeBeltInventory beltInventory,
 		SlimeBeltBlockEntity controller) {
-		Track primary = getNearestTrack(entity.getBoundingBox()
+		Track nearest = getNearestTrack(entity.getBoundingBox()
 			.getCenter(), belt, controller);
-		Track secondary = primary == Track.FRONT ? Track.BACK
-			: Track.FRONT;
-		if (beltInventory.canInsertAtOnTrack(belt.index, primary))
-			return primary;
-		if (beltInventory.canInsertAtOnTrack(belt.index, secondary))
-			return secondary;
-		return null;
+		// The two surfaces are physically isolated. A blocked landing on the touched
+		// surface must leave the entity in the world instead of rerouting it through
+		// the opposite side of the belt.
+		return beltInventory.canInsertAtOnTrack(belt.index, nearest) ? nearest : null;
 	}
 
 	// Dropped items can touch either exposed belt surface, so choose the insertion point on the nearest track.
