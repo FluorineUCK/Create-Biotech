@@ -25,12 +25,14 @@ import net.createmod.catnip.levelWrappers.SchematicLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
+import net.minecraft.world.Containers;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.common.util.BlockSnapshot;
 import net.neoforged.neoforge.event.EventHooks;
+import net.neoforged.neoforge.items.ItemHandlerHelper;
 
 @Mixin(DeployerMovementBehaviour.class)
 public abstract class DeployerMovementBehaviourMixin {
@@ -71,7 +73,12 @@ public abstract class DeployerMovementBehaviourMixin {
 		}
 
 		List<ItemRequirement.StackRequirement> requirements = collectRequirements(schematicWorld, chain);
-		if (requirements == null || !hasRequirements(context, requirements)) {
+		if (requirements == null) {
+			ci.cancel();
+			return;
+		}
+		List<ItemStack> extracted = extractRequirements(context, requirements, level, pos);
+		if (extracted == null) {
 			ci.cancel();
 			return;
 		}
@@ -80,6 +87,8 @@ public abstract class DeployerMovementBehaviourMixin {
 		for (BlockPos chainPos : chain)
 			snapshots.add(BlockSnapshot.create(level.dimension(), level, chainPos));
 
+		ci.cancel();
+		boolean committed = false;
 		try {
 			Axis shaftAxis = state.getValue(SlimeBeltBlock.SLOPE) == BeltSlope.SIDEWAYS ? Axis.Y
 				: state.getValue(SlimeBeltBlock.HORIZONTAL_FACING).getClockWise().getAxis();
@@ -94,28 +103,21 @@ public abstract class DeployerMovementBehaviourMixin {
 
 			for (BlockPos chainPos : chain)
 				if (!level.getBlockState(chainPos).is(CBBlocks.SLIME_BELT.get())) {
-					restoreSnapshots(snapshots);
-					ci.cancel();
 					return;
 				}
 
-			for (BlockSnapshot snapshot : snapshots)
-				if (EventHooks.onBlockPlace(player, snapshot, Direction.UP)) {
-					restoreSnapshots(snapshots);
-					ci.cancel();
-					return;
-				}
-
-			if (!consumeRequirements(context, requirements)) {
-				restoreSnapshots(snapshots);
-				ci.cancel();
+			if (EventHooks.onMultiBlockPlace(player, snapshots, Direction.UP))
 				return;
+			committed = true;
+		} finally {
+			if (!committed) {
+				try {
+					restoreSnapshots(snapshots);
+				} finally {
+					refundRequirements(context, extracted, level, pos);
+				}
 			}
-		} catch (RuntimeException exception) {
-			restoreSnapshots(snapshots);
-			throw exception;
 		}
-		ci.cancel();
 	}
 
 	private static BlockPos findChainStart(SchematicLevel schematicWorld, BlockPos endpoint) {
@@ -172,45 +174,41 @@ public abstract class DeployerMovementBehaviourMixin {
 		return requirements;
 	}
 
-	private static boolean hasRequirements(MovementContext context,
-		List<ItemRequirement.StackRequirement> requirements) {
+	private static List<ItemStack> extractRequirements(MovementContext context,
+		List<ItemRequirement.StackRequirement> requirements, Level level, BlockPos pos) {
 		if (context.contraption.hasUniversalCreativeCrate)
-			return true;
+			return List.of();
 		var items = context.contraption.getStorage().getAllItems();
-		int[] remaining = new int[items.getSlots()];
-		for (int slot = 0; slot < remaining.length; slot++)
-			remaining[slot] = items.getStackInSlot(slot).getCount();
-
 		for (ItemRequirement.StackRequirement required : requirements) {
 			if (required.usage != ItemRequirement.ItemUseType.CONSUME)
-				return false;
-			int needed = required.stack.getCount();
-			for (int slot = 0; slot < remaining.length && needed > 0; slot++) {
-				ItemStack available = items.getStackInSlot(slot);
-				if (remaining[slot] == 0 || !required.matches(available))
-					continue;
-				int extracted = Math.min(remaining[slot], needed);
-				remaining[slot] -= extracted;
-				needed -= extracted;
-			}
-			if (needed > 0)
-				return false;
+				return null;
+			ItemStack simulated = ItemHelper.extract(items, required::matches, ExtractionCountMode.EXACTLY,
+				required.stack.getCount(), true);
+			if (simulated.getCount() != required.stack.getCount())
+				return null;
 		}
-		return true;
-	}
 
-	private static boolean consumeRequirements(MovementContext context,
-		List<ItemRequirement.StackRequirement> requirements) {
-		if (context.contraption.hasUniversalCreativeCrate)
-			return true;
-		var items = context.contraption.getStorage().getAllItems();
+		List<ItemStack> extractedItems = new ArrayList<>(requirements.size());
 		for (ItemRequirement.StackRequirement required : requirements) {
 			ItemStack extracted = ItemHelper.extract(items, required::matches, ExtractionCountMode.EXACTLY,
 				required.stack.getCount(), false);
-			if (extracted.getCount() != required.stack.getCount())
-				return false;
+			if (extracted.getCount() != required.stack.getCount()) {
+				refundRequirements(context, extractedItems, level, pos);
+				return null;
+			}
+			extractedItems.add(extracted);
 		}
-		return true;
+		return extractedItems;
+	}
+
+	private static void refundRequirements(MovementContext context, List<ItemStack> extracted, Level level,
+		BlockPos pos) {
+		var items = context.contraption.getStorage().getAllItems();
+		for (ItemStack stack : extracted) {
+			ItemStack remainder = ItemHandlerHelper.insertItemStacked(items, stack, false);
+			if (!remainder.isEmpty())
+				Containers.dropItemStack(level, pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5, remainder);
+		}
 	}
 
 	private static void restoreSnapshots(List<BlockSnapshot> snapshots) {

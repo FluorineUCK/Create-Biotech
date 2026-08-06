@@ -59,7 +59,7 @@ public abstract class LaunchedItemForBeltMixin implements SlimeChainData {
 		cir.getReturnValue().putIntArray("CreateBiotechPulleyOffsets", createBiotech$pulleyOffsets);
 	}
 
-	@Inject(method = "readNBT", at = @At("TAIL"), remap = false)
+	@Inject(method = "readNBT", at = @At("TAIL"))
 	private void createBiotech$readSlimeChain(CompoundTag nbt, HolderLookup.Provider registries,
 		HolderGetter<Block> holderGetter, CallbackInfo ci) {
 		if (nbt.contains("CreateBiotechPulleyOffsets"))

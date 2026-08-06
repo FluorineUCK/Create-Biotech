@@ -4,7 +4,6 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -15,7 +14,6 @@ import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelBeltView;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelInteractionHandler;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity;
-import com.simibubi.create.content.kinetics.belt.BeltHelper;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.logistics.tunnel.BrassTunnelBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -35,16 +33,20 @@ public abstract class BrassTunnelBlockEntityMixin {
 	@Unique
 	private SlimeBeltTunnelBeltView createBiotech$beltView;
 
-	@Redirect(method = "tick", at = @At(value = "INVOKE",
+	@WrapOperation(method = "tick", at = @At(value = "INVOKE",
 		target = "Lcom/simibubi/create/content/kinetics/belt/BeltHelper;getSegmentBE(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;)Lcom/simibubi/create/content/kinetics/belt/BeltBlockEntity;"))
-	private BeltBlockEntity createBiotech$getBeltBelowForTick(LevelAccessor world, BlockPos pos) {
-		return getBeltView(world, pos);
+	private BeltBlockEntity createBiotech$getBeltBelowForTick(LevelAccessor world, BlockPos pos,
+		Operation<BeltBlockEntity> original) {
+		BeltBlockEntity belt = original.call(world, pos);
+		return belt != null ? belt : getSlimeBeltView(world, pos);
 	}
 
-	@Redirect(method = "addValidOutputsOf", at = @At(value = "INVOKE",
+	@WrapOperation(method = "addValidOutputsOf", at = @At(value = "INVOKE",
 		target = "Lcom/simibubi/create/content/kinetics/belt/BeltHelper;getSegmentBE(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;)Lcom/simibubi/create/content/kinetics/belt/BeltBlockEntity;"))
-	private BeltBlockEntity createBiotech$getBeltBelowForOutputs(LevelAccessor world, BlockPos pos) {
-		return getBeltView(world, pos);
+	private BeltBlockEntity createBiotech$getBeltBelowForOutputs(LevelAccessor world, BlockPos pos,
+		Operation<BeltBlockEntity> original) {
+		BeltBlockEntity belt = original.call(world, pos);
+		return belt != null ? belt : getSlimeBeltView(world, pos);
 	}
 
 	@Inject(method = "insertIntoTunnel", at = @At("HEAD"), cancellable = true)
@@ -122,10 +124,7 @@ public abstract class BrassTunnelBlockEntityMixin {
 		return original.call(behaviour, side);
 	}
 
-	private BeltBlockEntity getBeltView(LevelAccessor world, BlockPos pos) {
-		BeltBlockEntity vanillaBelt = BeltHelper.getSegmentBE(world, pos);
-		if (vanillaBelt != null)
-			return vanillaBelt;
+	private BeltBlockEntity getSlimeBeltView(LevelAccessor world, BlockPos pos) {
 		SlimeBeltBlockEntity slimeBelt = SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(world, pos);
 		if (slimeBelt == null)
 			return null;

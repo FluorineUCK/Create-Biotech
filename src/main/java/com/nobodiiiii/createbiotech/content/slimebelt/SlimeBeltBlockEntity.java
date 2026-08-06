@@ -21,6 +21,7 @@ import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInvento
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeItemHandlerBeltSegment;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
+import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelCapabilityInvalidator;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -418,6 +419,8 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		sidedHandlers.clear();
 		nullSideHandler = null;
 		invalidateCapabilities();
+		if (level != null)
+			SlimeBeltTunnelCapabilityInvalidator.invalidate(level, worldPosition.above());
 	}
 
 	private IItemHandler getItemHandler(Direction side) {

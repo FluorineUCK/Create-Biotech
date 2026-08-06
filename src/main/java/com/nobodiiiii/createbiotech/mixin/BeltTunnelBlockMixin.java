@@ -15,7 +15,6 @@ import com.simibubi.create.content.kinetics.belt.BeltSlope;
 import com.simibubi.create.content.kinetics.belt.BeltBlock;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlock;
-import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
 import net.minecraft.core.BlockPos;
@@ -56,9 +55,7 @@ public abstract class BeltTunnelBlockMixin {
 		CallbackInfoReturnable<BlockState> cir) {
 		if (facing != Direction.DOWN || !(world instanceof Level level))
 			return;
-		if (level.getBlockEntity(currentPos) instanceof BeltTunnelBlockEntity tunnel)
-			((SlimeBeltTunnelCapabilityInvalidator) tunnel).createBiotech$clearItemCapability();
-		level.invalidateCapabilities(currentPos);
+		SlimeBeltTunnelCapabilityInvalidator.invalidate(level, currentPos);
 	}
 
 	@Inject(method = "getTunnelState", at = @At("HEAD"), cancellable = true)

@@ -22,7 +22,8 @@ import net.minecraft.world.level.block.state.BlockState;
 public abstract class ContraptionMixin {
 
 	@Inject(method = "moveBlock", at = @At(value = "INVOKE",
-		target = "Lnet/minecraft/world/level/Level;getBlockEntity(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/entity/BlockEntity;"),
+		target = "Lnet/minecraft/world/level/Level;getBlockEntity(Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/entity/BlockEntity;",
+		ordinal = 0),
 		cancellable = false)
 	private void createBiotech$collectSlimeBeltChain(Level world, @Nullable Direction forcedDirection,
 		Queue<BlockPos> frontier, Set<BlockPos> visited, CallbackInfoReturnable<Boolean> cir,

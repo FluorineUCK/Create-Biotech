@@ -40,6 +40,14 @@ public abstract class BasinBlockSlimeBeltOutputMixin {
 		} else if (!neighbour.getCollisionShape(world, neighbourPos).isEmpty()) {
 			cir.setReturnValue(false);
 			return;
+		} else {
+			SlimeBeltBlockEntity controller = segment.getControllerBE();
+			if (controller == null)
+				return;
+			Track track = SlimeBeltHelper.resolveIOTrack(controller, segment.index, direction);
+			cir.setReturnValue(track == Track.FRONT
+				&& (segment.getSpeed() == 0 || segment.getMovementFacing() != direction.getOpposite()));
+			return;
 		}
 
 		SlimeBeltBlockEntity controller = segment.getControllerBE();
@@ -48,10 +56,6 @@ public abstract class BasinBlockSlimeBeltOutputMixin {
 		Track track = SlimeBeltHelper.resolveIOTrack(controller, segment.index, direction);
 		if (track != Track.FRONT) {
 			cir.setReturnValue(false);
-			return;
-		}
-		if (segment.getSpeed() == 0) {
-			cir.setReturnValue(true);
 			return;
 		}
 		DirectBeltInputBehaviour behaviour =
