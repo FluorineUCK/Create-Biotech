@@ -8,7 +8,6 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllPartialModels;
-import com.simibubi.create.AllSpriteShifts;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltInventory;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
@@ -42,7 +41,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.AxisDirection;
 import net.minecraft.core.Vec3i;
 import net.minecraft.util.Mth;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -96,8 +94,6 @@ public class MagmaBeltRenderer extends SafeBlockEntityRenderer<MagmaBeltBlockEnt
 				end = b;
 			}
 
-			DyeColor color = be.color.orElse(null);
-
 			for (boolean bottom : Iterate.trueAndFalse) {
 
 				PartialModel beltPartial = getBeltPartial(diagonal, start, end, bottom);
@@ -105,7 +101,7 @@ public class MagmaBeltRenderer extends SafeBlockEntityRenderer<MagmaBeltBlockEnt
 				SuperByteBuffer beltBuffer = CachedBuffers.partial(beltPartial, blockState)
 					.light(light);
 
-				SpriteShiftEntry spriteShift = getSpriteShiftEntry(color, diagonal, bottom);
+				SpriteShiftEntry spriteShift = getSpriteShiftEntry(diagonal, bottom);
 
 				// UV shift
 				float speed = be.getSpeed();
@@ -166,13 +162,9 @@ public class MagmaBeltRenderer extends SafeBlockEntityRenderer<MagmaBeltBlockEnt
 		renderItems(be, partialTicks, ms, buffer, light, overlay);
 	}
 
-	public static SpriteShiftEntry getSpriteShiftEntry(DyeColor color, boolean diagonal, boolean bottom) {
-		if (color != null) {
-			return (diagonal ? AllSpriteShifts.DYED_DIAGONAL_BELTS
-				: bottom ? AllSpriteShifts.DYED_OFFSET_BELTS : AllSpriteShifts.DYED_BELTS).get(color);
-		} else
-			return diagonal ? MagmaBeltSpriteShifts.BELT_DIAGONAL
-				: bottom ? MagmaBeltSpriteShifts.BELT_OFFSET : MagmaBeltSpriteShifts.BELT;
+	public static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
+		return diagonal ? MagmaBeltSpriteShifts.BELT_DIAGONAL
+			: bottom ? MagmaBeltSpriteShifts.BELT_OFFSET : MagmaBeltSpriteShifts.BELT;
 	}
 
 	public static PartialModel getBeltPartial(boolean diagonal, boolean start, boolean end, boolean bottom) {

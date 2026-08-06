@@ -19,7 +19,6 @@ import com.simibubi.create.api.contraption.transformable.TransformableBlock;
 import com.simibubi.create.api.schematic.requirement.SpecialBlockItemRequirement;
 import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
-import com.simibubi.create.content.fluids.transfer.GenericItemEmptying;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity.CasingType;
@@ -40,7 +39,6 @@ import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
 import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
 import com.simibubi.create.foundation.block.render.ReducedDestroyEffects;
 import com.simibubi.create.foundation.item.ItemHelper;
-import com.yision.allay.block.allayport.AllayPortBlock;
 
 import net.createmod.catnip.data.Iterate;
 import net.createmod.catnip.math.VecHelper;
@@ -60,7 +58,6 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
@@ -83,7 +80,6 @@ import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -100,7 +96,6 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
-import net.neoforged.neoforge.common.Tags;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaBeltBlock extends HorizontalKineticBlock
@@ -283,19 +278,7 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 		boolean isWrench = AllItems.WRENCH.isIn(heldItem);
 		boolean isConnector = heldItem.is(CBItems.MAGMA_BELT_CONNECTOR.get());
 		boolean isShaft = AllBlocks.SHAFT.isIn(heldItem);
-		boolean isDye = heldItem.is(Tags.Items.DYES);
-		boolean hasWater = GenericItemEmptying.emptyItem(world, heldItem, true)
-			.getFirst()
-			.getFluid()
-			.isSame(Fluids.WATER);
 		boolean isHand = heldItem.isEmpty() && handIn == InteractionHand.MAIN_HAND;
-
-		if (isDye || hasWater) {
-			MagmaBeltBlockEntity segment = MagmaBeltHelper.getSegmentBE(world, pos);
-			return segment != null && segment.applyColor(DyeColor.getColor(heldItem))
-				? InteractionResult.SUCCESS
-				: InteractionResult.PASS;
-		}
 
 		if (isConnector)
 			return MagmaBeltSlicer.useConnector(state, world, pos, player, handIn, hit, new Feedback());
@@ -581,8 +564,6 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 		if (FunnelBlock.isFunnel(blockState) && FunnelBlock.getFunnelFacing(blockState) != Direction.UP)
 			return false;
 		if (blockState.getBlock() instanceof BeltTunnelBlock)
-			return false;
-		if (blockState.getBlock() instanceof AllayPortBlock)
 			return false;
 		return true;
 	}

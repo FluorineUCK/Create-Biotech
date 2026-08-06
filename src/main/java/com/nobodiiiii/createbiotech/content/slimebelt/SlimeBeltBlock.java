@@ -21,7 +21,6 @@ import com.simibubi.create.AllItems;
 import com.simibubi.create.api.contraption.transformable.TransformableBlock;
 import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
-import com.simibubi.create.content.fluids.transfer.GenericItemEmptying;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
@@ -74,7 +73,6 @@ import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -288,10 +286,6 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		boolean isConnector = CBItems.isSlimeBeltConnector(heldItem);
 		boolean isShaft = AllBlocks.SHAFT.isIn(heldItem);
 		boolean isHand = heldItem.isEmpty() && hand == InteractionHand.MAIN_HAND;
-		boolean hasWater = GenericItemEmptying.emptyItem(world, heldItem, true).getFirst().getFluid().isSame(Fluids.WATER);
-
-		if (hasWater)
-			return InteractionResult.PASS;
 		if (isConnector)
 			return SlimeBeltSlicer.useConnector(state, world, pos, player, hand, hit, new SlimeBeltSlicer.Feedback());
 		if (isWrench)

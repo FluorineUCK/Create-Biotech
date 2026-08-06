@@ -24,7 +24,6 @@ import net.createmod.catnip.data.Iterate;
 import net.createmod.catnip.render.SpriteShiftEntry;
 import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
-import net.minecraft.world.item.DyeColor;
 
 public class MagmaBeltVisual extends KineticBlockEntityVisual<MagmaBeltBlockEntity> {
 
@@ -44,15 +43,13 @@ public class MagmaBeltVisual extends KineticBlockEntityVisual<MagmaBeltBlockEnti
 		BeltPart part = blockState.getValue(MagmaBeltBlock.PART);
 		boolean start = part == BeltPart.START;
 		boolean end = part == BeltPart.END;
-		DyeColor color = blockEntity.color.orElse(null);
-
 		boolean diagonal = blockState.getValue(MagmaBeltBlock.SLOPE)
 			.isDiagonal();
 		belts = new ScrollInstance[diagonal ? 1 : 2];
 
 		for (boolean bottom : Iterate.trueAndFalse) {
 			PartialModel beltPartial = MagmaBeltRenderer.getBeltPartial(diagonal, start, end, bottom);
-			SpriteShiftEntry spriteShift = MagmaBeltRenderer.getSpriteShiftEntry(color, diagonal, bottom);
+			SpriteShiftEntry spriteShift = MagmaBeltRenderer.getSpriteShiftEntry(diagonal, bottom);
 			Instancer<ScrollInstance> beltModel =
 				instancerProvider().instancer(AllInstanceTypes.SCROLLING, Models.partial(beltPartial));
 
@@ -75,13 +72,12 @@ public class MagmaBeltVisual extends KineticBlockEntityVisual<MagmaBeltBlockEnti
 
 	@Override
 	public void update(float partialTick) {
-		DyeColor color = blockEntity.color.orElse(null);
 		boolean diagonal = blockState.getValue(MagmaBeltBlock.SLOPE)
 			.isDiagonal();
 
 		boolean bottom = true;
 		for (ScrollInstance belt : belts) {
-			setup(belt, bottom, MagmaBeltRenderer.getSpriteShiftEntry(color, diagonal, bottom));
+			setup(belt, bottom, MagmaBeltRenderer.getSpriteShiftEntry(diagonal, bottom));
 			bottom = false;
 		}
 
