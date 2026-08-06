@@ -90,11 +90,7 @@ public class SlimeBeltInventory {
 		boolean movementDirectionChanged = refreshMovementDirection();
 
 		// Added/Removed items from previous cycle
-		if (!toInsert.isEmpty() || !toRemove.isEmpty()) {
-			toInsert.forEach(this::insert);
-			toInsert.clear();
-			items.removeAll(toRemove);
-			toRemove.clear();
+		if (flushPendingChanges()) {
 			belt.notifyUpdate();
 		}
 
@@ -680,7 +676,7 @@ public class SlimeBeltInventory {
 	}
 
 	public boolean canInsertAtOnTrack(int segment, Track track) {
-		return canInsert(SlimeBeltInsertionPlanner.planTrackInsertion(belt, frame(), segment, track));
+		return canInsert(planTrackInsertion(segment, track));
 	}
 
 	public void prepareInsertedItem(TransportedItemStack transported, int segment, Direction side) {
@@ -693,7 +689,14 @@ public class SlimeBeltInventory {
 	}
 
 	public void prepareInsertedItemOnTrack(TransportedItemStack transported, int segment, Track track) {
-		applyInsertion(transported, SlimeBeltInsertionPlanner.planTrackInsertion(belt, frame(), segment, track));
+		applyInsertion(transported, planTrackInsertion(segment, track));
+	}
+
+	private InsertionPlan planTrackInsertion(int segment, Track track) {
+		// Entity capture can be the first inventory interaction after loading. Resolve
+		// against the live kinetic direction instead of the persisted/default order.
+		refreshMovementDirection();
+		return SlimeBeltInsertionPlanner.planTrackInsertion(belt, frame(), segment, track);
 	}
 
 	/** Land a stack according to a plan; gate and landing consume the same resolution. */
@@ -834,6 +837,11 @@ public class SlimeBeltInventory {
 	}
 
 	public CompoundTag write(HolderLookup.Provider registries) {
+		// sendData() can run immediately after addItem(), before the next inventory tick.
+		// Serialize one coherent snapshot so the client never replaces its live list with
+		// the stale pre-insertion state. This mirrors Create's BeltInventory#write.
+		refreshMovementDirection();
+		flushPendingChanges();
 		CompoundTag nbt = new CompoundTag();
 		ListTag itemsNBT = new ListTag();
 		items.forEach(stack -> itemsNBT.add(stack.serializeNBT(registries)));
@@ -842,6 +850,16 @@ public class SlimeBeltInventory {
 			nbt.put("LazyItem", lazyClientItem.serializeNBT(registries));
 		nbt.putBoolean("PositiveOrder", beltMovementPositive);
 		return nbt;
+	}
+
+	private boolean flushPendingChanges() {
+		if (toInsert.isEmpty() && toRemove.isEmpty())
+			return false;
+		toInsert.forEach(this::insert);
+		toInsert.clear();
+		items.removeAll(toRemove);
+		toRemove.clear();
+		return true;
 	}
 
 	public void eject(TransportedItemStack stack) {
