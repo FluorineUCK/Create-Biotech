@@ -8,10 +8,14 @@ import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
 
 /**
- * Keeps the optional Sable mixin configuration inert unless the complete API surface used by the
- * compatibility mixins is present. This class intentionally has no static references to Sable.
+ * Keeps optional compatibility mixins inert unless their complete target API is present. This
+ * class intentionally has no static references to Sable or Simulated.
  */
 public final class SableMixinPlugin implements IMixinConfigPlugin {
+	private static final String SIMULATED_MOVEMENT_CHECKS =
+		"dev.simulated_team.simulated.index.SimBlockMovementChecks";
+	private static final String SIMULATED_MOVEMENT_CHECKS_MIXIN =
+		"com.nobodiiiii.createbiotech.mixin.compat.sable.SimBlockMovementChecksMixin";
 
 	private static final String[] REQUIRED_CLASSES = {
 		"dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor",
@@ -25,6 +29,7 @@ public final class SableMixinPlugin implements IMixinConfigPlugin {
 	};
 
 	private boolean sableApiAvailable;
+	private boolean simulatedMovementChecksAvailable;
 
 	@Override
 	public void onLoad(String mixinPackage) {
@@ -36,6 +41,7 @@ public final class SableMixinPlugin implements IMixinConfigPlugin {
 				break;
 			}
 		}
+		simulatedMovementChecksAvailable = isPresent(SIMULATED_MOVEMENT_CHECKS, loader);
 	}
 
 	private static boolean isPresent(String className, ClassLoader loader) {
@@ -57,7 +63,11 @@ public final class SableMixinPlugin implements IMixinConfigPlugin {
 
 	@Override
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-		return sableApiAvailable;
+		if (!sableApiAvailable)
+			return false;
+		if (mixinClassName.equals(SIMULATED_MOVEMENT_CHECKS_MIXIN))
+			return simulatedMovementChecksAvailable;
+		return true;
 	}
 
 	@Override

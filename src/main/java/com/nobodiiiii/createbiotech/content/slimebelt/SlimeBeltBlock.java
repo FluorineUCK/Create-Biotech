@@ -147,8 +147,11 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	@Override
 	public void spawnAfterBreak(BlockState state, ServerLevel world, BlockPos pos, ItemStack stack, boolean b) {
 		SlimeBeltBlockEntity controllerBE = SlimeBeltHelper.getControllerBE(world, pos);
-		if (controllerBE != null)
-			controllerBE.getInventory().ejectAll();
+		if (controllerBE == null)
+			return;
+		SlimeBeltInventory inventory = controllerBE.getInventory();
+		if (inventory != null)
+			inventory.ejectAll();
 	}
 
 	@Override

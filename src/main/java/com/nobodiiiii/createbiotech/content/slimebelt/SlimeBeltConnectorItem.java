@@ -58,11 +58,6 @@ public class SlimeBeltConnectorItem extends BlockItem {
 
 		Level level = context.getLevel();
 		BlockPos pos = context.getClickedPos();
-		if (isVerticalShaft(level, pos)) {
-			// TODO support vertical shafts here instead of bailing out immediately.
-			return InteractionResult.FAIL;
-		}
-
 		boolean validAxis = validateAxis(level, pos);
 
 		if (level.isClientSide)
@@ -105,11 +100,6 @@ public class SlimeBeltConnectorItem extends BlockItem {
 		CBItemData.set(context.getItemInHand(), tag);
 		player.getCooldowns().addCooldown(this, 5);
 		return InteractionResult.SUCCESS;
-	}
-
-	private static boolean isVerticalShaft(Level level, BlockPos pos) {
-		BlockState state = level.getBlockState(pos);
-		return ShaftBlock.isShaft(state) && state.getValue(BlockStateProperties.AXIS) == Axis.Y;
 	}
 
 	public static void createBelts(Level level, BlockPos start, BlockPos end) {
