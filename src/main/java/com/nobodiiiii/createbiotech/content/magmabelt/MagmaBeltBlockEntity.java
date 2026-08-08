@@ -45,6 +45,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
@@ -59,7 +60,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class MagmaBeltBlockEntity extends KineticBlockEntity {
+public class MagmaBeltBlockEntity extends KineticBlockEntity implements Clearable {
 	public Map<Entity, TransportedEntityInfo> passengers;
 	public Optional<DyeColor> color;
 	public int beltLength;
@@ -227,6 +228,12 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity {
 		super.destroy();
 		if (isController())
 			getInventory().ejectAll();
+	}
+
+	@Override
+	public void clearContent() {
+		if (inventory != null)
+			inventory.getTransportedItems().clear();
 	}
 
 	@Override

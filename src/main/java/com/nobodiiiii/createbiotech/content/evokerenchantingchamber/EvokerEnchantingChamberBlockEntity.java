@@ -25,6 +25,7 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
 import net.minecraft.world.Containers;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -39,7 +40,7 @@ import net.neoforged.neoforge.fluids.capability.IFluidHandler;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class EvokerEnchantingChamberBlockEntity extends BlockEntity
-	implements IHaveGoggleInformation {
+	implements IHaveGoggleInformation, Clearable {
 
 	public static final int CAST_DURATION_TICKS_PER_LEVEL = 40;
 	private static final int CLIENT_SYNC_INTERVAL_TICKS = 10;
@@ -187,6 +188,16 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 		clientSyncTimer = 0;
 		if (level != null && !level.isClientSide)
 			level.playSound(null, worldPosition, SoundEvents.ENCHANTMENT_TABLE_USE, SoundSource.BLOCKS, 0.85f, 1.0f);
+	}
+
+	@Override
+	public void clearContent() {
+		heldItem = ItemStack.EMPTY;
+		pendingOutput = ItemStack.EMPTY;
+		fluidRemaining = 0;
+		fluidTotal = 0;
+		waitingForFluid = false;
+		clientSyncTimer = 0;
 	}
 
 	public boolean isCastingSpell() {

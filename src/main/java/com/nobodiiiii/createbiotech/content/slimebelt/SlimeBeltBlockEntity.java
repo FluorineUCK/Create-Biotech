@@ -43,6 +43,7 @@ import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtUtils;
 import net.minecraft.util.RandomSource;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -53,7 +54,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost {
+public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost, Clearable {
 
 	public Map<Entity, TransportedEntityInfo> passengers;
 	public int beltLength;
@@ -191,6 +192,12 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 
 		if (isController())
 			getInventory().read(compound.getCompound("Inventory"), registries);
+	}
+
+	@Override
+	public void clearContent() {
+		if (inventory != null)
+			inventory.getTransportedItems().clear();
 	}
 
 	@Override
