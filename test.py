@@ -11,10 +11,13 @@ import hashlib
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
+import time
 import uuid
+from dataclasses import dataclass
 from pathlib import Path
 
 sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8", errors="replace")
@@ -30,7 +33,28 @@ DEFAULT_INSTANCE = "1.21.1-NeoForge"
 DEFAULT_USERNAME = "Dev"
 DEFAULT_WIDTH = 1600
 DEFAULT_HEIGHT = 900
+DEFAULT_SMOKE_TIMEOUT = 40
+DEFAULT_SMOKE_LOG_LINES = 160
+POST_ENTRY_SETTLE_SECONDS = 2.0
 QUICKPLAY_MODS_DIR = PROJECT_ROOT / "build" / "quickplay" / "mods"
+
+SUCCESS_PATTERNS = (
+    re.compile(r"\[Server thread/INFO\](?: \[[^\]]+\])?: .+ logged in with entity id "),
+    re.compile(r"\[Server thread/INFO\](?: \[[^\]]+\])?: .+ joined the game"),
+    re.compile(r"\[Server thread/INFO\](?: \[[^\]]+\])?: .+加入了游戏"),
+)
+
+ERROR_PATTERN = re.compile(
+    r"\b(ERROR|FATAL)\b|Exception|Caused by:|Mixin apply failed|Crash|Failed to|Unable to",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class LogCursor:
+    exists: bool
+    size: int = 0
+    prefix: bytes = b""
 
 
 def offline_player_uuid(username: str) -> str:
@@ -276,6 +300,110 @@ def copy_mod_jar(mods_dir: Path) -> Path:
     return destination
 
 
+def latest_log_candidates(game_directory: Path) -> list[Path]:
+    candidates = [game_directory / "logs" / "latest.log", DOT_MINECRAFT / "logs" / "latest.log"]
+    return list(dict.fromkeys(candidates))
+
+
+def capture_log_cursor(path: Path) -> LogCursor:
+    if not path.exists():
+        return LogCursor(False)
+    try:
+        size = path.stat().st_size
+        with path.open("rb") as handle:
+            prefix = handle.read(min(size, 512))
+        return LogCursor(True, size, prefix)
+    except OSError:
+        return LogCursor(False)
+
+
+def read_log_since(path: Path, cursor: LogCursor) -> str:
+    try:
+        stat = path.stat()
+        start = 0
+        with path.open("rb") as handle:
+            if cursor.exists and stat.st_size >= cursor.size:
+                current_prefix = handle.read(len(cursor.prefix))
+                if current_prefix == cursor.prefix:
+                    start = cursor.size
+            handle.seek(start)
+            return handle.read().decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def read_smoke_log(
+    game_directory: Path, cursors: dict[Path, LogCursor]
+) -> tuple[Path, str]:
+    candidates = latest_log_candidates(game_directory)
+    for path in candidates:
+        text = read_log_since(path, cursors[path])
+        if text.strip():
+            return path, text
+    return candidates[0], ""
+
+
+def entered_world(log_text: str) -> bool:
+    return any(pattern.search(log_text) for pattern in SUCCESS_PATTERNS)
+
+
+def extract_error_excerpt(log_text: str, max_lines: int) -> str:
+    lines = log_text.splitlines()
+    if not lines:
+        return "No new log output was written during the smoke window."
+
+    excerpt: list[str] = []
+    index = 0
+    blocks = 0
+    while index < len(lines) and len(excerpt) < max_lines and blocks < 3:
+        if not ERROR_PATTERN.search(lines[index]):
+            index += 1
+            continue
+
+        start = max(0, index - 2)
+        end = index + 1
+        while end < len(lines) and end - index < 80:
+            line = lines[end]
+            if (
+                line.startswith((" ", "\t"))
+                or line.startswith(("Caused by:", "Suppressed:", "..."))
+                or ERROR_PATTERN.search(line)
+            ):
+                end += 1
+                continue
+            break
+
+        excerpt.extend(lines[start:end])
+        excerpt.append("")
+        blocks += 1
+        index = end
+
+    if excerpt:
+        return "\n".join(excerpt[:max_lines])
+    return "\n".join(lines[-max_lines:])
+
+
+def stop_process_tree(process: subprocess.Popen) -> None:
+    if process.poll() is not None:
+        return
+
+    if os.name == "nt":
+        subprocess.run(
+            ["taskkill", "/PID", str(process.pid), "/T", "/F"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return
+
+    process.terminate()
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.wait(timeout=5)
+
+
 def build_launch_command(instance: str, world: str, width: int, height: int) -> tuple[list[str], Path]:
     version_json = resolve_version_json(instance)
     instance_dir = version_json.parent
@@ -290,7 +418,7 @@ def build_launch_command(instance: str, world: str, width: int, height: int) -> 
     ], game_directory
 
 
-def launch(instance: str, world: str, width: int, height: int) -> None:
+def start_client(instance: str, world: str, width: int, height: int) -> tuple[subprocess.Popen, Path]:
     command, game_directory = build_launch_command(instance, world, width, height)
     process = subprocess.Popen(
         command,
@@ -299,10 +427,89 @@ def launch(instance: str, world: str, width: int, height: int) -> None:
         stderr=subprocess.DEVNULL,
         creationflags=getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0,
     )
+    return process, game_directory
+
+
+def launch(instance: str, world: str, width: int, height: int, dry_run: bool) -> None:
+    command, game_directory = build_launch_command(instance, world, width, height)
+    if dry_run:
+        print(f"[DRY] {instance}")
+        print(f"  game directory: {game_directory}")
+        print(f"  world: {world}")
+        print(f"  args: {len(command)}")
+        return
+
+    process, game_directory = start_client(instance, world, width, height)
     print(f"[LAUNCH] {instance}")
     print(f"  game directory: {game_directory}")
     print(f"  world: {world}")
     print(f"  pid: {process.pid}")
+
+
+def smoke_client(
+    instance: str,
+    world: str,
+    width: int,
+    height: int,
+    timeout: int,
+    max_log_lines: int,
+    dry_run: bool,
+) -> bool:
+    command, game_directory = build_launch_command(instance, world, width, height)
+    candidates = latest_log_candidates(game_directory)
+    cursors = {path: capture_log_cursor(path) for path in candidates}
+
+    if dry_run:
+        print(f"[SMOKE][DRY] {instance}")
+        print(f"  game directory: {game_directory}")
+        print(f"  world: {world}")
+        print(f"  timeout: {timeout}s")
+        print(f"  args: {len(command)}")
+        return True
+
+    print(f"[SMOKE] {instance}: waiting {timeout}s for quickplay world entry")
+    process, game_directory = start_client(instance, world, width, height)
+    print(f"[SMOKE][LAUNCH] {instance}")
+    print(f"  game directory: {game_directory}")
+    print(f"  world: {world}")
+    print(f"  pid: {process.pid}")
+
+    deadline = time.monotonic() + timeout
+    log_path = candidates[0]
+    log_text = ""
+    ok = False
+    try:
+        while time.monotonic() < deadline:
+            log_path, log_text = read_smoke_log(game_directory, cursors)
+            if log_text and entered_world(log_text):
+                ok = True
+                break
+            if process.poll() is not None:
+                break
+            time.sleep(0.1)
+
+        final_log_path, final_log_text = read_smoke_log(game_directory, cursors)
+        if final_log_text.strip():
+            log_path = final_log_path
+            log_text = final_log_text
+        ok = ok or bool(log_text and entered_world(log_text))
+
+        if ok:
+            print(
+                f"[SMOKE][PASS] {instance}: entered world within {timeout}s; "
+                f"waiting {POST_ENTRY_SETTLE_SECONDS:g}s before cleanup"
+            )
+            time.sleep(POST_ENTRY_SETTLE_SECONDS)
+        else:
+            print(f"[SMOKE][FAIL] {instance}: did not enter world within {timeout}s")
+            exit_code = process.poll()
+            if exit_code is not None:
+                print(f"[SMOKE][PROCESS EXIT] code={exit_code}")
+            print(f"[SMOKE][LOG] {log_path}")
+            print(extract_error_excerpt(log_text, max_log_lines))
+        return ok
+    finally:
+        stop_process_tree(process)
 
 
 def main() -> int:
@@ -312,9 +519,17 @@ def main() -> int:
     parser.add_argument("--skip-build", action="store_true")
     parser.add_argument("--online-build", action="store_true")
     parser.add_argument("--no-copy", action="store_true")
+    parser.add_argument("--dry-run", action="store_true", help="Build/copy as requested, but do not start the client.")
+    parser.add_argument("--smoke", action="store_true", help="Build, quickplay, wait for a world-entry log marker, then clean up.")
+    parser.add_argument("--smoke-timeout", type=int, default=DEFAULT_SMOKE_TIMEOUT)
+    parser.add_argument("--smoke-log-lines", type=int, default=DEFAULT_SMOKE_LOG_LINES)
     parser.add_argument("--width", type=int, default=DEFAULT_WIDTH)
     parser.add_argument("--height", type=int, default=DEFAULT_HEIGHT)
     args = parser.parse_args()
+    if args.smoke_timeout <= 0:
+        parser.error("--smoke-timeout must be greater than 0")
+    if args.smoke_log_lines <= 0:
+        parser.error("--smoke-log-lines must be greater than 0")
 
     game_directory = resolve_game_directory(args.instance)
     saves_dir = game_directory / "saves"
@@ -330,7 +545,18 @@ def main() -> int:
     if not args.no_copy:
         print(f"[COPY] {copy_mod_jar(mods_dir)}")
 
-    launch(args.instance, world, args.width, args.height)
+    if args.smoke:
+        return 0 if smoke_client(
+            args.instance,
+            world,
+            args.width,
+            args.height,
+            args.smoke_timeout,
+            args.smoke_log_lines,
+            args.dry_run,
+        ) else 1
+
+    launch(args.instance, world, args.width, args.height, args.dry_run)
     return 0
 
 

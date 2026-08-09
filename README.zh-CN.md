@@ -27,6 +27,7 @@
 ./gradlew runServer                 # 启动开发服务端
 ./gradlew runData                   # 重新生成数据生成产物
 ./gradlew quickPlayClient -Pinstance=<name>   # 构建 + 拷贝 + 通过 test.py 启动外部实例
+./gradlew quickPlaySmoke -Pinstance=<name>    # 进入世界、确认日志标记后自动结束客户端
 ```
 
 ## 仓库结构

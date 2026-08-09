@@ -19,6 +19,7 @@
     "ContraptionMixin",
     "DeployerMovementBehaviourMixin",
     "BeltTunnelBlockMixin",
+	"BeltTunnelItemMixin",
 	"BeltTunnelBlockEntityCapabilityMixin",
 	"BeltTunnelInteractionHandlerMixin",
     "LaunchedItemForBeltMixin",
