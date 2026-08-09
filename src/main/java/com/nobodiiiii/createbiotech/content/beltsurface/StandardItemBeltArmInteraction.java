@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.beltsurface;
 
+import java.util.function.Supplier;
+
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import com.simibubi.create.content.kinetics.belt.BeltSlope;
@@ -21,15 +23,15 @@ public final class StandardItemBeltArmInteraction {
 	private StandardItemBeltArmInteraction() {}
 
 	public static final class Type extends ArmInteractionPointType {
-		private final Block beltBlock;
+		private final Supplier<? extends Block> beltBlock;
 
-		public Type(Block beltBlock) {
+		public Type(Supplier<? extends Block> beltBlock) {
 			this.beltBlock = beltBlock;
 		}
 
 		@Override
 		public boolean canCreatePoint(Level level, BlockPos pos, BlockState state) {
-			if (state.getBlock() != beltBlock || !(state.getBlock() instanceof StandardItemBeltBlock belt))
+			if (state.getBlock() != beltBlock.get() || !(state.getBlock() instanceof StandardItemBeltBlock belt))
 				return false;
 			BeltSlope slope = state.getValue(belt.createBiotech$slopeProperty());
 			if (slope == BeltSlope.VERTICAL || slope == BeltSlope.SIDEWAYS)

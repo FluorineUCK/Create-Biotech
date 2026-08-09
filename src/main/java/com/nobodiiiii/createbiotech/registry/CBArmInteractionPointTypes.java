@@ -19,8 +19,8 @@ public final class CBArmInteractionPointTypes {
 		Registry.register(CreateBuiltInRegistries.ARM_INTERACTION_POINT_TYPE,
 			CreateBiotech.asResource("butter_cat_engine"), new ButterCatArmInteraction.Type());
 		Registry.register(CreateBuiltInRegistries.ARM_INTERACTION_POINT_TYPE,
-			CreateBiotech.asResource("slime_belt"), new StandardItemBeltArmInteraction.Type(CBBlocks.SLIME_BELT.get()));
+			CreateBiotech.asResource("slime_belt"), new StandardItemBeltArmInteraction.Type(CBBlocks.SLIME_BELT));
 		Registry.register(CreateBuiltInRegistries.ARM_INTERACTION_POINT_TYPE,
-			CreateBiotech.asResource("magma_belt"), new StandardItemBeltArmInteraction.Type(CBBlocks.MAGMA_BELT.get()));
+			CreateBiotech.asResource("magma_belt"), new StandardItemBeltArmInteraction.Type(CBBlocks.MAGMA_BELT));
 	}
 }
