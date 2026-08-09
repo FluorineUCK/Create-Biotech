@@ -20,6 +20,8 @@ import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Trac
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInventory;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeItemHandlerBeltSegment;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementSegment;
+import com.simibubi.create.content.kinetics.belt.BeltBlockEntity.CasingType;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltTunnelCapabilityInvalidator;
@@ -58,7 +60,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlockEntity extends KineticBlockEntity
-	implements BeltSurfaceHost, StandardItemBeltPort, Clearable {
+	implements BeltSurfaceHost, StandardItemBeltPort, CBBeltPlacementSegment, Clearable {
 
 	/** {@code Track.values()} clones its array on every call; the surface lookups run per funnel per tick. */
 	private static final Track[] TRACKS = Track.values();
@@ -427,6 +429,24 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity
 		if (level != null)
 			BeltTunnelCapabilityInvalidator.invalidate(level, worldPosition.above());
 	}
+
+	@Override
+	public int createBiotech$getBeltLength() {
+		return beltLength;
+	}
+
+	@Override
+	public boolean createBiotech$hasPulley() {
+		return hasPulley();
+	}
+
+	@Override
+	public CasingType createBiotech$getCasingType() {
+		return CasingType.NONE;
+	}
+
+	@Override
+	public void createBiotech$setCasingType(CasingType casing) {}
 
 	@Override
 	public BlockPos createBiotech$getBlockPos() {

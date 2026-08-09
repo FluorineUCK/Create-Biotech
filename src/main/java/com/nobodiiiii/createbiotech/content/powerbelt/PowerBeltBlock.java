@@ -12,6 +12,7 @@ import com.nobodiiiii.createbiotech.client.PowerBeltClientReporter;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainBlock;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementBlock;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -89,7 +90,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 
 public class PowerBeltBlock extends HorizontalKineticBlock
-	implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock, TransformableBlock, CBBeltChainBlock {
+	implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock, TransformableBlock, CBBeltPlacementBlock {
 
 	public static final Property<BeltSlope> SLOPE = BeltBlock.SLOPE;
 	public static final Property<BeltPart> PART = BeltBlock.PART;
@@ -112,6 +113,16 @@ public class PowerBeltBlock extends HorizontalKineticBlock
 	@Override
 	public Property<BeltPart> createBiotech$partProperty() {
 		return PART;
+	}
+
+	@Override
+	public ItemStack createBiotech$connectorStack() {
+		return new ItemStack(CBItems.POWER_BELT_CONNECTOR.get());
+	}
+
+	@Override
+	public void createBiotech$createChain(Level level, BlockPos start, BlockPos end) {
+		PowerBeltConnectorItem.createBelts(level, start, end);
 	}
 
 	@OnlyIn(Dist.CLIENT)

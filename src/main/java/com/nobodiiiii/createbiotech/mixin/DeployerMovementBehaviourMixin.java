@@ -8,12 +8,11 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlock;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltConnectorItem;
-import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainPlacement;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementBlock;
 import com.simibubi.create.content.contraptions.behaviour.MovementContext;
+import com.simibubi.create.content.kinetics.belt.BeltBlockEntity.CasingType;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
-import com.simibubi.create.content.kinetics.belt.BeltSlope;
 import com.simibubi.create.content.kinetics.deployer.DeployerFakePlayer;
 import com.simibubi.create.content.kinetics.deployer.DeployerMovementBehaviour;
 import com.simibubi.create.content.schematics.SchematicInstances;
@@ -24,11 +23,10 @@ import com.simibubi.create.foundation.item.ItemHelper.ExtractionCountMode;
 import net.createmod.catnip.levelWrappers.SchematicLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.core.Direction.Axis;
 import net.minecraft.world.Containers;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.neoforged.neoforge.common.util.BlockSnapshot;
 import net.neoforged.neoforge.event.EventHooks;
@@ -38,41 +36,39 @@ import net.neoforged.neoforge.items.ItemHandlerHelper;
 public abstract class DeployerMovementBehaviourMixin {
 
 	@Inject(method = "activateAsSchematicPrinter", at = @At("HEAD"), cancellable = true)
-	private void createBiotech$placeSlimeBeltChain(MovementContext context, BlockPos pos, DeployerFakePlayer player,
+	private void createBiotech$placeBeltChain(MovementContext context, BlockPos pos, DeployerFakePlayer player,
 		Level level, ItemStack filter, CallbackInfo ci) {
-		if (!filter.has(com.simibubi.create.AllDataComponents.SCHEMATIC_ANCHOR))
-			return;
-		if (!filter.getOrDefault(com.simibubi.create.AllDataComponents.SCHEMATIC_DEPLOYED, false))
-			return;
-		if (!level.getBlockState(pos).canBeReplaced())
+		if (!filter.has(com.simibubi.create.AllDataComponents.SCHEMATIC_ANCHOR)
+			|| !filter.getOrDefault(com.simibubi.create.AllDataComponents.SCHEMATIC_DEPLOYED, false)
+			|| !level.getBlockState(pos).canBeReplaced())
 			return;
 
-		SchematicLevel schematicWorld = SchematicInstances.get(level, filter);
-		if (schematicWorld == null || !schematicWorld.getBounds().isInside(pos.subtract(schematicWorld.anchor)))
+		SchematicLevel schematic = SchematicInstances.get(level, filter);
+		if (schematic == null || !schematic.getBounds().isInside(pos.subtract(schematic.anchor)))
 			return;
-		BlockState state = schematicWorld.getBlockState(pos);
-		if (!state.is(CBBlocks.SLIME_BELT.get()))
+		BlockState state = schematic.getBlockState(pos);
+		if (!(state.getBlock() instanceof CBBeltPlacementBlock belt))
 			return;
 
-		// Middle segments and pulley markers are consumed by the endpoint's one-shot placement.
-		if (state.getValue(SlimeBeltBlock.PART) == BeltPart.MIDDLE
-			|| state.getValue(SlimeBeltBlock.PART) == BeltPart.PULLEY) {
+		BeltPart part = state.getValue(belt.createBiotech$partProperty());
+		if (part == BeltPart.MIDDLE || part == BeltPart.PULLEY) {
 			ci.cancel();
 			return;
 		}
 
-		BlockPos start = findChainStart(schematicWorld, pos);
-		if (start == null) {
+		List<BlockPos> chain = CBBeltChainPlacement.readChain(schematic, pos);
+		if (chain == null || chain.size() < 2) {
 			ci.cancel();
 			return;
 		}
-		List<BlockPos> chain = readChain(schematicWorld, start);
-		if (chain == null || chain.size() < 2 || !canPlaceChain(level, chain)) {
+		int[] pulleys = CBBeltChainPlacement.collectPulleyOffsets(schematic, chain);
+		CasingType[] casings = CBBeltChainPlacement.collectCasings(schematic, chain);
+		if (!CBBeltChainPlacement.canPlaceChain(level, chain, pulleys)) {
 			ci.cancel();
 			return;
 		}
 
-		List<ItemRequirement.StackRequirement> requirements = collectRequirements(schematicWorld, chain);
+		List<ItemRequirement.StackRequirement> requirements = collectRequirements(schematic, chain);
 		if (requirements == null) {
 			ci.cancel();
 			return;
@@ -90,29 +86,15 @@ public abstract class DeployerMovementBehaviourMixin {
 		ci.cancel();
 		boolean committed = false;
 		try {
-			Axis shaftAxis = state.getValue(SlimeBeltBlock.SLOPE) == BeltSlope.SIDEWAYS ? Axis.Y
-				: state.getValue(SlimeBeltBlock.HORIZONTAL_FACING).getClockWise().getAxis();
-			for (BlockPos chainPos : chain) {
-				BlockState chainState = schematicWorld.getBlockState(chainPos);
-				if (chainState.getValue(SlimeBeltBlock.PART) != BeltPart.MIDDLE)
-					level.setBlockAndUpdate(chainPos, com.simibubi.create.AllBlocks.SHAFT.getDefaultState()
-						.setValue(com.simibubi.create.content.kinetics.simpleRelays.AbstractSimpleShaftBlock.AXIS,
-							shaftAxis));
-			}
-			SlimeBeltConnectorItem.createBelts(level, start, chain.get(chain.size() - 1));
-
-			for (BlockPos chainPos : chain)
-				if (!level.getBlockState(chainPos).is(CBBlocks.SLIME_BELT.get())) {
-					return;
-				}
-
+			if (!CBBeltChainPlacement.placeAtomically(level, state, chain, pulleys, casings))
+				return;
 			if (EventHooks.onMultiBlockPlace(player, snapshots, Direction.UP))
 				return;
 			committed = true;
 		} finally {
 			if (!committed) {
 				try {
-					restoreSnapshots(snapshots);
+					CBBeltChainPlacement.restoreSnapshots(snapshots);
 				} finally {
 					refundRequirements(context, extracted, level, pos);
 				}
@@ -120,53 +102,12 @@ public abstract class DeployerMovementBehaviourMixin {
 		}
 	}
 
-	private static BlockPos findChainStart(SchematicLevel schematicWorld, BlockPos endpoint) {
-		BlockPos current = endpoint;
-		for (int i = 0; i < 1000; i++) {
-			BlockState state = schematicWorld.getBlockState(current);
-			if (!state.is(CBBlocks.SLIME_BELT.get()))
-				return null;
-			if (state.getValue(SlimeBeltBlock.PART) == BeltPart.START)
-				return current;
-			BlockPos previous = SlimeBeltBlock.nextSegmentPosition(state, current, false);
-			if (previous == null || previous.equals(current))
-				return null;
-			current = previous;
-		}
-		return null;
-	}
-
-	private static List<BlockPos> readChain(SchematicLevel schematicWorld, BlockPos start) {
-		List<BlockPos> chain = new ArrayList<>();
-		BlockPos current = start;
-		for (int i = 0; i < 1000; i++) {
-			BlockState state = schematicWorld.getBlockState(current);
-			if (!state.is(CBBlocks.SLIME_BELT.get()))
-				return null;
-			chain.add(current);
-			if (state.getValue(SlimeBeltBlock.PART) == BeltPart.END)
-				return chain;
-			BlockPos next = SlimeBeltBlock.nextSegmentPosition(state, current, true);
-			if (next == null || next.equals(current))
-				return null;
-			current = next;
-		}
-		return null;
-	}
-
-	private static boolean canPlaceChain(Level level, List<BlockPos> chain) {
-		for (BlockPos chainPos : chain)
-			if (!level.getBlockState(chainPos).canBeReplaced())
-				return false;
-		return true;
-	}
-
-	private static List<ItemRequirement.StackRequirement> collectRequirements(SchematicLevel schematicWorld,
+	private static List<ItemRequirement.StackRequirement> collectRequirements(SchematicLevel schematic,
 		List<BlockPos> chain) {
 		List<ItemRequirement.StackRequirement> requirements = new ArrayList<>();
 		for (BlockPos chainPos : chain) {
-			ItemRequirement requirement = ItemRequirement.of(schematicWorld.getBlockState(chainPos),
-				schematicWorld.getBlockEntity(chainPos));
+			BlockEntity blockEntity = schematic.getBlockEntity(chainPos);
+			ItemRequirement requirement = ItemRequirement.of(schematic.getBlockState(chainPos), blockEntity);
 			if (requirement.isInvalid())
 				return null;
 			requirements.addAll(requirement.getRequiredItems());
@@ -174,29 +115,26 @@ public abstract class DeployerMovementBehaviourMixin {
 		return requirements;
 	}
 
+	/** Sequential real reservations make duplicate/tag-overlapping requirements cumulative; failures are refunded. */
 	private static List<ItemStack> extractRequirements(MovementContext context,
 		List<ItemRequirement.StackRequirement> requirements, Level level, BlockPos pos) {
 		if (context.contraption.hasUniversalCreativeCrate)
 			return List.of();
 		var items = context.contraption.getStorage().getAllItems();
-		for (ItemRequirement.StackRequirement required : requirements) {
-			if (required.usage != ItemRequirement.ItemUseType.CONSUME)
-				return null;
-			ItemStack simulated = ItemHelper.extract(items, required::matches, ExtractionCountMode.EXACTLY,
-				required.stack.getCount(), true);
-			if (simulated.getCount() != required.stack.getCount())
-				return null;
-		}
-
 		List<ItemStack> extractedItems = new ArrayList<>(requirements.size());
 		for (ItemRequirement.StackRequirement required : requirements) {
+			if (required.usage != ItemRequirement.ItemUseType.CONSUME) {
+				refundRequirements(context, extractedItems, level, pos);
+				return null;
+			}
 			ItemStack extracted = ItemHelper.extract(items, required::matches, ExtractionCountMode.EXACTLY,
 				required.stack.getCount(), false);
+			if (!extracted.isEmpty())
+				extractedItems.add(extracted);
 			if (extracted.getCount() != required.stack.getCount()) {
 				refundRequirements(context, extractedItems, level, pos);
 				return null;
 			}
-			extractedItems.add(extracted);
 		}
 		return extractedItems;
 	}
@@ -209,10 +147,5 @@ public abstract class DeployerMovementBehaviourMixin {
 			if (!remainder.isEmpty())
 				Containers.dropItemStack(level, pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5, remainder);
 		}
-	}
-
-	private static void restoreSnapshots(List<BlockSnapshot> snapshots) {
-		for (int i = snapshots.size() - 1; i >= 0; i--)
-			snapshots.get(i).restore(Block.UPDATE_ALL);
 	}
 }

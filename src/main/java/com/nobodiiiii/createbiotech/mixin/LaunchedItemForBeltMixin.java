@@ -8,24 +8,20 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlock;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltConnectorItem;
-import com.simibubi.create.AllBlocks;
-import com.simibubi.create.content.kinetics.belt.BeltSlope;
-import com.simibubi.create.content.kinetics.simpleRelays.AbstractSimpleShaftBlock;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainPlacement;
+import com.simibubi.create.content.kinetics.belt.BeltBlockEntity.CasingType;
 import com.simibubi.create.content.schematics.cannon.LaunchedItem;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.HolderGetter;
-import net.minecraft.core.Direction.Axis;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 
 @Mixin(LaunchedItem.ForBelt.class)
-public abstract class LaunchedItemForBeltMixin implements SlimeChainData {
+public abstract class LaunchedItemForBeltMixin implements CBBeltChainData {
 
 	@Unique
 	private int[] createBiotech$pulleyOffsets;
@@ -35,6 +31,9 @@ public abstract class LaunchedItemForBeltMixin implements SlimeChainData {
 
 	@Shadow
 	public int length;
+
+	@Shadow
+	public CasingType[] casings;
 
 	@Shadow
 	public BlockPos target;
@@ -54,46 +53,25 @@ public abstract class LaunchedItemForBeltMixin implements SlimeChainData {
 	@Inject(method = "serializeNBT", at = @At("RETURN"))
 	private void createBiotech$serializeSlimeChain(HolderLookup.Provider registries,
 		CallbackInfoReturnable<CompoundTag> cir) {
-		if (!state.is(com.nobodiiiii.createbiotech.registry.CBBlocks.SLIME_BELT.get()) || createBiotech$pulleyOffsets == null)
+		if (!CBBeltChainPlacement.isPlacementBelt(state) || createBiotech$pulleyOffsets == null)
 			return;
-		cir.getReturnValue().putIntArray("CreateBiotechPulleyOffsets", createBiotech$pulleyOffsets);
+		cir.getReturnValue().putIntArray(CBBeltChainPlacement.PULLEY_OFFSETS_TAG, createBiotech$pulleyOffsets);
 	}
 
 	@Inject(method = "readNBT", at = @At("TAIL"))
 	private void createBiotech$readSlimeChain(CompoundTag nbt, HolderLookup.Provider registries,
 		HolderGetter<Block> holderGetter, CallbackInfo ci) {
-		if (nbt.contains("CreateBiotechPulleyOffsets"))
-			createBiotech$pulleyOffsets = nbt.getIntArray("CreateBiotechPulleyOffsets");
+		if (nbt.contains(CBBeltChainPlacement.PULLEY_OFFSETS_TAG))
+			createBiotech$pulleyOffsets = nbt.getIntArray(CBBeltChainPlacement.PULLEY_OFFSETS_TAG);
 	}
 
 	@Inject(method = "place", at = @At("HEAD"), cancellable = true)
-	private void createBiotech$placeSlimeChain(Level world, CallbackInfo ci) {
-		if (!state.is(com.nobodiiiii.createbiotech.registry.CBBlocks.SLIME_BELT.get()))
+	private void createBiotech$placeBeltChain(Level world, CallbackInfo ci) {
+		if (!CBBeltChainPlacement.isPlacementBelt(state))
 			return;
-		if (length < 2) {
-			ci.cancel();
-			return;
-		}
-
-		boolean isStart = state.getValue(SlimeBeltBlock.PART)
-			== com.simibubi.create.content.kinetics.belt.BeltPart.START;
-		BlockPos offset = SlimeBeltBlock.nextSegmentPosition(state, BlockPos.ZERO, isStart);
-		if (offset == null) {
-			ci.cancel();
-			return;
-		}
-		Axis shaftAxis = state.getValue(SlimeBeltBlock.SLOPE) == BeltSlope.SIDEWAYS ? Axis.Y
-			: state.getValue(SlimeBeltBlock.HORIZONTAL_FACING).getClockWise().getAxis();
-		world.setBlockAndUpdate(target, AllBlocks.SHAFT.getDefaultState()
-			.setValue(AbstractSimpleShaftBlock.AXIS, shaftAxis));
-		if (createBiotech$pulleyOffsets != null)
-			for (int pulleyOffset : createBiotech$pulleyOffsets)
-				world.setBlockAndUpdate(target.offset(offset.getX() * pulleyOffset, offset.getY() * pulleyOffset,
-					offset.getZ() * pulleyOffset), AllBlocks.SHAFT.getDefaultState()
-						.setValue(AbstractSimpleShaftBlock.AXIS, shaftAxis));
-		BlockPos end = target.offset(offset.getX() * (length - 1), offset.getY() * (length - 1),
-			offset.getZ() * (length - 1));
-		SlimeBeltConnectorItem.createBelts(world, target, end);
+		int[] pulleys = createBiotech$pulleyOffsets == null ? new int[0] : createBiotech$pulleyOffsets;
+		CBBeltChainPlacement.placeAtomically(world, state,
+			CBBeltChainPlacement.positionsFromPayload(state, target, length), pulleys, casings);
 		ci.cancel();
 	}
 }

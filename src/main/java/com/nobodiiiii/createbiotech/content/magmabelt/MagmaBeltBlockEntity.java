@@ -33,6 +33,7 @@ import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaItemHandler
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltTunnelCapabilityInvalidator;
 import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementSegment;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.logistics.tunnel.BrassTunnelBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -62,7 +63,8 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class MagmaBeltBlockEntity extends KineticBlockEntity implements StandardItemBeltPort, Clearable {
+public class MagmaBeltBlockEntity extends KineticBlockEntity
+	implements StandardItemBeltPort, CBBeltPlacementSegment, Clearable {
 
 	/** Ticks to wait before re-attempting a chain init that already failed once. */
 	private static final int INIT_RETRY_INTERVAL = 20;
@@ -618,6 +620,26 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity implements Standard
 		itemHandler = null;
 		if (level != null)
 			BeltTunnelCapabilityInvalidator.invalidate(level, worldPosition.above());
+	}
+
+	@Override
+	public int createBiotech$getBeltLength() {
+		return beltLength;
+	}
+
+	@Override
+	public boolean createBiotech$hasPulley() {
+		return hasPulley();
+	}
+
+	@Override
+	public CasingType createBiotech$getCasingType() {
+		return casing;
+	}
+
+	@Override
+	public void createBiotech$setCasingType(CasingType casing) {
+		setCasingType(casing);
 	}
 
 	@Override

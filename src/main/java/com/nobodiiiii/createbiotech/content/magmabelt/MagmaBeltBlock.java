@@ -14,6 +14,7 @@ import com.simibubi.create.AllItems;
 import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltBlock;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementBlock;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -102,7 +103,7 @@ import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaBeltBlock extends HorizontalKineticBlock
 	implements IBE<MagmaBeltBlockEntity>, SpecialBlockItemRequirement, TransformableBlock, ProperWaterloggedBlock,
-	StandardItemBeltBlock {
+	StandardItemBeltBlock, CBBeltPlacementBlock {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);
@@ -134,6 +135,16 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 	@Override
 	public boolean createBiotech$canSupportTunnel(BlockState state) {
 		return state.getValue(CASING);
+	}
+
+	@Override
+	public ItemStack createBiotech$connectorStack() {
+		return new ItemStack(CBItems.MAGMA_BELT_CONNECTOR.get());
+	}
+
+	@Override
+	public void createBiotech$createChain(Level level, BlockPos start, BlockPos end) {
+		MagmaBeltConnectorItem.createBelts(level, start, end);
 	}
 
 	@OnlyIn(Dist.CLIENT)
@@ -619,18 +630,6 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 	@Override
 	public BlockEntityType<? extends MagmaBeltBlockEntity> getBlockEntityType() {
 		return CBBlockEntityTypes.MAGMA_BELT.get();
-	}
-
-	@Override
-	public ItemRequirement getRequiredItems(BlockState state, BlockEntity be) {
-		List<ItemStack> required = new ArrayList<>();
-		if (state.getValue(PART) != BeltPart.MIDDLE)
-			required.add(AllBlocks.SHAFT.asStack());
-		if (state.getValue(PART) == BeltPart.START)
-			required.add(new ItemStack(CBItems.MAGMA_BELT_CONNECTOR.get()));
-		if (required.isEmpty())
-			return ItemRequirement.NONE;
-		return new ItemRequirement(ItemUseType.CONSUME, required);
 	}
 
 	@Override
