@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.powerbelt;
 
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltSlicer;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllBlocks;
@@ -209,75 +210,24 @@ public class PowerBeltSlicer {
 	}
 
 	private static boolean hasSplitMaterials(Player player, int requiredShafts) {
-		if (player == null)
-			return false;
-		int connectors = 0;
-		int shafts = 0;
-		for (int i = 0; i < player.getInventory()
-			.getContainerSize(); i++) {
-			ItemStack stack = player.getInventory()
-				.getItem(i);
-			if (stack.isEmpty())
-				continue;
-			if (CBItems.isPowerBeltConnector(stack))
-				connectors += stack.getCount();
-			if (AllBlocks.SHAFT.isIn(stack))
-				shafts += stack.getCount();
-		}
-		return connectors >= 1 && shafts >= requiredShafts;
+		return CBBeltSlicer.hasSplitMaterials(player, CBItems::isPowerBeltConnector, requiredShafts);
 	}
 
 	private static void consumeSplitMaterials(Player player, int firstSegmentShafts, int secondSegmentShafts) {
-		consumeInventoryItem(player, true, 1);
-		consumeInventoryItem(player, false, firstSegmentShafts + secondSegmentShafts);
-	}
-
-	private static void consumeInventoryItem(Player player, boolean connector, int amount) {
-		int remaining = amount;
-		for (int i = 0; i < player.getInventory()
-			.getContainerSize() && remaining > 0; i++) {
-			ItemStack stack = player.getInventory()
-				.getItem(i);
-			if (stack.isEmpty())
-				continue;
-			boolean matches = connector ? CBItems.isPowerBeltConnector(stack) : AllBlocks.SHAFT.isIn(stack);
-			if (!matches)
-				continue;
-			int taken = Math.min(stack.getCount(), remaining);
-			stack.shrink(taken);
-			remaining -= taken;
-		}
+		CBBeltSlicer.consumeSplitMaterials(player, CBItems::isPowerBeltConnector,
+			firstSegmentShafts + secondSegmentShafts);
 	}
 
 	static boolean beltStatesCompatible(BlockState state, BlockState nextState) {
-		Direction facing1 = state.getValue(PowerBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope1 = state.getValue(PowerBeltBlock.SLOPE);
-		Direction facing2 = nextState.getValue(PowerBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope2 = nextState.getValue(PowerBeltBlock.SLOPE);
-		return slope1 == BeltSlope.HORIZONTAL && slope2 == BeltSlope.HORIZONTAL && facing2.getAxis() == facing1.getAxis();
+		return state.getValue(PowerBeltBlock.SLOPE) == BeltSlope.HORIZONTAL
+			&& CBBeltSlicer.beltStatesCompatible(state, nextState);
 	}
 
 	static BlockState flipBelt(BlockState state) {
-		Direction facing = state.getValue(PowerBeltBlock.HORIZONTAL_FACING);
-		BeltPart part = state.getValue(PowerBeltBlock.PART);
-
-		if (part == BeltPart.END)
-			state = state.setValue(PowerBeltBlock.PART, BeltPart.START);
-		else if (part == BeltPart.START)
-			state = state.setValue(PowerBeltBlock.PART, BeltPart.END);
-
-		return state.setValue(PowerBeltBlock.HORIZONTAL_FACING, facing.getOpposite());
+		return CBBeltSlicer.flipBelt(state);
 	}
 
 	static boolean hoveringEnd(BlockState state, BlockHitResult hit) {
-		BeltPart part = state.getValue(PowerBeltBlock.PART);
-		if (part == BeltPart.MIDDLE || part == BeltPart.PULLEY)
-			return false;
-
-		Vec3 beltVector = PowerBeltBlock.getBeltVector(state);
-		Vec3 centerOf = VecHelper.getCenterOf(hit.getBlockPos());
-		Vec3 subtract = hit.getLocation()
-			.subtract(centerOf);
-		return subtract.dot(beltVector) > 0 == (part == BeltPart.END);
+		return CBBeltSlicer.hoveringEnd(state, hit, PowerBeltBlock.getBeltVector(state));
 	}
 }

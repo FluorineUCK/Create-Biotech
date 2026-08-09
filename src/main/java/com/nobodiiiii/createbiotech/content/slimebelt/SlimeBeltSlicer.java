@@ -8,6 +8,8 @@ import java.util.Map;
 
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltSlicer;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
 import com.simibubi.create.content.kinetics.belt.BeltSlope;
@@ -77,6 +79,8 @@ public class SlimeBeltSlicer {
 			resetChain(world, beltChain);
 
 			BlockPos next = part == BeltPart.END ? pos.subtract(beltVector) : pos.offset(beltVector);
+			if (!CBBeltChain.isLoadedInSameSpace(world, pos, next))
+				return InteractionResult.FAIL;
 			BlockState nextState = world.getBlockState(next);
 			if (!nextState.is(CBBlocks.SLIME_BELT.get()))
 				return InteractionResult.FAIL;
@@ -101,6 +105,8 @@ public class SlimeBeltSlicer {
 		Vec3 centerOf = VecHelper.getCenterOf(hit.getBlockPos());
 		boolean towardPositive = hit.getLocation().subtract(centerOf).dot(Vec3.atLowerCornerOf(beltVector)) > 0;
 		BlockPos next = !towardPositive ? pos.subtract(beltVector) : pos.offset(beltVector);
+		if (!CBBeltChain.isLoadedInSameSpace(world, pos, next))
+			return InteractionResult.FAIL;
 
 		if (hitSegment == 0 || hitSegment == 1 && !towardPositive)
 			return InteractionResult.FAIL;
@@ -159,6 +165,8 @@ public class SlimeBeltSlicer {
 			return InteractionResult.PASS;
 
 		BlockPos next = part == BeltPart.START ? pos.subtract(beltVector) : pos.offset(beltVector);
+		if (!CBBeltChain.isLoadedInSameSpace(world, pos, next))
+			return InteractionResult.FAIL;
 		SlimeBeltBlockEntity mergedController = null;
 		List<BlockPos> mergedChain = List.of();
 		boolean flipMergedBelt = false;
@@ -362,88 +370,23 @@ public class SlimeBeltSlicer {
 	}
 
 	private static boolean hasSplitMaterials(Player player, int requiredShafts) {
-		if (player == null)
-			return false;
-		int connectors = 0;
-		int shafts = 0;
-		for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-			ItemStack stack = player.getInventory().getItem(i);
-			if (stack.isEmpty())
-				continue;
-			if (CBItems.isSlimeBeltConnector(stack))
-				connectors += stack.getCount();
-			if (com.simibubi.create.AllBlocks.SHAFT.isIn(stack))
-				shafts += stack.getCount();
-		}
-		return connectors >= 1 && shafts >= requiredShafts;
+		return CBBeltSlicer.hasSplitMaterials(player, CBItems::isSlimeBeltConnector, requiredShafts);
 	}
 
 	private static void consumeSplitMaterials(Player player, int firstSegmentShafts, int secondSegmentShafts) {
-		consumeInventoryItem(player, true, 1);
-		consumeInventoryItem(player, false, firstSegmentShafts + secondSegmentShafts);
-	}
-
-	private static void consumeInventoryItem(Player player, boolean connector, int amount) {
-		int remaining = amount;
-		for (int i = 0; i < player.getInventory().getContainerSize() && remaining > 0; i++) {
-			ItemStack stack = player.getInventory().getItem(i);
-			if (stack.isEmpty())
-				continue;
-			boolean matches = connector ? CBItems.isSlimeBeltConnector(stack) : com.simibubi.create.AllBlocks.SHAFT.isIn(stack);
-			if (!matches)
-				continue;
-			int taken = Math.min(stack.getCount(), remaining);
-			stack.shrink(taken);
-			remaining -= taken;
-		}
+		CBBeltSlicer.consumeSplitMaterials(player, CBItems::isSlimeBeltConnector,
+			firstSegmentShafts + secondSegmentShafts);
 	}
 
 	static boolean beltStatesCompatible(BlockState state, BlockState nextState) {
-		Direction facing1 = state.getValue(SlimeBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope1 = state.getValue(SlimeBeltBlock.SLOPE);
-		Direction facing2 = nextState.getValue(SlimeBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope2 = nextState.getValue(SlimeBeltBlock.SLOPE);
-
-		switch (slope1) {
-			case UPWARD:
-				if (slope2 == BeltSlope.DOWNWARD)
-					return facing1 == facing2.getOpposite();
-				return slope2 == slope1 && facing1 == facing2;
-			case DOWNWARD:
-				if (slope2 == BeltSlope.UPWARD)
-					return facing1 == facing2.getOpposite();
-				return slope2 == slope1 && facing1 == facing2;
-			default:
-				return slope2 == slope1 && facing2.getAxis() == facing1.getAxis();
-		}
+		return CBBeltSlicer.beltStatesCompatible(state, nextState);
 	}
 
 	static BlockState flipBelt(BlockState state) {
-		Direction facing = state.getValue(SlimeBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope = state.getValue(SlimeBeltBlock.SLOPE);
-		BeltPart part = state.getValue(SlimeBeltBlock.PART);
-
-		if (slope == BeltSlope.UPWARD)
-			state = state.setValue(SlimeBeltBlock.SLOPE, BeltSlope.DOWNWARD);
-		else if (slope == BeltSlope.DOWNWARD)
-			state = state.setValue(SlimeBeltBlock.SLOPE, BeltSlope.UPWARD);
-
-		if (part == BeltPart.END)
-			state = state.setValue(SlimeBeltBlock.PART, BeltPart.START);
-		else if (part == BeltPart.START)
-			state = state.setValue(SlimeBeltBlock.PART, BeltPart.END);
-
-		return state.setValue(SlimeBeltBlock.HORIZONTAL_FACING, facing.getOpposite());
+		return CBBeltSlicer.flipBelt(state);
 	}
 
 	static boolean hoveringEnd(BlockState state, BlockHitResult hit) {
-		BeltPart part = state.getValue(SlimeBeltBlock.PART);
-		if (part == BeltPart.MIDDLE || part == BeltPart.PULLEY)
-			return false;
-
-		Vec3 beltVector = SlimeBeltHelper.getBeltVector(state);
-		Vec3 centerOf = VecHelper.getCenterOf(hit.getBlockPos());
-		Vec3 subtract = hit.getLocation().subtract(centerOf);
-		return subtract.dot(beltVector) > 0 == (part == BeltPart.END);
+		return CBBeltSlicer.hoveringEnd(state, hit, SlimeBeltHelper.getBeltVector(state));
 	}
 }
