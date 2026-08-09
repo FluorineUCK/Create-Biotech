@@ -32,6 +32,7 @@ import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltSpriteShifts;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltVisual;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltRenderer;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltSpriteShifts;
+import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltVisual;
 import com.nobodiiiii.createbiotech.content.petridish.PetriDishRenderer;
 import com.nobodiiiii.createbiotech.content.schrodingerscat.SchrodingersCatRenderer;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerConnectionHandler;
@@ -296,6 +297,10 @@ public class CreateBiotechClient {
 			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.SLIME_BELT.get())
 				.factory(SlimeBeltVisual::new)
 				.skipVanillaRender(be -> !be.shouldRenderNormally())
+				.apply();
+			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.POWER_BELT.get())
+				.factory(PowerBeltVisual::new)
+				.skipVanillaRender(be -> true)
 				.apply();
 			SimpleEntityVisualizer.<GhastHotAirBalloonEntity>builder(CBEntityTypes.GHAST_HOT_AIR_BALLOON.get())
 				.factory(ContraptionVisual::new)
