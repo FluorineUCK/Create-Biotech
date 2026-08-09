@@ -50,7 +50,7 @@ import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.BlockEvent;
 
 public class ShulkerTeleporterBlock extends KineticBlock
-	implements IBE<ShulkerTeleporterBlockEntity>, ICogWheel {
+	implements IBE<ShulkerTeleporterBlockEntity>, ICogWheel, CBMultiBlockLifecycle.Part {
 
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 	public static final IntegerProperty PART = IntegerProperty.create("part", 0, 2);
@@ -256,6 +256,11 @@ public class ShulkerTeleporterBlock extends KineticBlock
 	@Override
 	public PushReaction getPistonPushReaction(BlockState state) {
 		return PushReaction.BLOCK;
+	}
+
+	@Override
+	public BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state) {
+		return getBottomPos(pos, state);
 	}
 
 	@Override

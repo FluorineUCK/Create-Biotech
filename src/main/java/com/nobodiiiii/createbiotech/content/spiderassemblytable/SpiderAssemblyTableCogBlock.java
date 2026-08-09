@@ -24,6 +24,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -35,7 +36,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
-	implements IBE<SpiderAssemblyTableCogBlockEntity>, ICogWheel {
+	implements IBE<SpiderAssemblyTableCogBlockEntity>, ICogWheel, CBMultiBlockLifecycle.Part {
 
 	public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 
@@ -147,5 +148,15 @@ public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
 
 	static BlockPos getMainPos(BlockPos pos, BlockState state) {
 		return pos.relative(state.getValue(FACING));
+	}
+
+	@Override
+	public Class<? extends Block> getMultiBlockType() {
+		return SpiderAssemblyTableBlock.class;
+	}
+
+	@Override
+	public BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state) {
+		return getMainPos(pos, state);
 	}
 }

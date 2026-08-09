@@ -43,7 +43,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-public class GiantFrogBlock extends BaseEntityBlock {
+public class GiantFrogBlock extends BaseEntityBlock implements CBMultiBlockLifecycle.Part {
 	public static final MapCodec<GiantFrogBlock> CODEC = simpleCodec(GiantFrogBlock::new);
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 	public static final IntegerProperty X_OFFSET = IntegerProperty.create("x", 0, 2);
@@ -209,6 +209,11 @@ public class GiantFrogBlock extends BaseEntityBlock {
 	@Override
 	public PushReaction getPistonPushReaction(BlockState state) {
 		return PushReaction.BLOCK;
+	}
+
+	@Override
+	public BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state) {
+		return getMainPos(pos, state);
 	}
 
 	@Override

@@ -2,7 +2,11 @@ package com.nobodiiiii.createbiotech.foundation.block;
 
 import javax.annotation.Nullable;
 
+import com.simibubi.create.api.contraption.BlockMovementChecks;
+import com.simibubi.create.api.contraption.BlockMovementChecks.CheckResult;
+
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -34,8 +38,57 @@ public final class CBMultiBlockLifecycle {
 
 	/** Level event id for the vanilla "block broken" particle and sound burst. */
 	private static final int BLOCK_BREAK_EFFECT = 2001;
+	private static boolean movementChecksRegistered;
 
 	private CBMultiBlockLifecycle() {}
+
+	/**
+	 * A block occupying one position of a larger logical block. Every part reports
+	 * the same type and anchor, allowing structure collectors to keep the parts
+	 * together without knowing the layout of each machine.
+	 */
+	public interface Part {
+		default Class<? extends Block> getMultiBlockType() {
+			return getClass().asSubclass(Block.class);
+		}
+
+		BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state);
+	}
+
+	/**
+	 * Registers the shared movement rules used by Create contraptions and by
+	 * Simulated physical structures. Parts remain piston-immovable, but Create is
+	 * allowed to collect them, and the attachment check pulls in the rest of their
+	 * logical block.
+	 */
+	public static synchronized void registerMovementChecks() {
+		if (movementChecksRegistered)
+			return;
+		movementChecksRegistered = true;
+
+		BlockMovementChecks.registerMovementNecessaryCheck((state, level, pos) ->
+			state.getBlock() instanceof Part ? CheckResult.SUCCESS : CheckResult.PASS);
+		BlockMovementChecks.registerMovementAllowedCheck((state, level, pos) ->
+			state.getBlock() instanceof Part ? CheckResult.SUCCESS : CheckResult.PASS);
+		BlockMovementChecks.registerAttachedCheck(CBMultiBlockLifecycle::isPartAttachedTowards);
+	}
+
+	private static CheckResult isPartAttachedTowards(BlockState state, Level level, BlockPos pos,
+		Direction direction) {
+		if (!(state.getBlock() instanceof Part part))
+			return CheckResult.PASS;
+
+		BlockPos neighbourPos = pos.relative(direction);
+		BlockState neighbourState = level.getBlockState(neighbourPos);
+		if (!(neighbourState.getBlock() instanceof Part neighbourPart))
+			return CheckResult.PASS;
+		if (part.getMultiBlockType() != neighbourPart.getMultiBlockType())
+			return CheckResult.PASS;
+
+		BlockPos anchor = part.getMultiBlockAnchor(pos, state);
+		BlockPos neighbourAnchor = neighbourPart.getMultiBlockAnchor(neighbourPos, neighbourState);
+		return anchor.equals(neighbourAnchor) ? CheckResult.SUCCESS : CheckResult.PASS;
+	}
 
 	/**
 	 * Queues a structure check on {@code pos} for the next tick. Repeated calls

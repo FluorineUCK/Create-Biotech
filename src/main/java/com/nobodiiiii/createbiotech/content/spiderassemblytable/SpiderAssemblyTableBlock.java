@@ -39,7 +39,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
-	implements IBE<SpiderAssemblyTableBlockEntity> {
+	implements IBE<SpiderAssemblyTableBlockEntity>, CBMultiBlockLifecycle.Part {
 
 	public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 	private static final VoxelShape SHAPE = Block.box(0, 0, 0, 16, 9, 16);
@@ -235,6 +235,11 @@ public class SpiderAssemblyTableBlock extends HorizontalKineticBlock
 
 	static BlockPos getTailPos(BlockPos pos, BlockState state) {
 		return pos.relative(state.getValue(FACING).getOpposite());
+	}
+
+	@Override
+	public BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state) {
+		return pos;
 	}
 
 	Direction getPlacementFacing(BlockPlaceContext context) {

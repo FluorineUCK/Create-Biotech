@@ -44,7 +44,8 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.BlockEvent;
 
-public class EvokerEnchantingChamberBlock extends BaseEntityBlock implements IWrenchable {
+public class EvokerEnchantingChamberBlock extends BaseEntityBlock
+	implements IWrenchable, CBMultiBlockLifecycle.Part {
 	public static final MapCodec<EvokerEnchantingChamberBlock> CODEC =
 		simpleCodec(EvokerEnchantingChamberBlock::new);
 
@@ -129,9 +130,14 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock implements IWr
 
 	@Override
 	public PushReaction getPistonPushReaction(BlockState state) {
-		// Without this a Create contraption would happily pick up one half and leave the
-		// other behind, and the leftover half deletes itself without dropping anything.
+		// Vanilla pistons must not split the two halves. Moving structures use the
+		// shared CBMultiBlockLifecycle attachment rule instead.
 		return PushReaction.BLOCK;
+	}
+
+	@Override
+	public BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state) {
+		return state.getValue(HALF) == DoubleBlockHalf.LOWER ? pos : pos.below();
 	}
 
 	@Override

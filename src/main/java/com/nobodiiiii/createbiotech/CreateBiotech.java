@@ -13,6 +13,7 @@ import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastBalloonRopeS
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmMovingInteraction;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmMovementBehaviour;
 import com.nobodiiiii.createbiotech.data.CBDataGenerators;
+import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBArmInteractionPointTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -94,6 +95,7 @@ public class CreateBiotech {
 
 	private static void onCommonSetup(FMLCommonSetupEvent event) {
 		event.enqueueWork(() -> {
+			CBMultiBlockLifecycle.registerMovementChecks();
 			CBDisplaySources.register();
 			ExperienceOpenPipeEffectHandler.register();
 			ExplosionProofItemVaultCompat.register();
