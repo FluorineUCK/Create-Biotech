@@ -12,6 +12,8 @@ import org.apache.commons.lang3.mutable.MutableBoolean;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainBlock;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -99,7 +101,8 @@ import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class MagmaBeltBlock extends HorizontalKineticBlock
-	implements IBE<MagmaBeltBlockEntity>, SpecialBlockItemRequirement, TransformableBlock, ProperWaterloggedBlock {
+	implements IBE<MagmaBeltBlockEntity>, SpecialBlockItemRequirement, TransformableBlock, ProperWaterloggedBlock,
+	CBBeltChainBlock {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);
@@ -111,6 +114,16 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 			.setValue(PART, BeltPart.START)
 			.setValue(CASING, false)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@Override
+	public Property<BeltSlope> createBiotech$slopeProperty() {
+		return SLOPE;
+	}
+
+	@Override
+	public Property<BeltPart> createBiotech$partProperty() {
+		return PART;
 	}
 
 	@OnlyIn(Dist.CLIENT)
@@ -440,26 +453,29 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 		BlockState state = world.getBlockState(pos);
 		if (!MagmaBeltBlock.isMagmaBelt(state))
 			return;
-		// Find controller
-		int limit = 1000;
-		BlockPos currentPos = pos;
-		while (limit-- > 0) {
-			BlockState currentState = world.getBlockState(currentPos);
-			if (!MagmaBeltBlock.isMagmaBelt(currentState)) {
+		CBBeltChain.WalkResult backward =
+			CBBeltChain.walk(world, pos, false, CBBeltChain.MAX_SEGMENTS);
+		if (!backward.complete()) {
+			if (backward.status() == CBBeltChain.WalkStatus.INVALID
+				|| backward.status() == CBBeltChain.WalkStatus.TOO_LONG)
 				world.destroyBlock(pos, true);
-				return;
-			}
-			BlockPos nextSegmentPosition = nextSegmentPosition(currentState, currentPos, false);
-			if (nextSegmentPosition == null)
-				break;
-			if (!world.isLoaded(nextSegmentPosition))
-				return;
-			currentPos = nextSegmentPosition;
+			return;
 		}
+		BlockPos currentPos = backward.lastPosition();
+		if (currentPos == null)
+			return;
 
 		// Init belts
 		int index = 0;
-		List<BlockPos> beltChain = getBeltChain(world, currentPos);
+		CBBeltChain.WalkResult forward =
+			CBBeltChain.walk(world, currentPos, true, CBBeltChain.MAX_SEGMENTS);
+		if (!forward.complete()) {
+			if (forward.status() == CBBeltChain.WalkStatus.INVALID
+				|| forward.status() == CBBeltChain.WalkStatus.TOO_LONG)
+				world.destroyBlock(currentPos, true);
+			return;
+		}
+		List<BlockPos> beltChain = forward.positions();
 		if (beltChain.size() < 2) {
 			world.destroyBlock(currentPos, true);
 			return;
@@ -506,6 +522,8 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 		for (boolean forward : Iterate.trueAndFalse) {
 			BlockPos currentPos = nextSegmentPosition(state, pos, forward);
 			if (currentPos == null)
+				continue;
+			if (!CBBeltChain.isLoadedInSameSpace(world, pos, currentPos))
 				continue;
 			BlockState currentState = world.getBlockState(currentPos);
 			if (!MagmaBeltBlock.isMagmaBelt(currentState))
@@ -576,40 +594,11 @@ public class MagmaBeltBlock extends HorizontalKineticBlock
 	}
 
 	public static List<BlockPos> getBeltChain(LevelAccessor world, BlockPos controllerPos) {
-		List<BlockPos> positions = new LinkedList<>();
-
-		BlockState blockState = world.getBlockState(controllerPos);
-		if (!MagmaBeltBlock.isMagmaBelt(blockState))
-			return positions;
-
-		int limit = 1000;
-		BlockPos current = controllerPos;
-		while (limit-- > 0 && current != null) {
-			BlockState state = world.getBlockState(current);
-			if (!MagmaBeltBlock.isMagmaBelt(state))
-				break;
-			positions.add(current);
-			current = nextSegmentPosition(state, current, true);
-		}
-
-		return positions;
+		return CBBeltChain.getBeltChain(world, controllerPos, 1000);
 	}
 
 	public static BlockPos nextSegmentPosition(BlockState state, BlockPos pos, boolean forward) {
-		Direction direction = state.getValue(HORIZONTAL_FACING);
-		BeltSlope slope = state.getValue(SLOPE);
-		BeltPart part = state.getValue(PART);
-
-		int offset = forward ? 1 : -1;
-
-		if (part == BeltPart.END && forward || part == BeltPart.START && !forward)
-			return null;
-		if (slope == BeltSlope.VERTICAL)
-			return pos.above(direction.getAxisDirection() == AxisDirection.POSITIVE ? offset : -offset);
-		pos = pos.relative(direction, offset);
-		if (slope != BeltSlope.HORIZONTAL && slope != BeltSlope.SIDEWAYS)
-			return pos.above(slope == BeltSlope.UPWARD ? offset : -offset);
-		return pos;
+		return CBBeltChain.nextSegmentPosition(state, pos, forward);
 	}
 
 	@Override

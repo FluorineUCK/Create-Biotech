@@ -10,6 +10,8 @@ import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.client.PowerBeltClientReporter;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainBlock;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -87,7 +89,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 
 public class PowerBeltBlock extends HorizontalKineticBlock
-	implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock, TransformableBlock {
+	implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock, TransformableBlock, CBBeltChainBlock {
 
 	public static final Property<BeltSlope> SLOPE = BeltBlock.SLOPE;
 	public static final Property<BeltPart> PART = BeltBlock.PART;
@@ -100,6 +102,16 @@ public class PowerBeltBlock extends HorizontalKineticBlock
 			.setValue(PART, BeltPart.PULLEY)
 			.setValue(CASING, false)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@Override
+	public Property<BeltSlope> createBiotech$slopeProperty() {
+		return SLOPE;
+	}
+
+	@Override
+	public Property<BeltPart> createBiotech$partProperty() {
+		return PART;
 	}
 
 	@OnlyIn(Dist.CLIENT)
@@ -369,26 +381,28 @@ public class PowerBeltBlock extends HorizontalKineticBlock
 		if (!isPowerBelt(state))
 			return;
 
-		int limit = 1000;
-		BlockPos currentPos = pos;
-		while (limit-- > 0) {
-			BlockState currentState = world.getBlockState(currentPos);
-			if (!isPowerBelt(currentState)) {
+		CBBeltChain.WalkResult backward =
+			CBBeltChain.walk(world, pos, false, CBBeltChain.MAX_SEGMENTS);
+		if (!backward.complete()) {
+			if (backward.status() == CBBeltChain.WalkStatus.INVALID
+				|| backward.status() == CBBeltChain.WalkStatus.TOO_LONG)
 				world.destroyBlock(pos, true);
-				return;
-			}
-			BlockPos nextSegmentPosition = nextSegmentPosition(currentState, currentPos, false);
-			if (nextSegmentPosition == null)
-				break;
-			if (!world.isLoaded(nextSegmentPosition))
-				return;
-			if (!sameSpace(world, pos, nextSegmentPosition))
-				return;
-			currentPos = nextSegmentPosition;
+			return;
 		}
+		BlockPos currentPos = backward.lastPosition();
+		if (currentPos == null)
+			return;
 
 		int index = 0;
-		List<BlockPos> beltChain = getBeltChain(world, currentPos);
+		CBBeltChain.WalkResult forward =
+			CBBeltChain.walk(world, currentPos, true, CBBeltChain.MAX_SEGMENTS);
+		if (!forward.complete()) {
+			if (forward.status() == CBBeltChain.WalkStatus.INVALID
+				|| forward.status() == CBBeltChain.WalkStatus.TOO_LONG)
+				world.destroyBlock(currentPos, true);
+			return;
+		}
+		List<BlockPos> beltChain = forward.positions();
 		if (beltChain.size() < 2) {
 			world.destroyBlock(currentPos, true);
 			return;
@@ -498,41 +512,11 @@ public class PowerBeltBlock extends HorizontalKineticBlock
 	}
 
 	public static List<BlockPos> getBeltChain(LevelAccessor world, BlockPos controllerPos) {
-		List<BlockPos> positions = new LinkedList<>();
-		BlockState blockState = world.getBlockState(controllerPos);
-		if (!isPowerBelt(blockState))
-			return positions;
-
-		int limit = 1000;
-		BlockPos current = controllerPos;
-		while (limit-- > 0 && current != null) {
-			if (!sameSpace(world, controllerPos, current))
-				break;
-			if (world instanceof Level level && !level.isLoaded(current))
-				break;
-			BlockState state = world.getBlockState(current);
-			if (!isPowerBelt(state))
-				break;
-			positions.add(current);
-			current = nextSegmentPosition(state, current, true);
-		}
-		return positions;
+		return CBBeltChain.getBeltChain(world, controllerPos, 1000);
 	}
 
 	public static BlockPos nextSegmentPosition(BlockState state, BlockPos pos, boolean forward) {
-		Direction direction = state.getValue(HORIZONTAL_FACING);
-		BeltSlope slope = state.getValue(SLOPE);
-		BeltPart part = state.getValue(PART);
-		int offset = forward ? 1 : -1;
-
-		if (part == BeltPart.END && forward || part == BeltPart.START && !forward)
-			return null;
-		if (slope == BeltSlope.VERTICAL)
-			return pos.above(direction.getAxisDirection() == AxisDirection.POSITIVE ? offset : -offset);
-		pos = pos.relative(direction, offset);
-		if (slope != BeltSlope.HORIZONTAL && slope != BeltSlope.SIDEWAYS)
-			return pos.above(slope == BeltSlope.UPWARD ? offset : -offset);
-		return pos;
+		return CBBeltChain.nextSegmentPosition(state, pos, forward);
 	}
 
 	@Override

@@ -30,6 +30,7 @@ import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltMovemen
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltMovementHandler.TransportedEntityInfo;
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltTunnelInteractionHandler;
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaItemHandlerBeltSegment;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.logistics.tunnel.BrassTunnelBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -333,9 +334,11 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity implements Clearabl
 	}
 
 	public MagmaBeltBlockEntity getControllerBE() {
-		if (controller == null)
+		if (controller == null || level == null)
 			return null;
 		if (!level.isLoaded(controller))
+			return null;
+		if (!SubLevelCompat.sameSpace(level, worldPosition, controller))
 			return null;
 		BlockEntity be = level.getBlockEntity(controller);
 		if (be == null || !(be instanceof MagmaBeltBlockEntity))

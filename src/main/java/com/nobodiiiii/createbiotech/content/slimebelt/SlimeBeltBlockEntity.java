@@ -19,6 +19,7 @@ import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceHost;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Track;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInventory;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeItemHandlerBeltSegment;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelCapabilityInvalidator;
@@ -253,7 +254,9 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	}
 
 	public SlimeBeltBlockEntity getControllerBE() {
-		if (controller == null || !level.isLoaded(controller))
+		if (controller == null || level == null || !level.isLoaded(controller))
+			return null;
+		if (!SubLevelCompat.sameSpace(level, worldPosition, controller))
 			return null;
 		BlockEntity be = level.getBlockEntity(controller);
 		return be instanceof SlimeBeltBlockEntity slimeBelt ? slimeBelt : null;
