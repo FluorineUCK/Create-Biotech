@@ -12,7 +12,7 @@
     "BasinBlockEntityMixin",
     "BasinInventoryMixin",
     "BasinBlockMixin",
-    "BasinBlockSlimeBeltOutputMixin",
+    "BasinBlockBeltOutputMixin",
     "BlockEntityConfigurationPacketMixin",
     "BlockBreakingMovementBehaviourMixin",
 	"BrassTunnelBlockEntityMixin",

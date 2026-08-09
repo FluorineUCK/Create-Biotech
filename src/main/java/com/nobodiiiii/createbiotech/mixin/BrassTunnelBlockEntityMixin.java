@@ -9,10 +9,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
-import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelBeltView;
-import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelInteractionHandler;
+import com.nobodiiiii.createbiotech.content.beltsurface.CBBeltTunnelBeltView;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPortResolver;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.logistics.tunnel.BrassTunnelBlockEntity;
@@ -31,14 +30,14 @@ import net.minecraft.world.phys.Vec3;
 public abstract class BrassTunnelBlockEntityMixin {
 
 	@Unique
-	private SlimeBeltTunnelBeltView createBiotech$beltView;
+	private CBBeltTunnelBeltView createBiotech$beltView;
 
 	@WrapOperation(method = "tick", at = @At(value = "INVOKE",
 		target = "Lcom/simibubi/create/content/kinetics/belt/BeltHelper;getSegmentBE(Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;)Lcom/simibubi/create/content/kinetics/belt/BeltBlockEntity;"))
 	private BeltBlockEntity createBiotech$getBeltBelowForTick(LevelAccessor world, BlockPos pos,
 		Operation<BeltBlockEntity> original) {
 		BeltBlockEntity belt = original.call(world, pos);
-		return belt != null ? belt : getSlimeBeltView(world, pos);
+		return belt != null ? belt : getBiotechBeltView(world, pos);
 	}
 
 	@WrapOperation(method = "addValidOutputsOf", at = @At(value = "INVOKE",
@@ -46,7 +45,7 @@ public abstract class BrassTunnelBlockEntityMixin {
 	private BeltBlockEntity createBiotech$getBeltBelowForOutputs(LevelAccessor world, BlockPos pos,
 		Operation<BeltBlockEntity> original) {
 		BeltBlockEntity belt = original.call(world, pos);
-		return belt != null ? belt : getSlimeBeltView(world, pos);
+		return belt != null ? belt : getBiotechBeltView(world, pos);
 	}
 
 	@Inject(method = "insertIntoTunnel", at = @At("HEAD"), cancellable = true)
@@ -56,10 +55,10 @@ public abstract class BrassTunnelBlockEntityMixin {
 		if (level == null)
 			return;
 		BlockPos outputPos = tunnel.getBlockPos().below().relative(side);
-		SlimeBeltBlockEntity below = SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(level,
-			tunnel.getBlockPos().below());
-		boolean slimeOutput = SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(level, outputPos) != null;
-		if (below == null && !slimeOutput)
+		StandardItemBeltPort below =
+			StandardItemBeltPortResolver.getHorizontalPort(level, tunnel.getBlockPos().below());
+		StandardItemBeltPort beltOutput = StandardItemBeltPortResolver.getHorizontalPort(level, outputPos);
+		if (below == null && beltOutput == null)
 			return;
 
 		if (stack.isEmpty()) {
@@ -71,13 +70,12 @@ public abstract class BrassTunnelBlockEntityMixin {
 			return;
 		}
 
-		if (slimeOutput) {
-			if (!SlimeBeltTunnelInteractionHandler.canInsertIntoFront(level, outputPos, side)) {
+		if (beltOutput != null) {
+			if (!beltOutput.createBiotech$canInsertIntoItemPort(side)) {
 				cir.setReturnValue(null);
 				return;
 			}
-			ItemStack result =
-				SlimeBeltTunnelInteractionHandler.insertIntoFront(level, outputPos, stack, side, simulate);
+			ItemStack result = beltOutput.createBiotech$insertIntoItemPort(stack, side, simulate);
 			if (result.isEmpty() && !simulate)
 				tunnel.flap(side, false);
 			cir.setReturnValue(result);
@@ -98,15 +96,10 @@ public abstract class BrassTunnelBlockEntityMixin {
 			return;
 		}
 
-		if (side == below.getMovementFacing()
+		if (below != null && side == below.createBiotech$getMovementFacing()
 			&& !BlockHelper.hasBlockSolidSide(level.getBlockState(outputPos), level, outputPos, side.getOpposite())) {
-			SlimeBeltBlockEntity controller = below.getControllerBE();
-			if (controller == null) {
-				cir.setReturnValue(null);
-				return;
-			}
 			if (!simulate)
-				eject(level, tunnel, below, controller, side, stack);
+				eject(level, tunnel, below, side, stack);
 			cir.setReturnValue(ItemStack.EMPTY);
 			return;
 		}
@@ -119,29 +112,30 @@ public abstract class BrassTunnelBlockEntityMixin {
 	private boolean createBiotech$validateFrontOutput(DirectBeltInputBehaviour behaviour, Direction side,
 		Operation<Boolean> original, @Local BlockPos offset) {
 		Level level = ((BrassTunnelBlockEntity) (Object) this).getLevel();
-		if (level != null && SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(level, offset) != null)
-			return SlimeBeltTunnelInteractionHandler.canInsertIntoFront(level, offset, side);
+		StandardItemBeltPort port = level == null ? null
+			: StandardItemBeltPortResolver.getHorizontalPort(level, offset);
+		if (port != null)
+			return port.createBiotech$canInsertIntoItemPort(side);
 		return original.call(behaviour, side);
 	}
 
-	private BeltBlockEntity getSlimeBeltView(LevelAccessor world, BlockPos pos) {
-		SlimeBeltBlockEntity slimeBelt = SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(world, pos);
-		if (slimeBelt == null)
+	private BeltBlockEntity getBiotechBeltView(LevelAccessor world, BlockPos pos) {
+		StandardItemBeltPort port = StandardItemBeltPortResolver.getHorizontalPort(world, pos);
+		if (port == null)
 			return null;
 		if (createBiotech$beltView == null)
-			createBiotech$beltView = new SlimeBeltTunnelBeltView(slimeBelt);
+			createBiotech$beltView = new CBBeltTunnelBeltView(port);
 		else
-			createBiotech$beltView.setDelegate(slimeBelt);
+			createBiotech$beltView.setDelegate(port);
 		return createBiotech$beltView;
 	}
 
-	private static void eject(Level level, BrassTunnelBlockEntity tunnel, SlimeBeltBlockEntity segment,
-		SlimeBeltBlockEntity controller, Direction side, ItemStack stack) {
+	private static void eject(Level level, BrassTunnelBlockEntity tunnel, StandardItemBeltPort belt,
+		Direction side, ItemStack stack) {
 		tunnel.flap(side, true);
-		float beltMovementSpeed = segment.getDirectionAwareBeltMovementSpeed();
+		float beltMovementSpeed = belt.createBiotech$getDirectionAwareSpeed();
 		float movementSpeed = Math.max(Math.abs(beltMovementSpeed), 1 / 8f);
-		int additionalOffset = beltMovementSpeed > 0 ? 1 : 0;
-		Vec3 outPos = SlimeBeltHelper.getVectorForOffset(controller, segment.index + additionalOffset);
+		Vec3 outPos = belt.createBiotech$getEjectionPosition();
 		Vec3 outMotion = Vec3.atLowerCornerOf(side.getNormal()).scale(movementSpeed).add(0, 1 / 8f, 0);
 		ItemEntity entity = new ItemEntity(level, outPos.x, outPos.y + 6 / 16f, outPos.z, stack);
 		entity.setDeltaMovement(outMotion);

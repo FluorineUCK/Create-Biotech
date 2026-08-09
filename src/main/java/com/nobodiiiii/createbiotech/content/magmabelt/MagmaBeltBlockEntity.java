@@ -30,6 +30,8 @@ import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltMovemen
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltMovementHandler.TransportedEntityInfo;
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltTunnelInteractionHandler;
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaItemHandlerBeltSegment;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltTunnelCapabilityInvalidator;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.logistics.tunnel.BrassTunnelBlockEntity;
@@ -60,7 +62,7 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.client.model.data.ModelData;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class MagmaBeltBlockEntity extends KineticBlockEntity implements Clearable {
+public class MagmaBeltBlockEntity extends KineticBlockEntity implements StandardItemBeltPort, Clearable {
 
 	/** Ticks to wait before re-attempting a chain init that already failed once. */
 	private static final int INIT_RETRY_INTERVAL = 20;
@@ -614,6 +616,63 @@ public class MagmaBeltBlockEntity extends KineticBlockEntity implements Clearabl
 	public void invalidateItemHandler() {
 		invalidateCapabilities();
 		itemHandler = null;
+		if (level != null)
+			BeltTunnelCapabilityInvalidator.invalidate(level, worldPosition.above());
+	}
+
+	@Override
+	public BlockPos createBiotech$getBlockPos() {
+		return worldPosition;
+	}
+
+	@Override
+	public boolean createBiotech$isHorizontalItemPort() {
+		return getBlockState().getValue(MagmaBeltBlock.SLOPE) == BeltSlope.HORIZONTAL
+			&& MagmaBeltBlock.canTransportObjects(getBlockState());
+	}
+
+	@Override
+	public boolean createBiotech$addressesItemPort(Direction side) {
+		return createBiotech$isHorizontalItemPort() && side.getAxis() == getBeltFacing().getAxis();
+	}
+
+	@Override
+	public boolean createBiotech$canInsertIntoItemPort(Direction side) {
+		return canInsertFrom(side);
+	}
+
+	@Override
+	public ItemStack createBiotech$insertIntoItemPort(ItemStack stack, Direction side, boolean simulate) {
+		return tryInsertingFromSide(new TransportedItemStack(stack), side, simulate);
+	}
+
+	@Override
+	public IItemHandler createBiotech$getItemHandler() {
+		return getItemCapability(Direction.UP);
+	}
+
+	@Override
+	public Direction createBiotech$getMovementFacing() {
+		return getMovementFacing();
+	}
+
+	@Override
+	public float createBiotech$getSpeed() {
+		return getSpeed();
+	}
+
+	@Override
+	public float createBiotech$getDirectionAwareSpeed() {
+		return getDirectionAwareBeltMovementSpeed();
+	}
+
+	@Override
+	public Vec3 createBiotech$getEjectionPosition() {
+		MagmaBeltBlockEntity controllerBE = getControllerBE();
+		if (controllerBE == null)
+			return Vec3.atCenterOf(worldPosition);
+		int additionalOffset = getDirectionAwareBeltMovementSpeed() > 0 ? 1 : 0;
+		return MagmaBeltHelper.getVectorForOffset(controllerBE, index + additionalOffset);
 	}
 
 	public boolean shouldRenderNormally() {

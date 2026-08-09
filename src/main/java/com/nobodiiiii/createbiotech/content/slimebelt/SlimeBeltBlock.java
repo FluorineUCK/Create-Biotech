@@ -9,9 +9,9 @@ import java.util.function.Consumer;
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceProviderBlock;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltBlock;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
-import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainBlock;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -94,7 +94,7 @@ import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlock extends HorizontalKineticBlock
 	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock, TransformableBlock,
-	SpecialBlockItemRequirement, CBBeltChainBlock {
+	SpecialBlockItemRequirement, StandardItemBeltBlock {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);
@@ -114,6 +114,16 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	@Override
 	public Property<BeltPart> createBiotech$partProperty() {
 		return PART;
+	}
+
+	@Override
+	public boolean createBiotech$canTransportItems(BlockState state) {
+		return canTransportObjects(state);
+	}
+
+	@Override
+	public boolean createBiotech$canSupportTunnel(BlockState state) {
+		return true;
 	}
 
 	@OnlyIn(Dist.CLIENT)

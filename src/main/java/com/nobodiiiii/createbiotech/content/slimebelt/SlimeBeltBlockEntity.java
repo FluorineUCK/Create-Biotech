@@ -22,7 +22,8 @@ import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeItemHandler
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
-import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelCapabilityInvalidator;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltTunnelCapabilityInvalidator;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -56,7 +57,8 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost, Clearable {
+public class SlimeBeltBlockEntity extends KineticBlockEntity
+	implements BeltSurfaceHost, StandardItemBeltPort, Clearable {
 
 	/** {@code Track.values()} clones its array on every call; the surface lookups run per funnel per tick. */
 	private static final Track[] TRACKS = Track.values();
@@ -423,7 +425,62 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		nullSideHandler = null;
 		invalidateCapabilities();
 		if (level != null)
-			SlimeBeltTunnelCapabilityInvalidator.invalidate(level, worldPosition.above());
+			BeltTunnelCapabilityInvalidator.invalidate(level, worldPosition.above());
+	}
+
+	@Override
+	public BlockPos createBiotech$getBlockPos() {
+		return worldPosition;
+	}
+
+	@Override
+	public boolean createBiotech$isHorizontalItemPort() {
+		return getBlockState().getValue(SlimeBeltBlock.SLOPE) == BeltSlope.HORIZONTAL
+			&& SlimeBeltBlock.canTransportObjects(getBlockState());
+	}
+
+	@Override
+	public boolean createBiotech$addressesItemPort(Direction side) {
+		return canTunnelAddressFront(side);
+	}
+
+	@Override
+	public boolean createBiotech$canInsertIntoItemPort(Direction side) {
+		return canTunnelInsertIntoFront(side);
+	}
+
+	@Override
+	public ItemStack createBiotech$insertIntoItemPort(ItemStack stack, Direction side, boolean simulate) {
+		return insertFromTunnelIntoFront(stack, side, simulate);
+	}
+
+	@Override
+	public IItemHandler createBiotech$getItemHandler() {
+		return getItemCapability(Direction.UP);
+	}
+
+	@Override
+	public Direction createBiotech$getMovementFacing() {
+		return getMovementFacing();
+	}
+
+	@Override
+	public float createBiotech$getSpeed() {
+		return getSpeed();
+	}
+
+	@Override
+	public float createBiotech$getDirectionAwareSpeed() {
+		return getDirectionAwareBeltMovementSpeed();
+	}
+
+	@Override
+	public Vec3 createBiotech$getEjectionPosition() {
+		SlimeBeltBlockEntity controllerBE = getControllerBE();
+		if (controllerBE == null)
+			return Vec3.atCenterOf(worldPosition);
+		int additionalOffset = getDirectionAwareBeltMovementSpeed() > 0 ? 1 : 0;
+		return SlimeBeltHelper.getVectorForOffset(controllerBE, index + additionalOffset);
 	}
 
 	private IItemHandler getItemHandler(Direction side) {

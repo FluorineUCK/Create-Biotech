@@ -5,9 +5,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Track;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPortResolver;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.logistics.funnel.FunnelBlock;
 import com.simibubi.create.content.processing.basin.BasinBlock;
@@ -16,19 +15,19 @@ import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.BlockGetter;
-import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 
+/** Extends basin output checks to every standard Biotech item-belt surface, including stopped belts. */
 @Mixin(BasinBlock.class)
-public abstract class BasinBlockSlimeBeltOutputMixin {
+public abstract class BasinBlockBeltOutputMixin {
 
 	@Inject(method = "canOutputTo", at = @At("HEAD"), cancellable = true)
-	private static void createBiotech$allowStoppedSlimeBeltOutput(BlockGetter world, BlockPos basinPos,
+	private static void createBiotech$allowStandardBeltOutput(BlockGetter world, BlockPos basinPos,
 		Direction direction, CallbackInfoReturnable<Boolean> cir) {
 		BlockPos neighbourPos = basinPos.relative(direction);
 		BlockPos outputPos = neighbourPos.below();
-		BlockEntity blockEntity = world.getBlockEntity(outputPos);
-		if (!(blockEntity instanceof SlimeBeltBlockEntity segment))
+		StandardItemBeltPort port = StandardItemBeltPortResolver.getHorizontalPort(world, outputPos);
+		if (port == null)
 			return;
 
 		BlockState neighbour = world.getBlockState(neighbourPos);
@@ -41,20 +40,13 @@ public abstract class BasinBlockSlimeBeltOutputMixin {
 			cir.setReturnValue(false);
 			return;
 		} else {
-			SlimeBeltBlockEntity controller = segment.getControllerBE();
-			if (controller == null)
-				return;
-			Track track = SlimeBeltHelper.resolveIOTrack(controller, segment.index, direction);
-			cir.setReturnValue(track == Track.FRONT
-				&& (segment.getSpeed() == 0 || segment.getMovementFacing() != direction.getOpposite()));
+			cir.setReturnValue(port.createBiotech$addressesItemPort(direction)
+				&& (port.createBiotech$getSpeed() == 0
+					|| port.createBiotech$getMovementFacing() != direction.getOpposite()));
 			return;
 		}
 
-		SlimeBeltBlockEntity controller = segment.getControllerBE();
-		if (controller == null)
-			return;
-		Track track = SlimeBeltHelper.resolveIOTrack(controller, segment.index, direction);
-		if (track != Track.FRONT) {
+		if (!port.createBiotech$addressesItemPort(direction)) {
 			cir.setReturnValue(false);
 			return;
 		}

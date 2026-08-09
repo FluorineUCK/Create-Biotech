@@ -1,6 +1,8 @@
 package com.nobodiiiii.createbiotech.content.magmabelt.transport;
 
 import com.simibubi.create.AllBlocks;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPortResolver;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlock;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltHelper;
@@ -77,16 +79,21 @@ public class MagmaBeltTunnelInteractionHandler {
 						.relative(d);
 					if (!world.isLoaded(outpos))
 						return true;
-					DirectBeltInputBehaviour behaviour =
-						BlockEntityBehaviour.get(world, outpos, DirectBeltInputBehaviour.TYPE);
-					if (behaviour == null)
-						continue;
-					if (!behaviour.canInsertFromSide(d))
-						continue;
-
 					ItemStack toinsert = current.stack.copyWithCount(1);
-					if (!behaviour.handleInsertion(toinsert, d, false)
-						.isEmpty())
+					ItemStack remainder;
+					StandardItemBeltPort port = StandardItemBeltPortResolver.getHorizontalPort(world, outpos);
+					if (port != null) {
+						if (!port.createBiotech$canInsertIntoItemPort(d))
+							continue;
+						remainder = port.createBiotech$insertIntoItemPort(toinsert, d, false);
+					} else {
+						DirectBeltInputBehaviour behaviour =
+							BlockEntityBehaviour.get(world, outpos, DirectBeltInputBehaviour.TYPE);
+						if (behaviour == null || !behaviour.canInsertFromSide(d))
+							continue;
+						remainder = behaviour.handleInsertion(toinsert, d, false);
+					}
+					if (!remainder.isEmpty())
 						return true;
 					if (onServer)
 						flapTunnel(beltInventory, upcomingSegment, d, false);

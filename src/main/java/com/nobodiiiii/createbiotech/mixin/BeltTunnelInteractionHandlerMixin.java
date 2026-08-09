@@ -6,7 +6,8 @@ import org.spongepowered.asm.mixin.injection.At;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
-import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelInteractionHandler;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPortResolver;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.kinetics.belt.transport.BeltTunnelInteractionHandler;
 
@@ -22,8 +23,9 @@ public abstract class BeltTunnelInteractionHandlerMixin {
 		target = "Lcom/simibubi/create/content/kinetics/belt/behaviour/DirectBeltInputBehaviour;canInsertFromSide(Lnet/minecraft/core/Direction;)Z"))
 	private static boolean createBiotech$validateFrontOutput(DirectBeltInputBehaviour behaviour, Direction side,
 		Operation<Boolean> original, @Local BlockPos outpos, @Local Level world) {
-		if (SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(world, outpos) != null)
-			return SlimeBeltTunnelInteractionHandler.canInsertIntoFront(world, outpos, side);
+		StandardItemBeltPort port = StandardItemBeltPortResolver.getHorizontalPort(world, outpos);
+		if (port != null)
+			return port.createBiotech$canInsertIntoItemPort(side);
 		return original.call(behaviour, side);
 	}
 
@@ -31,8 +33,9 @@ public abstract class BeltTunnelInteractionHandlerMixin {
 		target = "Lcom/simibubi/create/content/kinetics/belt/behaviour/DirectBeltInputBehaviour;handleInsertion(Lnet/minecraft/world/item/ItemStack;Lnet/minecraft/core/Direction;Z)Lnet/minecraft/world/item/ItemStack;"))
 	private static ItemStack createBiotech$insertIntoFront(DirectBeltInputBehaviour behaviour, ItemStack stack,
 		Direction side, boolean simulate, Operation<ItemStack> original, @Local BlockPos outpos, @Local Level world) {
-		if (SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(world, outpos) != null)
-			return SlimeBeltTunnelInteractionHandler.insertIntoFront(world, outpos, stack, side, simulate);
+		StandardItemBeltPort port = StandardItemBeltPortResolver.getHorizontalPort(world, outpos);
+		if (port != null)
+			return port.createBiotech$insertIntoItemPort(stack, side, simulate);
 		return original.call(behaviour, stack, side, simulate);
 	}
 }

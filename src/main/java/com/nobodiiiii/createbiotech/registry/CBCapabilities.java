@@ -1,8 +1,8 @@
 package com.nobodiiiii.createbiotech.registry;
 
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlockEntity;
-import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
-import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltTunnelInteractionHandler;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPortResolver;
 import com.simibubi.create.AllBlockEntityTypes;
 
 import net.minecraft.core.Direction;
@@ -63,9 +63,9 @@ public final class CBCapabilities {
 			(be, side) -> {
 				if (be.getLevel() == null)
 					return null;
-				SlimeBeltBlockEntity belt = SlimeBeltTunnelInteractionHandler.getHorizontalSlimeBelt(be.getLevel(),
-					be.getBlockPos().below());
-				return belt == null ? null : belt.getItemCapability(Direction.UP);
+				StandardItemBeltPort belt =
+					StandardItemBeltPortResolver.getHorizontalPort(be.getLevel(), be.getBlockPos().below());
+				return belt == null ? null : belt.createBiotech$getItemHandler();
 			});
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.MAGMA_BELT.get(),
 			(be, side) -> be.getItemCapability(side));

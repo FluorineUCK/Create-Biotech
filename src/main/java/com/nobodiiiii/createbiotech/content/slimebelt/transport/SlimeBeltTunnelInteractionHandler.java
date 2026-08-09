@@ -4,6 +4,8 @@ import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlock;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Track;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPortResolver;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.kinetics.belt.behaviour.DirectBeltInputBehaviour;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
@@ -19,7 +21,6 @@ import net.createmod.catnip.data.Iterate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -78,10 +79,11 @@ public final class SlimeBeltTunnelInteractionHandler {
 						return true;
 					ItemStack toInsert = current.stack.copyWithCount(1);
 					ItemStack remainder;
-					if (getHorizontalSlimeBelt(world, outputPos) != null) {
-						if (!canInsertIntoFront(world, outputPos, direction))
+					StandardItemBeltPort port = StandardItemBeltPortResolver.getHorizontalPort(world, outputPos);
+					if (port != null) {
+						if (!port.createBiotech$canInsertIntoItemPort(direction))
 							continue;
-						remainder = insertIntoFront(world, outputPos, toInsert, direction, false);
+						remainder = port.createBiotech$insertIntoItemPort(toInsert, direction, false);
 					} else {
 						DirectBeltInputBehaviour behaviour =
 							BlockEntityBehaviour.get(world, outputPos, DirectBeltInputBehaviour.TYPE);
@@ -144,31 +146,6 @@ public final class SlimeBeltTunnelInteractionHandler {
 			return null;
 		BlockEntity blockEntity = world.getBlockEntity(tunnelPos);
 		return blockEntity instanceof BeltTunnelBlockEntity tunnel ? tunnel : null;
-	}
-
-	public static SlimeBeltBlockEntity getHorizontalSlimeBelt(BlockGetter world, BlockPos pos) {
-		BlockState state = world.getBlockState(pos);
-		if (!state.is(com.nobodiiiii.createbiotech.registry.CBBlocks.SLIME_BELT.get())
-			|| state.getValue(SlimeBeltBlock.SLOPE)
-				!= com.simibubi.create.content.kinetics.belt.BeltSlope.HORIZONTAL)
-			return null;
-		return SlimeBeltHelper.getSegmentBE(world, pos);
-	}
-
-	public static boolean addressesFront(BlockGetter world, BlockPos pos, Direction side) {
-		SlimeBeltBlockEntity segment = getHorizontalSlimeBelt(world, pos);
-		return segment != null && segment.canTunnelAddressFront(side);
-	}
-
-	public static boolean canInsertIntoFront(BlockGetter world, BlockPos pos, Direction side) {
-		SlimeBeltBlockEntity segment = getHorizontalSlimeBelt(world, pos);
-		return segment != null && segment.canTunnelInsertIntoFront(side);
-	}
-
-	public static ItemStack insertIntoFront(BlockGetter world, BlockPos pos, ItemStack stack, Direction side,
-		boolean simulate) {
-		SlimeBeltBlockEntity segment = getHorizontalSlimeBelt(world, pos);
-		return segment == null ? stack : segment.insertFromTunnelIntoFront(stack, side, simulate);
 	}
 
 	private static void setFrontPosition(SlimeBeltInventory beltInventory, TransportedItemStack item,

@@ -12,6 +12,7 @@ public final class CBDisplaySources {
 		if (registered)
 			return;
 		DisplaySource.BY_BLOCK.add(CBBlocks.SLIME_BELT.get(), AllDisplaySources.ITEM_NAMES.get());
+		DisplaySource.BY_BLOCK.add(CBBlocks.MAGMA_BELT.get(), AllDisplaySources.ITEM_NAMES.get());
 		registered = true;
 	}
 }
