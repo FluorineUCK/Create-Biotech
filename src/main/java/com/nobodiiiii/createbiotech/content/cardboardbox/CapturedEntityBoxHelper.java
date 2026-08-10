@@ -1,7 +1,5 @@
 package com.nobodiiiii.createbiotech.content.cardboardbox;
 
-import net.minecraft.core.registries.Registries;
-
 import net.minecraft.core.registries.BuiltInRegistries;
 
 import java.util.ArrayList;
@@ -28,6 +26,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.level.Level;
@@ -107,6 +106,26 @@ public class CapturedEntityBoxHelper {
 		stackTag.putFloat(CAPTURED_ENTITY_HEALTH_TAG, target.getHealth());
 		CBItemData.set(stack, stackTag);
 		return true;
+	}
+
+	public static ItemStack createFilledBox(Item boxItem, EntityType<?> entityType) {
+		if (!(boxItem instanceof CapturedEntityBoxItem))
+			throw new IllegalArgumentException("Item " + BuiltInRegistries.ITEM.getKey(boxItem)
+				+ " is not a captured entity box item");
+
+		ItemStack stack = boxItem.getDefaultInstance();
+		ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
+		if (entityId == null)
+			return stack;
+
+		CompoundTag entityData = new CompoundTag();
+		entityData.putString("id", entityId.toString());
+		CompoundTag stackTag = CBItemData.getOrEmpty(stack);
+		stackTag.put(CAPTURED_ENTITY_TAG, entityData);
+		stackTag.putString(CAPTURED_ENTITY_DESC_ID_TAG, entityType.getDescriptionId());
+		stackTag.remove(CAPTURED_ENTITY_HEALTH_TAG);
+		CBItemData.set(stack, stackTag);
+		return stack;
 	}
 
 	public static boolean captureEntityFromPlayerStack(ItemStack stack, Player player, LivingEntity target) {

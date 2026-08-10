@@ -11,13 +11,10 @@ import java.util.stream.Stream;
 
 import com.mojang.serialization.MapCodec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
-import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.nobodiiiii.createbiotech.registry.CBIngredients;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.nbt.CompoundTag;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
@@ -72,8 +69,7 @@ public class CapturedEntityBoxIngredient implements ICustomIngredient {
 	@Override
 	public Stream<ItemStack> getItems() {
 		return items.stream()
-			.map(Item::getDefaultInstance)
-			.map(stack -> createDisplayStack(stack, entityType));
+			.map(item -> CapturedEntityBoxHelper.createFilledBox(item, entityType));
 	}
 
 	@Override
@@ -91,20 +87,6 @@ public class CapturedEntityBoxIngredient implements ICustomIngredient {
 	@Override
 	public IngredientType<?> getType() {
 		return CBIngredients.CAPTURED_ENTITY_BOX.get();
-	}
-
-	private static ItemStack createDisplayStack(ItemStack stack, EntityType<?> entityType) {
-		ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
-		if (entityId == null)
-			return stack;
-
-		CompoundTag tag = new CompoundTag();
-		CompoundTag entityData = new CompoundTag();
-		entityData.putString("id", entityId.toString());
-		tag.put("CapturedEntity", entityData);
-		tag.putString("CapturedEntityDescId", entityType.getDescriptionId());
-		CBItemData.set(stack, tag);
-		return stack;
 	}
 
 	private static Item requireBoxItem(Item item) {
