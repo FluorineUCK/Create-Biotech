@@ -35,6 +35,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.util.Mth;
+import net.minecraft.world.Clearable;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
@@ -54,7 +55,7 @@ import net.neoforged.neoforge.fluids.capability.IFluidHandler.FluidAction;
 import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
 import net.neoforged.neoforge.items.ItemStackHandler;
 
-public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
+public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation, Clearable {
 
 	public static final int GROWTH_ANIMATION_DURATION = 8;
 	public static final int EMERGENCE_ANIMATION_DURATION = 20;
@@ -295,6 +296,13 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		}
 
 		return InteractionResult.PASS;
+	}
+
+	@Override
+	public void clearContent() {
+		inventory.setStackInSlot(0, ItemStack.EMPTY);
+		fluidTank.setFluid(FluidStack.EMPTY);
+		clearRecordedEntity();
 	}
 
 	public void setAdvancementOwner(@Nullable LivingEntity placer) {

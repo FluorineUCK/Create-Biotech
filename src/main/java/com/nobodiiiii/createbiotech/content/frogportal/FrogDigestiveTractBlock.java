@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.frogportal;
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -78,7 +79,7 @@ public class FrogDigestiveTractBlock extends Block implements EntityBlock, Porta
 			BlockPos exitPos = portalType == FrogStomachSpace.PortalType.MOUTH
 				? GiantFrogBlock.getMouthExitPos(frog.pos(), frog.facing())
 				: GiantFrogBlock.getTailExitPos(frog.pos(), frog.facing());
-			target = Vec3.atBottomCenterOf(exitPos);
+			target = SubLevelCompat.toWorld(dest, frog.pos(), Vec3.atBottomCenterOf(exitPos));
 		} else {
 			FrogStomachSavedData.Location legacy = spaceIndex >= 0
 				? data.getReturn(entity.getUUID(), spaceIndex)

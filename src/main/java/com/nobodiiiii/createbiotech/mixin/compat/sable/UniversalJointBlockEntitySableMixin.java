@@ -1,9 +1,14 @@
 package com.nobodiiiii.createbiotech.mixin.compat.sable;
 
+import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
+
+import org.joml.Vector3d;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointBlockEntity;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
@@ -13,13 +18,11 @@ import dev.ryanhcode.sable.api.block.BlockEntitySubLevelActor;
 import dev.ryanhcode.sable.api.physics.force.ForceTotal;
 import dev.ryanhcode.sable.api.physics.handle.RigidBodyHandle;
 import dev.ryanhcode.sable.api.physics.mass.MassData;
+import dev.ryanhcode.sable.api.sublevel.SubLevelContainer;
 import dev.ryanhcode.sable.sublevel.ServerSubLevel;
+import dev.ryanhcode.sable.sublevel.SubLevel;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
-
-import org.joml.Vector3d;
-import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Unique;
 
 @Mixin(UniversalJointBlockEntity.class)
 public abstract class UniversalJointBlockEntitySableMixin implements BlockEntitySubLevelActor {
@@ -53,9 +56,11 @@ public abstract class UniversalJointBlockEntitySableMixin implements BlockEntity
 			return;
 
 		UUID peerSpaceId = peer.getContainingSubLevelId();
-		ServerSubLevel peerSpace = peerSpaceId == null ? null
-			: SubLevelCompat.findSubLevel(level, peerSpaceId) instanceof ServerSubLevel server
-				? server : null;
+		SubLevelContainer container = SubLevelContainer.getContainer(level);
+		SubLevel resolvedPeerSpace = peerSpaceId == null || container == null ? null
+			: container.getSubLevel(peerSpaceId);
+		ServerSubLevel peerSpace = resolvedPeerSpace instanceof ServerSubLevel server
+			? server : null;
 		if (peerSpaceId != null && peerSpace == null)
 			return;
 		if (peerSpace == currentSubLevel)
@@ -116,6 +121,25 @@ public abstract class UniversalJointBlockEntitySableMixin implements BlockEntity
 
 		createBiotech$applyImpulse(currentSubLevel, currentHandle, localPoint,
 			peerSpace, peerLocalPoint, direction.scale(impulse));
+	}
+
+	@Override
+	@Nullable
+	public Iterable<SubLevel> sable$getConnectionDependencies() {
+		UniversalJointBlockEntity endpoint = (UniversalJointBlockEntity) (Object) this;
+		Level level = endpoint.getLevel();
+		if (level == null || !endpoint.isAtExpectedOwnAddress() || !endpoint.hasLink())
+			return null;
+		UUID peerSpaceId = endpoint.getLinkedSubLevelId();
+		if (peerSpaceId == null)
+			return null;
+		SubLevelContainer container = SubLevelContainer.getContainer(level);
+		if (container == null)
+			return null;
+		SubLevel dependency = container.getSubLevel(peerSpaceId);
+		if (dependency == null)
+			return null;
+		return List.of(dependency);
 	}
 
 	@Unique

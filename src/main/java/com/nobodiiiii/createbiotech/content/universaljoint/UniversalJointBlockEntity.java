@@ -180,6 +180,12 @@ public class UniversalJointBlockEntity extends UniversalJointEndpointBlockEntity
 				&& (!references(partner) || !partner.references(this))) {
 				clearLocalLink();
 				rebuildKineticsAfterTransaction();
+			} else if (partner != null) {
+				double disconnectRange = getElasticDisconnectRange();
+				if (distanceSquaredTo(partner) >= disconnectRange * disconnectRange) {
+					UniversalJointTransactions.requestFracture(this);
+					return;
+				}
 			}
 		}
 

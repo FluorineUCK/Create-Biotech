@@ -311,6 +311,12 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 	}
 
 	@Override
+	public void clearContent() {
+		getCarrierInventory().setStackInSlot(0, ItemStack.EMPTY);
+		super.clearContent();
+	}
+
+	@Override
 	public void destroy() {
 		portInventory.dropAllCarriers();
 		super.destroy();
