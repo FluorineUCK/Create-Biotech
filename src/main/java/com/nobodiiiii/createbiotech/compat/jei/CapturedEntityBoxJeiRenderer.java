@@ -1,8 +1,5 @@
 package com.nobodiiiii.createbiotech.compat.jei;
 
-import java.lang.invoke.MethodHandle;
-import java.lang.invoke.MethodHandles;
-import java.lang.invoke.MethodType;
 import java.util.List;
 
 import org.jetbrains.annotations.Nullable;
@@ -26,7 +23,6 @@ import net.minecraft.world.level.Level;
 public final class CapturedEntityBoxJeiRenderer {
 	private static final ThreadLocal<Boolean> CURRENT_SLOT_HOVERED = ThreadLocal.withInitial(() -> false);
 	private static final ThreadLocal<IRecipeSlotDrawable> CURRENT_SLOT = new ThreadLocal<>();
-	private static final MethodHandle SLOT_DRAW_WITH_HOVER = findSlotDrawWithHover();
 	private static final ItemStack ENTITY_ITEM_TRANSFORM = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get());
 	private static final ItemStack LARGE_BOX_BADGE = new ItemStack(CBItems.LARGE_CARDBOARD_BOX.get());
 	private static final long BOX_CYCLE_TIME_MS = 1000L;
@@ -43,43 +39,14 @@ public final class CapturedEntityBoxJeiRenderer {
 
 	private CapturedEntityBoxJeiRenderer() {}
 
-	public static void drawSlotWithHoverContext(IRecipeSlotDrawable slot, GuiGraphics graphics) {
-		drawSlotWithHoverContext(slot, graphics, false);
-	}
-
-	public static void drawSlotWithHoverContext(IRecipeSlotDrawable slot, GuiGraphics graphics, boolean hovered) {
+	public static void beginSlotDraw(IRecipeSlotDrawable slot, boolean hovered) {
 		CURRENT_SLOT_HOVERED.set(hovered);
 		CURRENT_SLOT.set(slot);
-		try {
-			drawSlot(slot, graphics, hovered);
-		} finally {
-			CURRENT_SLOT.remove();
-			CURRENT_SLOT_HOVERED.remove();
-		}
 	}
 
-	private static void drawSlot(IRecipeSlotDrawable slot, GuiGraphics graphics, boolean hovered) {
-		if (SLOT_DRAW_WITH_HOVER == null) {
-			slot.draw(graphics);
-			return;
-		}
-
-		try {
-			SLOT_DRAW_WITH_HOVER.invoke(slot, graphics, hovered);
-		} catch (Throwable throwable) {
-			throw new IllegalStateException("Unable to draw JEI recipe slot with hover context", throwable);
-		}
-	}
-
-	@Nullable
-	private static MethodHandle findSlotDrawWithHover() {
-		try {
-			return MethodHandles.publicLookup()
-				.findVirtual(IRecipeSlotDrawable.class, "draw",
-					MethodType.methodType(void.class, GuiGraphics.class, boolean.class));
-		} catch (NoSuchMethodException | IllegalAccessException ignored) {
-			return null;
-		}
+	public static void endSlotDraw() {
+		CURRENT_SLOT.remove();
+		CURRENT_SLOT_HOVERED.remove();
 	}
 
 	public static boolean renderCapturedEntityBox(GuiGraphics graphics, ItemStack stack, int x, int y) {

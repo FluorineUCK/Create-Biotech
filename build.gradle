@@ -139,7 +139,7 @@ def generateModMetadata = tasks.register('generateModMetadata', ProcessResources
             mod_description        : mod_description,
             create_version_range   : create_version_range,
             sable_version_range    : sable_version_range,
-            jei_version            : jei_version,
+            jei_version_range      : jei_version_range,
             jade_version           : jade_version
     ]
 

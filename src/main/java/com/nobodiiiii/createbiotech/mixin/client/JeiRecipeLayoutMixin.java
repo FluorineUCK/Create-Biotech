@@ -6,8 +6,9 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Redirect;
 
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.nobodiiiii.createbiotech.compat.jei.CapturedEntityBoxJeiRenderer;
 
 import mezz.jei.api.gui.inputs.RecipeSlotUnderMouse;
@@ -21,23 +22,33 @@ public abstract class JeiRecipeLayoutMixin {
 	@Shadow(remap = false)
 	public abstract Optional<RecipeSlotUnderMouse> getSlotUnderMouse(double mouseX, double mouseY);
 
-	@Redirect(method = "drawRecipe", at = @At(value = "INVOKE",
+	@WrapOperation(method = "drawRecipe", at = @At(value = "INVOKE",
 		target = "Lmezz/jei/api/gui/ingredient/IRecipeSlotDrawable;draw(Lnet/minecraft/client/gui/GuiGraphics;Z)V"),
-		remap = true, require = 0)
+		require = 0)
 	private void createBiotech$drawSlotWithHoverContext(IRecipeSlotDrawable slot, GuiGraphics slotGraphics,
-		boolean hovered) {
-		CapturedEntityBoxJeiRenderer.drawSlotWithHoverContext(slot, slotGraphics, hovered);
+		boolean hovered, Operation<Void> original) {
+		CapturedEntityBoxJeiRenderer.beginSlotDraw(slot, hovered);
+		try {
+			original.call(slot, slotGraphics, hovered);
+		} finally {
+			CapturedEntityBoxJeiRenderer.endSlotDraw();
+		}
 	}
 
-	@Redirect(method = "drawRecipe", at = @At(value = "INVOKE",
+	@WrapOperation(method = "drawRecipe", at = @At(value = "INVOKE",
 		target = "Lmezz/jei/api/gui/ingredient/IRecipeSlotDrawable;draw(Lnet/minecraft/client/gui/GuiGraphics;)V"),
-		remap = true, require = 0)
+		require = 0)
 	private void createBiotech$drawSlotWithHoverContextLegacy(IRecipeSlotDrawable slot, GuiGraphics slotGraphics,
-		GuiGraphics graphics, int mouseX, int mouseY) {
+		Operation<Void> original, GuiGraphics graphics, int mouseX, int mouseY) {
 		boolean hovered = getSlotUnderMouse(mouseX, mouseY)
 			.map(RecipeSlotUnderMouse::slot)
 			.filter(slot::equals)
 			.isPresent();
-		CapturedEntityBoxJeiRenderer.drawSlotWithHoverContext(slot, slotGraphics, hovered);
+		CapturedEntityBoxJeiRenderer.beginSlotDraw(slot, hovered);
+		try {
+			original.call(slot, slotGraphics);
+		} finally {
+			CapturedEntityBoxJeiRenderer.endSlotDraw();
+		}
 	}
 }
