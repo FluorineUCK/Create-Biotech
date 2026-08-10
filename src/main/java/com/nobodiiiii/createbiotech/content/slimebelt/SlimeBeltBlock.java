@@ -1,11 +1,18 @@
 package com.nobodiiiii.createbiotech.content.slimebelt;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import org.apache.commons.lang3.mutable.MutableBoolean;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceProviderBlock;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltBlock;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementBlock;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -14,8 +21,10 @@ import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInvento
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
+import com.simibubi.create.api.contraption.transformable.TransformableBlock;
+import com.simibubi.create.api.schematic.requirement.SpecialBlockItemRequirement;
+import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.equipment.armor.DivingBootsItem;
-import com.simibubi.create.content.fluids.transfer.GenericItemEmptying;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
@@ -24,10 +33,16 @@ import com.simibubi.create.content.kinetics.belt.behaviour.TransportedItemStackH
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 import com.simibubi.create.content.logistics.box.PackageEntity;
 import com.simibubi.create.content.logistics.box.PackageItem;
+import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlock;
+import com.simibubi.create.content.schematics.requirement.ItemRequirement;
+import com.simibubi.create.content.schematics.requirement.ItemRequirement.ItemUseType;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
+import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
+import com.simibubi.create.foundation.block.render.ReducedDestroyEffects;
 import com.simibubi.create.foundation.item.ItemHelper;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
@@ -49,6 +64,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
@@ -57,11 +73,13 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition.Builder;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.levelgen.DebugLevelSource;
 import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -76,7 +94,8 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.neoforge.items.IItemHandler;
 
 public class SlimeBeltBlock extends HorizontalKineticBlock
-	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock {
+	implements IBE<SlimeBeltBlockEntity>, ProperWaterloggedBlock, BeltSurfaceProviderBlock, TransformableBlock,
+	StandardItemBeltBlock, CBBeltPlacementBlock {
 
 	public static final Property<BeltSlope> SLOPE = EnumProperty.create("slope", BeltSlope.class);
 	public static final Property<BeltPart> PART = EnumProperty.create("part", BeltPart.class);
@@ -86,6 +105,41 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		registerDefaultState(defaultBlockState().setValue(SLOPE, BeltSlope.HORIZONTAL)
 			.setValue(PART, BeltPart.START)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@Override
+	public Property<BeltSlope> createBiotech$slopeProperty() {
+		return SLOPE;
+	}
+
+	@Override
+	public Property<BeltPart> createBiotech$partProperty() {
+		return PART;
+	}
+
+	@Override
+	public boolean createBiotech$canTransportItems(BlockState state) {
+		return canTransportObjects(state);
+	}
+
+	@Override
+	public boolean createBiotech$canSupportTunnel(BlockState state) {
+		return true;
+	}
+
+	@Override
+	public ItemStack createBiotech$connectorStack() {
+		return new ItemStack(CBItems.SLIME_BELT_CONNECTOR.get());
+	}
+
+	@Override
+	public void createBiotech$createChain(Level level, BlockPos start, BlockPos end) {
+		SlimeBeltConnectorItem.createBelts(level, start, end);
+	}
+
+	@OnlyIn(Dist.CLIENT)
+	public void initializeClient(Consumer<IClientBlockExtensions> consumer) {
+		consumer.accept(new RenderProperties());
 	}
 
 	@Override
@@ -126,8 +180,11 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	@Override
 	public void spawnAfterBreak(BlockState state, ServerLevel world, BlockPos pos, ItemStack stack, boolean b) {
 		SlimeBeltBlockEntity controllerBE = SlimeBeltHelper.getControllerBE(world, pos);
-		if (controllerBE != null)
-			controllerBE.getInventory().ejectAll();
+		if (controllerBE == null)
+			return;
+		SlimeBeltInventory inventory = controllerBE.getInventory();
+		if (inventory != null)
+			inventory.ejectAll();
 	}
 
 	@Override
@@ -224,15 +281,17 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 
 	private static Track getClosestCaptureTrack(Entity entity, SlimeBeltBlockEntity belt, SlimeBeltInventory beltInventory,
 		SlimeBeltBlockEntity controller) {
-		Track primary = getNearestTrack(entity.getBoundingBox()
+		Track nearest = getNearestTrack(entity.getBoundingBox()
 			.getCenter(), belt, controller);
-		Track secondary = primary == Track.FRONT ? Track.BACK
-			: Track.FRONT;
-		if (beltInventory.canInsertAtOnTrack(belt.index, primary))
-			return primary;
-		if (beltInventory.canInsertAtOnTrack(belt.index, secondary))
-			return secondary;
-		return null;
+		// The two surfaces are physically isolated. A blocked landing on the touched
+		// surface must leave the entity in the world instead of rerouting it through
+		// the opposite side of the belt.
+		return beltInventory.canInsertAtOnTrack(belt.index, nearest) ? nearest : null;
+	}
+
+	@Override
+	public boolean isFlammable(BlockState state, BlockGetter world, BlockPos pos, Direction face) {
+		return false;
 	}
 
 	// Dropped items can touch either exposed belt surface, so choose the insertion point on the nearest track.
@@ -273,10 +332,6 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		boolean isConnector = CBItems.isSlimeBeltConnector(heldItem);
 		boolean isShaft = AllBlocks.SHAFT.isIn(heldItem);
 		boolean isHand = heldItem.isEmpty() && hand == InteractionHand.MAIN_HAND;
-		boolean hasWater = GenericItemEmptying.emptyItem(world, heldItem, true).getFirst().getFluid().isSame(Fluids.WATER);
-
-		if (hasWater)
-			return InteractionResult.PASS;
 		if (isConnector)
 			return SlimeBeltSlicer.useConnector(state, world, pos, player, hand, hit, new SlimeBeltSlicer.Feedback());
 		if (isWrench)
@@ -285,8 +340,14 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		SlimeBeltBlockEntity belt = SlimeBeltHelper.getSegmentBE(world, pos);
 		if (belt == null)
 			return InteractionResult.PASS;
+		SlimeBeltBlockEntity controllerBelt = belt.getControllerBE();
+		if (controllerBelt == null)
+			return InteractionResult.PASS;
+		Track clickedTrack = getNearestTrack(hit.getLocation(), belt, controllerBelt);
 
 		if (PackageItem.isPackage(heldItem)) {
+			if (clickedTrack != Track.FRONT)
+				return InteractionResult.PASS;
 			IItemHandler handler = belt.getItemCapability(Direction.UP);
 			if (handler == null)
 				return InteractionResult.PASS;
@@ -298,18 +359,13 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		}
 
 		if (isHand) {
-			SlimeBeltBlockEntity controllerBelt = belt.getControllerBE();
-			if (controllerBelt == null)
+			if (clickedTrack != Track.FRONT)
 				return InteractionResult.PASS;
 			if (world.isClientSide)
 				return InteractionResult.SUCCESS;
 
 			SlimeBeltInventory beltInventory = controllerBelt.getInventory();
-			Track clickedTrack = getNearestTrack(hit.getLocation(), belt, controllerBelt);
 			MutableBoolean success = tryPickupItemFromTrack(player, belt, beltInventory, clickedTrack);
-			if (!success.isTrue())
-				success = tryPickupItemFromTrack(player, belt, beltInventory,
-					clickedTrack == Track.FRONT ? Track.BACK : Track.FRONT);
 
 			if (success.isTrue())
 				world.playSound(null, pos, SoundEvents.ITEM_PICKUP, SoundSource.PLAYERS, .2f,
@@ -411,24 +467,28 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 		if (!state.is(CBBlocks.SLIME_BELT.get()))
 			return;
 
-		int limit = 1000;
-		BlockPos currentPos = pos;
-		while (limit-- > 0) {
-			BlockState currentState = world.getBlockState(currentPos);
-			if (!currentState.is(CBBlocks.SLIME_BELT.get())) {
+		CBBeltChain.WalkResult backward =
+			CBBeltChain.walk(world, pos, false, CBBeltChain.MAX_SEGMENTS);
+		if (!backward.complete()) {
+			if (backward.status() == CBBeltChain.WalkStatus.INVALID
+				|| backward.status() == CBBeltChain.WalkStatus.TOO_LONG)
 				world.destroyBlock(pos, true);
-				return;
-			}
-			BlockPos nextSegmentPosition = nextSegmentPosition(currentState, currentPos, false);
-			if (nextSegmentPosition == null)
-				break;
-			if (!world.isLoaded(nextSegmentPosition))
-				return;
-			currentPos = nextSegmentPosition;
+			return;
 		}
+		BlockPos currentPos = backward.lastPosition();
+		if (currentPos == null)
+			return;
 
 		int index = 0;
-		List<BlockPos> beltChain = getBeltChain(world, currentPos);
+		CBBeltChain.WalkResult forward =
+			CBBeltChain.walk(world, currentPos, true, CBBeltChain.MAX_SEGMENTS);
+		if (!forward.complete()) {
+			if (forward.status() == CBBeltChain.WalkStatus.INVALID
+				|| forward.status() == CBBeltChain.WalkStatus.TOO_LONG)
+				world.destroyBlock(currentPos, true);
+			return;
+		}
+		List<BlockPos> beltChain = forward.positions();
 		if (beltChain.size() < 2) {
 			world.destroyBlock(currentPos, true);
 			return;
@@ -445,6 +505,7 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 			be.setController(currentPos);
 			be.beltLength = beltChain.size();
 			be.index = index;
+			be.invalidateItemHandlers();
 			be.attachKinetics();
 			be.setChanged();
 			be.sendData();
@@ -462,6 +523,8 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 			BlockPos currentPos = nextSegmentPosition(state, pos, forward);
 			if (currentPos == null)
 				continue;
+			if (!CBBeltChain.isLoadedInSameSpace(world, pos, currentPos))
+				continue;
 			BlockState currentState = world.getBlockState(currentPos);
 			if (!currentState.is(CBBlocks.SLIME_BELT.get()))
 				continue;
@@ -476,8 +539,8 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 
 			world.removeBlockEntity(currentPos);
 			BlockState shaftState = AllBlocks.SHAFT.getDefaultState().setValue(BlockStateProperties.AXIS, getRotationAxis(currentState));
-			world.setBlock(currentPos, ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), 3);
-			world.levelEvent(2001, currentPos, Block.getId(currentState));
+			world.setBlock(currentPos, ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), Block.UPDATE_ALL);
+			world.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, currentPos, Block.getId(currentState));
 		}
 	}
 
@@ -485,41 +548,23 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	public BlockState updateShape(BlockState state, Direction side, BlockState neighbourState, LevelAccessor world,
 		BlockPos pos, BlockPos neighbourPos) {
 		updateWater(world, state, pos);
+		if (side.getAxis().isHorizontal())
+			updateTunnelConnections(world, pos.above());
 		return state;
 	}
 
-	public static List<BlockPos> getBeltChain(LevelAccessor world, BlockPos controllerPos) {
-		List<BlockPos> positions = new LinkedList<>();
-		BlockState blockState = world.getBlockState(controllerPos);
-		if (!blockState.is(CBBlocks.SLIME_BELT.get()))
-			return positions;
+	private static void updateTunnelConnections(LevelAccessor world, BlockPos pos) {
+		Block block = world.getBlockState(pos).getBlock();
+		if (block instanceof BeltTunnelBlock tunnel)
+			tunnel.updateTunnel(world, pos);
+	}
 
-		int limit = 1000;
-		BlockPos current = controllerPos;
-		while (limit-- > 0 && current != null) {
-			BlockState state = world.getBlockState(current);
-			if (!state.is(CBBlocks.SLIME_BELT.get()))
-				break;
-			positions.add(current);
-			current = nextSegmentPosition(state, current, true);
-		}
-		return positions;
+	public static List<BlockPos> getBeltChain(LevelAccessor world, BlockPos controllerPos) {
+		return CBBeltChain.getBeltChain(world, controllerPos, 1000);
 	}
 
 	public static BlockPos nextSegmentPosition(BlockState state, BlockPos pos, boolean forward) {
-		Direction direction = state.getValue(HORIZONTAL_FACING);
-		BeltSlope slope = state.getValue(SLOPE);
-		BeltPart part = state.getValue(PART);
-		int offset = forward ? 1 : -1;
-
-		if (part == BeltPart.END && forward || part == BeltPart.START && !forward)
-			return null;
-		if (slope == BeltSlope.VERTICAL)
-			return pos.above(direction.getAxisDirection() == AxisDirection.POSITIVE ? offset : -offset);
-		pos = pos.relative(direction, offset);
-		if (slope != BeltSlope.HORIZONTAL && slope != BeltSlope.SIDEWAYS)
-			return pos.above(slope == BeltSlope.UPWARD ? offset : -offset);
-		return pos;
+		return CBBeltChain.nextSegmentPosition(state, pos, forward);
 	}
 
 	@Override
@@ -547,6 +592,15 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	}
 
 	@Override
+	public BlockState transform(BlockState state, StructureTransform transform) {
+		if (transform.mirror != null)
+			state = mirror(state, transform.mirror);
+		if (transform.rotationAxis == Axis.Y)
+			return rotate(state, transform.rotation);
+		return CBBeltTransform.transformInner(state, transform, SLOPE);
+	}
+
+	@Override
 	protected boolean isPathfindable(BlockState state, PathComputationType type) {
 		return false;
 	}
@@ -554,5 +608,15 @@ public class SlimeBeltBlock extends HorizontalKineticBlock
 	@Override
 	public FluidState getFluidState(BlockState state) {
 		return fluidState(state);
+	}
+
+	public static class RenderProperties extends ReducedDestroyEffects implements MultiPosDestructionHandler {
+		@Override
+		public Set<BlockPos> getExtraPositions(ClientLevel level, BlockPos pos, BlockState blockState, int progress) {
+			BlockEntity blockEntity = level.getBlockEntity(pos);
+			if (blockEntity instanceof SlimeBeltBlockEntity belt)
+				return new HashSet<>(SlimeBeltBlock.getBeltChain(level, belt.getController()));
+			return null;
+		}
 	}
 }

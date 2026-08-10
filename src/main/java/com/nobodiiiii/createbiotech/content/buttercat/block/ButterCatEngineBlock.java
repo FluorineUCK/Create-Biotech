@@ -4,14 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import com.simibubi.create.AllBlocks;
-import com.simibubi.create.AllItems;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import com.simibubi.create.foundation.block.IBE;
-import com.nobodiiiii.createbiotech.content.buttercat.datagen.other.ModTags;
+import com.nobodiiiii.createbiotech.content.buttercat.item.ButterCatIngredients;
 import com.nobodiiiii.createbiotech.content.buttercat.event.ClientEffect;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModBlockEnetities;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModBlocks;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModItems;
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
+import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.registry.CBItems;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
@@ -80,8 +80,8 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
 
     @Override
     protected ItemInteractionResult useItemOn(ItemStack itemStack, BlockState blockState, Level level, BlockPos pos,
-                                              Player player, InteractionHand hand, BlockHitResult result) {
-        if (hand != InteractionHand.MAIN_HAND || itemStack.is(AllItems.WRENCH.get())) {
+                                               Player player, InteractionHand hand, BlockHitResult result) {
+        if (hand != InteractionHand.MAIN_HAND || CBWrenchHelper.isWrench(itemStack)) {
             return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
         }
 
@@ -93,8 +93,8 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
             return ItemInteractionResult.sidedSuccess(level.isClientSide);
         }
 
-        boolean isSuperButter = !be.isInfinite() && itemStack.is(ModItems.SUPER_BUTTER.get());
-        boolean isButter = ModTags.matchesIngredient(itemStack, ModTags.getButters());
+        boolean isSuperButter = !be.isInfinite() && itemStack.is(CBItems.SUPER_BUTTER.get());
+        boolean isButter = ButterCatIngredients.isButter(itemStack);
 
         if (level.isClientSide) {
             return ItemInteractionResult.sidedSuccess(true);
@@ -109,7 +109,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
         }
 
         if (isButter) {
-            int butterLevel = ModItems.getButterLevel(itemStack.getItem());
+            int butterLevel = CBItems.getButterLevel(itemStack.getItem());
             if (!be.canAcceptButter(butterLevel)) {
                 displayMessage(player, "string.create_biotech.full");
                 return ItemInteractionResult.FAIL;
@@ -144,9 +144,9 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
         // else
         int butterType = -1;
 
-        if (ModTags.matchesIngredient(itemStack,ModTags.getButters()))
+        if (ButterCatIngredients.isButter(itemStack))
             butterType = 0;
-        else if (itemStack.is(ModItems.SUPER_BUTTER.get()))
+        else if (itemStack.is(CBItems.SUPER_BUTTER.get()))
             butterType = 1;
 
         if(butterType == -1 )
@@ -155,7 +155,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
         if(!simulate){
             switch (butterType){
                 case 0 -> {
-                    int levelCount = ModItems.getButterLevel(itemStack.getItem());
+                    int levelCount = CBItems.getButterLevel(itemStack.getItem());
                     if (!blockEntity.canAcceptButter(levelCount))
                         return InteractionResultHolder.fail(ItemStack.EMPTY);
                     blockEntity.addButterCount(levelCount);
@@ -196,7 +196,7 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
 
     @Override
     public BlockEntityType<? extends ButterCatEngineBlockEntity> getBlockEntityType() {
-        return ModBlockEnetities.BUTTER_CAT_ENGINE_BE.get();
+        return CBBlockEntityTypes.BUTTER_CAT_ENGINE.get();
     }
 
     @Override
@@ -219,13 +219,13 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
     }
 
     private boolean preservesWholeBlock(ItemStack tool, ServerLevel level) {
-        return tool != null && (tool.is(AllItems.WRENCH.get())
+        return tool != null && (CBWrenchHelper.isWrench(tool)
             || EnchantmentHelper.getItemEnchantmentLevel(
                 level.registryAccess().holderOrThrow(Enchantments.SILK_TOUCH), tool) > 0);
     }
 
     private boolean hasBread(BlockState state) {
-        return ModBlocks.BUTTER_CAT_ENGINE.has(state);
+        return state.is(CBBlocks.BUTTER_CAT_ENGINE.get());
     }
 
     private void spawnCat(LootParams.Builder builder, ButterCatEngineBlockEntity be) {
@@ -252,11 +252,11 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
             if (level.getBlockEntity(pos) instanceof ButterCatEngineBlockEntity be) {
                 if (!level.isClientSide) {
                     if (be.isInfinite()) {
-                        Block.popResource(level, pos, new ItemStack(ModItems.SUPER_BUTTER.get()));
+                        Block.popResource(level, pos, new ItemStack(CBItems.SUPER_BUTTER.get()));
                     } else {
                         int butterCount = be.getTotalCount();
                         if (butterCount > 0)
-                            Block.popResource(level, pos, new ItemStack(ModItems.BUTTER.get(), butterCount));
+                            Block.popResource(level, pos, new ItemStack(CBItems.BUTTER.get(), butterCount));
                     }
                 }
             }

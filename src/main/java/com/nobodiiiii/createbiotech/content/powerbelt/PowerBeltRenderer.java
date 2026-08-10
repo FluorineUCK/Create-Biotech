@@ -5,6 +5,7 @@ import java.util.function.Supplier;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.client.render.CBBeltRenderHelper;
 import com.simibubi.create.AllPartialModels;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
@@ -38,103 +39,12 @@ public class PowerBeltRenderer extends SafeBlockEntityRenderer<PowerBeltBlockEnt
 		BlockState blockState = be.getBlockState();
 		if (!blockState.is(CBBlocks.POWER_BELT.get()))
 			return;
-
-		BeltSlope beltSlope = blockState.getValue(PowerBeltBlock.SLOPE);
-		BeltPart part = blockState.getValue(PowerBeltBlock.PART);
-		Direction facing = blockState.getValue(PowerBeltBlock.HORIZONTAL_FACING);
-		AxisDirection axisDirection = facing.getAxisDirection();
-
-		boolean downward = beltSlope == BeltSlope.DOWNWARD;
-		boolean upward = beltSlope == BeltSlope.UPWARD;
-		boolean diagonal = downward || upward;
-		boolean start = part == BeltPart.START;
-		boolean end = part == BeltPart.END;
-		boolean sideways = beltSlope == BeltSlope.SIDEWAYS;
-		boolean alongX = facing.getAxis() == Direction.Axis.X;
-
-		PoseStack localTransforms = new PoseStack();
-		var msr = TransformStack.of(localTransforms);
-		VertexConsumer vb = buffer.getBuffer(RenderType.solid());
-		float renderTick = AnimationTickHolder.getRenderTime(be.getLevel());
-
-		msr.center()
-			.rotateYDegrees(AngleHelper.horizontalAngle(facing) + (upward ? 180 : 0) + (sideways ? 270 : 0))
-			.rotateZDegrees(sideways ? 90 : 0)
-			.rotateXDegrees(!diagonal && beltSlope != BeltSlope.HORIZONTAL ? 90 : 0)
-			.uncenter();
-
-		if (downward || beltSlope == BeltSlope.VERTICAL && axisDirection == AxisDirection.POSITIVE) {
-			boolean swap = start;
-			start = end;
-			end = swap;
-		}
-
-		for (boolean bottom : Iterate.trueAndFalse) {
-			PartialModel beltPartial = BeltRenderer.getBeltPartial(diagonal, start, end, bottom);
-			SuperByteBuffer beltBuffer = CachedBuffers.partial(beltPartial, blockState)
-				.light(light);
-
-			SpriteShiftEntry spriteShift = getSpriteShiftEntry(diagonal, bottom);
-			float speed = be.getSpeed();
-			shiftBeltUvs(beltBuffer, spriteShift, speed, renderTick, axisDirection, diagonal, downward, alongX,
-				sideways, bottom);
-
-			beltBuffer.transform(localTransforms)
-				.renderInto(ms, vb);
-
-			if (diagonal)
-				break;
-		}
-
-		if (be.hasPulley())
-			renderPulley(be, blockState, ms, vb, light, sideways);
+		CBBeltRenderHelper.renderSurface(be, blockState, ms, buffer, light,
+			PowerBeltRenderer::getSpriteShiftEntry, 0);
 	}
 
-	private static void shiftBeltUvs(SuperByteBuffer beltBuffer, SpriteShiftEntry spriteShift, float speed,
-		float renderTick, AxisDirection axisDirection, boolean diagonal, boolean downward, boolean alongX, boolean sideways,
-		boolean bottom) {
-		float time = renderTick * axisDirection.getStep();
-		if (diagonal && downward != alongX || !sideways && !diagonal && alongX
-			|| sideways && axisDirection == AxisDirection.NEGATIVE)
-			speed = -speed;
-
-		TextureAtlasSprite targetSprite = spriteShift.getTarget();
-		if (targetSprite == null)
-			return;
-
-		float spriteSize = targetSprite.getV1() - targetSprite.getV0();
-		float scrollMult = diagonal ? 3f / 8f : .5f;
-		double scroll = speed * time / (31.5 * 16) + (bottom ? .5 : 0);
-		scroll = scroll - Math.floor(scroll);
-		scroll = scroll * spriteSize * scrollMult;
-		beltBuffer.shiftUVScrolling(spriteShift, (float) scroll);
-	}
-
-	private static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
+	public static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
 		return diagonal ? PowerBeltSpriteShifts.BELT_DIAGONAL
 			: bottom ? PowerBeltSpriteShifts.BELT_OFFSET : PowerBeltSpriteShifts.BELT;
-	}
-
-	private static void renderPulley(PowerBeltBlockEntity be, BlockState blockState, PoseStack ms, VertexConsumer vb,
-		int light, boolean sideways) {
-		Direction dir = sideways ? Direction.UP : blockState.getValue(PowerBeltBlock.HORIZONTAL_FACING)
-			.getClockWise();
-		Supplier<PoseStack> matrixStackSupplier = () -> {
-			PoseStack stack = new PoseStack();
-			var stacker = TransformStack.of(stack);
-			stacker.center();
-			if (dir.getAxis() == Direction.Axis.X)
-				stacker.rotateYDegrees(90);
-			if (dir.getAxis() == Direction.Axis.Y)
-				stacker.rotateXDegrees(90);
-			stacker.rotateXDegrees(90);
-			stacker.uncenter();
-			return stack;
-		};
-
-		SuperByteBuffer superBuffer =
-			CachedBuffers.partialDirectional(AllPartialModels.BELT_PULLEY, blockState, dir, matrixStackSupplier);
-		KineticBlockEntityRenderer.standardKineticRotationTransform(superBuffer, be, light)
-			.renderInto(ms, vb);
 	}
 }

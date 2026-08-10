@@ -12,6 +12,15 @@
       "conditions": [
         {
           "condition": "minecraft:survives_explosion"
+        },
+        {
+          "condition": "minecraft:block_state_property",
+          "block": "create_biotech:giant_frog",
+          "properties": {
+            "x": "1",
+            "y": "0",
+            "z": "1"
+          }
         }
       ]
     }

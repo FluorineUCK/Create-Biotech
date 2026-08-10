@@ -4,7 +4,6 @@ import net.minecraft.core.registries.Registries;
 
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodGoalHandler;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerArmInteractions;
-import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
 import com.nobodiiiii.createbiotech.content.bufferpad.BufferPadMovementBehaviour;
 import com.nobodiiiii.createbiotech.content.experience.ExperienceOpenPipeEffectHandler;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultCompat;
@@ -13,7 +12,10 @@ import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSlimeSpawning;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastBalloonRopeShearsInteraction;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmMovingInteraction;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmMovementBehaviour;
+import com.nobodiiiii.createbiotech.data.CBDataGenerators;
+import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.network.CBPackets;
+import com.nobodiiiii.createbiotech.registry.CBArmInteractionPointTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBCapabilities;
@@ -21,13 +23,16 @@ import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBContraptionTypes;
 import com.nobodiiiii.createbiotech.registry.CBCreativeModeTabs;
 import com.nobodiiiii.createbiotech.registry.CBDataComponents;
+import com.nobodiiiii.createbiotech.registry.CBDisplaySources;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBFluids;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.nobodiiiii.createbiotech.registry.CBIngredients;
 import com.nobodiiiii.createbiotech.registry.CBMenuTypes;
+import com.nobodiiiii.createbiotech.registry.CBMobEffects;
 import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
 import com.nobodiiiii.createbiotech.registry.CBPoiTypes;
+import com.nobodiiiii.createbiotech.registry.CBPotions;
 import com.nobodiiiii.createbiotech.registry.CBRecipeTypes;
 import com.nobodiiiii.createbiotech.registry.CBRecipeConditions;
 import com.simibubi.create.AllBlocks;
@@ -67,7 +72,9 @@ public class CreateBiotech {
 		CBParticleTypes.register(modEventBus);
 		CBRecipeConditions.register(modEventBus);
 		CBRecipeTypes.register(modEventBus);
-		ButterCatModule.init(modEventBus);
+		CBMobEffects.register(modEventBus);
+		CBPotions.register(modEventBus);
+		modEventBus.addListener(CBDataGenerators::gatherData);
 		modEventBus.addListener(CreateBiotech::onCommonSetup);
 		modEventBus.addListener(CreateBiotech::onRegister);
 		CBPackets.register();
@@ -88,6 +95,8 @@ public class CreateBiotech {
 
 	private static void onCommonSetup(FMLCommonSetupEvent event) {
 		event.enqueueWork(() -> {
+			CBMultiBlockLifecycle.registerMovementChecks();
+			CBDisplaySources.register();
 			ExperienceOpenPipeEffectHandler.register();
 			ExplosionProofItemVaultCompat.register();
 			BlockStressValues.IMPACTS.register(CBBlocks.EXPERIENCE_PUMP.get(), () -> 4.0d);
@@ -95,6 +104,8 @@ public class CreateBiotech {
 				() -> BlockStressValues.getCapacity(AllBlocks.LARGE_WATER_WHEEL.get()));
 			BlockStressValues.RPM.register(CBBlocks.AUTOMATIC_FISH_RELEASE_MACHINE.get(),
 				new BlockStressValues.GeneratedRpm(4, false));
+			CBBlocks.registerButterCatStressValues();
+			CBFluids.registerCreamDispenseBehavior();
 			MovementBehaviour.REGISTRY.register(CBBlocks.GHAST_HELM.get(), new GhastHelmMovementBehaviour());
 			BufferPadMovementBehaviour bufferPadMovementBehaviour = new BufferPadMovementBehaviour();
 			for (DyeColor color : DyeColor.values())
@@ -108,6 +119,7 @@ public class CreateBiotech {
 
 	private static void onRegister(RegisterEvent event) {
 		ShulkerPackagerArmInteractions.register();
+		CBArmInteractionPointTypes.register();
 		CBContraptionTypes.init();
 	}
 

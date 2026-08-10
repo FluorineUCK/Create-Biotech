@@ -1,11 +1,18 @@
 package com.nobodiiiii.createbiotech.content.powerbelt;
 
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.client.PowerBeltClientReporter;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltTransform;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainBlock;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementBlock;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -13,7 +20,8 @@ import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
-import com.simibubi.create.content.fluids.transfer.GenericItemEmptying;
+import com.simibubi.create.api.contraption.transformable.TransformableBlock;
+import com.simibubi.create.content.contraptions.StructureTransform;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltBlock;
@@ -25,10 +33,12 @@ import com.simibubi.create.content.logistics.funnel.FunnelBlock;
 import com.simibubi.create.content.logistics.tunnel.BeltTunnelBlock;
 import com.simibubi.create.foundation.block.IBE;
 import com.simibubi.create.foundation.block.ProperWaterloggedBlock;
-import com.yision.allay.block.allayport.AllayPortBlock;
+import com.simibubi.create.foundation.block.render.MultiPosDestructionHandler;
+import com.simibubi.create.foundation.block.render.ReducedDestroyEffects;
 
 import dev.ryanhcode.sable.companion.SubLevelAccess;
 
+import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
@@ -51,6 +61,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
@@ -63,7 +74,6 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.BooleanProperty;
 import net.minecraft.world.level.block.state.properties.Property;
 import net.minecraft.world.level.material.FluidState;
-import net.minecraft.world.level.material.Fluids;
 import net.minecraft.world.level.pathfinder.PathType;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.level.storage.loot.LootParams;
@@ -76,8 +86,11 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.api.distmarker.OnlyIn;
+import net.neoforged.neoforge.client.extensions.common.IClientBlockExtensions;
 
-public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock {
+public class PowerBeltBlock extends HorizontalKineticBlock
+	implements IBE<PowerBeltBlockEntity>, ProperWaterloggedBlock, TransformableBlock, CBBeltPlacementBlock {
 
 	public static final Property<BeltSlope> SLOPE = BeltBlock.SLOPE;
 	public static final Property<BeltPart> PART = BeltBlock.PART;
@@ -90,6 +103,31 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 			.setValue(PART, BeltPart.PULLEY)
 			.setValue(CASING, false)
 			.setValue(WATERLOGGED, false));
+	}
+
+	@Override
+	public Property<BeltSlope> createBiotech$slopeProperty() {
+		return SLOPE;
+	}
+
+	@Override
+	public Property<BeltPart> createBiotech$partProperty() {
+		return PART;
+	}
+
+	@Override
+	public ItemStack createBiotech$connectorStack() {
+		return new ItemStack(CBItems.POWER_BELT_CONNECTOR.get());
+	}
+
+	@Override
+	public void createBiotech$createChain(Level level, BlockPos start, BlockPos end) {
+		PowerBeltConnectorItem.createBelts(level, start, end);
+	}
+
+	@OnlyIn(Dist.CLIENT)
+	public void initializeClient(Consumer<IClientBlockExtensions> consumer) {
+		consumer.accept(new RenderProperties());
 	}
 
 	@Override
@@ -248,13 +286,6 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 
 		boolean isWrench = AllItems.WRENCH.isIn(heldItem);
 		boolean isConnector = CBItems.isPowerBeltConnector(heldItem);
-		boolean hasWater = GenericItemEmptying.emptyItem(world, heldItem, true)
-			.getFirst()
-			.getFluid()
-			.isSame(Fluids.WATER);
-
-		if (hasWater)
-			return InteractionResult.PASS;
 		if (isConnector)
 			return PowerBeltSlicer.useConnector(state, world, pos, player, hand, hit, new PowerBeltSlicer.Feedback());
 		if (isWrench)
@@ -361,26 +392,28 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 		if (!isPowerBelt(state))
 			return;
 
-		int limit = 1000;
-		BlockPos currentPos = pos;
-		while (limit-- > 0) {
-			BlockState currentState = world.getBlockState(currentPos);
-			if (!isPowerBelt(currentState)) {
+		CBBeltChain.WalkResult backward =
+			CBBeltChain.walk(world, pos, false, CBBeltChain.MAX_SEGMENTS);
+		if (!backward.complete()) {
+			if (backward.status() == CBBeltChain.WalkStatus.INVALID
+				|| backward.status() == CBBeltChain.WalkStatus.TOO_LONG)
 				world.destroyBlock(pos, true);
-				return;
-			}
-			BlockPos nextSegmentPosition = nextSegmentPosition(currentState, currentPos, false);
-			if (nextSegmentPosition == null)
-				break;
-			if (!world.isLoaded(nextSegmentPosition))
-				return;
-			if (!sameSpace(world, pos, nextSegmentPosition))
-				return;
-			currentPos = nextSegmentPosition;
+			return;
 		}
+		BlockPos currentPos = backward.lastPosition();
+		if (currentPos == null)
+			return;
 
 		int index = 0;
-		List<BlockPos> beltChain = getBeltChain(world, currentPos);
+		CBBeltChain.WalkResult forward =
+			CBBeltChain.walk(world, currentPos, true, CBBeltChain.MAX_SEGMENTS);
+		if (!forward.complete()) {
+			if (forward.status() == CBBeltChain.WalkStatus.INVALID
+				|| forward.status() == CBBeltChain.WalkStatus.TOO_LONG)
+				world.destroyBlock(currentPos, true);
+			return;
+		}
+		List<BlockPos> beltChain = forward.positions();
 		if (beltChain.size() < 2) {
 			world.destroyBlock(currentPos, true);
 			return;
@@ -429,8 +462,8 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 			BlockState shaftState = AllBlocks.SHAFT.getDefaultState()
 				.setValue(BlockStateProperties.AXIS, getRotationAxis(currentState));
 			world.setBlock(currentPos,
-				ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), 3);
-			world.levelEvent(2001, currentPos, Block.getId(currentState));
+				ProperWaterloggedBlock.withWater(world, hasPulley ? shaftState : Blocks.AIR.defaultBlockState(), currentPos), Block.UPDATE_ALL);
+			world.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, currentPos, Block.getId(currentState));
 		}
 	}
 
@@ -466,8 +499,6 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 			return false;
 		if (blockState.getBlock() instanceof BeltTunnelBlock)
 			return false;
-		if (blockState.getBlock() instanceof AllayPortBlock)
-			return false;
 		return true;
 	}
 
@@ -492,41 +523,11 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 	}
 
 	public static List<BlockPos> getBeltChain(LevelAccessor world, BlockPos controllerPos) {
-		List<BlockPos> positions = new LinkedList<>();
-		BlockState blockState = world.getBlockState(controllerPos);
-		if (!isPowerBelt(blockState))
-			return positions;
-
-		int limit = 1000;
-		BlockPos current = controllerPos;
-		while (limit-- > 0 && current != null) {
-			if (!sameSpace(world, controllerPos, current))
-				break;
-			if (world instanceof Level level && !level.isLoaded(current))
-				break;
-			BlockState state = world.getBlockState(current);
-			if (!isPowerBelt(state))
-				break;
-			positions.add(current);
-			current = nextSegmentPosition(state, current, true);
-		}
-		return positions;
+		return CBBeltChain.getBeltChain(world, controllerPos, 1000);
 	}
 
 	public static BlockPos nextSegmentPosition(BlockState state, BlockPos pos, boolean forward) {
-		Direction direction = state.getValue(HORIZONTAL_FACING);
-		BeltSlope slope = state.getValue(SLOPE);
-		BeltPart part = state.getValue(PART);
-		int offset = forward ? 1 : -1;
-
-		if (part == BeltPart.END && forward || part == BeltPart.START && !forward)
-			return null;
-		if (slope == BeltSlope.VERTICAL)
-			return pos.above(direction.getAxisDirection() == AxisDirection.POSITIVE ? offset : -offset);
-		pos = pos.relative(direction, offset);
-		if (slope != BeltSlope.HORIZONTAL && slope != BeltSlope.SIDEWAYS)
-			return pos.above(slope == BeltSlope.UPWARD ? offset : -offset);
-		return pos;
+		return CBBeltChain.nextSegmentPosition(state, pos, forward);
 	}
 
 	@Override
@@ -543,6 +544,15 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 				return rotated.setValue(PART, BeltPart.START);
 		}
 		return rotated;
+	}
+
+	@Override
+	public BlockState transform(BlockState state, StructureTransform transform) {
+		if (transform.mirror != null)
+			state = mirror(state, transform.mirror);
+		if (transform.rotationAxis == Axis.Y)
+			return rotate(state, transform.rotation);
+		return CBBeltTransform.transformInner(state, transform, SLOPE);
 	}
 
 	@Nullable
@@ -581,5 +591,15 @@ public class PowerBeltBlock extends HorizontalKineticBlock implements IBE<PowerB
 
 	public static boolean isPowerBelt(BlockState state) {
 		return state.is(CBBlocks.POWER_BELT.get());
+	}
+
+	public static class RenderProperties extends ReducedDestroyEffects implements MultiPosDestructionHandler {
+		@Override
+		public Set<BlockPos> getExtraPositions(ClientLevel level, BlockPos pos, BlockState blockState, int progress) {
+			BlockEntity blockEntity = level.getBlockEntity(pos);
+			if (blockEntity instanceof PowerBeltBlockEntity belt)
+				return new HashSet<>(PowerBeltBlock.getBeltChain(level, belt.getController()));
+			return null;
+		}
 	}
 }

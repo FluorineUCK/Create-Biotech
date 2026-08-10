@@ -138,9 +138,9 @@ Java 17 / Windows
 
 ### 工作包 2D：客户端类加载
 
-- `ModPartialModels.init()` 移到 Butter Cat client init；
-- common block entity不返回 `PartialModel`；
-- dedicated server smoke确认无 client-only class load。
+- [x] 删除 Butter Cat 独立 `ModPartialModels`/module 初始化，模型声明和注册移到主客户端入口；
+- [x] common block entity不再返回 `PartialModel`，由 renderer、visual 和 JEI 客户端映射模型；
+- [ ] dedicated server smoke确认无 client-only class load。
 
 验收：dedicated server可启动，required Mixin全部应用，集成服务器重开无跨世界状态。
 

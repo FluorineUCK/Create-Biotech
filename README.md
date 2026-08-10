@@ -27,6 +27,7 @@ This README is mainly for contributors and AI coding agents. If you want a playe
 ./gradlew runServer                 # launch dev server
 ./gradlew runData                   # regenerate datagen output
 ./gradlew quickPlayClient -Pinstance=<name>   # build + copy + launch external instance via test.py
+./gradlew quickPlaySmoke -Pinstance=<name>    # enter a world, verify the log marker, then stop the client
 ```
 
 ## Repository layout

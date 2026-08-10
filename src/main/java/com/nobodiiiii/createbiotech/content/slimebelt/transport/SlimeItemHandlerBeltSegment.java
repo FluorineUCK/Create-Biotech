@@ -1,14 +1,13 @@
 package com.nobodiiiii.createbiotech.content.slimebelt.transport;
 
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
-import com.simibubi.create.foundation.item.ItemHelper;
+import com.nobodiiiii.createbiotech.content.beltsurface.AbstractItemHandlerBeltSegment;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
 
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
-import net.neoforged.neoforge.items.IItemHandler;
 
-public class SlimeItemHandlerBeltSegment implements IItemHandler {
+public class SlimeItemHandlerBeltSegment extends AbstractItemHandlerBeltSegment {
 
 	private final SlimeBeltInventory beltInventory;
 	private final int offset;
@@ -21,62 +20,30 @@ public class SlimeItemHandlerBeltSegment implements IItemHandler {
 	}
 
 	@Override
-	public int getSlots() {
-		return 1;
+	protected TransportedItemStack getTransportedStack() {
+		return beltInventory.getStackAtOffset(offset, side);
 	}
 
 	@Override
-	public ItemStack getStackInSlot(int slot) {
-		TransportedItemStack stackAtOffset = this.beltInventory.getStackAtOffset(offset, side);
-		if (stackAtOffset == null)
-			return ItemStack.EMPTY;
-		return stackAtOffset.stack;
+	protected boolean canInsert() {
+		return beltInventory.canInsertAtFromSide(offset, side);
 	}
 
 	@Override
-	public ItemStack insertItem(int slot, ItemStack stack, boolean simulate) {
-		if (this.beltInventory.canInsertAtFromSide(offset, side)) {
-			ItemStack remainder = ItemHelper.limitCountToMaxStackSize(stack, simulate);
-			if (!simulate) {
-				TransportedItemStack newStack = new TransportedItemStack(stack);
-				this.beltInventory.prepareInsertedItem(newStack, offset, side);
-				this.beltInventory.addItem(newStack);
-				SlimeBeltBlockEntity belt = this.beltInventory.belt;
-				belt.setChanged();
-				belt.sendData();
-			}
-			return remainder;
-		}
-		return stack;
+	protected void insertTransportedStack(ItemStack stack) {
+		TransportedItemStack transported = new TransportedItemStack(stack);
+		beltInventory.prepareInsertedItem(transported, offset, side);
+		beltInventory.addItem(transported);
+		SlimeBeltBlockEntity belt = beltInventory.belt;
+		belt.setChanged();
+		belt.sendData();
 	}
 
 	@Override
-	public ItemStack extractItem(int slot, int amount, boolean simulate) {
-		TransportedItemStack transported = this.beltInventory.getStackAtOffset(offset, side);
-		if (transported == null)
-			return ItemStack.EMPTY;
-
-		amount = Math.min(amount, transported.stack.getCount());
-		ItemStack extracted = simulate ? transported.stack.copy()
-			.split(amount) : transported.stack.split(amount);
-		if (!simulate) {
-			if (transported.stack.isEmpty())
-				beltInventory.toRemove.add(transported);
-			else
-				beltInventory.belt.notifyUpdate();
-		}
-
-		return extracted;
+	protected void onExtracted(TransportedItemStack transported, boolean emptied) {
+		if (emptied)
+			beltInventory.toRemove.add(transported);
+		else
+			beltInventory.belt.notifyUpdate();
 	}
-
-	@Override
-	public int getSlotLimit(int slot) {
-		return Math.min(getStackInSlot(slot).getMaxStackSize(), 64);
-	}
-
-	@Override
-	public boolean isItemValid(int slot, ItemStack stack) {
-		return true;
-	}
-
 }

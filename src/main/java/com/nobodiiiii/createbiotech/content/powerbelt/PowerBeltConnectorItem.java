@@ -1,12 +1,12 @@
 package com.nobodiiiii.createbiotech.content.powerbelt;
 
-import java.util.LinkedList;
 import java.util.List;
-import java.util.UUID;
 
 import javax.annotation.Nonnull;
 
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltConnectorGeometry;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltConnectorSelection;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
@@ -22,9 +22,7 @@ import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
-import net.minecraft.core.Direction.AxisDirection;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtUtils;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
@@ -37,10 +35,6 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 
 public class PowerBeltConnectorItem extends BlockItem {
-	private static final String FIRST_PULLEY = "FirstPulley";
-	private static final String FIRST_PULLEY_DIMENSION = "FirstPulleyDimension";
-	private static final String FIRST_PULLEY_SUBLEVEL = "FirstPulleySubLevel";
-
 	public PowerBeltConnectorItem(Properties properties) {
 		super(CBBlocks.POWER_BELT.get(), properties);
 	}
@@ -71,14 +65,10 @@ public class PowerBeltConnectorItem extends BlockItem {
 		CompoundTag tag = CBItemData.getOrEmpty(context.getItemInHand());
 		BlockPos firstPulley = null;
 
-		if (tag.contains(FIRST_PULLEY)) {
-			firstPulley = NbtUtils.readBlockPos(tag, FIRST_PULLEY).orElse(null);
-			UUID storedSubLevelId = tag.hasUUID(FIRST_PULLEY_SUBLEVEL) ? tag.getUUID(FIRST_PULLEY_SUBLEVEL) : null;
-			boolean validBinding = firstPulley != null
-				&& level.dimension().location().toString().equals(tag.getString(FIRST_PULLEY_DIMENSION))
-				&& SubLevelCompat.matchesSpace(level, firstPulley, storedSubLevelId);
-			if (!validBinding || !validateAxis(level, firstPulley)
-				|| !firstPulley.closerThan(pos, maxLength() * 2)) {
+		if (tag.contains(CBBeltConnectorSelection.POSITION)) {
+			firstPulley = CBBeltConnectorSelection.readValid(tag, level, pos, maxLength() * 2,
+				candidate -> validateAxis(level, candidate));
+			if (firstPulley == null) {
 				CBItemData.set(context.getItemInHand(), null);
 				tag = new CompoundTag();
 				firstPulley = null;
@@ -88,7 +78,7 @@ public class PowerBeltConnectorItem extends BlockItem {
 		if (!validAxis || player == null)
 			return InteractionResult.FAIL;
 
-		if (tag.contains(FIRST_PULLEY)) {
+		if (tag.contains(CBBeltConnectorSelection.POSITION)) {
 			if (!canConnect(level, firstPulley, pos))
 				return InteractionResult.FAIL;
 
@@ -108,13 +98,7 @@ public class PowerBeltConnectorItem extends BlockItem {
 			return InteractionResult.SUCCESS;
 		}
 
-		tag.put(FIRST_PULLEY, NbtUtils.writeBlockPos(pos));
-		tag.putString(FIRST_PULLEY_DIMENSION, level.dimension().location().toString());
-		UUID subLevelId = SubLevelCompat.getSpaceId(level, pos);
-		if (subLevelId != null)
-			tag.putUUID(FIRST_PULLEY_SUBLEVEL, subLevelId);
-		else
-			tag.remove(FIRST_PULLEY_SUBLEVEL);
+		CBBeltConnectorSelection.write(tag, level, pos);
 		CBItemData.set(context.getItemInHand(), tag);
 		player.getCooldowns()
 			.addCooldown(this, 5);
@@ -128,8 +112,8 @@ public class PowerBeltConnectorItem extends BlockItem {
 			.scale(.5f)), SoundEvents.WOOL_PLACE, SoundSource.BLOCKS, .5f, 1f);
 
 		BeltSlope slope = BeltSlope.HORIZONTAL;
-		Direction facing = getFacingFromTo(start, end);
-		List<BlockPos> beltsToCreate = getBeltChainBetween(start, end, facing);
+		Direction facing = CBBeltConnectorGeometry.facingFromTo(start, end);
+		List<BlockPos> beltsToCreate = CBBeltConnectorGeometry.chainBetween(start, end, slope, facing);
 		BlockState beltState = CBBlocks.POWER_BELT.get()
 			.defaultBlockState();
 		boolean failed = false;
@@ -163,28 +147,6 @@ public class PowerBeltConnectorItem extends BlockItem {
 			if (level.getBlockState(currentPos)
 				.is(CBBlocks.POWER_BELT.get()))
 				level.destroyBlock(currentPos, false);
-	}
-
-	private static Direction getFacingFromTo(BlockPos start, BlockPos end) {
-		Axis beltAxis = start.getX() == end.getX() ? Axis.Z : Axis.X;
-		BlockPos diff = end.subtract(start);
-		AxisDirection axisDirection =
-			beltAxis.choose(diff.getX(), 0, diff.getZ()) > 0 ? AxisDirection.POSITIVE : AxisDirection.NEGATIVE;
-		return Direction.get(axisDirection, beltAxis);
-	}
-
-	private static List<BlockPos> getBeltChainBetween(BlockPos start, BlockPos end, Direction direction) {
-		List<BlockPos> positions = new LinkedList<>();
-		int limit = 1000;
-		BlockPos current = start;
-
-		do {
-			positions.add(current);
-			current = current.relative(direction);
-		} while (!current.equals(end) && limit-- > 0);
-
-		positions.add(end);
-		return positions;
 	}
 
 	public static boolean canConnect(Level level, BlockPos first, BlockPos second) {

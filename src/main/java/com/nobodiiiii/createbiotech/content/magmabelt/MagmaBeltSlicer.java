@@ -3,11 +3,12 @@ package com.nobodiiiii.createbiotech.content.magmabelt;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Optional;
 
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllItems;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChain;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltSlicer;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity.CasingType;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
@@ -33,10 +34,10 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -92,6 +93,8 @@ public class MagmaBeltSlicer {
 
 			MagmaBeltInventory inventory = controllerBE.inventory;
 			BlockPos next = part == BeltPart.END ? pos.subtract(beltVector) : pos.offset(beltVector);
+			if (!CBBeltChain.isLoadedInSameSpace(world, pos, next))
+				return InteractionResult.FAIL;
 			BlockState replacedState = world.getBlockState(next);
 			MagmaBeltBlockEntity segmentBE = MagmaBeltHelper.getSegmentBE(world, next);
 			KineticBlockEntity.switchToBlockState(world, next, ProperWaterloggedBlock.withWater(world,
@@ -99,7 +102,7 @@ public class MagmaBeltSlicer {
 			world.setBlock(pos, ProperWaterloggedBlock.withWater(world, Blocks.AIR.defaultBlockState(), pos),
 				Block.UPDATE_ALL | Block.UPDATE_MOVE_BY_PISTON);
 			world.removeBlockEntity(pos);
-			world.levelEvent(2001, pos, Block.getId(state));
+			world.levelEvent(LevelEvent.PARTICLES_DESTROY_BLOCK, pos, Block.getId(state));
 
 			if (!creative && MagmaBeltBlock.isMagmaBelt(replacedState)
 				&& replacedState.getValue(MagmaBeltBlock.PART) == BeltPart.PULLEY)
@@ -149,61 +152,27 @@ public class MagmaBeltSlicer {
 			.subtract(centerOf);
 		boolean towardPositive = subtract.dot(Vec3.atLowerCornerOf(beltVector)) > 0;
 		BlockPos next = !towardPositive ? pos.subtract(beltVector) : pos.offset(beltVector);
+		if (!CBBeltChain.isLoadedInSameSpace(world, pos, next))
+			return InteractionResult.FAIL;
 
 		if (hitSegment == 0 || hitSegment == 1 && !towardPositive)
 			return InteractionResult.FAIL;
 		if (hitSegment == controllerBE.beltLength - 1 || hitSegment == controllerBE.beltLength - 2 && towardPositive)
 			return InteractionResult.FAIL;
 
-		// Look for shafts
-		if (!creative) {
-			int requiredShafts = 0;
-			if (!segmentBE.hasPulley())
-				requiredShafts++;
-			BlockState other = world.getBlockState(next);
-			if (MagmaBeltBlock.isMagmaBelt(other) && other.getValue(MagmaBeltBlock.PART) == BeltPart.MIDDLE)
-				requiredShafts++;
+		int requiredShafts = (segmentBE.hasPulley() ? 0 : 1)
+			+ (MagmaBeltBlock.isMagmaBelt(world.getBlockState(next))
+				&& world.getBlockState(next).getValue(MagmaBeltBlock.PART) == BeltPart.MIDDLE ? 1 : 0);
+		if (!creative && !CBBeltSlicer.hasSplitMaterials(player,
+			stack -> stack.is(CBItems.MAGMA_BELT_CONNECTOR.get()), requiredShafts))
+			return InteractionResult.FAIL;
+		if (world.isClientSide)
+			return InteractionResult.SUCCESS;
+		if (!creative)
+			CBBeltSlicer.consumeSplitMaterials(player, stack -> stack.is(CBItems.MAGMA_BELT_CONNECTOR.get()),
+				requiredShafts);
 
-			int amountRetrieved = 0;
-			boolean beltFound = false;
-			Search:
-			while (true) {
-				for (int i = 0; i < player.getInventory().getContainerSize(); ++i) {
-					if (amountRetrieved == requiredShafts && beltFound)
-						break Search;
-
-					ItemStack itemstack = player.getInventory().getItem(i);
-					if (itemstack.isEmpty())
-						continue;
-					int count = itemstack.getCount();
-
-					if (itemstack.is(CBItems.MAGMA_BELT_CONNECTOR.get()) && !beltFound) {
-						if (!world.isClientSide)
-							itemstack.shrink(1);
-						beltFound = true;
-						continue;
-					}
-
-					if (AllBlocks.SHAFT.isIn(itemstack)) {
-						int taken = Math.min(count, requiredShafts - amountRetrieved);
-						if (!world.isClientSide)
-							if (taken == count)
-								player.getInventory().setItem(i, ItemStack.EMPTY);
-							else
-								itemstack.shrink(taken);
-						amountRetrieved += taken;
-					}
-				}
-
-				if (!world.isClientSide){
-					player.getInventory().placeItemBackInInventory(AllBlocks.SHAFT.asStack(amountRetrieved));
-					if (beltFound) player.getInventory().placeItemBackInInventory(new ItemStack(CBItems.MAGMA_BELT_CONNECTOR.get()));
-				}
-				return InteractionResult.FAIL;
-			}
-		}
-
-		if (!world.isClientSide) {
+		{
 			for (BlockPos blockPos : beltChain) {
 				MagmaBeltBlockEntity belt = MagmaBeltHelper.getSegmentBE(world, blockPos);
 				if (belt == null)
@@ -263,6 +232,8 @@ public class MagmaBeltSlicer {
 			return InteractionResult.PASS;
 
 		BlockPos next = part == BeltPart.START ? pos.subtract(beltVector) : pos.offset(beltVector);
+		if (!CBBeltChain.isLoadedInSameSpace(world, pos, next))
+			return InteractionResult.FAIL;
 		MagmaBeltBlockEntity mergedController = null;
 		int mergedBeltLength = 0;
 
@@ -284,7 +255,6 @@ public class MagmaBeltSlicer {
 
 			if (!world.isClientSide) {
 				boolean flipBelt = facing != nextState.getValue(MagmaBeltBlock.HORIZONTAL_FACING);
-				Optional<DyeColor> color = controllerBE.color;
 				for (BlockPos blockPos : MagmaBeltBlock.getBeltChain(world, mergedController.getBlockPos())) {
 					MagmaBeltBlockEntity belt = MagmaBeltHelper.getSegmentBE(world, blockPos);
 					if (belt == null)
@@ -292,7 +262,6 @@ public class MagmaBeltSlicer {
 					belt.detachKinetics();
 					belt.invalidateItemHandler();
 					belt.beltLength = 0;
-					belt.color = color;
 					if (flipBelt)
 						world.setBlock(blockPos, flipBelt(world.getBlockState(blockPos)), Block.UPDATE_ALL | Block.UPDATE_MOVE_BY_PISTON);
 				}
@@ -306,6 +275,8 @@ public class MagmaBeltSlicer {
 							mergedBeltLength - transportedItemStack.prevBeltPosition;
 					}
 				}
+
+				beltChain = MagmaBeltBlock.getBeltChain(world, mergedController.getBlockPos());
 			}
 		}
 
@@ -328,8 +299,6 @@ public class MagmaBeltSlicer {
 					ProperWaterloggedBlock.withWater(world, state.setValue(MagmaBeltBlock.CASING, false), next),
 					Block.UPDATE_ALL | Block.UPDATE_MOVE_BY_PISTON);
 				MagmaBeltBlockEntity segmentBE = MagmaBeltHelper.getSegmentBE(world, next);
-				if (segmentBE != null)
-					segmentBE.color = controllerBE.color;
 				world.playSound(null, pos, SoundEvents.WOOL_PLACE,
 					player == null ? SoundSource.BLOCKS : SoundSource.PLAYERS, 0.5F, 1F);
 
@@ -356,6 +325,13 @@ public class MagmaBeltSlicer {
 				if (!creative) {
 					player.getInventory().placeItemBackInInventory(AllBlocks.SHAFT.asStack(2));
 					player.getInventory().placeItemBackInInventory(new ItemStack(CBItems.MAGMA_BELT_CONNECTOR.get()));
+				}
+
+				for (BlockPos blockPos : MagmaBeltBlock.getBeltChain(world, controllerBE.getBlockPos())) {
+					MagmaBeltBlockEntity belt = MagmaBeltHelper.getSegmentBE(world, blockPos);
+					if (belt == null)
+						continue;
+					belt.invalidateItemHandler();
 				}
 
 				// Transfer items to other controller
@@ -400,54 +376,15 @@ public class MagmaBeltSlicer {
 	}
 
 	static boolean beltStatesCompatible(BlockState state, BlockState nextState) {
-		Direction facing1 = state.getValue(MagmaBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope1 = state.getValue(MagmaBeltBlock.SLOPE);
-		Direction facing2 = nextState.getValue(MagmaBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope2 = nextState.getValue(MagmaBeltBlock.SLOPE);
-
-		switch (slope1) {
-			case UPWARD:
-				if (slope2 == BeltSlope.DOWNWARD)
-					return facing1 == facing2.getOpposite();
-				return slope2 == slope1 && facing1 == facing2;
-			case DOWNWARD:
-				if (slope2 == BeltSlope.UPWARD)
-					return facing1 == facing2.getOpposite();
-				return slope2 == slope1 && facing1 == facing2;
-			default:
-				return slope2 == slope1 && facing2.getAxis() == facing1.getAxis();
-		}
+		return CBBeltSlicer.beltStatesCompatible(state, nextState);
 	}
 
 	static BlockState flipBelt(BlockState state) {
-		Direction facing = state.getValue(MagmaBeltBlock.HORIZONTAL_FACING);
-		BeltSlope slope = state.getValue(MagmaBeltBlock.SLOPE);
-		BeltPart part = state.getValue(MagmaBeltBlock.PART);
-
-		if (slope == BeltSlope.UPWARD)
-			state = state.setValue(MagmaBeltBlock.SLOPE, BeltSlope.DOWNWARD);
-		else if (slope == BeltSlope.DOWNWARD)
-			state = state.setValue(MagmaBeltBlock.SLOPE, BeltSlope.UPWARD);
-
-		if (part == BeltPart.END)
-			state = state.setValue(MagmaBeltBlock.PART, BeltPart.START);
-		else if (part == BeltPart.START)
-			state = state.setValue(MagmaBeltBlock.PART, BeltPart.END);
-
-		return state.setValue(MagmaBeltBlock.HORIZONTAL_FACING, facing.getOpposite());
+		return CBBeltSlicer.flipBelt(state);
 	}
 
 	static boolean hoveringEnd(BlockState state, BlockHitResult hit) {
-		BeltPart part = state.getValue(MagmaBeltBlock.PART);
-		if (part == BeltPart.MIDDLE || part == BeltPart.PULLEY)
-			return false;
-
-		Vec3 beltVector = MagmaBeltHelper.getBeltVector(state);
-		Vec3 centerOf = VecHelper.getCenterOf(hit.getBlockPos());
-		Vec3 subtract = hit.getLocation()
-			.subtract(centerOf);
-
-		return subtract.dot(beltVector) > 0 == (part == BeltPart.END);
+		return CBBeltSlicer.hoveringEnd(state, hit, MagmaBeltHelper.getBeltVector(state));
 	}
 
 	@OnlyIn(Dist.CLIENT)

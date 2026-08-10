@@ -16,6 +16,7 @@ import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
 import com.simibubi.create.foundation.render.ShadowRenderHelper;
 
+import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import dev.engine_room.flywheel.lib.transform.TransformStack;
 import net.createmod.catnip.animation.AnimationTickHolder;
@@ -46,6 +47,7 @@ import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.LoopSection;
+import com.nobodiiiii.createbiotech.client.render.CBBeltRenderHelper;
 
 public class SlimeBeltRenderer extends SafeBlockEntityRenderer<SlimeBeltBlockEntity> {
 
@@ -69,92 +71,15 @@ public class SlimeBeltRenderer extends SafeBlockEntityRenderer<SlimeBeltBlockEnt
 		if (!blockState.is(com.nobodiiiii.createbiotech.registry.CBBlocks.SLIME_BELT.get()))
 			return;
 
-		BeltSlope beltSlope = blockState.getValue(SlimeBeltBlock.SLOPE);
-		BeltPart part = blockState.getValue(SlimeBeltBlock.PART);
-		Direction facing = blockState.getValue(SlimeBeltBlock.HORIZONTAL_FACING);
-		AxisDirection axisDirection = facing.getAxisDirection();
-
-		boolean downward = beltSlope == BeltSlope.DOWNWARD;
-		boolean upward = beltSlope == BeltSlope.UPWARD;
-		boolean diagonal = downward || upward;
-		boolean start = part == BeltPart.START;
-		boolean end = part == BeltPart.END;
-		boolean sideways = beltSlope == BeltSlope.SIDEWAYS;
-		boolean alongX = facing.getAxis() == Direction.Axis.X;
-
-		PoseStack localTransforms = new PoseStack();
-		if (beltSlope == BeltSlope.VERTICAL)
-			localTransforms.translate(0, -SlimeBeltLoopGeometry.VERTICAL_BELT_DROP, 0);
-		var msr = TransformStack.of(localTransforms);
-		VertexConsumer vb = buffer.getBuffer(RenderType.solid());
-		float renderTick = AnimationTickHolder.getRenderTime(be.getLevel());
-
-		msr.center()
-			.rotateYDegrees(AngleHelper.horizontalAngle(facing) + (upward ? 180 : 0) + (sideways ? 270 : 0))
-			.rotateZDegrees(sideways ? 90 : 0)
-			.rotateXDegrees(!diagonal && beltSlope != BeltSlope.HORIZONTAL ? 90 : 0)
-			.uncenter();
-
-		if (downward || beltSlope == BeltSlope.VERTICAL && axisDirection == AxisDirection.POSITIVE) {
-			boolean swap = start;
-			start = end;
-			end = swap;
-		}
-
-		for (boolean bottom : Iterate.trueAndFalse) {
-			PartialModel beltPartial = BeltRenderer.getBeltPartial(diagonal, start, end, bottom);
-			SuperByteBuffer beltBuffer = CachedBuffers.partial(beltPartial, blockState)
-				.light(light);
-
-			SpriteShiftEntry spriteShift = getSpriteShiftEntry(diagonal, bottom);
-			float speed = be.getSpeed();
-			double scroll = bottom ? 0.5 : 0.0;
-			if (speed != 0) {
-				float time = renderTick * axisDirection.getStep();
-				if (diagonal && (downward ^ alongX) || !diagonal && alongX)
-					speed = -speed;
-
-				scroll += speed * time / (31.5 * 16);
-			}
-			float scrollMult = diagonal ? 3f / 8f : 0.5f;
-			TextureAtlasSprite originalSprite = spriteShift.getOriginal();
-			TextureAtlasSprite targetSprite = spriteShift.getTarget();
-			if (originalSprite != null && targetSprite != null) {
-				float spriteSize = targetSprite.getV1() - targetSprite.getV0();
-				scroll = scroll - Math.floor(scroll);
-				scroll = scroll * spriteSize * scrollMult;
-				beltBuffer.shiftUVScrolling(spriteShift, (float) scroll);
-			}
-
-			beltBuffer.transform(localTransforms).renderInto(ms, vb);
-			if (diagonal)
-				break;
-		}
-
-		if (be.hasPulley()) {
-			Direction dir = sideways ? Direction.UP : blockState.getValue(SlimeBeltBlock.HORIZONTAL_FACING).getClockWise();
-			Supplier<PoseStack> matrixStackSupplier = () -> {
-				PoseStack stack = new PoseStack();
-				var stacker = TransformStack.of(stack);
-				stacker.center();
-				if (dir.getAxis() == Direction.Axis.X)
-					stacker.rotateYDegrees(90);
-				if (dir.getAxis() == Direction.Axis.Y)
-					stacker.rotateXDegrees(90);
-				stacker.rotateXDegrees(90);
-				stacker.uncenter();
-				return stack;
-			};
-
-			SuperByteBuffer superBuffer =
-				CachedBuffers.partialDirectional(AllPartialModels.BELT_PULLEY, blockState, dir, matrixStackSupplier);
-			KineticBlockEntityRenderer.standardKineticRotationTransform(superBuffer, be, light).renderInto(ms, vb);
+		if (!VisualizationManager.supportsVisualization(be.getLevel())) {
+			CBBeltRenderHelper.renderSurface(be, blockState, ms, buffer, light,
+				SlimeBeltRenderer::getSpriteShiftEntry, (float) -SlimeBeltLoopGeometry.VERTICAL_BELT_DROP);
 		}
 
 		renderItems(be, partialTicks, ms, buffer, light, overlay);
 	}
 
-	private static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
+	public static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
 		return diagonal ? SlimeBeltSpriteShifts.BELT_DIAGONAL
 			: bottom ? SlimeBeltSpriteShifts.BELT_OFFSET : SlimeBeltSpriteShifts.BELT;
 	}

@@ -8,6 +8,7 @@ import java.util.UUID;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
 import dev.ryanhcode.sable.companion.SubLevelAccess;
 
@@ -18,6 +19,8 @@ import net.minecraft.world.entity.monster.Ghast;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.BaseEntityBlock;
@@ -35,7 +38,7 @@ import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
-public class GhastHotAirBalloonAssemblyStationBlock extends BaseEntityBlock {
+public class GhastHotAirBalloonAssemblyStationBlock extends BaseEntityBlock implements IWrenchable {
 	public static final MapCodec<GhastHotAirBalloonAssemblyStationBlock> CODEC =
 		simpleCodec(GhastHotAirBalloonAssemblyStationBlock::new);
 
@@ -69,6 +72,23 @@ public class GhastHotAirBalloonAssemblyStationBlock extends BaseEntityBlock {
 	@Override
 	public BlockState mirror(BlockState state, Mirror mirror) {
 		return state.rotate(mirror.getRotation(state.getValue(HORIZONTAL_FACING)));
+	}
+
+	@Override
+	public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+		if (context.getClickedFace().getAxis() != Direction.Axis.Y)
+			return InteractionResult.PASS;
+		BlockState rotated = state.setValue(HORIZONTAL_FACING,
+			state.getValue(HORIZONTAL_FACING).getClockWise(context.getClickedFace().getAxis()));
+		Level level = context.getLevel();
+		BlockPos pos = context.getClickedPos();
+		if (!rotated.canSurvive(level, pos))
+			return InteractionResult.PASS;
+		if (level.isClientSide())
+			return InteractionResult.SUCCESS;
+		level.setBlock(pos, rotated, Block.UPDATE_ALL);
+		IWrenchable.playRotateSound(level, pos);
+		return InteractionResult.SUCCESS;
 	}
 
 	@Override

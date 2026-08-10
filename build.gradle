@@ -165,11 +165,15 @@ tasks.register('syncQuickPlayMods', Sync) {
     into(layout.buildDirectory.dir('quickplay/mods'))
 }
 
-def configureQuickPlayClientTask = { Exec task, boolean onlineBuild ->
+def configureQuickPlayClientTask = { Exec task, boolean onlineBuild, boolean smokeRun ->
     task.group = 'mod development'
-    task.description = onlineBuild
-            ? 'Runs test.py with an online Gradle build, copies the mod jar, and quickplays the local NeoForge client.'
-            : 'Runs test.py with an offline Gradle build, copies the mod jar, and quickplays the local NeoForge client.'
+    if (smokeRun) {
+        task.description = 'Runs test.py with an offline Gradle build, quickplays the local NeoForge client, checks world entry, and cleans up.'
+    } else {
+        task.description = onlineBuild
+                ? 'Runs test.py with an online Gradle build, copies the mod jar, and quickplays the local NeoForge client.'
+                : 'Runs test.py with an offline Gradle build, copies the mod jar, and quickplays the local NeoForge client.'
+    }
     task.workingDir = projectDir
 
     def command = [project.findProperty('pythonExecutable') ?: 'python', 'test.py']
@@ -188,6 +192,18 @@ def configureQuickPlayClientTask = { Exec task, boolean onlineBuild ->
     if (project.hasProperty('noCopy')) {
         command += ['--no-copy']
     }
+    if (project.hasProperty('dryRun')) {
+        command += ['--dry-run']
+    }
+    if (smokeRun) {
+        command += ['--smoke']
+    }
+    if (smokeRun && project.hasProperty('smokeTimeout')) {
+        command += ['--smoke-timeout', project.property('smokeTimeout').toString()]
+    }
+    if (smokeRun && project.hasProperty('smokeLogLines')) {
+        command += ['--smoke-log-lines', project.property('smokeLogLines').toString()]
+    }
     if (project.hasProperty('width')) {
         command += ['--width', project.property('width').toString()]
     }
@@ -199,11 +215,15 @@ def configureQuickPlayClientTask = { Exec task, boolean onlineBuild ->
 }
 
 tasks.register('quickPlayClient', Exec) {
-    configureQuickPlayClientTask(delegate, false)
+    configureQuickPlayClientTask(delegate, false, false)
 }
 
 tasks.register('quickPlayClientOnline', Exec) {
-    configureQuickPlayClientTask(delegate, true)
+    configureQuickPlayClientTask(delegate, true, false)
+}
+
+tasks.register('quickPlaySmoke', Exec) {
+    configureQuickPlayClientTask(delegate, false, true)
 }
 
 jar {

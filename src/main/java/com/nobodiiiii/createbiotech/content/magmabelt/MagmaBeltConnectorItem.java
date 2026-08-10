@@ -1,12 +1,14 @@
 package com.nobodiiiii.createbiotech.content.magmabelt;
 
-import java.util.LinkedList;
 import java.util.List;
 
 import javax.annotation.Nonnull;
 
 import com.simibubi.create.AllBlocks;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltConnectorGeometry;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltConnectorSelection;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntity;
@@ -23,9 +25,7 @@ import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.Axis;
-import net.minecraft.core.Direction.AxisDirection;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.NbtUtils;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionResult;
@@ -70,19 +70,19 @@ public class MagmaBeltConnectorItem extends BlockItem {
 		BlockPos firstPulley = null;
 
 		// Remove first if no longer existant or valid
-		if (tag.contains("FirstPulley")) {
-			firstPulley = NbtUtils.readBlockPos(tag, "FirstPulley").orElse(null);
-			if (firstPulley == null || !validateAxis(world, firstPulley)
-				|| !firstPulley.closerThan(pos, maxLength() * 2)) {
-				tag.remove("FirstPulley");
-				CBItemData.set(context.getItemInHand(), tag);
+		if (tag.contains(CBBeltConnectorSelection.POSITION)) {
+			firstPulley = CBBeltConnectorSelection.readValid(tag, world, pos, maxLength() * 2,
+				candidate -> validateAxis(world, candidate));
+			if (firstPulley == null) {
+				CBItemData.set(context.getItemInHand(), null);
+				tag = new CompoundTag();
 			}
 		}
 
 		if (!validAxis || playerEntity == null)
 			return InteractionResult.FAIL;
 
-		if (tag.contains("FirstPulley")) {
+		if (tag.contains(CBBeltConnectorSelection.POSITION)) {
 
 			if (!canConnect(world, firstPulley, pos))
 				return InteractionResult.FAIL;
@@ -104,7 +104,7 @@ public class MagmaBeltConnectorItem extends BlockItem {
 			return InteractionResult.SUCCESS;
 		}
 
-		tag.put("FirstPulley", NbtUtils.writeBlockPos(pos));
+		CBBeltConnectorSelection.write(tag, world, pos);
 		CBItemData.set(context.getItemInHand(), tag);
 		playerEntity.getCooldowns()
 			.addCooldown(this, 5);
@@ -112,18 +112,20 @@ public class MagmaBeltConnectorItem extends BlockItem {
 	}
 
 	public static void createBelts(Level world, BlockPos start, BlockPos end) {
+		if (!SubLevelCompat.sameSpace(world, start, end))
+			return;
 		world.playSound(null, BlockPos.containing(VecHelper.getCenterOf(start.offset(end))
 			.scale(.5f)), SoundEvents.WOOL_PLACE, SoundSource.BLOCKS, 0.5F, 1F);
 
-		BeltSlope slope = getSlopeBetween(start, end);
-		Direction facing = getFacingFromTo(start, end);
+		BeltSlope slope = CBBeltConnectorGeometry.slopeBetween(start, end);
+		Direction facing = CBBeltConnectorGeometry.facingFromTo(start, end);
 
 		BlockPos diff = end.subtract(start);
 		if (diff.getX() == diff.getZ())
 			facing = Direction.get(facing.getAxisDirection(), world.getBlockState(start)
 				.getValue(BlockStateProperties.AXIS) == Axis.X ? Axis.Z : Axis.X);
 
-		List<BlockPos> beltsToCreate = getBeltChainBetween(start, end, slope, facing);
+		List<BlockPos> beltsToCreate = CBBeltConnectorGeometry.chainBetween(start, end, slope, facing);
 		BlockState beltBlock = CBBlocks.MAGMA_BELT.get().defaultBlockState();
 		boolean failed = false;
 
@@ -159,56 +161,9 @@ public class MagmaBeltConnectorItem extends BlockItem {
 				world.destroyBlock(pos, false);
 	}
 
-	private static Direction getFacingFromTo(BlockPos start, BlockPos end) {
-		Axis beltAxis = start.getX() == end.getX() ? Axis.Z : Axis.X;
-		BlockPos diff = end.subtract(start);
-		AxisDirection axisDirection = AxisDirection.POSITIVE;
-
-		if (diff.getX() == 0 && diff.getZ() == 0)
-			axisDirection = diff.getY() > 0 ? AxisDirection.POSITIVE : AxisDirection.NEGATIVE;
-		else
-			axisDirection =
-				beltAxis.choose(diff.getX(), 0, diff.getZ()) > 0 ? AxisDirection.POSITIVE : AxisDirection.NEGATIVE;
-
-		return Direction.get(axisDirection, beltAxis);
-	}
-
-	private static BeltSlope getSlopeBetween(BlockPos start, BlockPos end) {
-		BlockPos diff = end.subtract(start);
-
-		if (diff.getY() != 0) {
-			if (diff.getZ() != 0 || diff.getX() != 0)
-				return diff.getY() > 0 ? BeltSlope.UPWARD : BeltSlope.DOWNWARD;
-			return BeltSlope.VERTICAL;
-		}
-		return BeltSlope.HORIZONTAL;
-	}
-
-	private static List<BlockPos> getBeltChainBetween(BlockPos start, BlockPos end, BeltSlope slope,
-		Direction direction) {
-		List<BlockPos> positions = new LinkedList<>();
-		int limit = 1000;
-		BlockPos current = start;
-
-		do {
-			positions.add(current);
-
-			if (slope == BeltSlope.VERTICAL) {
-				current = current.above(direction.getAxisDirection() == AxisDirection.POSITIVE ? 1 : -1);
-				continue;
-			}
-
-			current = current.relative(direction);
-			if (slope != BeltSlope.HORIZONTAL)
-				current = current.above(slope == BeltSlope.UPWARD ? 1 : -1);
-
-		} while (!current.equals(end) && limit-- > 0);
-
-		positions.add(end);
-		return positions;
-	}
-
 	public static boolean canConnect(Level world, BlockPos first, BlockPos second) {
+		if (!SubLevelCompat.sameSpace(world, first, second))
+			return false;
 		if (!world.isLoaded(first) || !world.isLoaded(second))
 			return false;
 		if (!second.closerThan(first, maxLength()))

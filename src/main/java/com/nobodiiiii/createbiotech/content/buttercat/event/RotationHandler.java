@@ -1,8 +1,8 @@
 package com.nobodiiiii.createbiotech.content.buttercat.event;
 
-import com.nobodiiiii.createbiotech.content.buttercat.ButterCatModule;
 import com.nobodiiiii.createbiotech.content.buttercat.mob_effect.ButterRotationEffect;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModEffects;
+import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.registry.CBMobEffects;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.util.Mth;
@@ -15,7 +15,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
 
-@EventBusSubscriber(modid = ButterCatModule.MODID, value = Dist.CLIENT)
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public class RotationHandler {
     static float acceleration = 0;
     static int amplifier = -1;
@@ -23,7 +23,7 @@ public class RotationHandler {
     public static void onClientTick(ClientTickEvent.Post event) {
         Player player = Minecraft.getInstance().player;
         if (player == null ) return;
-        MobEffectInstance effect = player.getEffect(ModEffects.BUTTER_ROTATION_EFFECT);
+        MobEffectInstance effect = player.getEffect(CBMobEffects.BUTTER_ROTATION.getDelegate());
 
         acceleration = Mth.clamp(acceleration+0.1f*(effect!=null?1:-1),0,1);
         if(effect!=null){

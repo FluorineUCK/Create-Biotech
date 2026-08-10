@@ -30,6 +30,7 @@
 | 兼容层与 Mixin | 已完成 | [03-mixin-compatibility.zh-CN.md](03-mixin-compatibility.zh-CN.md) |
 | 测试、诊断与开发者体验 | 已完成 | [06-testing-diagnostics-developer-experience.zh-CN.md](06-testing-diagnostics-developer-experience.zh-CN.md) |
 | 综合路线图 | 已完成 | [07-priority-roadmap.zh-CN.md](07-priority-roadmap.zh-CN.md) |
+| 史莱姆传送带 Create 兼容差异与修复方案 | 已完成 | [09-slime-belt-create-parity-audit-and-fix-plan.zh-CN.md](09-slime-belt-create-parity-audit-and-fix-plan.zh-CN.md) |
 
 ## 审计基准
 

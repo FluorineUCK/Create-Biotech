@@ -1,7 +1,10 @@
 package com.nobodiiiii.createbiotech.content.evokerenchantingchamber;
 
 import com.mojang.serialization.MapCodec;
+import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -15,6 +18,7 @@ import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -35,9 +39,13 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.phys.BlockHitResult;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.level.BlockEvent;
 
-public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
+public class EvokerEnchantingChamberBlock extends BaseEntityBlock
+	implements IWrenchable, CBMultiBlockLifecycle.Part {
 	public static final MapCodec<EvokerEnchantingChamberBlock> CODEC =
 		simpleCodec(EvokerEnchantingChamberBlock::new);
 
@@ -61,6 +69,8 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 		BlockPos pos = context.getClickedPos();
 		Level level = context.getLevel();
 		if (!hasSpaceForUpperHalf(level, pos))
+			return null;
+		if (!level.getWorldBorder().isWithinBounds(pos.above()))
 			return null;
 		if (!level.getBlockState(pos.above()).canBeReplaced(context))
 			return null;
@@ -105,23 +115,29 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 
 	@Override
 	public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
-		if (!level.isClientSide() && state.getValue(HALF) == DoubleBlockHalf.UPPER) {
+		// Survival breaks let the lower half be destroyed by the shape cascade below, so
+		// its loot table decides what drops. Creative has to take it out itself, without
+		// drops, exactly like vanilla's double blocks.
+		if (!level.isClientSide() && state.getValue(HALF) == DoubleBlockHalf.UPPER && player.isCreative()) {
 			BlockPos lowerPos = pos.below();
 			BlockState lowerState = level.getBlockState(lowerPos);
-			if (lowerState.is(this) && lowerState.getValue(HALF) == DoubleBlockHalf.LOWER) {
-				if (player.isCreative()) {
-					level.setBlock(lowerPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-					level.levelEvent(player, 2001, lowerPos, Block.getId(lowerState));
-				} else {
-					BlockEntity lowerBlockEntity = level.getBlockEntity(lowerPos);
-					dropResources(lowerState, (ServerLevel) level, lowerPos, lowerBlockEntity, player,
-						player.getMainHandItem());
-					level.setBlock(lowerPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
-				}
-			}
+			if (lowerState.is(this) && lowerState.getValue(HALF) == DoubleBlockHalf.LOWER)
+				CBMultiBlockLifecycle.removeAnchorInCreative(level, lowerPos, player);
 		}
 
 		return super.playerWillDestroy(level, pos, state, player);
+	}
+
+	@Override
+	public PushReaction getPistonPushReaction(BlockState state) {
+		// Vanilla pistons must not split the two halves. Moving structures use the
+		// shared CBMultiBlockLifecycle attachment rule instead.
+		return PushReaction.BLOCK;
+	}
+
+	@Override
+	public BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state) {
+		return state.getValue(HALF) == DoubleBlockHalf.LOWER ? pos : pos.below();
 	}
 
 	@Override
@@ -151,12 +167,19 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 
 	@Override
 	public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+		// Only the lower half owns state. The upper half used to carry a hollow proxy
+		// block entity purely so pipes could connect to it; that job now belongs to the
+		// block-level capability provider in CBCapabilities.
+		if (state.getValue(HALF) == DoubleBlockHalf.UPPER)
+			return null;
 		return CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get().create(pos, state);
 	}
 
 	@Override
 	protected ItemInteractionResult useItemOn(ItemStack heldStack, BlockState state, Level level, BlockPos pos,
 		Player player, InteractionHand hand, BlockHitResult hit) {
+		if (CBWrenchHelper.isWrench(heldStack))
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		InteractionResult result = interact(state, level, pos, player, hand, heldStack);
 		return result.consumesAction()
 			? ItemInteractionResult.sidedSuccess(level.isClientSide)
@@ -185,6 +208,72 @@ public class EvokerEnchantingChamberBlock extends BaseEntityBlock {
 			return InteractionResult.CONSUME;
 		}
 		return InteractionResult.PASS;
+	}
+
+	@Override
+	public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+		Level level = context.getLevel();
+		BlockPos clickedPos = context.getClickedPos();
+		BlockPos lowerPos = state.getValue(HALF) == DoubleBlockHalf.LOWER ? clickedPos : clickedPos.below();
+		BlockPos upperPos = lowerPos.above();
+		BlockState lowerState = level.getBlockState(lowerPos);
+		BlockState upperState = level.getBlockState(upperPos);
+		if (!isCompleteStructure(lowerState, upperState))
+			return IWrenchable.super.onWrenched(state, context);
+		if (context.getClickedFace().getAxis() != Direction.Axis.Y)
+			return InteractionResult.PASS;
+
+		Direction rotatedFacing = lowerState.getValue(FACING)
+			.getClockWise(context.getClickedFace().getAxis());
+		BlockState rotatedLower = lowerState.setValue(FACING, rotatedFacing);
+		BlockState rotatedUpper = upperState.setValue(FACING, rotatedFacing);
+		if (!rotatedLower.canSurvive(level, lowerPos) || !rotatedUpper.canSurvive(level, upperPos))
+			return InteractionResult.PASS;
+		if (level.isClientSide())
+			return InteractionResult.SUCCESS;
+
+		level.setBlock(lowerPos, rotatedLower, Block.UPDATE_ALL);
+		level.setBlock(upperPos, rotatedUpper, Block.UPDATE_ALL);
+		IWrenchable.playRotateSound(level, clickedPos);
+		return InteractionResult.SUCCESS;
+	}
+
+	@Override
+	public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
+		Level level = context.getLevel();
+		BlockPos clickedPos = context.getClickedPos();
+		BlockPos lowerPos = state.getValue(HALF) == DoubleBlockHalf.LOWER ? clickedPos : clickedPos.below();
+		BlockPos upperPos = lowerPos.above();
+		BlockState lowerState = level.getBlockState(lowerPos);
+		BlockState upperState = level.getBlockState(upperPos);
+		if (!isCompleteStructure(lowerState, upperState))
+			return IWrenchable.super.onSneakWrenched(state, context);
+		if (!(level instanceof ServerLevel serverLevel))
+			return InteractionResult.SUCCESS;
+
+		Player player = context.getPlayer();
+		BlockEvent.BreakEvent event = new BlockEvent.BreakEvent(level, clickedPos, state, player);
+		NeoForge.EVENT_BUS.post(event);
+		if (event.isCanceled())
+			return InteractionResult.SUCCESS;
+
+		if (player != null && !player.isCreative()) {
+			Block.getDrops(lowerState, serverLevel, lowerPos, level.getBlockEntity(lowerPos), player,
+				context.getItemInHand()).forEach(player.getInventory()::placeItemBackInInventory);
+		}
+		lowerState.spawnAfterBreak(serverLevel, lowerPos, ItemStack.EMPTY, true);
+		level.setBlock(upperPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
+		level.setBlock(lowerPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL_IMMEDIATE);
+		IWrenchable.playRemoveSound(level, lowerPos);
+		return InteractionResult.SUCCESS;
+	}
+
+	private static boolean isCompleteStructure(BlockState lowerState, BlockState upperState) {
+		return lowerState.getBlock() instanceof EvokerEnchantingChamberBlock
+			&& upperState.getBlock() instanceof EvokerEnchantingChamberBlock
+			&& lowerState.getValue(HALF) == DoubleBlockHalf.LOWER
+			&& upperState.getValue(HALF) == DoubleBlockHalf.UPPER
+			&& lowerState.getValue(FACING) == upperState.getValue(FACING);
 	}
 
 	@Override

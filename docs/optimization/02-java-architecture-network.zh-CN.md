@@ -144,16 +144,17 @@
 ### ARCH-07：Butter Cat 在通用初始化中加载客户端模型类型
 
 - 优先级：P1
+- 状态：已于 2026-08-03 修复代码边界；尚未执行 dedicated server smoke
 
-`ButterCatModule.init()` 在通用模组构造阶段调用 `ModPartialModels.init()`，从而加载带有 Flywheel `PartialModel` 静态字段的类。`ButterCatEngineBlockEntity` 本身还直接返回 `PartialModel`，把渲染模型选择暴露在通用方块实体 API 中。
+原实现由 `ButterCatModule.init()` 在通用模组构造阶段调用 `ModPartialModels.init()`，并由 `ButterCatEngineBlockEntity` 直接返回 `PartialModel`。现已删除 Butter Cat 独立模块/注册层：模型声明集中到主客户端 `ButterCatPartials`，模型注册由 `CreateBiotechClient` 完成，方块实体只暴露猫变种、黄油阶段、面包状态等通用数据，renderer、visual 和 JEI 预览器在客户端完成模型映射。
 
 精确匹配的 Create 参考 `ref/Create/src/main/java/com/simibubi/create/CreateClient.java` 只在 `clientInit()` 中调用 `AllPartialModels.init()`。当前项目的做法与 Create 自身的客户端隔离模式不同，存在 dedicated server 类加载风险，也让服务端逻辑依赖渲染库类型。
 
-建议：
+完成情况：
 
-- 将 `ModPartialModels.init()` 移到 `ButterCatModule.clientInit()`。
-- 方块实体只暴露猫变种、黄油阶段等通用数据；由 renderer/visual 在客户端把状态映射为 `PartialModel`。
-- 添加 dedicated server 启动 smoke test 后再确认风险是否已经触发；本阶段没有启动服务器，因此这里记录为高风险边界问题，不宣称已复现崩溃。
+- [x] 客户端模型声明和注册移到主客户端包/入口。
+- [x] 方块实体只暴露通用状态，由客户端消费者映射 `PartialModel`。
+- [ ] 添加 dedicated server 启动 smoke；本次为非 Mixin 改动，已通过 `runData` 与 `build`，但未额外启动游戏进程。
 
 ### ARCH-08：客户端入口过度集中且有重复注册
 

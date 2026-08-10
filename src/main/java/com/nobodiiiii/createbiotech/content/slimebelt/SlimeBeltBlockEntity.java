@@ -19,8 +19,13 @@ import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceHost;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Track;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltInventory;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeItemHandlerBeltSegment;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementSegment;
+import com.simibubi.create.content.kinetics.belt.BeltBlockEntity.CasingType;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler;
 import com.nobodiiiii.createbiotech.content.slimebelt.transport.SlimeBeltMovementHandler.TransportedEntityInfo;
+import com.nobodiiiii.createbiotech.content.beltsurface.BeltTunnelCapabilityInvalidator;
+import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -54,7 +59,14 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandler;
 
-public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurfaceHost, Clearable {
+public class SlimeBeltBlockEntity extends KineticBlockEntity
+	implements BeltSurfaceHost, StandardItemBeltPort, CBBeltPlacementSegment, Clearable {
+
+	/** {@code Track.values()} clones its array on every call; the surface lookups run per funnel per tick. */
+	private static final Track[] TRACKS = Track.values();
+
+	/** Ticks to wait before re-attempting a chain init that already failed once. */
+	private static final int INIT_RETRY_INTERVAL = 20;
 
 	public Map<Entity, TransportedEntityInfo> passengers;
 	public int beltLength;
@@ -67,6 +79,7 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	private final Map<Direction, IItemHandler> sidedHandlers;
 	private IItemHandler nullSideHandler;
 	private SlimeBeltLoopGeometry loopGeometry;
+	private int initRetryCooldown;
 
 	public SlimeBeltBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
@@ -94,11 +107,13 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	@Override
 	public void tick() {
 		if (beltLength == 0)
-			SlimeBeltBlock.initBelt(level, worldPosition);
+			tryInitBelt();
 
 		super.tick();
 
-		if (!CBBlocks.SLIME_BELT.get().equals(level.getBlockState(worldPosition).getBlock()))
+		// The block entity's cached state is kept in sync by LevelChunk#setBlockState, so this needs no
+		// chunk lookup. Create reads through the level here; the power belt already relies on the cache.
+		if (!getBlockState().is(CBBlocks.SLIME_BELT.get()))
 			return;
 
 		if (!isController())
@@ -137,6 +152,23 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		return isController() ? super.calculateStressApplied() : 0;
 	}
 
+	/**
+	 * Chain init is retried from the tick because the chain can span a chunk that was not loaded yet. A failed
+	 * attempt walks the chain from this segment back to its start, and every segment attempts it, so retrying
+	 * every tick costs O(n²) block lookups per tick for as long as the far end stays unloaded. Only repeated
+	 * failures back off — the attempt right after placement, slicing or a contraption disassembly still runs
+	 * on the very next tick.
+	 */
+	private void tryInitBelt() {
+		if (initRetryCooldown > 0) {
+			initRetryCooldown--;
+			return;
+		}
+		SlimeBeltBlock.initBelt(level, worldPosition);
+		if (beltLength == 0)
+			initRetryCooldown = INIT_RETRY_INTERVAL;
+	}
+
 	@Override
 	public AABB createRenderBoundingBox() {
 		return isController() ? super.createRenderBoundingBox().inflate(beltLength + 1) : super.createRenderBoundingBox();
@@ -145,7 +177,22 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	public IItemHandler getItemCapability(Direction side) {
 		if (!SlimeBeltBlock.canTransportObjects(getBlockState()))
 			return null;
-		return getItemHandler(side);
+		// NeoForge's generic item capability is the vanilla belt work surface. The
+		// BACK loop is an internal transport track and is exposed only through the
+		// dedicated belt-funnel surface resolver.
+		return getItemHandler(Direction.UP);
+	}
+
+	/**
+	 * Commands that replace a block ({@code /setblock}, {@code /fill}, {@code /clone}) and structure
+	 * placement call this before the replacement so container contents vanish rather than pop out.
+	 * Create's belt does the same; without it the transported items survive into the removal path.
+	 */
+	@Override
+	public void clearContent() {
+		if (inventory != null)
+			inventory.getTransportedItems()
+				.clear();
 	}
 
 	@Override
@@ -195,24 +242,25 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	}
 
 	@Override
-	public void clearContent() {
-		if (inventory != null)
-			inventory.getTransportedItems().clear();
-	}
-
-	@Override
 	public void clearKineticInformation() {
 		super.clearKineticInformation();
 		beltLength = 0;
 		index = 0;
 		controller = null;
-		passengers = null;
 		trackerUpdateTag = new CompoundTag();
+		// Whatever cleared the chain deserves a fresh attempt on the next tick, not a leftover backoff.
+		initRetryCooldown = 0;
+		// The cached handlers captured the index this just reset, so they have to go. `passengers`
+		// deliberately survives: KineticBlockEntity#read calls this on every read, and the belt syncs on
+		// every insertion, so clearing the map here would drop the client's riders several times a second.
+		// Chain rewiring clears it through SlimeBeltSlicer#resetChain instead.
 		invalidateItemHandlers();
 	}
 
 	public SlimeBeltBlockEntity getControllerBE() {
-		if (controller == null || !level.isLoaded(controller))
+		if (controller == null || level == null || !level.isLoaded(controller))
+			return null;
+		if (!SubLevelCompat.sameSpace(level, worldPosition, controller))
 			return null;
 		BlockEntity be = level.getBlockEntity(controller);
 		return be instanceof SlimeBeltBlockEntity slimeBelt ? slimeBelt : null;
@@ -366,9 +414,93 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		return inventory;
 	}
 
+	/**
+	 * Drops the cached per-side handlers and tells NeoForge that the capability at this position changed.
+	 * Handlers capture the segment's inventory and index, so anything that rewires the chain has to call this.
+	 *
+	 * <p>The invalidation matters even when nothing was cached: the chain only exposes a handler once its
+	 * controller inventory exists, and becoming ready changes no block state, so neighbours holding a
+	 * {@code BlockCapabilityCache} would otherwise keep the null they cached before the chain was wired up.</p>
+	 */
 	public void invalidateItemHandlers() {
 		sidedHandlers.clear();
 		nullSideHandler = null;
+		invalidateCapabilities();
+		if (level != null)
+			BeltTunnelCapabilityInvalidator.invalidate(level, worldPosition.above());
+	}
+
+	@Override
+	public int createBiotech$getBeltLength() {
+		return beltLength;
+	}
+
+	@Override
+	public boolean createBiotech$hasPulley() {
+		return hasPulley();
+	}
+
+	@Override
+	public CasingType createBiotech$getCasingType() {
+		return CasingType.NONE;
+	}
+
+	@Override
+	public void createBiotech$setCasingType(CasingType casing) {}
+
+	@Override
+	public BlockPos createBiotech$getBlockPos() {
+		return worldPosition;
+	}
+
+	@Override
+	public boolean createBiotech$isHorizontalItemPort() {
+		return getBlockState().getValue(SlimeBeltBlock.SLOPE) == BeltSlope.HORIZONTAL
+			&& SlimeBeltBlock.canTransportObjects(getBlockState());
+	}
+
+	@Override
+	public boolean createBiotech$addressesItemPort(Direction side) {
+		return canTunnelAddressFront(side);
+	}
+
+	@Override
+	public boolean createBiotech$canInsertIntoItemPort(Direction side) {
+		return canTunnelInsertIntoFront(side);
+	}
+
+	@Override
+	public ItemStack createBiotech$insertIntoItemPort(ItemStack stack, Direction side, boolean simulate) {
+		return insertFromTunnelIntoFront(stack, side, simulate);
+	}
+
+	@Override
+	public IItemHandler createBiotech$getItemHandler() {
+		return getItemCapability(Direction.UP);
+	}
+
+	@Override
+	public Direction createBiotech$getMovementFacing() {
+		return getMovementFacing();
+	}
+
+	@Override
+	public float createBiotech$getSpeed() {
+		return getSpeed();
+	}
+
+	@Override
+	public float createBiotech$getDirectionAwareSpeed() {
+		return getDirectionAwareBeltMovementSpeed();
+	}
+
+	@Override
+	public Vec3 createBiotech$getEjectionPosition() {
+		SlimeBeltBlockEntity controllerBE = getControllerBE();
+		if (controllerBE == null)
+			return Vec3.atCenterOf(worldPosition);
+		int additionalOffset = getDirectionAwareBeltMovementSpeed() > 0 ? 1 : 0;
+		return SlimeBeltHelper.getVectorForOffset(controllerBE, index + additionalOffset);
 	}
 
 	private IItemHandler getItemHandler(Direction side) {
@@ -376,8 +508,8 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		// constructing a handler too early would create a SlimeItemHandlerBeltSegment whose
 		// beltInventory field is null, and subsequent getStackInSlot/insertItem/extractItem calls would NPE.
 		// This happens at world-load time when a neighbouring funnel ticks before the belt chain is wired up.
-		// Note: this preserves the per-side (FRONT/BACK track) routing — once the inventory is ready, the
-		// cached handler still holds a stable inventory ref, and `side` keeps directing each request to its track.
+		// The generic capability deliberately uses Direction.UP above, which resolves to FRONT. Keep the
+		// sided cache for the funnel/legacy callers that explicitly request a physical surface.
 		SlimeBeltInventory inv = getInventory();
 		if (inv == null)
 			return null;
@@ -391,6 +523,26 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	}
 
 	private boolean canInsertFrom(Direction side) {
+		return canInsertFrom(side, null);
+	}
+
+	public boolean canTunnelAddressFront(Direction side) {
+		side = SlimeBeltInsertionPlanner.resolvePhysicalSide(this, side);
+		SlimeBeltBlockEntity controllerBE = getControllerBE();
+		if (controllerBE == null)
+			return false;
+		return SlimeBeltHelper.resolveIOTrack(controllerBE, index, side) == Track.FRONT;
+	}
+
+	public boolean canTunnelInsertIntoFront(Direction side) {
+		return canInsertFrom(side, Track.FRONT);
+	}
+
+	public ItemStack insertFromTunnelIntoFront(ItemStack stack, Direction side, boolean simulate) {
+		return tryInsertingFromSide(new TransportedItemStack(stack), side, simulate, Track.FRONT);
+	}
+
+	private boolean canInsertFrom(Direction side, Track requiredTrack) {
 		side = SlimeBeltInsertionPlanner.resolvePhysicalSide(this, side);
 		if (getSpeed() == 0)
 			return false;
@@ -398,7 +550,7 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 		if (controllerBE == null)
 			return false;
 		Track target = SlimeBeltHelper.resolveIOTrack(controllerBE, index, side);
-		if (target == null)
+		if (target == null || requiredTrack != null && target != requiredTrack)
 			return false;
 		return SlimeBeltInsertionPlanner.isCompatibleAdjacentChainInput(this, side, controllerBE, target);
 	}
@@ -412,16 +564,21 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 	}
 
 	private ItemStack tryInsertingFromSide(TransportedItemStack transportedStack, Direction side, boolean simulate) {
+		return tryInsertingFromSide(transportedStack, side, simulate, null);
+	}
+
+	private ItemStack tryInsertingFromSide(TransportedItemStack transportedStack, Direction side, boolean simulate,
+		Track requiredTrack) {
 		side = SlimeBeltInsertionPlanner.resolvePhysicalSide(this, side);
 		SlimeBeltInventory beltInventory = getInventory();
 		boolean verticalHorizontalBeltInput = SlimeBeltInsertionPlanner.isVerticalHorizontalBeltInput(this, side);
 		if (!SlimeBeltBlock.canTransportObjects(getBlockState()) || beltInventory == null)
 			return transportedStack.stack;
-		if (!canInsertFrom(side))
+		if (!canInsertFrom(side, requiredTrack))
 			return transportedStack.stack;
 		SlimeBeltInsertionPlanner.InsertionPlan plan =
 			beltInventory.planInsertion(index, side, verticalHorizontalBeltInput, transportedStack);
-		if (!beltInventory.canInsert(plan))
+		if (plan == null || requiredTrack != null && plan.track() != requiredTrack || !beltInventory.canInsert(plan))
 			return transportedStack.stack;
 		if (simulate)
 			return ItemStack.EMPTY;
@@ -473,19 +630,54 @@ public class SlimeBeltBlockEntity extends KineticBlockEntity implements BeltSurf
 
 	@Override
 	public List<BeltSurface> surfaces() {
-		if (level == null)
-			return List.of();
-		SlimeBeltBlockEntity controller = getControllerBE();
-		if (controller == null || controller.beltLength == 0)
+		SlimeBeltBlockEntity controller = surfaceController();
+		if (controller == null)
 			return List.of();
 		List<BeltSurface> result = new ArrayList<>(2);
-		for (Track track : Track.values()) {
-			Direction outwardNormal = SlimeBeltHelper.getRepresentativeSideForTrack(controller, index, track);
-			Direction movementFacing = SlimeBeltHelper.getMovementFacingForTrack(controller, track);
-			if (outwardNormal.getAxis() == movementFacing.getAxis())
-				continue;
-			result.add(BeltSurface.of(this, worldPosition, index, outwardNormal, movementFacing));
+		for (Track track : TRACKS) {
+			BeltSurface surface = surfaceOn(controller, track);
+			if (surface != null)
+				result.add(surface);
 		}
 		return result;
+	}
+
+	/**
+	 * Resolves a single side without materialising the list. Create's funnels call
+	 * {@code determineCurrentMode} every tick on both sides, and that lands here through
+	 * {@link com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver}, so the default
+	 * {@code surfaces()}-and-scan would allocate a list plus both surfaces per funnel per tick.
+	 */
+	@Override
+	public BeltSurface surfaceFor(Direction outwardNormal) {
+		SlimeBeltBlockEntity controller = surfaceController();
+		if (controller == null)
+			return null;
+		for (Track track : TRACKS) {
+			// Compare the normal before building anything; at most one surface is ever constructed.
+			if (SlimeBeltHelper.getRepresentativeSideForTrack(controller, index, track) != outwardNormal)
+				continue;
+			BeltSurface surface = surfaceOn(controller, track);
+			if (surface != null)
+				return surface;
+		}
+		return null;
+	}
+
+	/** The controller to read track geometry from, or null when this segment has no live chain. */
+	private SlimeBeltBlockEntity surfaceController() {
+		if (level == null)
+			return null;
+		SlimeBeltBlockEntity controller = getControllerBE();
+		return controller == null || controller.beltLength == 0 ? null : controller;
+	}
+
+	/** The surface this segment exposes on {@code track}, or null when the track faces along its own motion. */
+	private BeltSurface surfaceOn(SlimeBeltBlockEntity controller, Track track) {
+		Direction outwardNormal = SlimeBeltHelper.getRepresentativeSideForTrack(controller, index, track);
+		Direction movementFacing = SlimeBeltHelper.getMovementFacingForTrack(controller, track);
+		if (outwardNormal.getAxis() == movementFacing.getAxis())
+			return null;
+		return BeltSurface.of(this, worldPosition, index, outwardNormal, movementFacing);
 	}
 }

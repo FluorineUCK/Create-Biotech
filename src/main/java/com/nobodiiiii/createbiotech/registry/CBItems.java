@@ -9,7 +9,7 @@ import java.util.EnumMap;
 import java.util.Map;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModItems;
+import com.nobodiiiii.createbiotech.content.buttercat.item.ButterFoodProperties;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterFoodItem;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterSequencedAssemblyItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CardboardBoxItem;
@@ -43,11 +43,11 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Rarity;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import net.neoforged.neoforge.registries.DeferredHolder;
-import com.tterrag.registrate.util.entry.ItemEntry;
 
 public class CBItems {
 
@@ -247,12 +247,30 @@ public class CBItems {
 	public static final Map<DyeColor, DeferredHolder<Item, Item>> BUFFER_PADS = registerBufferPads();
 	public static final DeferredHolder<Item, Item> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
 
-	// Butter Cat content is registered through the shared ButterCat registrate, and re-exported
-	// here so the project's primary item registry remains the place to inspect mod items.
-	public static final ItemEntry<ConfigurableButterFoodItem> BUTTER = ModItems.BUTTER;
-	public static final ItemEntry<ConfigurableButterSequencedAssemblyItem> INCOMPLETE_SUPER_BUTTER =
-		ModItems.INCOMPLETE_SUPER_BUTTER;
-	public static final ItemEntry<ConfigurableButterFoodItem> SUPER_BUTTER = ModItems.SUPER_BUTTER;
+	public static final DeferredHolder<Item, Item> CUTE_CAT_ON_SHAFT = ITEMS.register("cute_cat_on_shaft",
+		() -> new BlockItem(CBBlocks.CUTE_CAT_ON_SHAFT.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> BUTTER_CAT_ENGINE = ITEMS.register("butter_cat_engine",
+		() -> new BlockItem(CBBlocks.BUTTER_CAT_ENGINE.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, ConfigurableButterFoodItem> BUTTER = ITEMS.register("butter",
+		() -> new ConfigurableButterFoodItem(
+			new Item.Properties().food(ButterFoodProperties.createDefault(ButterFoodProperties.Variant.BUTTER)),
+			ButterFoodProperties.Variant.BUTTER));
+
+	public static final DeferredHolder<Item, ConfigurableButterSequencedAssemblyItem> INCOMPLETE_SUPER_BUTTER =
+		ITEMS.register("incomplete_super_butter",
+			() -> new ConfigurableButterSequencedAssemblyItem(
+				new Item.Properties().food(
+					ButterFoodProperties.createDefault(ButterFoodProperties.Variant.INCOMPLETE_SUPER_BUTTER)),
+				ButterFoodProperties.Variant.INCOMPLETE_SUPER_BUTTER));
+
+	public static final DeferredHolder<Item, ConfigurableButterFoodItem> SUPER_BUTTER = ITEMS.register("super_butter",
+		() -> new ConfigurableButterFoodItem(
+			new Item.Properties()
+				.food(ButterFoodProperties.createDefault(ButterFoodProperties.Variant.SUPER_BUTTER))
+				.rarity(Rarity.EPIC),
+			ButterFoodProperties.Variant.SUPER_BUTTER));
 
 	private CBItems() {}
 
@@ -274,6 +292,14 @@ public class CBItems {
 
 	public static boolean isCustomBeltConnector(ItemStack stack) {
 		return isSlimeBeltConnector(stack) || isMagmaBeltConnector(stack) || isPowerBeltConnector(stack);
+	}
+
+	public static int getButterLevel(Item item) {
+		if (item == INCOMPLETE_SUPER_BUTTER.get())
+			return 3;
+		if (item == SUPER_BUTTER.get())
+			return 5;
+		return 1;
 	}
 
 	private static Map<DyeColor, DeferredHolder<Item, Item>> registerBufferPads() {

@@ -18,7 +18,8 @@ public class AllCreateBiotechPonderTags {
 			.add(CBItems.UNIVERSAL_JOINT);
 
 		HELPER.addToTag(AllCreatePonderTags.KINETIC_SOURCES)
-			.add(CBItems.POWER_BELT_CONNECTOR);
+			.add(CBItems.POWER_BELT_CONNECTOR)
+			.add(CBItems.BUTTER_CAT_ENGINE);
 
 		HELPER.addToTag(AllCreatePonderTags.KINETIC_APPLIANCES)
 			.add(CBItems.CREEPER_BLAST_CHAMBER)

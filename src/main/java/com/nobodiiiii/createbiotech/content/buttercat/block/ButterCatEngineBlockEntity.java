@@ -4,12 +4,11 @@ import net.minecraft.core.HolderLookup;
 
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModPartialModels;
-import com.nobodiiiii.createbiotech.content.buttercat.register.ModBlocks;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
-import dev.engine_room.flywheel.lib.model.baked.PartialModel;
+import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
@@ -40,6 +39,10 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
         super(type, pos, state);
     }
 
+    public ButterCatEngineBlockEntity(BlockPos pos, BlockState state) {
+        this(CBBlockEntityTypes.BUTTER_CAT_ENGINE.get(), pos, state);
+    }
+
     @Override
     public void addBehaviours(List<BlockEntityBehaviour> behaviours) {
         super.addBehaviours(behaviours);
@@ -68,7 +71,7 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
     }
 
     public boolean hasBread(){
-        return getBlockState() != null && ModBlocks.BUTTER_CAT_ENGINE.has(getBlockState());
+        return getBlockState() != null && getBlockState().is(CBBlocks.BUTTER_CAT_ENGINE.get());
     }
 
     public void setInfinite(boolean bool) {
@@ -186,30 +189,12 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
             ButterCatEngineClientRotation.sync(this, previousSpeed, clientPacket);
 
     }
-    ///================get models================
+    ///================render state================
     public int getButterLevel(){
         if(butterCount==0) return 0;
         else if(butterCount>8 && butterCount<=16) return 2;
         else if(butterCount>16) return 3;
         return 1;
-    }
-    public PartialModel getCatModel() {
-        return ModPartialModels.getCatModel(catVariant);
-    }
-    public PartialModel getButterModel() {
-        if(isInfinite()) return ModPartialModels.BCE_SUPER_BUTTER;
-        return switch (getButterLevel()) {
-            case 0 -> ModPartialModels.BCE_EMPTY;
-            case 2 -> ModPartialModels.BCE_BUTTER;
-            case 3 -> ModPartialModels.BCE_BUTTER_BIG;
-            default -> ModPartialModels.BCE_BUTTER_SMALL;
-        };
-    }
-    public PartialModel getBreadModel() {
-        return hasBread()? ModPartialModels.BCE_BREAD:ModPartialModels.BCE_EMPTY;
-    }
-    public PartialModel getRopeModel() {
-        return hasBread() ? ModPartialModels.BCE_ROPE : ModPartialModels.BCE_EMPTY;
     }
     public int getMaxButterCount(){
         return CBConfigs.SERVER.butterCat.maxButterCount.get();

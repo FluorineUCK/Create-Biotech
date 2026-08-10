@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.content.evokerenchantingchamber;
 
+import javax.annotation.Nullable;
+
 import net.minecraft.core.HolderLookup;
 
 import java.util.List;
@@ -29,6 +31,7 @@ import net.minecraft.world.Clearable;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
@@ -71,7 +74,6 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 	}
 
 	public static void tick(Level level, BlockPos pos, BlockState state, EvokerEnchantingChamberBlockEntity be) {
-		be.ensureUpperProxyBlockEntity();
 		if (level.isClientSide) {
 			if (be.isCastingSpell())
 				spawnBookEnchantParticlesClient(level, pos, state);
@@ -500,6 +502,19 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 		return below instanceof EvokerEnchantingChamberBlockEntity chamber ? chamber : null;
 	}
 
+	/**
+	 * The block entity owning the chamber at {@code pos}, whichever half was asked for.
+	 * The upper half has no block entity of its own, so capabilities are attached to the
+	 * block there and forwarded down here.
+	 */
+	@Nullable
+	public static EvokerEnchantingChamberBlockEntity resolveController(BlockGetter level, BlockPos pos,
+		BlockState state, @Nullable BlockEntity blockEntity) {
+		if (state.getValue(EvokerEnchantingChamberBlock.HALF) == DoubleBlockHalf.UPPER)
+			blockEntity = level.getBlockEntity(pos.below());
+		return blockEntity instanceof EvokerEnchantingChamberBlockEntity chamber ? chamber : null;
+	}
+
 	public void dropContentsAndFluid() {
 		EvokerEnchantingChamberBlockEntity controller = getController();
 		if (controller != null && controller != this) {
@@ -515,22 +530,6 @@ public class EvokerEnchantingChamberBlockEntity extends BlockEntity
 		if (!pendingOutput.isEmpty())
 			Containers.dropItemStack(level, dropPos.x, dropPos.y, dropPos.z, pendingOutput.copy());
 		clearState(true);
-	}
-
-	private void ensureUpperProxyBlockEntity() {
-		if (level == null || getController() != this)
-			return;
-		BlockPos upperPos = worldPosition.above();
-		BlockState upperState = level.getBlockState(upperPos);
-		if (!(upperState.getBlock() instanceof EvokerEnchantingChamberBlock)
-			|| upperState.getValue(EvokerEnchantingChamberBlock.HALF) != DoubleBlockHalf.UPPER
-			|| level.getBlockEntity(upperPos) != null) {
-			return;
-		}
-
-		BlockEntity proxy = CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get().create(upperPos, upperState);
-		if (proxy != null)
-			level.setBlockEntity(proxy);
 	}
 
 	private void clearState(boolean clearStoredFluid) {

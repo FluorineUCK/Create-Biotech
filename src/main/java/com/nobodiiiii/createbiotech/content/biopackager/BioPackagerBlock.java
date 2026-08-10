@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.biopackager;
 
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.foundation.block.IBE;
@@ -88,6 +89,9 @@ public class BioPackagerBlock extends WrenchableDirectionalBlock implements IBE<
 	private InteractionResult interact(BlockState state, Level worldIn, BlockPos pos, Player player,
 		InteractionHand handIn, ItemStack itemInHand) {
 		if (player == null)
+			return InteractionResult.PASS;
+
+		if (CBWrenchHelper.isWrench(itemInHand))
 			return InteractionResult.PASS;
 
 		return onBlockEntityUse(worldIn, pos, be -> {

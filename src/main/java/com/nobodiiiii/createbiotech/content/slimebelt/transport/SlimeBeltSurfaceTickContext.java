@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.slimebelt.transport;
 
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.FunnelTickContext;
+import com.nobodiiiii.createbiotech.content.beltsurface.CrusherTickContext;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltHelper;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltLoopGeometry.Track;
@@ -20,7 +21,7 @@ import net.minecraft.world.level.Level;
  * Direction discretisation is delegated to {@link BeltSurface}, which holds the {@code (outwardNormal, movementFacing)}
  * pair for this track.
  */
-public final class SlimeBeltSurfaceTickContext implements FunnelTickContext {
+public final class SlimeBeltSurfaceTickContext implements FunnelTickContext, CrusherTickContext {
 
 	private final SlimeBeltInventory inv;
 	private final Track track;
@@ -70,6 +71,11 @@ public final class SlimeBeltSurfaceTickContext implements FunnelTickContext {
 	@Override
 	public BlockPos funnelPosFor(int segment) {
 		return SlimeBeltHelper.getPositionForOffset(inv.belt, segment).relative(surface.outwardNormal());
+	}
+
+	@Override
+	public BlockPos crusherPosFor(int segment) {
+		return funnelPosFor(segment);
 	}
 
 	@Override

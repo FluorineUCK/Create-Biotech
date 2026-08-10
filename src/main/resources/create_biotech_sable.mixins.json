@@ -5,6 +5,7 @@
   "plugin": "com.nobodiiiii.createbiotech.mixin.compat.sable.SableMixinPlugin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "SimBlockMovementChecksMixin",
     "UniversalJointEndpointBlockSableMixin",
     "UniversalJointBlockEntitySableMixin"
   ],

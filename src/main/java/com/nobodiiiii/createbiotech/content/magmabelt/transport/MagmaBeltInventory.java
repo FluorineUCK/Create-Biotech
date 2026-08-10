@@ -66,14 +66,12 @@ public class MagmaBeltInventory {
 				lazyClientItem.locked = true;
 		}
 
+		boolean inventoryChanged = refreshMovementDirection();
+
 		// Added/Removed items from previous cycle
-		if (!toInsert.isEmpty() || !toRemove.isEmpty()) {
-			toInsert.forEach(this::insert);
-			toInsert.clear();
-			items.removeAll(toRemove);
-			toRemove.clear();
+		inventoryChanged |= flushPendingChanges();
+		if (inventoryChanged)
 			belt.notifyUpdate();
-		}
 
 		if (belt.getSpeed() == 0) {
 			if (belt.getLevel().isClientSide && !belt.isVirtual())
@@ -81,13 +79,6 @@ public class MagmaBeltInventory {
 			else
 				tickMagmaBlastingWithoutMovement();
 			return;
-		}
-
-		// Reverse item collection if belt just reversed
-		if (beltMovementPositive != belt.getDirectionAwareBeltMovementSpeed() > 0) {
-			beltMovementPositive = !beltMovementPositive;
-			Collections.reverse(items);
-			belt.notifyUpdate();
 		}
 
 		// Assuming the first entry is furthest on the belt
@@ -470,6 +461,9 @@ public class MagmaBeltInventory {
 	}
 
 	public boolean canInsertAtFromSide(int segment, Direction side) {
+		// Capability insertion can be the first inventory interaction after load or
+		// a kinetic reversal; use the live direction for both gating and landing.
+		refreshMovementDirection();
 		float segmentPos = segment;
 		if (belt.getMovementFacing() == side.getOpposite())
 			return false;
@@ -538,6 +532,10 @@ public class MagmaBeltInventory {
 	}
 
 	public CompoundTag write(HolderLookup.Provider registries) {
+		// sendData() can run immediately after addItem(), before the next inventory
+		// tick. Persist and synchronize one direction-correct snapshot.
+		refreshMovementDirection();
+		flushPendingChanges();
 		CompoundTag nbt = new CompoundTag();
 		ListTag itemsNBT = new ListTag();
 		items.forEach(stack -> itemsNBT.add(stack.serializeNBT(registries)));
@@ -546,6 +544,27 @@ public class MagmaBeltInventory {
 			nbt.put("LazyItem", lazyClientItem.serializeNBT(registries));
 		nbt.putBoolean("PositiveOrder", beltMovementPositive);
 		return nbt;
+	}
+
+	private boolean refreshMovementDirection() {
+		if (belt.getSpeed() == 0)
+			return false;
+		boolean movingPositive = belt.getDirectionAwareBeltMovementSpeed() > 0;
+		if (beltMovementPositive == movingPositive)
+			return false;
+		beltMovementPositive = movingPositive;
+		Collections.reverse(items);
+		return true;
+	}
+
+	private boolean flushPendingChanges() {
+		if (toInsert.isEmpty() && toRemove.isEmpty())
+			return false;
+		toInsert.forEach(this::insert);
+		toInsert.clear();
+		items.removeAll(toRemove);
+		toRemove.clear();
+		return true;
 	}
 
 	public void eject(TransportedItemStack stack) {

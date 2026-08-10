@@ -7,6 +7,7 @@ import org.jetbrains.annotations.Nullable;
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.math.Axis;
+import com.nobodiiiii.createbiotech.client.ButterCatPartials;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlockEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -120,25 +121,27 @@ public final class CuteCatOnShaftJeiRenderer {
 			Direction facing = renderState.getValue(BlockStateProperties.HORIZONTAL_FACING);
 			float angle = 0.0f;
 
-			CachedBuffers.partialFacing(blockEntity.getCatModel(), renderState, facing)
+			CachedBuffers.partialFacing(ButterCatPartials.getCatModel(blockEntity.getCatVariant()), renderState, facing)
 				.rotateCenteredDegrees(angle, facing)
 				.light(LightTexture.FULL_BRIGHT)
 				.overlay(OverlayTexture.NO_OVERLAY)
 				.renderInto(poseStack, graphics.bufferSource().getBuffer(RenderType.cutoutMipped()));
 
-			CachedBuffers.partialFacing(blockEntity.getButterModel(), renderState, facing)
+			CachedBuffers.partialFacing(
+				ButterCatPartials.getButterModel(blockEntity.isInfinite(), blockEntity.getButterLevel()),
+				renderState, facing)
 				.rotateCenteredDegrees(angle, facing)
 				.light(LightTexture.FULL_BRIGHT)
 				.overlay(OverlayTexture.NO_OVERLAY)
 				.renderInto(poseStack, graphics.bufferSource().getBuffer(RenderType.solid()));
 
-			CachedBuffers.partialFacing(blockEntity.getBreadModel(), renderState, facing)
+			CachedBuffers.partialFacing(ButterCatPartials.getBreadModel(blockEntity.hasBread()), renderState, facing)
 				.rotateCenteredDegrees(angle, facing)
 				.light(LightTexture.FULL_BRIGHT)
 				.overlay(OverlayTexture.NO_OVERLAY)
 				.renderInto(poseStack, graphics.bufferSource().getBuffer(RenderType.solid()));
 
-			CachedBuffers.partialFacing(blockEntity.getRopeModel(), renderState, facing)
+			CachedBuffers.partialFacing(ButterCatPartials.getRopeModel(blockEntity.hasBread()), renderState, facing)
 				.rotateCenteredDegrees(angle, facing)
 				.light(LightTexture.FULL_BRIGHT)
 				.overlay(OverlayTexture.NO_OVERLAY)
@@ -157,7 +160,7 @@ public final class CuteCatOnShaftJeiRenderer {
 	}
 
 	private static BlockState createRenderState() {
-		return CBBlocks.CUTE_CAT_ON_SHAFT.getDefaultState()
+		return CBBlocks.CUTE_CAT_ON_SHAFT.get().defaultBlockState()
 			.setValue(BlockStateProperties.HORIZONTAL_FACING, PREVIEW_FACING);
 	}
 

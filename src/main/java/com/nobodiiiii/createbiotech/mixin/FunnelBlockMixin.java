@@ -25,6 +25,8 @@ import net.minecraft.world.level.block.state.BlockState;
 
 @Mixin(FunnelBlock.class)
 public abstract class FunnelBlockMixin {
+	private static final ThreadLocal<Boolean> CREATE_BIOTECH$UPDATING_SHAPE =
+		ThreadLocal.withInitial(() -> false);
 
 	@Inject(method = "entityInside(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/Entity;)V",
 		at = @At("HEAD"))
@@ -55,18 +57,15 @@ public abstract class FunnelBlockMixin {
 			context.getClickedPos()));
 	}
 
-	// TODO(belt-placement-restore): re-enable once the crash is diagnosed and the revert/re-attach
-	// invariants are stabilised. The original idea: when a slime belt is placed adjacent to an existing
-	// plain FunnelBlock, this updateShape hook converts the funnel into a BeltFunnel attached to the new
-	// surface. Currently this path crashes when placing a belt next to a funnel (likely a re-entrancy or
-	// surface-stale issue during the LevelAccessor neighbour update). For now the auto-attach is disabled:
-	// only initial placement via getStateForPlacement specialises (which is sufficient for the typical
-	// "right-click chest above belt" workflow). Players who already have a placed funnel and want to
-	// attach it after building the belt must remove and replace the funnel.
-	// @Inject(method = "updateShape(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;",
-	//   at = @At("HEAD"), cancellable = true)
+	@Inject(method = "updateShape(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/core/Direction;Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/level/LevelAccessor;Lnet/minecraft/core/BlockPos;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/level/block/state/BlockState;",
+		at = @At("RETURN"), cancellable = true)
 	private void createBiotech$updateShape(BlockState state, Direction direction, BlockState neighbour,
 		LevelAccessor world, BlockPos pos, BlockPos neighbourPos, CallbackInfoReturnable<BlockState> cir) {
+		if (CREATE_BIOTECH$UPDATING_SHAPE.get())
+			return;
+		BlockState result = cir.getReturnValue();
+		if (result == null || !(result.getBlock() instanceof FunnelBlock))
+			return;
 		Direction worldFacing = AbstractFunnelBlock.getFunnelFacing(state);
 		if (worldFacing == null)
 			return;
@@ -74,14 +73,20 @@ public abstract class FunnelBlockMixin {
 		BeltSurface surface = BeltSurfaceResolver.resolveForPlacement(world, pos);
 		if (surface == null)
 			return;
-		// only react when the neighbour on the belt side changed
-		if (direction != surface.outwardNormal().getOpposite())
+		// Only react to the neighbour that actually provides the discovered surface. This
+		// prevents unrelated neighbour updates from repeatedly rebuilding the funnel.
+		if (!surface.beltPos().equals(neighbourPos) || direction != surface.outwardNormal().getOpposite())
 			return;
 		Direction localFacing = surface.localize(worldFacing);
 		if (localFacing.getAxis().isVertical())
 			return;
 
-		cir.setReturnValue(buildBeltFunnelState(state, surface, localFacing, world, pos));
+		CREATE_BIOTECH$UPDATING_SHAPE.set(true);
+		try {
+			cir.setReturnValue(buildBeltFunnelState(state, surface, localFacing, world, pos));
+		} finally {
+			CREATE_BIOTECH$UPDATING_SHAPE.set(false);
+		}
 	}
 
 	private BlockState buildBeltFunnelState(BlockState vanillaState, BeltSurface surface, Direction localFacing,

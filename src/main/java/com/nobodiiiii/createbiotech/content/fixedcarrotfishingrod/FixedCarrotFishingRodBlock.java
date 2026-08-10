@@ -1,7 +1,9 @@
 package com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod;
 
 import com.mojang.serialization.MapCodec;
+import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
 import com.nobodiiiii.createbiotech.registry.CBItems;
+import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -13,6 +15,7 @@ import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.context.BlockPlaceContext;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
@@ -34,7 +37,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-public class FixedCarrotFishingRodBlock extends HorizontalDirectionalBlock implements EntityBlock {
+public class FixedCarrotFishingRodBlock extends HorizontalDirectionalBlock implements EntityBlock, IWrenchable {
 	public static final MapCodec<FixedCarrotFishingRodBlock> CODEC = simpleCodec(FixedCarrotFishingRodBlock::new);
 
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
@@ -145,6 +148,8 @@ public class FixedCarrotFishingRodBlock extends HorizontalDirectionalBlock imple
 	@Override
 	protected ItemInteractionResult useItemOn(ItemStack heldItem, BlockState state, Level level, BlockPos pos,
 		Player player, InteractionHand hand, BlockHitResult hit) {
+		if (CBWrenchHelper.isWrench(heldItem))
+			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		InteractionResult result = interact(state, level, pos, player, heldItem);
 		return result.consumesAction()
 			? ItemInteractionResult.sidedSuccess(level.isClientSide)
@@ -190,6 +195,23 @@ public class FixedCarrotFishingRodBlock extends HorizontalDirectionalBlock imple
 		}
 
 		level.playSound(null, pos, SoundEvents.ITEM_FRAME_ADD_ITEM, SoundSource.BLOCKS, 1.0f, 1.0f);
+		return InteractionResult.SUCCESS;
+	}
+
+	@Override
+	public InteractionResult onWrenched(BlockState state, UseOnContext context) {
+		if (context.getClickedFace().getAxis() != Direction.Axis.Y)
+			return InteractionResult.PASS;
+		BlockState rotated = state.setValue(FACING,
+			state.getValue(FACING).getClockWise(context.getClickedFace().getAxis()));
+		Level level = context.getLevel();
+		BlockPos pos = context.getClickedPos();
+		if (!rotated.canSurvive(level, pos))
+			return InteractionResult.PASS;
+		if (level.isClientSide())
+			return InteractionResult.SUCCESS;
+		level.setBlock(pos, rotated, Block.UPDATE_ALL);
+		IWrenchable.playRotateSound(level, pos);
 		return InteractionResult.SUCCESS;
 	}
 

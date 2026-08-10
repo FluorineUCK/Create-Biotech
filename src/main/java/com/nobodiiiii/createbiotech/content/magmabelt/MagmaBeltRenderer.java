@@ -8,9 +8,9 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.AllPartialModels;
-import com.simibubi.create.AllSpriteShifts;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
 import com.nobodiiiii.createbiotech.content.magmabelt.transport.MagmaBeltInventory;
+import com.nobodiiiii.createbiotech.client.render.CBBeltRenderHelper;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
 import com.simibubi.create.content.kinetics.belt.BeltSlope;
 import com.simibubi.create.content.kinetics.belt.transport.TransportedItemStack;
@@ -18,6 +18,7 @@ import com.simibubi.create.content.logistics.box.PackageItem;
 import com.simibubi.create.foundation.blockEntity.renderer.SafeBlockEntityRenderer;
 import com.simibubi.create.foundation.render.ShadowRenderHelper;
 
+import dev.engine_room.flywheel.api.visualization.VisualizationManager;
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import dev.engine_room.flywheel.lib.transform.TransformStack;
 import net.createmod.catnip.animation.AnimationTickHolder;
@@ -41,8 +42,6 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.Direction.AxisDirection;
 import net.minecraft.core.Vec3i;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -60,119 +59,21 @@ public class MagmaBeltRenderer extends SafeBlockEntityRenderer<MagmaBeltBlockEnt
 	protected void renderSafe(MagmaBeltBlockEntity be, float partialTicks, PoseStack ms, MultiBufferSource buffer, int light,
 		int overlay) {
 
-		{
+		if (!VisualizationManager.supportsVisualization(be.getLevel())) {
 
 			BlockState blockState = be.getBlockState();
 			if (!MagmaBeltBlock.isMagmaBelt(blockState))
 				return;
-
-			BeltSlope beltSlope = blockState.getValue(MagmaBeltBlock.SLOPE);
-			BeltPart part = blockState.getValue(MagmaBeltBlock.PART);
-			Direction facing = blockState.getValue(MagmaBeltBlock.HORIZONTAL_FACING);
-			AxisDirection axisDirection = facing.getAxisDirection();
-
-			boolean downward = beltSlope == BeltSlope.DOWNWARD;
-			boolean upward = beltSlope == BeltSlope.UPWARD;
-			boolean diagonal = downward || upward;
-			boolean start = part == BeltPart.START;
-			boolean end = part == BeltPart.END;
-			boolean sideways = beltSlope == BeltSlope.SIDEWAYS;
-			boolean alongX = facing.getAxis() == Direction.Axis.X;
-
-			PoseStack localTransforms = new PoseStack();
-			var msr = TransformStack.of(localTransforms);
-			VertexConsumer vb = buffer.getBuffer(RenderType.solid());
-			float renderTick = AnimationTickHolder.getRenderTime(be.getLevel());
-
-			msr.center()
-					.rotateYDegrees(AngleHelper.horizontalAngle(facing) + (upward ? 180 : 0) + (sideways ? 270 : 0))
-					.rotateZDegrees(sideways ? 90 : 0)
-					.rotateXDegrees(!diagonal && beltSlope != BeltSlope.HORIZONTAL ? 90 : 0)
-					.uncenter();
-
-			if (downward || beltSlope == BeltSlope.VERTICAL && axisDirection == AxisDirection.POSITIVE) {
-				boolean b = start;
-				start = end;
-				end = b;
-			}
-
-			DyeColor color = be.color.orElse(null);
-
-			for (boolean bottom : Iterate.trueAndFalse) {
-
-				PartialModel beltPartial = getBeltPartial(diagonal, start, end, bottom);
-
-				SuperByteBuffer beltBuffer = CachedBuffers.partial(beltPartial, blockState)
-					.light(light);
-
-				SpriteShiftEntry spriteShift = getSpriteShiftEntry(color, diagonal, bottom);
-
-				// UV shift
-				float speed = be.getSpeed();
-				double scroll = bottom ? 0.5 : 0.0;
-				if (speed != 0) {
-					float time = renderTick * axisDirection.getStep();
-					if (diagonal && (downward ^ alongX) || !sideways && !diagonal && alongX
-						|| sideways && axisDirection == AxisDirection.NEGATIVE)
-						speed = -speed;
-
-					scroll += speed * time / (31.5 * 16);
-				}
-
-				float scrollMult = diagonal ? 3f / 8f : 0.5f;
-				TextureAtlasSprite originalSprite = spriteShift.getOriginal();
-				TextureAtlasSprite targetSprite = spriteShift.getTarget();
-				if (originalSprite != null && targetSprite != null) {
-					float spriteSize = targetSprite.getV1() - targetSprite.getV0();
-
-					scroll = scroll - Math.floor(scroll);
-					scroll = scroll * spriteSize * scrollMult;
-
-					beltBuffer.shiftUVScrolling(spriteShift, (float) scroll);
-				}
-
-				beltBuffer
-					.transform(localTransforms)
-					.renderInto(ms, vb);
-
-				// Diagonal belt do not have a separate bottom model
-				if (diagonal)
-					break;
-			}
-
-			if (be.hasPulley()) {
-				Direction dir = sideways ? Direction.UP
-					: blockState.getValue(MagmaBeltBlock.HORIZONTAL_FACING)
-						.getClockWise();
-
-				Supplier<PoseStack> matrixStackSupplier = () -> {
-					PoseStack stack = new PoseStack();
-					var stacker = TransformStack.of(stack);
-					stacker.center();
-					if (dir.getAxis() == Direction.Axis.X) stacker.rotateYDegrees(90);
-					if (dir.getAxis() == Direction.Axis.Y) stacker.rotateXDegrees(90);
-					stacker.rotateXDegrees(90);
-					stacker.uncenter();
-					return stack;
-				};
-
-				SuperByteBuffer superBuffer = CachedBuffers.partialDirectional(AllPartialModels.BELT_PULLEY,
-					blockState, dir, matrixStackSupplier);
-				KineticBlockEntityRenderer.standardKineticRotationTransform(superBuffer, be, light)
-					.renderInto(ms, vb);
-			}
+			CBBeltRenderHelper.renderSurface(be, blockState, ms, buffer, light,
+				MagmaBeltRenderer::getSpriteShiftEntry, 0);
 		}
 
 		renderItems(be, partialTicks, ms, buffer, light, overlay);
 	}
 
-	public static SpriteShiftEntry getSpriteShiftEntry(DyeColor color, boolean diagonal, boolean bottom) {
-		if (color != null) {
-			return (diagonal ? AllSpriteShifts.DYED_DIAGONAL_BELTS
-				: bottom ? AllSpriteShifts.DYED_OFFSET_BELTS : AllSpriteShifts.DYED_BELTS).get(color);
-		} else
-			return diagonal ? MagmaBeltSpriteShifts.BELT_DIAGONAL
-				: bottom ? MagmaBeltSpriteShifts.BELT_OFFSET : MagmaBeltSpriteShifts.BELT;
+	public static SpriteShiftEntry getSpriteShiftEntry(boolean diagonal, boolean bottom) {
+		return diagonal ? MagmaBeltSpriteShifts.BELT_DIAGONAL
+			: bottom ? MagmaBeltSpriteShifts.BELT_OFFSET : MagmaBeltSpriteShifts.BELT;
 	}
 
 	public static PartialModel getBeltPartial(boolean diagonal, boolean start, boolean end, boolean bottom) {
@@ -315,14 +216,11 @@ public class MagmaBeltRenderer extends SafeBlockEntityRenderer<MagmaBeltBlockEnt
 		}
 
 		if (renderUpright) {
-			Entity renderViewEntity = mc.cameraEntity;
-			if (renderViewEntity != null) {
-				Vec3 positionVec = renderViewEntity.position();
-				Vec3 vectorForOffset = MagmaBeltHelper.getVectorForOffset(be, offset);
-				Vec3 diff = vectorForOffset.subtract(positionVec);
-				float yRot = (float) (Mth.atan2(diff.x, diff.z) + Math.PI);
-				ms.mulPose(Axis.YP.rotation(yRot));
-			}
+			Vec3 cameraPosition = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+			Vec3 vectorForOffset = MagmaBeltHelper.getVectorForOffset(be, offset);
+			Vec3 diff = vectorForOffset.subtract(cameraPosition);
+			float yRot = (float) (Mth.atan2(diff.x, diff.z) + Math.PI);
+			ms.mulPose(Axis.YP.rotation(yRot));
 			ms.translate(0, 3 / 32d, 1 / 16f);
 		}
 

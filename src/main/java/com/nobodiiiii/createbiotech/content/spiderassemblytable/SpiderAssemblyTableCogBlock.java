@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.spiderassemblytable;
 
+import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.AllShapes;
@@ -13,6 +14,8 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.RandomSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Player;
@@ -21,7 +24,7 @@ import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.LevelAccessor;
 import net.minecraft.world.level.LevelReader;
-import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -33,7 +36,7 @@ import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
-	implements IBE<SpiderAssemblyTableCogBlockEntity>, ICogWheel {
+	implements IBE<SpiderAssemblyTableCogBlockEntity>, ICogWheel, CBMultiBlockLifecycle.Part {
 
 	public static final DirectionProperty FACING = BlockStateProperties.HORIZONTAL_FACING;
 
@@ -53,17 +56,27 @@ public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
 	}
 
 	@Override
-	public boolean canSurvive(BlockState state, LevelReader level, BlockPos pos) {
-		return isValidMainFor(level, pos, state)
-			&& CogWheelBlock.isValidCogwheelPosition(false, level, pos, getRotationAxis(state));
+	public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
+		super.onPlace(state, level, pos, oldState, isMoving);
+		// Catches cogs that arrive without a table behind them, such as from /setblock.
+		SpiderAssemblyTableBlock.scheduleStructureCheck(level, getMainPos(pos, state), pos);
 	}
 
 	@Override
 	public BlockState updateShape(BlockState state, Direction direction, BlockState neighborState, LevelAccessor level,
 		BlockPos pos, BlockPos neighborPos) {
-		if (!state.canSurvive(level, pos))
-			return Blocks.AIR.defaultBlockState();
+		// Deferred to the scheduled tick so the check never runs on the client and does
+		// not read across the chunk border the table may sit behind.
+		SpiderAssemblyTableBlock.scheduleStructureCheck(level, getMainPos(pos, state), pos);
 		return super.updateShape(state, direction, neighborState, level, pos, neighborPos);
+	}
+
+	@Override
+	public void tick(BlockState state, ServerLevel level, BlockPos pos, RandomSource random) {
+		BlockPos mainPos = getMainPos(pos, state);
+		if (SpiderAssemblyTableBlock.isValidStructure(level, mainPos, pos))
+			return;
+		SpiderAssemblyTableBlock.removeStructure(level, mainPos, pos);
 	}
 
 	@Override
@@ -74,19 +87,22 @@ public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
 
 	@Override
 	public BlockState playerWillDestroy(Level level, BlockPos pos, BlockState state, Player player) {
-		if (!level.isClientSide && !SpiderAssemblyTableBlock.isRemovingTailFromMain()) {
+		// Survival breaks let the scheduled teardown destroy the table so its loot table
+		// decides what drops. Creative has to take the table out itself, without drops.
+		if (!level.isClientSide && player.isCreative()) {
 			BlockPos mainPos = getMainPos(pos, state);
-			SpiderAssemblyTableBlock.removeMainFromTail(level, mainPos, !player.isCreative(), true);
+			// Reciprocal check: a table that happens to face this way but belongs to a
+			// different cog is a machine of its own and must be left alone.
+			if (SpiderAssemblyTableBlock.isValidStructure(level, mainPos, pos))
+				CBMultiBlockLifecycle.removeAnchorInCreative(level, mainPos, player);
 		}
 		return super.playerWillDestroy(level, pos, state, player);
 	}
 
 	@Override
 	public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
-		if (state.getBlock() != newState.getBlock() && !level.isClientSide && !SpiderAssemblyTableBlock.isRemovingTailFromMain()) {
-			BlockPos mainPos = getMainPos(pos, state);
-			SpiderAssemblyTableBlock.removeMainFromTail(level, mainPos, !isMoving, false);
-		}
+		if (state.getBlock() != newState.getBlock())
+			SpiderAssemblyTableBlock.scheduleStructureCheck(level, getMainPos(pos, state), pos);
 		super.onRemove(state, level, pos, newState, isMoving);
 	}
 
@@ -123,18 +139,24 @@ public class SpiderAssemblyTableCogBlock extends HorizontalKineticBlock
 
 	public static boolean isValidCogFor(LevelReader level, BlockPos pos, BlockState mainState) {
 		BlockState cogState = level.getBlockState(pos);
-		return cogState.getBlock() instanceof SpiderAssemblyTableCogBlock
-			&& cogState.getValue(FACING) == mainState.getValue(SpiderAssemblyTableBlock.FACING);
+		if (!(cogState.getBlock() instanceof SpiderAssemblyTableCogBlock cog))
+			return false;
+		if (cogState.getValue(FACING) != mainState.getValue(SpiderAssemblyTableBlock.FACING))
+			return false;
+		return CogWheelBlock.isValidCogwheelPosition(false, level, pos, cog.getRotationAxis(cogState));
 	}
 
-	private static boolean isValidMainFor(LevelReader level, BlockPos pos, BlockState cogState) {
-		BlockPos mainPos = getMainPos(pos, cogState);
-		BlockState mainState = level.getBlockState(mainPos);
-		return mainState.getBlock() instanceof SpiderAssemblyTableBlock
-			&& mainState.getValue(SpiderAssemblyTableBlock.FACING) == cogState.getValue(FACING);
-	}
-
-	private static BlockPos getMainPos(BlockPos pos, BlockState state) {
+	static BlockPos getMainPos(BlockPos pos, BlockState state) {
 		return pos.relative(state.getValue(FACING));
+	}
+
+	@Override
+	public Class<? extends Block> getMultiBlockType() {
+		return SpiderAssemblyTableBlock.class;
+	}
+
+	@Override
+	public BlockPos getMultiBlockAnchor(BlockPos pos, BlockState state) {
+		return getMainPos(pos, state);
 	}
 }
