@@ -30,6 +30,7 @@ import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionPro
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlockEntity;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
+import com.nobodiiiii.createbiotech.foundation.item.DeferredExtractionPreviewProvider;
 import com.nobodiiiii.createbiotech.mixin.MobAccessor;
 import com.nobodiiiii.createbiotech.mixin.client.CreeperAccessor;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
@@ -2022,6 +2023,15 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		return readyOutputs.get(0).boxStack.copy();
 	}
 
+	private ItemStack getDeferredControllerOutputPreview() {
+		MarkedCreeperTarget target = findMarkedCreeperForOutput();
+		if (target == null)
+			return ItemStack.EMPTY;
+
+		ItemStack preview = createBoxedCreeper(target.creeper);
+		return preview == null ? ItemStack.EMPTY : preview;
+	}
+
 	private void requestControllerOutput() {
 		if (isPausedForPartialChunkUnload())
 			return;
@@ -3130,7 +3140,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		BLOCKED_OUTPUT
 	}
 
-	private class ChamberInputHandler implements IItemHandler {
+	private class ChamberInputHandler implements IItemHandler, DeferredExtractionPreviewProvider {
 		@Override
 		public int getSlots() {
 			return 1;
@@ -3140,12 +3150,13 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		public ItemStack getStackInSlot(int slot) {
 			validateSlot(slot);
 			ItemStack output = getActualControllerOutput();
-			if (output != null)
-				return output;
+			return output == null ? ItemStack.EMPTY : output;
+		}
 
-			// Create 1.21 funnels skip simulated extraction for slots that report empty.
-			requestControllerOutput();
-			return ItemStack.EMPTY;
+		@Override
+		public ItemStack getDeferredExtractionPreview(int slot) {
+			validateSlot(slot);
+			return getDeferredControllerOutputPreview();
 		}
 
 		@Override
