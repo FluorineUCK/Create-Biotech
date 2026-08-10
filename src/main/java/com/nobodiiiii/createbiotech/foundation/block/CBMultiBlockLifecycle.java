@@ -60,6 +60,10 @@ public final class CBMultiBlockLifecycle {
 	 * Simulated physical structures. Parts remain piston-immovable, but Create is
 	 * allowed to collect them, and the attachment check pulls in the rest of their
 	 * logical block.
+	 *
+	 * <p>Parts intentionally remain non-brittle. Unlike vanilla doors and beds, these
+	 * machines rely on normal adjacent-block stickiness to join a moving structure;
+	 * their implementations must defer completeness checks until placement settles.</p>
 	 */
 	public static synchronized void registerMovementChecks() {
 		if (movementChecksRegistered)
