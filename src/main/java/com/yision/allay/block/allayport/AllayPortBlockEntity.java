@@ -20,7 +20,6 @@ import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
@@ -262,13 +261,17 @@ public class AllayPortBlockEntity extends PackagePortBlockEntity {
 
 	@Override
 	public ItemInteractionResult use(Player player) {
+		if (!canPlayerUse(player)) {
+			return ItemInteractionResult.FAIL;
+		}
 		return super.use(player);
 	}
 
 	@Override
 	public boolean canPlayerUse(Player player) {
 		if (level == null || !SubLevelCompat.isValidSpacePosition(level, worldPosition)
-			|| level.getBlockEntity(worldPosition) != this) {
+			|| level.getBlockEntity(worldPosition) != this
+			|| !SubLevelCompat.canEntityInteractWith(level, worldPosition, player)) {
 			return false;
 		}
 		Vec3 worldCenter = SubLevelCompat.toWorld(level, worldPosition,

@@ -81,6 +81,9 @@ public class AllayPortConfigurationPacket extends BlockEntityConfigurationPacket
 		if (!SubLevelCompat.matchesSpace(level, pos, subLevelId)) {
 			return;
 		}
+		if (!SubLevelCompat.canEntityInteractWith(level, pos, player)) {
+			return;
+		}
 		double interactionRange = player.blockInteractionRange() + maxRange();
 		if (new AABB(pos).distanceToSqr(SubLevelCompat.toLocal(level, pos, player.getEyePosition()))
 			>= interactionRange * interactionRange) {
