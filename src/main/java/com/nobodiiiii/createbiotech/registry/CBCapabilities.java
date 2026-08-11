@@ -57,6 +57,8 @@ public final class CBCapabilities {
 			(be, side) -> be.getFluidCapability(side));
 		event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, CBBlockEntityTypes.SQUID_PRINTER.get(),
 			(be, side) -> be.getFluidCapability(side));
+		event.registerBlockEntity(Capabilities.FluidHandler.BLOCK, CBBlockEntityTypes.MAGMA_CUBE_BURNER.get(),
+			(be, side) -> be.getFluidCapability(side));
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.SLIME_BELT.get(),
 			(be, side) -> be.getItemCapability(side));
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, AllBlockEntityTypes.ANDESITE_TUNNEL.get(),

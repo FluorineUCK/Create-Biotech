@@ -22,6 +22,7 @@ import com.nobodiiiii.createbiotech.content.shulkerteleporter.ShulkerTeleporterB
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableCogBlockEntity;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlockEntity;
+import com.nobodiiiii.createbiotech.content.magmacubeburner.MagmaCubeBurnerBlockEntity;
 import com.nobodiiiii.createbiotech.content.petridish.PetriDishBlockEntity;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
@@ -59,6 +60,11 @@ public class CBBlockEntityTypes {
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MagmaBeltBlockEntity>> MAGMA_BELT =
 		BLOCK_ENTITY_TYPES.register("magma_belt",
 			() -> BlockEntityType.Builder.of(MagmaBeltBlockEntity::new, CBBlocks.MAGMA_BELT.get())
+				.build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MagmaCubeBurnerBlockEntity>>
+		MAGMA_CUBE_BURNER = BLOCK_ENTITY_TYPES.register("magma_cube_burner",
+			() -> BlockEntityType.Builder.of(MagmaCubeBurnerBlockEntity::new, CBBlocks.MAGMA_CUBE_BURNER.get())
 				.build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PowerBeltBlockEntity>> POWER_BELT =

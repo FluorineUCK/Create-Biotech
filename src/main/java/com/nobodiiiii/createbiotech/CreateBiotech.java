@@ -38,6 +38,7 @@ import com.nobodiiiii.createbiotech.registry.CBRecipeConditions;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.api.behaviour.movement.MovementBehaviour;
 import com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour;
+import com.simibubi.create.api.boiler.BoilerHeater;
 import com.simibubi.create.api.stress.BlockStressValues;
 import com.yision.allay.block.allayport.AllayPortTargetRegistry;
 import com.yision.allay.logistics.courier.AllayCourierTaskManager;
@@ -106,6 +107,7 @@ public class CreateBiotech {
 				new BlockStressValues.GeneratedRpm(4, false));
 			CBBlocks.registerButterCatStressValues();
 			CBFluids.registerCreamDispenseBehavior();
+			BoilerHeater.REGISTRY.register(CBBlocks.MAGMA_CUBE_BURNER.get(), BoilerHeater.BLAZE_BURNER);
 			MovementBehaviour.REGISTRY.register(CBBlocks.GHAST_HELM.get(), new GhastHelmMovementBehaviour());
 			BufferPadMovementBehaviour bufferPadMovementBehaviour = new BufferPadMovementBehaviour();
 			for (DyeColor color : DyeColor.values())

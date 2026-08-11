@@ -28,6 +28,7 @@ import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonAssemblyStationBlock;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHelmBlock;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlock;
+import com.nobodiiiii.createbiotech.content.magmacubeburner.MagmaCubeBurnerBlock;
 import com.nobodiiiii.createbiotech.content.petridish.PetriDishBlock;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltBlock;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlock;
@@ -78,6 +79,13 @@ public class CBBlocks {
 			.strength(0.8f)
 			.mapColor(MapColor.COLOR_RED)
 			.noOcclusion()));
+
+	public static final DeferredHolder<Block, MagmaCubeBurnerBlock> MAGMA_CUBE_BURNER =
+		BLOCKS.register("magma_cube_burner",
+			() -> new MagmaCubeBurnerBlock(CBSharedProperties.createSoftMetal()
+				.mapColor(MapColor.COLOR_GRAY)
+				.lightLevel(MagmaCubeBurnerBlock::getLight)
+				.noOcclusion()));
 
 	public static final DeferredHolder<Block, PowerBeltBlock> POWER_BELT = BLOCKS.register("power_belt",
 		() -> new PowerBeltBlock(CBSharedProperties.createWooden()
