@@ -12,6 +12,7 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
+import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.advancement.PlacedByPlayerAdvancementTracker;
@@ -29,6 +30,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -65,6 +67,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 	private static final String TANK_TAG = "Tank";
 	private static final String RECORDED_ENTITY_ID_TAG = "RecordedEntityId";
 	private static final String RECORDED_MAX_HEALTH_TAG = "RecordedMaxHealth";
+	private static final String RECORDED_MIMIC_PROFILE_TAG = "RecordedMimicProfile";
 	private static final String SCAN_COOLDOWN_TAG = "ScanCooldown";
 	private static final String EMERGENCE_IN_PROGRESS_TAG = "EmergenceInProgress";
 	private static final String EMERGENCE_TICKS_REMAINING_TAG = "EmergenceTicksRemaining";
@@ -107,6 +110,8 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 
 	@Nullable
 	private ResourceLocation recordedEntityId;
+	@Nullable
+	private MimicProfile recordedMimicProfile;
 	private float recordedMaxHealth;
 	private int scanCooldown;
 	@Nullable
@@ -398,6 +403,8 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		if (!(preview instanceof LivingEntity livingPreview))
 			return null;
 
+		if (recordedMimicProfile != null)
+			recordedMimicProfile.apply(livingPreview);
 		SlimeMimicHandler.setSlimeMimic(livingPreview, true);
 		livingPreview.setNoGravity(true);
 		clientPreviewEntityId = recordedEntityId;
@@ -524,12 +531,12 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		float spawnYaw = getSpawnYaw();
 		Entity spawned = entityType.spawn(serverLevel, entity -> {
 			entity.moveTo(spawnX, spawnY, spawnZ, spawnYaw, entity.getXRot());
-			SlimeMimicHandler.markSpawnedEntity(entity);
+			prepareSpawnedMimic(entity);
 		}, spawnPos, MobSpawnType.DISPENSER, true, false);
 		if (spawned == null) {
 			spawned = entityType.create(serverLevel);
 			if (spawned != null) {
-				SlimeMimicHandler.markSpawnedEntity(spawned);
+				prepareSpawnedMimic(spawned);
 				spawned.moveTo(spawnX, spawnY, spawnZ, serverLevel.random.nextFloat() * 360.0f, 0.0f);
 				serverLevel.addFreshEntity(spawned);
 			}
@@ -546,7 +553,6 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		livingEntity.yBodyRotO = spawnYaw;
 		livingEntity.setYHeadRot(spawnYaw);
 		livingEntity.yHeadRotO = spawnYaw;
-		SlimeMimicHandler.markSpawnedEntity(livingEntity);
 		emergenceInProgress = false;
 		emergenceTicksRemaining = 0;
 		fluidTank.drain(required, FluidAction.EXECUTE);
@@ -555,6 +561,12 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		clearRecordedEntity();
 		level.playSound(null, worldPosition, SoundEvents.SLIME_BLOCK_PLACE, SoundSource.BLOCKS, 0.7f, 0.9f);
 		sendData();
+	}
+
+	private void prepareSpawnedMimic(@Nullable Entity entity) {
+		if (entity instanceof LivingEntity livingEntity && recordedMimicProfile != null)
+			recordedMimicProfile.apply(livingEntity);
+		SlimeMimicHandler.markSpawnedEntity(entity);
 	}
 
 	private void awardCultivationAdvancements(ServerLevel serverLevel, LivingEntity cultivatedEntity) {
@@ -660,6 +672,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		if (entityId == null)
 			return;
 		recordedEntityId = entityId;
+		recordedMimicProfile = MimicProfile.capture(entity);
 		recordedMaxHealth = entity.getMaxHealth();
 		int required = getRequiredFluidAmount();
 		if (fluidTank.getFluidAmount() > required) {
@@ -671,6 +684,7 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 
 	private void clearRecordedEntity() {
 		recordedEntityId = null;
+		recordedMimicProfile = null;
 		recordedMaxHealth = 0;
 		scanCooldown = 0;
 		emergenceInProgress = false;
@@ -707,6 +721,8 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		tag.put(TANK_TAG, fluidTank.writeToNBT(registries, new CompoundTag()));
 		if (recordedEntityId != null)
 			tag.putString(RECORDED_ENTITY_ID_TAG, recordedEntityId.toString());
+		if (recordedMimicProfile != null)
+			tag.put(RECORDED_MIMIC_PROFILE_TAG, recordedMimicProfile.save());
 		tag.putFloat(RECORDED_MAX_HEALTH_TAG, recordedMaxHealth);
 		tag.putInt(SCAN_COOLDOWN_TAG, scanCooldown);
 		tag.putBoolean(EMERGENCE_IN_PROGRESS_TAG, emergenceInProgress);
@@ -721,6 +737,10 @@ public class PetriDishBlockEntity extends SmartBlockEntity implements IHaveGoggl
 		fluidTank.readFromNBT(registries, tag.getCompound(TANK_TAG));
 		recordedEntityId =
 			tag.contains(RECORDED_ENTITY_ID_TAG) ? ResourceLocation.parse(tag.getString(RECORDED_ENTITY_ID_TAG)) : null;
+		recordedMimicProfile = tag.contains(RECORDED_MIMIC_PROFILE_TAG, Tag.TAG_COMPOUND)
+			? MimicProfile.load(tag.getCompound(RECORDED_MIMIC_PROFILE_TAG)) : null;
+		if (recordedMimicProfile != null && !recordedMimicProfile.matches(recordedEntityId))
+			recordedMimicProfile = null;
 		recordedMaxHealth = tag.getFloat(RECORDED_MAX_HEALTH_TAG);
 		scanCooldown = tag.getInt(SCAN_COOLDOWN_TAG);
 		emergenceInProgress = tag.getBoolean(EMERGENCE_IN_PROGRESS_TAG);

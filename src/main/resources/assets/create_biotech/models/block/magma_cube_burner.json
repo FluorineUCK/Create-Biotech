@@ -5,7 +5,7 @@
 	"texture_size": [64, 64],
 	"textures": {
 		"0": "create_biotech:block/magma_cube_burner",
-		"particle": "create_biotech:block/magma_cube_burner"
+		"particle": "minecraft:block/blackstone"
 	},
 	"elements": [
 		{
