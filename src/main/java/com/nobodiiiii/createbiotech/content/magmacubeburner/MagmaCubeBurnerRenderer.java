@@ -24,8 +24,10 @@ public class MagmaCubeBurnerRenderer extends SmartBlockEntityRenderer<MagmaCubeB
 	private static final int MAGMA_CUBE_SIZE = 1;
 	private static final float MAGMA_CUBE_BASE_Y = 2f / 16f;
 	private static final float MAGMA_CUBE_JUMP_HEIGHT = 2f / 16f;
-	private static final float JUMP_ANIMATION_PERIOD = 40f;
+	private static final float JUMP_ANIMATION_PERIOD = MagmaCubeBurnerBlockEntity.BURNING_ANIMATION_PERIOD;
 	private static final float JUMP_AIR_TIME = 16f;
+	private static final float BURNING_LANDING_PHASE =
+		MagmaCubeBurnerBlockEntity.BURNING_LANDING_TICK / JUMP_ANIMATION_PERIOD;
 	private static final float FLUID_MIN_XZ = 3f / 16f + 1f / 512f;
 	private static final float FLUID_MAX_XZ = 13f / 16f - 1f / 512f;
 	private static final float FLUID_MIN_Y = 2f / 16f + 1f / 512f;
@@ -91,8 +93,8 @@ public class MagmaCubeBurnerRenderer extends SmartBlockEntityRenderer<MagmaCubeB
 		float squish = 0;
 		if (phase < .2f)
 			squish = Mth.sin(phase / .2f * Mth.PI) * .5f;
-		else if (phase >= .8f)
-			squish = -Mth.sin((phase - .8f) / .2f * Mth.PI) * .25f;
+		else if (phase >= BURNING_LANDING_PHASE)
+			squish = -Mth.sin((phase - BURNING_LANDING_PHASE) / (1 - BURNING_LANDING_PHASE) * Mth.PI) * .25f;
 		setSquish(magmaCube, squish);
 	}
 

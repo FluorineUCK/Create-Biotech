@@ -5,7 +5,6 @@ import javax.annotation.ParametersAreNonnullByDefault;
 import com.mojang.serialization.MapCodec;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBItems;
-import com.simibubi.create.AllShapes;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.content.processing.basin.BasinBlockEntity;
 import com.simibubi.create.content.processing.burner.BlazeBurnerBlock;
@@ -42,6 +41,7 @@ import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
+import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
 @MethodsReturnNonnullByDefault
@@ -50,6 +50,40 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 
 	public static final MapCodec<MagmaCubeBurnerBlock> CODEC = simpleCodec(MagmaCubeBurnerBlock::new);
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
+	private static final VoxelShape MODEL_SHAPE = Shapes.or(
+		Block.box(1, 0, 1, 15, 2, 15),
+		Block.box(2, 2, 2, 14, 6, 3),
+		Block.box(2, 2, 2, 3, 6, 14),
+		Block.box(13, 2, 2, 14, 6, 14),
+		Block.box(2, 2, 13, 14, 6, 14),
+		Block.box(1, 2, 1, 3, 13, 3),
+		Block.box(13, 2, 1, 15, 13, 3),
+		Block.box(13, 2, 13, 15, 13, 15),
+		Block.box(1, 2, 13, 3, 13, 15),
+		Block.box(3, 6, 13, 13, 8, 15),
+		Block.box(3, 6, 1, 13, 8, 3),
+		Block.box(1, 6, 3, 3, 8, 13),
+		Block.box(13, 6, 3, 15, 8, 13),
+		Block.box(5, 14, 11, 11, 15, 12),
+		Block.box(5, 13, 13, 11, 15, 15),
+		Block.box(4, 14, 5, 5, 15, 11),
+		Block.box(1, 13, 5, 3, 15, 11),
+		Block.box(5, 14, 4, 11, 15, 5),
+		Block.box(11, 13, 5, 12, 14, 11),
+		Block.box(5, 13, 1, 11, 15, 3),
+		Block.box(13, 13, 5, 15, 15, 11),
+		Block.box(1, 13, 11, 5, 16, 15),
+		Block.box(1, 13, 1, 5, 16, 5),
+		Block.box(11, 13, 1, 15, 16, 5),
+		Block.box(11, 13, 11, 15, 16, 15),
+		Block.box(0, 0, 0, 5, 2, 1),
+		Block.box(0, 0, 1, 1, 2, 5),
+		Block.box(0, 0, 11, 1, 2, 15),
+		Block.box(0, 0, 15, 5, 2, 16),
+		Block.box(11, 0, 15, 16, 2, 16),
+		Block.box(15, 0, 11, 16, 2, 15),
+		Block.box(11, 0, 0, 16, 2, 1),
+		Block.box(15, 0, 1, 16, 2, 5));
 
 	public MagmaCubeBurnerBlock(Properties properties) {
 		super(properties);
@@ -70,7 +104,12 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 
 	@Override
 	public BlockState getStateForPlacement(BlockPlaceContext context) {
-		return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
+		ItemStack stack = context.getItemInHand();
+		HeatLevel initialHeat = stack.getItem() instanceof MagmaCubeBurnerItem burnerItem
+			&& !burnerItem.hasCapturedMagmaCube() ? HeatLevel.NONE : HeatLevel.SMOULDERING;
+		return defaultBlockState()
+			.setValue(BlazeBurnerBlock.HEAT_LEVEL, initialHeat)
+			.setValue(FACING, context.getHorizontalDirection().getOpposite());
 	}
 
 	@Override
@@ -107,6 +146,8 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 
 	@Override
 	public BlockEntity newBlockEntity(BlockPos pos, BlockState state) {
+		if (state.getValue(BlazeBurnerBlock.HEAT_LEVEL) == HeatLevel.NONE)
+			return null;
 		return new MagmaCubeBurnerBlockEntity(pos, state);
 	}
 
@@ -120,19 +161,18 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 	@Override
 	public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader level, BlockPos pos,
 		Player player) {
-		return CBItems.MAGMA_CUBE_BURNER.get().getDefaultInstance();
+		return (state.getValue(BlazeBurnerBlock.HEAT_LEVEL) == HeatLevel.NONE
+			? CBItems.EMPTY_MAGMA_CUBE_BURNER : CBItems.MAGMA_CUBE_BURNER).get().getDefaultInstance();
 	}
 
 	@Override
 	public VoxelShape getShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-		return AllShapes.HEATER_BLOCK_SHAPE;
+		return MODEL_SHAPE;
 	}
 
 	@Override
 	public VoxelShape getCollisionShape(BlockState state, BlockGetter level, BlockPos pos, CollisionContext context) {
-		if (context == CollisionContext.empty())
-			return AllShapes.HEATER_BLOCK_SPECIAL_COLLISION_SHAPE;
-		return getShape(state, level, pos, context);
+		return MODEL_SHAPE;
 	}
 
 	@Override

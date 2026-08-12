@@ -103,8 +103,12 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> MAGMA_BELT_CONNECTOR = ITEMS.register("magma_belt_connector",
 		() -> new MagmaBeltConnectorItem(new Item.Properties()));
 
+	public static final DeferredHolder<Item, Item> EMPTY_MAGMA_CUBE_BURNER =
+		ITEMS.register("empty_magma_cube_burner",
+			() -> MagmaCubeBurnerItem.empty(CBBlocks.MAGMA_CUBE_BURNER.get(), new Item.Properties()));
+
 	public static final DeferredHolder<Item, Item> MAGMA_CUBE_BURNER = ITEMS.register("magma_cube_burner",
-		() -> new MagmaCubeBurnerItem(CBBlocks.MAGMA_CUBE_BURNER.get(), new Item.Properties()));
+		() -> MagmaCubeBurnerItem.withMagmaCube(CBBlocks.MAGMA_CUBE_BURNER.get(), new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> POWER_BELT_CONNECTOR = ITEMS.register("power_belt_connector",
 		() -> new PowerBeltConnectorItem(new Item.Properties()));

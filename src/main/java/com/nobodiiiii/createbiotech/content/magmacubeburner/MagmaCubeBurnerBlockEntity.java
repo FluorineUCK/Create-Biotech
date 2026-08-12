@@ -22,6 +22,8 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.util.RandomSource;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -36,6 +38,8 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 
 	public static final int TANK_CAPACITY = FluidType.BUCKET_VOLUME;
 	public static final int LAVA_PER_RENDER_PIXEL = FluidType.BUCKET_VOLUME / 4;
+	static final int BURNING_ANIMATION_PERIOD = 40;
+	static final int BURNING_LANDING_TICK = 32;
 
 	private static final String LAVA_TANK_TAG = "LavaTank";
 	private static final String BURN_PROGRESS_TAG = "BurnProgress";
@@ -59,6 +63,8 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 	private int burnProgress;
 	private boolean needsClientSync;
 	private int lastSyncedLavaHeight = -1;
+	@Nullable
+	private HeatLevel lastClientHeatLevel;
 
 	public MagmaCubeBurnerBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.MAGMA_CUBE_BURNER.get(), pos, state);
@@ -78,7 +84,7 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 			return;
 
 		if (level.isClientSide) {
-			spawnBurningParticles();
+			tickClientParticles();
 			return;
 		}
 
@@ -128,10 +134,22 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 		return true;
 	}
 
-	private void spawnBurningParticles() {
-		if (getBlockState().getOptionalValue(BlazeBurnerBlock.HEAT_LEVEL).orElse(HeatLevel.SMOULDERING)
-			!= HeatLevel.KINDLED)
+	private void tickClientParticles() {
+		HeatLevel heatLevel = getBlockState().getOptionalValue(BlazeBurnerBlock.HEAT_LEVEL)
+			.orElse(HeatLevel.SMOULDERING);
+		if (lastClientHeatLevel != null && !lastClientHeatLevel.isAtLeast(HeatLevel.KINDLED)
+			&& heatLevel.isAtLeast(HeatLevel.KINDLED))
+			spawnStartBurningParticleBurst();
+		lastClientHeatLevel = heatLevel;
+
+		if (!heatLevel.isAtLeast(HeatLevel.KINDLED))
 			return;
+		spawnBurningParticles();
+		if (Math.floorMod(level.getGameTime(), BURNING_ANIMATION_PERIOD) == BURNING_LANDING_TICK)
+			spawnMagmaCubeLandingParticles();
+	}
+
+	private void spawnBurningParticles() {
 
 		RandomSource random = level.getRandom();
 		if (random.nextInt(4) != 0)
@@ -151,6 +169,37 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 			.scale((openAbove ? .25 : .5) + random.nextDouble() * .125))
 			.add(0, .5, 0);
 		level.addParticle(ParticleTypes.FLAME, flame.x, flame.y, flame.z, 0, yMotion, 0);
+	}
+
+	private void spawnStartBurningParticleBurst() {
+		Vec3 center = VecHelper.getCenterOf(worldPosition);
+		RandomSource random = level.getRandom();
+		for (int i = 0; i < 20; i++) {
+			Vec3 offset = VecHelper.offsetRandomly(Vec3.ZERO, random, .5f)
+				.multiply(1, .25f, 1)
+				.normalize();
+			Vec3 position = center.add(offset.scale(.5 + random.nextDouble() * .125))
+				.add(0, .125, 0);
+			Vec3 motion = offset.scale(1 / 32f);
+			level.addParticle(ParticleTypes.FLAME, position.x, position.y, position.z,
+				motion.x, motion.y, motion.z);
+		}
+	}
+
+	private void spawnMagmaCubeLandingParticles() {
+		RandomSource random = level.getRandom();
+		float diameter = EntityType.MAGMA_CUBE.getDimensions().width() * 2;
+		float radius = diameter / 2;
+		double centerX = worldPosition.getX() + .5;
+		double y = worldPosition.getY() + 2 / 16d;
+		double centerZ = worldPosition.getZ() + .5;
+		for (int i = 0; i < diameter * 16; i++) {
+			float angle = random.nextFloat() * Mth.TWO_PI;
+			float distance = random.nextFloat() * .5f + .5f;
+			float xOffset = Mth.sin(angle) * radius * distance;
+			float zOffset = Mth.cos(angle) * radius * distance;
+			level.addParticle(ParticleTypes.FLAME, centerX + xOffset, y, centerZ + zOffset, 0, 0, 0);
+		}
 	}
 
 	public IFluidHandler getFluidCapability(@Nullable Direction side) {

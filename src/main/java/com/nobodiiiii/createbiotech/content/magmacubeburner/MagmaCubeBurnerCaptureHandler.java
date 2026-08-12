@@ -2,7 +2,6 @@ package com.nobodiiiii.createbiotech.content.magmacubeburner;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBItems;
-import com.simibubi.create.AllItems;
 
 import net.createmod.catnip.math.VecHelper;
 import net.minecraft.core.BlockPos;
@@ -32,7 +31,7 @@ public final class MagmaCubeBurnerCaptureHandler {
 	public static void captureMagmaCube(PlayerInteractEvent.EntityInteract event) {
 		Player player = event.getEntity();
 		ItemStack heldItem = player.getItemInHand(event.getHand());
-		if (player.isSpectator() || !AllItems.EMPTY_BLAZE_BURNER.isIn(heldItem)
+		if (player.isSpectator() || !heldItem.is(CBItems.EMPTY_MAGMA_CUBE_BURNER.get())
 			|| !(event.getTarget() instanceof MagmaCube magmaCube))
 			return;
 
@@ -50,7 +49,7 @@ public final class MagmaCubeBurnerCaptureHandler {
 	public static void captureFromSpawner(PlayerInteractEvent.RightClickBlock event) {
 		Player player = event.getEntity();
 		ItemStack heldItem = player.getItemInHand(event.getHand());
-		if (player.isSpectator() || !AllItems.EMPTY_BLAZE_BURNER.isIn(heldItem))
+		if (player.isSpectator() || !heldItem.is(CBItems.EMPTY_MAGMA_CUBE_BURNER.get()))
 			return;
 
 		BlockPos pos = event.getPos();

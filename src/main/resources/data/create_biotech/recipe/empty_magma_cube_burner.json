@@ -1,0 +1,21 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [
+    " I ",
+    "IMI",
+    " I "
+  ],
+  "key": {
+    "I": {
+      "tag": "c:plates/iron"
+    },
+    "M": {
+      "item": "minecraft:magma_block"
+    }
+  },
+  "result": {
+    "id": "create_biotech:empty_magma_cube_burner"
+  },
+  "show_notification": true
+}
