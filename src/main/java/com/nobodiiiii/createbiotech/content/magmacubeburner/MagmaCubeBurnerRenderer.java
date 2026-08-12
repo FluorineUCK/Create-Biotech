@@ -6,16 +6,22 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.foundation.render.EntityRenderHelper;
 import com.simibubi.create.foundation.blockEntity.renderer.SmartBlockEntityRenderer;
 
+import net.createmod.catnip.platform.NeoForgeCatnipServices;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
+import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.MagmaCube;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.fluids.FluidStack;
 
 public class MagmaCubeBurnerRenderer extends SmartBlockEntityRenderer<MagmaCubeBurnerBlockEntity> {
 
-	private static final float ENTITY_SCALE = .36f;
+	private static final int MAGMA_CUBE_SIZE = 1;
+	private static final float FLUID_MIN_XZ = 3f / 16f + 1f / 512f;
+	private static final float FLUID_MAX_XZ = 13f / 16f - 1f / 512f;
+	private static final float FLUID_MIN_Y = 2f / 16f + 1f / 512f;
 
 	@Nullable
 	private MagmaCube renderedMagmaCube;
@@ -33,23 +39,33 @@ public class MagmaCubeBurnerRenderer extends SmartBlockEntityRenderer<MagmaCubeB
 		if (level == null)
 			return;
 
+		renderLava(blockEntity, poseStack, buffer, packedLight);
+
 		MagmaCube magmaCube = getOrCreateMagmaCube(level);
 		if (magmaCube == null)
 			return;
-		magmaCube.setSize(blockEntity.getRenderedMagmaCubeSize(), false);
+		magmaCube.setSize(MAGMA_CUBE_SIZE, false);
 
-		float animationTime = level.getGameTime() + partialTicks;
+		Direction facing = blockEntity.getBlockState().getValue(MagmaCubeBurnerBlock.FACING);
 		poseStack.pushPose();
-		poseStack.translate(.5, .125 + Math.sin(animationTime * .08) * .015, .5);
-		poseStack.scale(ENTITY_SCALE, ENTITY_SCALE, ENTITY_SCALE);
+		poseStack.translate(.5, .125, .5);
 		EntityRenderHelper.render(EntityRenderHelper.settings(magmaCube)
 			.packedLight(LightTexture.FULL_BRIGHT)
 			.partialTicks(partialTicks)
-			.ticks((int) level.getGameTime())
-			.yaw(animationTime * 2)
-			.bodyYaw(animationTime * 2)
-			.headYaw(animationTime * 2), poseStack, buffer);
+			.face(facing), poseStack, buffer);
 		poseStack.popPose();
+	}
+
+	private static void renderLava(MagmaCubeBurnerBlockEntity blockEntity, PoseStack poseStack,
+		MultiBufferSource buffer, int packedLight) {
+		FluidStack lava = blockEntity.getLavaFluidForRender();
+		int heightPixels = blockEntity.getRenderedLavaHeightPixels();
+		if (lava.isEmpty() || heightPixels == 0)
+			return;
+
+		float maxY = (2 + heightPixels) / 16f;
+		NeoForgeCatnipServices.FLUID_RENDERER.renderFluidBox(lava, FLUID_MIN_XZ, FLUID_MIN_Y, FLUID_MIN_XZ,
+			FLUID_MAX_XZ, maxY, FLUID_MAX_XZ, buffer, poseStack, packedLight, false, true);
 	}
 
 	@Nullable

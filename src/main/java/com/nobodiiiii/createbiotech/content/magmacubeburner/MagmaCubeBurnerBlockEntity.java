@@ -35,6 +35,7 @@ import net.neoforged.neoforge.fluids.capability.templates.FluidTank;
 public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHaveGoggleInformation {
 
 	public static final int TANK_CAPACITY = FluidType.BUCKET_VOLUME;
+	public static final int LAVA_PER_RENDER_PIXEL = FluidType.BUCKET_VOLUME / 4;
 
 	private static final String LAVA_TANK_TAG = "LavaTank";
 	private static final String BURN_PROGRESS_TAG = "BurnProgress";
@@ -57,7 +58,7 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 	private final IFluidHandler fluidCapability = new LavaInputHandler();
 	private int burnProgress;
 	private boolean needsClientSync;
-	private int lastSyncedRenderSize = -1;
+	private int lastSyncedLavaHeight = -1;
 
 	public MagmaCubeBurnerBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.MAGMA_CUBE_BURNER.get(), pos, state);
@@ -83,10 +84,10 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 
 		consumeLavaForOneTick();
 		boolean heatChanged = updateHeatLevel();
-		int renderSize = getRenderedMagmaCubeSize();
-		boolean renderSizeChanged = renderSize != lastSyncedRenderSize;
-		if (heatChanged || renderSizeChanged || needsClientSync && level.getGameTime() % 20 == 0) {
-			lastSyncedRenderSize = renderSize;
+		int lavaHeight = getRenderedLavaHeightPixels();
+		boolean lavaHeightChanged = lavaHeight != lastSyncedLavaHeight;
+		if (heatChanged || lavaHeightChanged || (needsClientSync && level.getGameTime() % 20 == 0)) {
+			lastSyncedLavaHeight = lavaHeight;
 			needsClientSync = false;
 			notifyUpdate();
 		}
@@ -156,17 +157,16 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 		return fluidCapability;
 	}
 
-	public int getRenderedMagmaCubeSize() {
-		long remaining = getRemainingBurnTime();
-		if (remaining <= 0)
-			return 1;
+	public FluidStack getLavaFluidForRender() {
+		return lavaTank.getFluid();
+	}
 
-		long bucketBurnTime = getLavaBucketBurnTime();
-		if (remaining * 3 <= bucketBurnTime)
-			return 1;
-		if (remaining * 3 <= bucketBurnTime * 2L)
-			return 2;
-		return 4;
+	public int getRenderedLavaHeightPixels() {
+		int amount = lavaTank.getFluidAmount();
+		if (amount <= 0)
+			return 0;
+		// The visible chamber spans four pixels: 250, 500, 750 and 1000 mB.
+		return Math.min(4, (amount + LAVA_PER_RENDER_PIXEL - 1) / LAVA_PER_RENDER_PIXEL);
 	}
 
 	public int getRemainingBurnTime() {
