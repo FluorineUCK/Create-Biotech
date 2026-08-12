@@ -35,6 +35,7 @@ public abstract class LivingEntityRendererMixin {
 		SlimeMimicRenderLayer.beginBodyPartReplacement(buffer, entity);
 		try {
 			original.call(model, poseStack, consumer, packedLight, overlay, color);
+			SlimeMimicRenderLayer.renderDeferredOuterParts();
 		} finally {
 			SlimeMimicRenderLayer.endPartInterception();
 		}
