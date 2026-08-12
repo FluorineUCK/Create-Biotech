@@ -1,0 +1,17 @@
+{
+  "type": "create:item_application",
+  "ingredients": [
+    {
+      "item": "create_biotech:empty_magma_cube_burner"
+    },
+    {
+      "type": "create_biotech:captured_entity_box",
+      "entity": "minecraft:magma_cube"
+    }
+  ],
+  "results": [
+    {
+      "id": "create_biotech:magma_cube_burner"
+    }
+  ]
+}

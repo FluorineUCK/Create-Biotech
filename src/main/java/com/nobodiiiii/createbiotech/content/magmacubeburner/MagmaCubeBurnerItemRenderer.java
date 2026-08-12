@@ -4,6 +4,8 @@ import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.foundation.render.OversizedBlockItemRenderer;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
+import com.simibubi.create.content.processing.burner.BlazeBurnerBlock;
+import com.simibubi.create.content.processing.burner.BlazeBurnerBlock.HeatLevel;
 import com.simibubi.create.foundation.item.render.CustomRenderedItemModel;
 import com.simibubi.create.foundation.item.render.PartialItemModelRenderer;
 
@@ -16,12 +18,18 @@ public class MagmaCubeBurnerItemRenderer extends OversizedBlockItemRenderer<Magm
 
 	@Override
 	protected MagmaCubeBurnerBlockEntity createBlockEntity() {
-		return new MagmaCubeBurnerBlockEntity(BlockPos.ZERO, CBBlocks.MAGMA_CUBE_BURNER.get().defaultBlockState());
+		return new MagmaCubeBurnerBlockEntity(BlockPos.ZERO, CBBlocks.MAGMA_CUBE_BURNER.get().defaultBlockState()
+			.setValue(BlazeBurnerBlock.HEAT_LEVEL, HeatLevel.SMOULDERING));
 	}
 
 	@Override
 	protected float getRenderYOffset() {
 		return 0;
+	}
+
+	@Override
+	protected float getItemScale() {
+		return 1;
 	}
 
 	@Override

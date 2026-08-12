@@ -89,7 +89,7 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 		super(properties);
 		registerDefaultState(defaultBlockState()
 			.setValue(FACING, Direction.NORTH)
-			.setValue(BlazeBurnerBlock.HEAT_LEVEL, HeatLevel.SMOULDERING));
+			.setValue(BlazeBurnerBlock.HEAT_LEVEL, HeatLevel.NONE));
 	}
 
 	@Override
@@ -182,7 +182,11 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 
 	@Override
 	public int getAnalogOutputSignal(BlockState state, Level level, BlockPos pos) {
-		return Math.max(0, state.getValue(BlazeBurnerBlock.HEAT_LEVEL).ordinal() - 1);
+		return switch (state.getValue(BlazeBurnerBlock.HEAT_LEVEL)) {
+		case NONE, SMOULDERING -> 0;
+		case FADING, KINDLED -> 2;
+		case SEETHING -> 3;
+		};
 	}
 
 	@Override
@@ -192,7 +196,7 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 
 	@Override
 	public void animateTick(BlockState state, Level level, BlockPos pos, RandomSource random) {
-		if (state.getValue(BlazeBurnerBlock.HEAT_LEVEL) != HeatLevel.KINDLED || random.nextInt(10) != 0)
+		if (!isBurning(state.getValue(BlazeBurnerBlock.HEAT_LEVEL)) || random.nextInt(10) != 0)
 			return;
 		level.playLocalSound(pos.getX() + .5, pos.getY() + .5, pos.getZ() + .5,
 			SoundEvents.CAMPFIRE_CRACKLE, SoundSource.BLOCKS, .5f + random.nextFloat(),
@@ -201,5 +205,9 @@ public class MagmaCubeBurnerBlock extends BaseEntityBlock implements IWrenchable
 
 	public static int getLight(BlockState state) {
 		return BlazeBurnerBlock.getLight(state);
+	}
+
+	public static boolean isBurning(HeatLevel heatLevel) {
+		return heatLevel == HeatLevel.FADING || heatLevel == HeatLevel.KINDLED;
 	}
 }

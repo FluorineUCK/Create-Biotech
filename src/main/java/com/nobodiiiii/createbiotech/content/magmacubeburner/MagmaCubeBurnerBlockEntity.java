@@ -124,7 +124,7 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 		if (!state.hasProperty(BlazeBurnerBlock.HEAT_LEVEL))
 			return false;
 
-		HeatLevel desired = lavaTank.isEmpty() ? HeatLevel.SMOULDERING : HeatLevel.KINDLED;
+		HeatLevel desired = getHeatLevel();
 		if (state.getValue(BlazeBurnerBlock.HEAT_LEVEL) == desired)
 			return false;
 
@@ -134,15 +134,22 @@ public class MagmaCubeBurnerBlockEntity extends SmartBlockEntity implements IHav
 		return true;
 	}
 
+	private HeatLevel getHeatLevel() {
+		if (lavaTank.isEmpty())
+			return HeatLevel.SMOULDERING;
+		boolean lowPercent = (double) getRemainingBurnTime() / getLavaBucketBurnTime() < .0125;
+		return lowPercent ? HeatLevel.FADING : HeatLevel.KINDLED;
+	}
+
 	private void tickClientParticles() {
 		HeatLevel heatLevel = getBlockState().getOptionalValue(BlazeBurnerBlock.HEAT_LEVEL)
 			.orElse(HeatLevel.SMOULDERING);
-		if (lastClientHeatLevel != null && !lastClientHeatLevel.isAtLeast(HeatLevel.KINDLED)
-			&& heatLevel.isAtLeast(HeatLevel.KINDLED))
+		if (lastClientHeatLevel != null && !MagmaCubeBurnerBlock.isBurning(lastClientHeatLevel)
+			&& MagmaCubeBurnerBlock.isBurning(heatLevel))
 			spawnStartBurningParticleBurst();
 		lastClientHeatLevel = heatLevel;
 
-		if (!heatLevel.isAtLeast(HeatLevel.KINDLED))
+		if (!MagmaCubeBurnerBlock.isBurning(heatLevel))
 			return;
 		spawnBurningParticles();
 		if (Math.floorMod(level.getGameTime(), BURNING_ANIMATION_PERIOD) == BURNING_LANDING_TICK)

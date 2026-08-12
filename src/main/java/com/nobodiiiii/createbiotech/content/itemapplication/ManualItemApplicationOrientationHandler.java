@@ -21,6 +21,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.RecipeType;
@@ -31,6 +32,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.block.state.properties.EnumProperty;
+import net.minecraft.world.phys.BlockHitResult;
 
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -64,13 +66,16 @@ public class ManualItemApplicationOrientationHandler {
 		if (heldItem.isEmpty() || blockState.isAir())
 			return;
 
+		// Some placed blocks, such as burners, use their state to distinguish empty and filled item variants.
+		ItemStack processedItem = blockState.getCloneItemStack(event.getHitVec(), level, pos, player);
 		Optional<RecipeHolder<ManualApplicationRecipe>> foundRecipe =
-			findCreateBiotechManualApplicationRecipe(level, blockState, heldItem);
+			findCreateBiotechManualApplicationRecipe(level, blockState, processedItem, heldItem);
 		if (foundRecipe.isEmpty())
 			return;
 
 		ManualApplicationRecipe recipe = foundRecipe.get().value();
-		BlockState transformedBlock = transformBlock(recipe, blockState, player, level.random);
+		BlockState transformedBlock = transformBlock(recipe, blockState, player, event.getHand(), event.getHitVec(),
+			level.random);
 		if (transformedBlock.isAir())
 			return;
 
@@ -86,7 +91,7 @@ public class ManualItemApplicationOrientationHandler {
 	}
 
 	private static Optional<RecipeHolder<ManualApplicationRecipe>> findCreateBiotechManualApplicationRecipe(Level level,
-		BlockState blockState, ItemStack heldItem) {
+		BlockState blockState, ItemStack processedItem, ItemStack heldItem) {
 		RecipeType<Recipe<RecipeWrapper>> type = AllRecipeTypes.ITEM_APPLICATION.getType();
 		return level.getRecipeManager()
 			.getAllRecipesFor(type)
@@ -98,8 +103,9 @@ public class ManualItemApplicationOrientationHandler {
 				? Optional.of(new RecipeHolder<>(recipe.id(), manualRecipe))
 				: Optional.<RecipeHolder<ManualApplicationRecipe>>empty())
 			.flatMap(Optional::stream)
-			.filter(recipe -> recipe.value()
-				.testBlock(blockState))
+			.filter(recipe -> recipe.value().testBlock(blockState) || recipe.value()
+				.getProcessedItem()
+				.test(processedItem))
 			.filter(recipe -> recipe.value()
 				.getRequiredHeldItem()
 				.test(heldItem))
@@ -107,7 +113,7 @@ public class ManualItemApplicationOrientationHandler {
 	}
 
 	private static BlockState transformBlock(ManualApplicationRecipe recipe, BlockState sourceState, Player player,
-		RandomSource random) {
+		InteractionHand hand, BlockHitResult hitResult, RandomSource random) {
 		if (recipe.getRollableResults()
 			.isEmpty())
 			return Blocks.AIR.defaultBlockState();
@@ -118,9 +124,25 @@ public class ManualItemApplicationOrientationHandler {
 		if (!(output.getItem() instanceof BlockItem blockItem))
 			return Blocks.AIR.defaultBlockState();
 
-		BlockState targetState = BlockHelper.copyProperties(sourceState, blockItem.getBlock()
-			.defaultBlockState());
+		BlockState targetState = blockItem.getBlock().defaultBlockState();
+		if (sourceState.is(targetState.getBlock())) {
+			// Preserve result-item placement state for same-block conversions, then restore only orientation.
+			BlockPlaceContext placementContext = new BlockPlaceContext(player, hand, output, hitResult);
+			BlockState placementState = blockItem.getBlock().getStateForPlacement(placementContext);
+			if (placementState != null)
+				targetState = placementState;
+			targetState = copyDirectionalProperties(sourceState, targetState);
+		} else {
+			targetState = BlockHelper.copyProperties(sourceState, targetState);
+		}
 		return applyDirectionalContext(targetState, sourceState, player);
+	}
+
+	private static BlockState copyDirectionalProperties(BlockState sourceState, BlockState targetState) {
+		targetState = BlockHelper.copyProperty(BlockStateProperties.FACING, sourceState, targetState);
+		targetState = BlockHelper.copyProperty(BlockStateProperties.HORIZONTAL_FACING, sourceState, targetState);
+		targetState = BlockHelper.copyProperty(BlockStateProperties.AXIS, sourceState, targetState);
+		return BlockHelper.copyProperty(BlockStateProperties.HORIZONTAL_AXIS, sourceState, targetState);
 	}
 
 	private static BlockState applyDirectionalContext(BlockState targetState, BlockState sourceState, Player player) {

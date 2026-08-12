@@ -7,7 +7,7 @@
       "model": "create_biotech:block/magma_cube_burner"
     },
     "blaze=fading": {
-      "model": "create_biotech:block/magma_cube_burner"
+      "model": "create_biotech:block/magma_cube_burner_burning"
     },
     "blaze=kindled": {
       "model": "create_biotech:block/magma_cube_burner_burning"

@@ -68,7 +68,7 @@ public class MagmaCubeBurnerRenderer extends SmartBlockEntityRenderer<MagmaCubeB
 
 	private static float getMagmaCubeY(MagmaCubeBurnerBlockEntity blockEntity, float partialTicks) {
 		HeatLevel heat = blockEntity.getBlockState().getValue(BlazeBurnerBlock.HEAT_LEVEL);
-		if (heat.isAtLeast(HeatLevel.KINDLED))
+		if (MagmaCubeBurnerBlock.isBurning(heat))
 			return MAGMA_CUBE_BASE_Y;
 
 		float cycleTick = (blockEntity.getLevel().getGameTime() + partialTicks) % JUMP_ANIMATION_PERIOD;
@@ -83,7 +83,7 @@ public class MagmaCubeBurnerRenderer extends SmartBlockEntityRenderer<MagmaCubeB
 	private static void updateJumpAnimation(MagmaCube magmaCube, MagmaCubeBurnerBlockEntity blockEntity,
 		float partialTicks) {
 		HeatLevel heat = blockEntity.getBlockState().getValue(BlazeBurnerBlock.HEAT_LEVEL);
-		if (!heat.isAtLeast(HeatLevel.KINDLED)) {
+		if (!MagmaCubeBurnerBlock.isBurning(heat)) {
 			setSquish(magmaCube, 0);
 			return;
 		}
