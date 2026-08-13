@@ -124,6 +124,8 @@ dependencies {
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
+    classpath += files(layout.buildDirectory.file("moddev/artifacts/neoforge-${neo_version}.jar"))
+    classpath += configurations.neoFormRuntimeDependenciesRuntimeClasspath
 }
 
 sourceSets.main.resources {
