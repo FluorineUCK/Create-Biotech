@@ -22,7 +22,7 @@ public class SonicConeWaveParticle extends ShriekParticle {
 
 	private static final int LIFETIME = 16;
 	private static final float MAX_RANGE = 16.0f;
-	private static final float HALF_ANGLE = (float) Math.toRadians(30.0d);
+	private static final float HALF_ANGLE = (float) Math.toRadians(60.0d);
 	private static final float MAX_WAVE_RADIUS = MAX_RANGE * Mth.sin(HALF_ANGLE);
 
 	private final Vec3 origin;

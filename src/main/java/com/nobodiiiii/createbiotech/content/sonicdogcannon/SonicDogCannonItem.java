@@ -38,6 +38,11 @@ public class SonicDogCannonItem extends Item {
 	private static final double MIN_BEAM_RANGE = 8.0d;
 	private static final double MAX_BEAM_RANGE = 24.0d;
 	private static final double BEAM_HIT_RADIUS = 0.6d;
+	private static final double HAND_SIDE_OFFSET = 0.56d;
+	private static final double HAND_DOWN_OFFSET = 0.52d;
+	private static final double HAND_FORWARD_OFFSET = 0.72d;
+	private static final double MUZZLE_FORWARD_FROM_HAND = 22.0d / 16.0d;
+	private static final double MUZZLE_UP_FROM_HAND = (7.25d - 2.4d) / 16.0d;
 
 	public SonicDogCannonItem(Properties properties) {
 		super(properties);
@@ -88,7 +93,8 @@ public class SonicDogCannonItem extends Item {
 		Vec3 origin = player.getEyePosition().add(direction.scale(0.5d));
 
 		if (chargeTicks >= FULL_CHARGE_TICKS) {
-			SonicDogConeWave.fire(serverLevel, player, origin, direction);
+			Vec3 particleOrigin = getMuzzlePosition(player, direction);
+			SonicDogConeWave.fire(serverLevel, player, origin, particleOrigin, direction);
 		} else {
 			double range = MIN_BEAM_RANGE
 				+ (MAX_BEAM_RANGE - MIN_BEAM_RANGE) * Math.min(chargeTicks, FULL_CHARGE_TICKS - 1)
@@ -99,6 +105,22 @@ public class SonicDogCannonItem extends Item {
 		level.playSound(null, player.getX(), player.getY(), player.getZ(), SoundEvents.WARDEN_SONIC_BOOM,
 			SoundSource.PLAYERS, 1.0f, 1.0f);
 		player.awardStat(Stats.ITEM_USED.get(this));
+	}
+
+	private static Vec3 getMuzzlePosition(Player player, Vec3 direction) {
+		Vec3 up = player.getUpVector(1.0f).normalize();
+		Vec3 right = direction.cross(up).normalize();
+		boolean rightHanded = player.getUsedItemHand() == InteractionHand.MAIN_HAND
+			? player.getMainArm() == net.minecraft.world.entity.HumanoidArm.RIGHT
+			: player.getMainArm() == net.minecraft.world.entity.HumanoidArm.LEFT;
+		double sideOffset = rightHanded ? HAND_SIDE_OFFSET : -HAND_SIDE_OFFSET;
+		Vec3 handPosition = player.getEyePosition()
+			.add(right.scale(sideOffset))
+			.add(up.scale(-HAND_DOWN_OFFSET))
+			.add(direction.scale(HAND_FORWARD_OFFSET));
+		return handPosition
+			.add(direction.scale(MUZZLE_FORWARD_FROM_HAND))
+			.add(up.scale(MUZZLE_UP_FROM_HAND));
 	}
 
 	private static void fireSonicBoom(ServerLevel level, Player player, Vec3 origin, Vec3 direction, double range) {
