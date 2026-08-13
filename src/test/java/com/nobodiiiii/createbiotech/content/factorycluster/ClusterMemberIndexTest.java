@@ -4,6 +4,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.lang.ref.Reference;
 import java.util.List;
 import java.util.UUID;
 
@@ -27,12 +28,21 @@ class ClusterMemberIndexTest {
 	@Test
 	void twoCoordinatorsReportConflictButPanelsDoNot() {
 		ClusterMemberIndex.ServerIndex index = new ClusterMemberIndex.ServerIndex();
-		index.register(member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.PANEL));
-		index.register(member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.PANEL));
-		assertFalse(index.conflicts(CLUSTER_ID).panelConflict());
-		index.register(member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.COMPUTER_COORDINATOR));
-		index.register(member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.COMPUTER_COORDINATOR));
-		assertTrue(index.conflicts(CLUSTER_ID).computerConflict());
+		List<FakeMember> members = List.of(
+			member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.PANEL),
+			member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.PANEL),
+			member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.COMPUTER_COORDINATOR),
+			member(UUID.randomUUID(), CLUSTER_ID, ClusterMemberType.COMPUTER_COORDINATOR));
+		try {
+			index.register(members.get(0));
+			index.register(members.get(1));
+			assertFalse(index.conflicts(CLUSTER_ID).panelConflict());
+			index.register(members.get(2));
+			index.register(members.get(3));
+			assertTrue(index.conflicts(CLUSTER_ID).computerConflict());
+		} finally {
+			Reference.reachabilityFence(members);
+		}
 	}
 
 	private static FakeMember member(UUID memberId, UUID clusterId, ClusterMemberType type) {
