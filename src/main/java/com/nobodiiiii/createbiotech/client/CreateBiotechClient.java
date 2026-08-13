@@ -460,6 +460,8 @@ public class CreateBiotechClient {
 		registerCreateStyleTooltip(CBItems.ALLAY_PORT.get());
 		registerCreateStyleTooltip(CBItems.ALLAY_COURIER.get());
 		registerCreateStyleTooltip(CBItems.CUTE_CAT_ON_SHAFT.get());
+		TooltipModifier.REGISTRY.register(CBItems.SONIC_DOG_CANNON.get(),
+			new SonicDogCannonTooltipModifier()::modify);
 		registerKineticCreateStyleTooltip(CBItems.BUTTER_CAT_ENGINE.get());
 		registerKineticCreateStyleTooltip(CBItems.BUTTER.get());
 		registerKineticCreateStyleTooltip(CBItems.INCOMPLETE_SUPER_BUTTER.get());

@@ -1,6 +1,5 @@
 package com.nobodiiiii.createbiotech.content.sonicdogcannon;
 
-import java.util.List;
 import java.util.function.Consumer;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -17,9 +16,6 @@ import com.simibubi.create.foundation.item.render.CustomRenderedItems;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
-import net.minecraft.ChatFormatting;
-import net.minecraft.network.chat.CommonComponents;
-import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -32,9 +28,7 @@ import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
@@ -100,40 +94,6 @@ public class SonicDogCannonItem extends Item {
 	public UseAnim getUseAnimation(ItemStack stack) {
 		// The cannon supplies its own two-handed pose; vanilla's bow pose would override it.
 		return UseAnim.NONE;
-	}
-
-	@Override
-	public void appendHoverText(ItemStack stack, TooltipContext context, List<Component> tooltip, TooltipFlag flag) {
-		super.appendHoverText(stack, context, tooltip, flag);
-
-		boolean hasUpgrades = false;
-		for (SonicDogCannonUpgrade upgrade : SonicDogCannonUpgrade.values()) {
-			if (upgrade.isInstalled(stack)) {
-				hasUpgrades = true;
-				break;
-			}
-		}
-		if (!hasUpgrades)
-			return;
-
-		tooltip.add(CommonComponents.EMPTY);
-		tooltip.add(Component.translatable("item.create_biotech.sonic_dog_cannon.upgrades")
-			.withStyle(ChatFormatting.GRAY));
-		for (SonicDogCannonUpgrade upgrade : SonicDogCannonUpgrade.values()) {
-			if (!upgrade.isInstalled(stack))
-				continue;
-
-			Component upgradeName;
-			if (upgrade == SonicDogCannonUpgrade.DOG_COLLAR) {
-				DyeColor color = SonicDogCannonUpgrade.getCollarColor(stack);
-				upgradeName = Component.translatable(upgrade.tooltipKey(),
-					Component.translatable("color.minecraft." + color.getName()))
-					.withColor(color.getTextColor());
-			} else {
-				upgradeName = Component.translatable(upgrade.tooltipKey()).withStyle(ChatFormatting.AQUA);
-			}
-			tooltip.add(CommonComponents.space().append(upgradeName));
-		}
 	}
 
 	@Override
