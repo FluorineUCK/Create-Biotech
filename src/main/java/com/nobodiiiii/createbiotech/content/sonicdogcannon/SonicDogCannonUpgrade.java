@@ -9,6 +9,9 @@ import com.nobodiiiii.createbiotech.registry.CBDataComponents;
 import net.minecraft.util.StringRepresentable;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+
+import org.jetbrains.annotations.Nullable;
 
 public enum SonicDogCannonUpgrade implements StringRepresentable {
 	VOICE_PACK("voice_pack"),
@@ -45,20 +48,32 @@ public enum SonicDogCannonUpgrade implements StringRepresentable {
 		return !getInstallationOrder(stack).isEmpty();
 	}
 
-	public static boolean removeLastInstalled(ItemStack stack) {
+	@Nullable
+	public static SonicDogCannonUpgrade removeLastInstalled(ItemStack stack) {
 		List<SonicDogCannonUpgrade> order = getInstallationOrder(stack);
 		if (order.isEmpty())
-			return false;
+			return null;
 
 		SonicDogCannonUpgrade removed = order.removeLast();
 		if (removed == DOG_COLLAR)
 			stack.remove(CBDataComponents.SONIC_DOG_CANNON_COLLAR_COLOR.get());
+		if (removed == SCOPE)
+			stack.remove(CBDataComponents.SONIC_DOG_CANNON_SCOPE_FOLDED.get());
 		if (order.isEmpty()) {
 			stack.remove(CBDataComponents.SONIC_DOG_CANNON_UPGRADES.get());
 		} else {
 			stack.set(CBDataComponents.SONIC_DOG_CANNON_UPGRADES.get(), encodeOrder(order));
 		}
-		return true;
+		return removed;
+	}
+
+	public ItemStack getRemovalRefund() {
+		return switch (this) {
+			case VOICE_PACK -> new ItemStack(Items.NOTE_BLOCK);
+			case SCOPE -> new ItemStack(Items.GLASS_PANE);
+			case SHRIEK_SONIC_BOOM -> new ItemStack(Items.SCULK_SHRIEKER);
+			case DOG_COLLAR -> ItemStack.EMPTY;
+		};
 	}
 
 	private static List<SonicDogCannonUpgrade> getInstallationOrder(ItemStack stack) {

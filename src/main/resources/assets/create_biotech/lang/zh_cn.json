@@ -6,7 +6,7 @@
   "item.create_biotech.sonic_dog_cannon.upgrade.voice_pack": "语音包",
   "item.create_biotech.sonic_dog_cannon.upgrade.voice_pack.description": "可观测宇宙内最_爽_的一声大狗叫",
   "item.create_biotech.sonic_dog_cannon.upgrade.scope": "瞄准镜",
-  "item.create_biotech.sonic_dog_cannon.upgrade.scope.description": "不会让你更准，但看起来很_帅_，潜行右击关闭护目镜",
+  "item.create_biotech.sonic_dog_cannon.upgrade.scope.description": "不会让你更准，但看起来很_帅_；潜行右击可_收起_或_展开_瞄准镜",
   "item.create_biotech.sonic_dog_cannon.upgrade.shriek_sonic_boom": "尖啸音爆",
   "item.create_biotech.sonic_dog_cannon.upgrade.shriek_sonic_boom.description": "改为发射坚守者同款_音爆_，造成_伤害_而非_眩晕_",
   "item.create_biotech.sonic_dog_cannon.upgrade.dog_collar": "狗狗项圈（%s）",

@@ -47,6 +47,11 @@ public final class CBDataComponents {
 			builder -> builder.persistent(DyeColor.CODEC)
 				.networkSynchronized(DyeColor.STREAM_CODEC));
 
+	public static final Supplier<DataComponentType<Boolean>> SONIC_DOG_CANNON_SCOPE_FOLDED =
+		COMPONENTS.registerComponentType("sonic_dog_cannon_scope_folded",
+			builder -> builder.persistent(Codec.BOOL)
+				.networkSynchronized(ByteBufCodecs.BOOL));
+
 	private CBDataComponents() {
 	}
 

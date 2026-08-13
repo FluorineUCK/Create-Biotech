@@ -7,6 +7,7 @@ import com.nobodiiiii.createbiotech.client.SonicDogCannonArmPose;
 import com.nobodiiiii.createbiotech.client.SonicDogCannonItemRenderer;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket.Action;
 import com.nobodiiiii.createbiotech.network.CBPackets;
+import com.nobodiiiii.createbiotech.registry.CBDataComponents;
 import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.AllSoundEvents;
@@ -68,10 +69,18 @@ public class SonicDogCannonItem extends Item {
 				return InteractionResultHolder.fail(stack);
 
 			if (!level.isClientSide) {
-				SonicDogCannonUpgrade.removeLastInstalled(stack);
+				SonicDogCannonUpgrade removed = SonicDogCannonUpgrade.removeLastInstalled(stack);
+				if (removed != null)
+					player.getInventory().placeItemBackInInventory(removed.getRemovalRefund());
 				AllSoundEvents.WRENCH_REMOVE.playOnServer(level, player.blockPosition(), 1.0f,
 					level.getRandom().nextFloat() * 0.5f + 0.5f);
 			}
+			return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
+		}
+
+		if (player.isShiftKeyDown() && SonicDogCannonUpgrade.SCOPE.isInstalled(stack)) {
+			if (!level.isClientSide)
+				setScopeFolded(stack, !isScopeFolded(stack));
 			return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
 		}
 
@@ -85,6 +94,18 @@ public class SonicDogCannonItem extends Item {
 		return InteractionResultHolder.consume(stack);
 	}
 
+	public static boolean isScopeFolded(ItemStack stack) {
+		return stack.getOrDefault(CBDataComponents.SONIC_DOG_CANNON_SCOPE_FOLDED.get(), false);
+	}
+
+	public static void setScopeFolded(ItemStack stack, boolean folded) {
+		if (folded) {
+			stack.set(CBDataComponents.SONIC_DOG_CANNON_SCOPE_FOLDED.get(), true);
+		} else {
+			stack.remove(CBDataComponents.SONIC_DOG_CANNON_SCOPE_FOLDED.get());
+		}
+	}
+
 	@Override
 	public int getUseDuration(ItemStack stack, LivingEntity entity) {
 		return 72000;
@@ -94,6 +115,13 @@ public class SonicDogCannonItem extends Item {
 	public UseAnim getUseAnimation(ItemStack stack) {
 		// The cannon supplies its own two-handed pose; vanilla's bow pose would override it.
 		return UseAnim.NONE;
+	}
+
+	@Override
+	public boolean onEntitySwing(ItemStack stack, LivingEntity entity, InteractionHand hand) {
+		// Match the Potato Cannon: successful block/item interactions should not play the
+		// vanilla full arm swing. The interaction still completes normally.
+		return true;
 	}
 
 	@Override

@@ -25,10 +25,13 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		CreateBiotech.asResource("item/sonic_dog_cannon/gear");
 	public static final ResourceLocation SCOPE_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/scope");
+	public static final ResourceLocation FOLDED_SCOPE_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/scope_folded");
 	public static final ResourceLocation COLLAR_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/collar");
 	private static final PartialModel GEAR = PartialModel.of(GEAR_MODEL_LOCATION);
 	private static final PartialModel SCOPE = PartialModel.of(SCOPE_MODEL_LOCATION);
+	private static final PartialModel FOLDED_SCOPE = PartialModel.of(FOLDED_SCOPE_MODEL_LOCATION);
 	private static final PartialModel COLLAR = PartialModel.of(COLLAR_MODEL_LOCATION);
 
 	@Override
@@ -54,7 +57,7 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 				// [8, 8, 8] centre, so a bare negative scale moves the part to the opposite side.
 				poseStack.scale(-1.0f, 1.0f, 1.0f);
 			}
-			renderer.render(SCOPE.get(), light);
+			renderer.render((SonicDogCannonItem.isScopeFolded(stack) ? FOLDED_SCOPE : SCOPE).get(), light);
 			poseStack.popPose();
 		}
 	}

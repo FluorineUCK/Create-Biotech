@@ -6,7 +6,7 @@
   "item.create_biotech.sonic_dog_cannon.upgrade.voice_pack": "Voice Pack",
   "item.create_biotech.sonic_dog_cannon.upgrade.voice_pack.description": "The most _satisfying_ Big Dog bark in the observable universe",
   "item.create_biotech.sonic_dog_cannon.upgrade.scope": "Scope",
-  "item.create_biotech.sonic_dog_cannon.upgrade.scope.description": "It will not improve your aim, but it looks _cool_. Sneak-R-Click to disable the goggles",
+  "item.create_biotech.sonic_dog_cannon.upgrade.scope.description": "It will not improve your aim, but it looks _cool_. Sneak-right-click to _retract_ or _extend_ the scope",
   "item.create_biotech.sonic_dog_cannon.upgrade.shriek_sonic_boom": "Shriek Sonic Boom",
   "item.create_biotech.sonic_dog_cannon.upgrade.shriek_sonic_boom.description": "Fires a Warden-style _Sonic Boom_, dealing _damage_ instead of _stunning_",
   "item.create_biotech.sonic_dog_cannon.upgrade.dog_collar": "Dog Collar (%s)",
