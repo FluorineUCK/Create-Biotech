@@ -17,6 +17,7 @@ import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerPlace
 import com.nobodiiiii.createbiotech.content.shulkerteleporter.ShulkerTeleporterConfigPacket;
 import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueRemovalPacket;
 import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueSelectionPacket;
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonFirePacket;
 import com.yision.allay.block.allayport.AllayPortConfigurationPacket;
 import com.yision.allay.block.allayport.AllayPortFlapPacket;
 import com.yision.allay.logistics.courier.hud.AllayCourierHudPacket;
@@ -42,7 +43,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 public final class CBPackets {
 
-	private static final String NETWORK_VERSION = "15";
+	private static final String NETWORK_VERSION = "16";
 	private static final List<ServerRegistration<?>> SERVERBOUND = new ArrayList<>();
 	private static final List<ClientRegistration<?>> CLIENTBOUND = new ArrayList<>();
 	private static final Map<Class<?>, Integer> SERVERBOUND_IDS = new HashMap<>();
@@ -90,6 +91,8 @@ public final class CBPackets {
 		registerClient(ShulkerPackagerPlacementPacket.ClientBoundResult.class,
 			ShulkerPackagerPlacementPacket.ClientBoundResult::new,
 			ShulkerPackagerPlacementPacket.ClientBoundResult::write);
+		registerClient(SonicDogCannonFirePacket.class, SonicDogCannonFirePacket::new,
+			SonicDogCannonFirePacket::write);
 
 		CatnipPacketRegistry registry = new CatnipPacketRegistry(CreateBiotech.MOD_ID, NETWORK_VERSION);
 		registry.registerPacket(new CatnipPacketRegistry.PacketType<>(
