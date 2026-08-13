@@ -53,6 +53,7 @@ public class SonicConeWaveParticle extends ShriekParticle {
 		xd = 0.0d;
 		yd = 0.0d;
 		zd = 0.0d;
+		setColor(1.0f, 1.0f, 1.0f);
 		pickSprite(sprites);
 		setAlpha(1.0f);
 	}
