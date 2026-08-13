@@ -9,6 +9,8 @@ import com.nobodiiiii.createbiotech.client.SonicDogCannonItemRenderer;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket.Action;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
+import com.simibubi.create.AllItems;
+import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.content.equipment.armor.BacktankUtil;
 import com.simibubi.create.foundation.item.render.CustomRenderedItems;
 
@@ -47,8 +49,8 @@ public class SonicDogCannonItem extends Item {
 	public static final int MAX_DURABILITY = 100;
 	public static final int FULL_CHARGE_TICKS = 40;
 	private static final int VOICE_PACK_CHARGE_START_TICKS = 36;
-	private static final double MIN_NORMAL_RANGE = 4.0d;
-	private static final double MAX_NORMAL_RANGE = 16.0d;
+	public static final double MIN_NORMAL_RANGE = 4.0d;
+	public static final double MAX_NORMAL_RANGE = 16.0d;
 	private static final double MIN_SHRIEK_RANGE = 8.0d;
 	private static final double MAX_SHRIEK_RANGE = 24.0d;
 	private static final double BEAM_HIT_RADIUS = 0.6d;
@@ -65,6 +67,19 @@ public class SonicDogCannonItem extends Item {
 	@Override
 	public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
 		ItemStack stack = player.getItemInHand(hand);
+		if (hand == InteractionHand.MAIN_HAND && player.isShiftKeyDown()
+			&& AllItems.WRENCH.isIn(player.getOffhandItem())) {
+			if (!SonicDogCannonUpgrade.hasInstalledUpgrade(stack))
+				return InteractionResultHolder.fail(stack);
+
+			if (!level.isClientSide) {
+				SonicDogCannonUpgrade.removeLastInstalled(stack);
+				AllSoundEvents.WRENCH_REMOVE.playOnServer(level, player.blockPosition(), 1.0f,
+					level.getRandom().nextFloat() * 0.5f + 0.5f);
+			}
+			return InteractionResultHolder.sidedSuccess(stack, level.isClientSide);
+		}
+
 		player.startUsingItem(hand);
 		if (!level.isClientSide) {
 			Action action = SonicDogCannonUpgrade.VOICE_PACK.isInstalled(stack)

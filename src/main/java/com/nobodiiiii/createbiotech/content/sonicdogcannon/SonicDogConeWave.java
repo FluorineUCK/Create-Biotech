@@ -4,6 +4,8 @@ import com.nobodiiiii.createbiotech.network.CBPackets;
 
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
@@ -13,6 +15,9 @@ public final class SonicDogConeWave {
 
 	private static final double HALF_ANGLE_RADIANS = Math.toRadians(60.0d);
 	private static final double MIN_DIRECTION_DOT = Math.cos(HALF_ANGLE_RADIANS);
+	private static final int DEBUFF_DURATION_TICKS = 5 * 20;
+	private static final int SLOWNESS_AMPLIFIER = 3;
+	private static final int WEAKNESS_AMPLIFIER = 1;
 
 	private SonicDogConeWave() {}
 
@@ -33,8 +38,13 @@ public final class SonicDogConeWave {
 			double distance = offset.length();
 			if (distance < 1.0e-5d || distance > range + target.getBbWidth() * 0.5d)
 				continue;
-			if (offset.dot(normalizedDirection) / distance >= MIN_DIRECTION_DOT)
-				target.hurt(level.damageSources().sonicBoom(owner), 1.0f);
+			if (offset.dot(normalizedDirection) / distance < MIN_DIRECTION_DOT)
+				continue;
+
+			target.addEffect(new MobEffectInstance(
+				MobEffects.MOVEMENT_SLOWDOWN, DEBUFF_DURATION_TICKS, SLOWNESS_AMPLIFIER), owner);
+			target.addEffect(new MobEffectInstance(
+				MobEffects.WEAKNESS, DEBUFF_DURATION_TICKS, WEAKNESS_AMPLIFIER), owner);
 		}
 	}
 }

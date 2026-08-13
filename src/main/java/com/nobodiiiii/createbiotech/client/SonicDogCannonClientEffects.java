@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.client;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicConeWaveParticleOption;
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonItem;
 
 import net.minecraft.client.CameraType;
 import net.minecraft.client.Minecraft;
@@ -21,7 +22,8 @@ import org.joml.Vector4f;
 
 public final class SonicDogCannonClientEffects {
 
-	private static final int PARTICLE_COUNT = 10;
+	private static final int MIN_PARTICLE_COUNT = 4;
+	private static final int MAX_PARTICLE_COUNT = 10;
 	private static final int PARTICLE_DELAY_TICKS = 1;
 
 	private static final double FIRST_PERSON_HAND_SIDE = 0.56d;
@@ -59,11 +61,22 @@ public final class SonicDogCannonClientEffects {
 			? getFirstPersonMuzzle(shooter, hand, direction)
 			: getThirdPersonMuzzle(shooter, hand);
 
-		for (int i = 0; i < PARTICLE_COUNT; i++) {
+		int particleCount = getParticleCount(range);
+		for (int i = 0; i < particleCount; i++) {
 			SonicConeWaveParticleOption particle = new SonicConeWaveParticleOption(
 				direction.toVector3f(), range, i * PARTICLE_DELAY_TICKS);
 			level.addParticle(particle, muzzle.x, muzzle.y, muzzle.z, 0.0d, 0.0d, 0.0d);
 		}
+	}
+
+	private static int getParticleCount(float range) {
+		double rangeProgress = Mth.clamp(
+			(range - SonicDogCannonItem.MIN_NORMAL_RANGE)
+				/ (SonicDogCannonItem.MAX_NORMAL_RANGE - SonicDogCannonItem.MIN_NORMAL_RANGE),
+			0.0d, 1.0d);
+		return Mth.clamp(
+			(int) Math.round(Mth.lerp(rangeProgress, MIN_PARTICLE_COUNT, MAX_PARTICLE_COUNT)),
+			MIN_PARTICLE_COUNT, MAX_PARTICLE_COUNT);
 	}
 
 	private static Vec3 getFirstPersonMuzzle(Player shooter, InteractionHand hand, Vec3 direction) {
