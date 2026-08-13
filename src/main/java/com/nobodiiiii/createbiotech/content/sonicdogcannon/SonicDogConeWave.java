@@ -10,12 +10,11 @@ import java.util.WeakHashMap;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 
-import net.minecraft.core.BlockPos;
-import net.minecraft.core.particles.VibrationParticleOption;
+import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
+
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.level.gameevent.BlockPositionSource;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -34,36 +33,10 @@ public final class SonicDogConeWave {
 
 	public static void fire(ServerLevel level, Player owner, Vec3 origin, Vec3 direction) {
 		Vec3 normalizedDirection = direction.normalize();
-		spawnVibrationCone(level, origin, normalizedDirection);
+		level.sendParticles(CBParticleTypes.SONIC_CONE_WAVE.get(), origin.x, origin.y, origin.z, 0,
+			normalizedDirection.x, normalizedDirection.y, normalizedDirection.z, 1.0d);
 		ACTIVE_WAVES.computeIfAbsent(level, ignored -> new ArrayList<>())
 			.add(new Wave(owner, origin, normalizedDirection));
-	}
-
-	private static void spawnVibrationCone(ServerLevel level, Vec3 origin, Vec3 forward) {
-		Vec3 reference = Math.abs(forward.y) < 0.99d ? new Vec3(0.0d, 1.0d, 0.0d) : new Vec3(1.0d, 0.0d, 0.0d);
-		Vec3 right = forward.cross(reference).normalize();
-		Vec3 up = right.cross(forward).normalize();
-
-		spawnVibration(level, origin, origin.add(forward.scale(SonicDogCannonItem.CONE_RANGE)));
-		int rings = 4;
-		for (int ring = 1; ring <= rings; ring++) {
-			double angle = HALF_ANGLE_RADIANS * ring / rings;
-			double forwardScale = Math.cos(angle);
-			double outwardScale = Math.sin(angle);
-			int samples = ring * 8;
-			for (int sample = 0; sample < samples; sample++) {
-				double azimuth = Math.PI * 2.0d * sample / samples;
-				Vec3 outward = right.scale(Math.cos(azimuth)).add(up.scale(Math.sin(azimuth)));
-				Vec3 ray = forward.scale(forwardScale).add(outward.scale(outwardScale));
-				spawnVibration(level, origin, origin.add(ray.scale(SonicDogCannonItem.CONE_RANGE)));
-			}
-		}
-	}
-
-	private static void spawnVibration(ServerLevel level, Vec3 origin, Vec3 destination) {
-		VibrationParticleOption particle = new VibrationParticleOption(
-			new BlockPositionSource(BlockPos.containing(destination)), TRAVEL_TICKS);
-		level.sendParticles(particle, origin.x, origin.y, origin.z, 1, 0.0d, 0.0d, 0.0d, 0.0d);
 	}
 
 	@SubscribeEvent

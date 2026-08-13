@@ -22,6 +22,8 @@ public class CBParticleTypes {
 		PARTICLE_TYPES.register("allay_courier_note", () -> new SimpleParticleType(false));
 	public static final DeferredHolder<ParticleType<?>, SimpleParticleType> FROG_PORTAL =
 		PARTICLE_TYPES.register("frog_portal", () -> new SimpleParticleType(false));
+	public static final DeferredHolder<ParticleType<?>, SimpleParticleType> SONIC_CONE_WAVE =
+		PARTICLE_TYPES.register("sonic_cone_wave", () -> new SimpleParticleType(true));
 
 	private CBParticleTypes() {
 	}

@@ -19,14 +19,14 @@ public final class SonicDogCannonArmPose {
 		ModelPart supporting = holdingArm == HumanoidArm.RIGHT ? model.leftArm : model.rightArm;
 		float mirror = holdingArm == HumanoidArm.RIGHT ? 1.0f : -1.0f;
 
-		// Raise the arm holding the cannon vertically by 60 degrees.
-		holding.xRot = radians(-60.0f);
-		holding.yRot = 0.0f;
+		// Keep the tuned pose as the neutral position, then track the head like vanilla ranged weapons.
+		holding.xRot = radians(-60.0f) + model.head.xRot;
+		holding.yRot = model.head.yRot;
 		holding.zRot = 0.0f;
 
 		// Reach the free hand inward and rest it on the cannon body.
-		supporting.xRot = radians(-75.0f);
-		supporting.yRot = mirror * radians(35.0f);
+		supporting.xRot = radians(-75.0f) + model.head.xRot;
+		supporting.yRot = mirror * radians(35.0f) + model.head.yRot;
 		supporting.zRot = mirror * radians(10.0f);
 	}
 
