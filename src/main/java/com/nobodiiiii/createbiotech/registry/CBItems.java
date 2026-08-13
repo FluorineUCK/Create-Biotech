@@ -18,6 +18,7 @@ import com.nobodiiiii.createbiotech.content.experience.ExperienceConstants;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberItem;
 import com.nobodiiiii.createbiotech.content.experience.HiddenExperienceItem;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultItem;
+import com.nobodiiiii.createbiotech.content.factorycluster.panel.FactoryPanelBlockItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.LargeCardboardBoxItem;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogItem;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltConnectorItem;
@@ -114,6 +115,10 @@ public class CBItems {
 
 	public static final DeferredHolder<Item, Item> WIRELESS_TERMINAL = ITEMS.register("wireless_terminal",
 		() -> new WirelessTerminalItem(new Item.Properties().stacksTo(1)));
+
+	public static final DeferredHolder<Item, FactoryPanelBlockItem> FACTORY_PANEL =
+		ITEMS.register("factory_panel", () -> new FactoryPanelBlockItem(CBBlocks.FACTORY_PANEL.get(),
+			new Item.Properties().stacksTo(1)));
 
 	public static final DeferredHolder<Item, Item> HALF_SHAFT = ITEMS.register("half_shaft",
 		() -> new BlockItem(CBBlocks.HALF_SHAFT.get(), new Item.Properties()));

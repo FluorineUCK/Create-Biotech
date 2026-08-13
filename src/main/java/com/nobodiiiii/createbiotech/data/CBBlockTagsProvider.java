@@ -37,6 +37,7 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 			CBBlocks.BIOTECH_CASING.get());
 
 		add(BlockTags.MINEABLE_WITH_PICKAXE,
+			CBBlocks.FACTORY_PANEL.get(),
 			CBBlocks.SLIME_BELT.get(),
 			CBBlocks.MAGMA_BELT.get(),
 			CBBlocks.POWER_BELT.get(),

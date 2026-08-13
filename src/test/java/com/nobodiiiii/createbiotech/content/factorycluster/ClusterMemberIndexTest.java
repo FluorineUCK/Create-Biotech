@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.factorycluster;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -45,6 +46,19 @@ class ClusterMemberIndexTest {
 		}
 	}
 
+	@Test
+	void rebindRemovesOldClusterEntryBeforeRegisteringNewIdentity() {
+		ClusterMemberIndex.ServerIndex index = new ClusterMemberIndex.ServerIndex();
+		MutableMember panel = new MutableMember(PANEL_ID, CLUSTER_ID);
+		UUID replacementCluster = UUID.fromString("00000000-0000-0000-0000-000000000003");
+		index.register(panel);
+
+		index.rebind(panel, () -> panel.clusterId = replacementCluster);
+
+		assertTrue(index.members(CLUSTER_ID, ClusterMemberType.PANEL).isEmpty());
+		assertEquals(List.of(panel), index.members(replacementCluster, ClusterMemberType.PANEL));
+	}
+
 	private static FakeMember member(UUID memberId, UUID clusterId, ClusterMemberType type) {
 		return new FakeMember(memberId, clusterId, type);
 	}
@@ -68,5 +82,50 @@ class ClusterMemberIndexTest {
 
 		@Override
 		public void applyClusterBinding(UUID clusterId, List<LogisticsBinding> bindings) {}
+	}
+
+	private static final class MutableMember implements ClusterMember {
+		private final UUID memberId;
+		private UUID clusterId;
+
+		private MutableMember(UUID memberId, UUID clusterId) {
+			this.memberId = memberId;
+			this.clusterId = clusterId;
+		}
+
+		@Override
+		public UUID memberId() {
+			return memberId;
+		}
+
+		@Override
+		public UUID clusterId() {
+			return clusterId;
+		}
+
+		@Override
+		public List<LogisticsBinding> logisticsBindings() {
+			return List.of();
+		}
+
+		@Override
+		public ClusterMemberType memberType() {
+			return ClusterMemberType.PANEL;
+		}
+
+		@Override
+		public SpaceAddress memberAddress() {
+			return null;
+		}
+
+		@Override
+		public boolean canRebind() {
+			return true;
+		}
+
+		@Override
+		public void applyClusterBinding(UUID clusterId, List<LogisticsBinding> bindings) {
+			this.clusterId = clusterId;
+		}
 	}
 }

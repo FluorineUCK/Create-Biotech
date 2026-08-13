@@ -12,6 +12,7 @@ import com.nobodiiiii.createbiotech.content.experience.BuddingExperienceBlockEnt
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlockEntity;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlockEntity;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlockEntity;
+import com.nobodiiiii.createbiotech.content.factorycluster.panel.FactoryPanelBlockEntity;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlockEntity;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlockEntity;
 import com.nobodiiiii.createbiotech.content.fluid.NetherPortalFluidBlockEntity;
@@ -45,6 +46,10 @@ public class CBBlockEntityTypes {
 
 	public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
 		DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, CreateBiotech.MOD_ID);
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FactoryPanelBlockEntity>> FACTORY_PANEL =
+		BLOCK_ENTITY_TYPES.register("factory_panel", () -> BlockEntityType.Builder
+			.of(FactoryPanelBlockEntity::new, CBBlocks.FACTORY_PANEL.get()).build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AutomaticFishReleaseMachineBlockEntity>>
 		AUTOMATIC_FISH_RELEASE_MACHINE = BLOCK_ENTITY_TYPES.register("automatic_fish_release_machine",

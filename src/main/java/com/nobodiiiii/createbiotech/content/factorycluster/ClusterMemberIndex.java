@@ -29,6 +29,10 @@ public final class ClusterMemberIndex {
 			index.unregister(member);
 	}
 
+	public static void rebind(MinecraftServer server, ClusterMember member, Runnable mutation) {
+		serverIndex(server).rebind(member, mutation);
+	}
+
 	public static List<ClusterMember> members(MinecraftServer server, UUID clusterId,
 		ClusterMemberType type) {
 		ServerIndex index;
@@ -82,6 +86,15 @@ public final class ClusterMemberIndex {
 				members.remove(key);
 			if (members.isEmpty())
 				membersByCluster.remove(clusterId);
+		}
+
+		void rebind(ClusterMember member, Runnable mutation) {
+			unregister(member);
+			try {
+				mutation.run();
+			} finally {
+				register(member);
+			}
 		}
 
 		List<ClusterMember> members(UUID clusterId, ClusterMemberType type) {

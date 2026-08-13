@@ -534,6 +534,7 @@
   "create_biotech.ponder.allay_port_scene_1.text_10": "但是需要确保涉及的站点位于被加载的区块中",
   "create_biotech.ponder.tag.ponderer_exported": "The Ponderer...",
   "create_biotech.ponder.tag.ponderer_exported.description": "This mod\u0027s Ponder scenes were created and exported with The Ponderer. Learn more: https://modrinth.com/mod/the-ponderer",
+  "block.create_biotech.factory_panel": "Factory Panel",
   "create_biotech.factory_cluster.binding.success": "Factory cluster bindings applied",
   "create_biotech.factory_cluster.binding.no_source": "The selected source is no longer part of a factory cluster",
   "create_biotech.factory_cluster.binding.active": "A factory cluster member is active and cannot be rebound",

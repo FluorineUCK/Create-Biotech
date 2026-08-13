@@ -534,6 +534,7 @@
   "create_biotech.ponder.allay_port_scene_1.text_10": "但是需要确保涉及的站点位于被加载的区块中",
   "create_biotech.ponder.tag.ponderer_exported": "思索者...",
   "create_biotech.ponder.tag.ponderer_exported.description": "以上思索由模组思索者（Ponderer）制作并导出，了解更多：https://modrinth.com/mod/the-ponderer",
+  "block.create_biotech.factory_panel": "工厂面板",
   "create_biotech.factory_cluster.binding.success": "工厂集群绑定已应用",
   "create_biotech.factory_cluster.binding.no_source": "所选源已不属于任何工厂集群",
   "create_biotech.factory_cluster.binding.active": "工厂集群中有成员正在运行，无法重新绑定",
