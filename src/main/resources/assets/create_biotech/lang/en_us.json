@@ -17,6 +17,7 @@
   "item.create_biotech.sonic_dog_cannon.tooltip.behaviour_backtank": "Uses the Tank's _Air Pressure_ to _prevent_ the Big Dog Sonic Cannon from losing _Durability_",
   "item.create_biotech.sonic_dog_cannon.tooltip.condition2": "When R-Clicked with a Wrench in the Off Hand",
   "item.create_biotech.sonic_dog_cannon.tooltip.behaviour2": "_Removes_ the most recently installed _upgrade_",
+  "effect.create_biotech.stun": "Stun",
   "block.create_biotech.automatic_fish_release_machine": "Boundless Merit Fully Automatic Fish Release Machine",
   "item.create_biotech.empty_magma_cube_burner": "Empty Magma Cube Burner",
   "block.create_biotech.magma_cube_burner": "Magma Cube Burner",

@@ -43,7 +43,9 @@ import org.jetbrains.annotations.Nullable;
 public class SonicDogCannonItem extends Item {
 
 	public static final int MAX_DURABILITY = 100;
+	public static final int MIN_CHARGE_TICKS = 10;
 	public static final int FULL_CHARGE_TICKS = 40;
+	private static final int COOLDOWN_TICKS = 20;
 	private static final int VOICE_PACK_CHARGE_START_TICKS = 36;
 	public static final double MIN_NORMAL_RANGE = 4.0d;
 	public static final double MAX_NORMAL_RANGE = 16.0d;
@@ -153,7 +155,11 @@ public class SonicDogCannonItem extends Item {
 		sendChargeSound(player, Action.STOP);
 
 		int chargeTicks = Math.max(0, getUseDuration(stack, entity) - timeLeft);
-		double charge = Math.min(chargeTicks, FULL_CHARGE_TICKS) / (double) FULL_CHARGE_TICKS;
+		if (chargeTicks < MIN_CHARGE_TICKS)
+			return;
+
+		double charge = Math.min(chargeTicks - MIN_CHARGE_TICKS, FULL_CHARGE_TICKS - MIN_CHARGE_TICKS)
+			/ (double) (FULL_CHARGE_TICKS - MIN_CHARGE_TICKS);
 		Vec3 direction = player.getLookAngle().normalize();
 		Vec3 origin = player.getEyePosition().add(direction.scale(0.5d));
 
@@ -164,6 +170,7 @@ public class SonicDogCannonItem extends Item {
 			double range = MIN_NORMAL_RANGE + (MAX_NORMAL_RANGE - MIN_NORMAL_RANGE) * charge;
 			SonicDogConeWave.fire(serverLevel, player, origin, direction, range);
 		}
+		sendGearAnimation(player, chargeTicks);
 
 		SoundEvent fireSound = hasVoicePack
 			? chargeTicks >= FULL_CHARGE_TICKS
@@ -172,12 +179,21 @@ public class SonicDogCannonItem extends Item {
 			: SoundEvents.WOLF_AMBIENT;
 		level.playSound(null, player.getX(), player.getY(), player.getZ(), fireSound,
 			SoundSource.PLAYERS, 1.0f, 1.0f);
+		player.getCooldowns().addCooldown(this, COOLDOWN_TICKS);
 		player.awardStat(Stats.ITEM_USED.get(this));
 	}
 
 	private static void sendChargeSound(Player player, Action action) {
 		SonicDogCannonChargeSoundPacket packet =
 			new SonicDogCannonChargeSoundPacket(player.getId(), action);
+		CBPackets.sendToTrackingEntity(packet, player);
+		if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)
+			CBPackets.sendToPlayer(packet, serverPlayer);
+	}
+
+	private static void sendGearAnimation(Player player, int chargeTicks) {
+		SonicDogCannonGearAnimationPacket packet = new SonicDogCannonGearAnimationPacket(
+			player.getId(), player.getUsedItemHand(), chargeTicks);
 		CBPackets.sendToTrackingEntity(packet, player);
 		if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)
 			CBPackets.sendToPlayer(packet, serverPlayer);

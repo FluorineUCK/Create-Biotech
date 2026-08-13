@@ -19,6 +19,7 @@ import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueRemovalPacke
 import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueSelectionPacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonFirePacket;
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonGearAnimationPacket;
 import com.yision.allay.block.allayport.AllayPortConfigurationPacket;
 import com.yision.allay.block.allayport.AllayPortFlapPacket;
 import com.yision.allay.logistics.courier.hud.AllayCourierHudPacket;
@@ -44,7 +45,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 public final class CBPackets {
 
-	private static final String NETWORK_VERSION = "19";
+	private static final String NETWORK_VERSION = "20";
 	private static final List<ServerRegistration<?>> SERVERBOUND = new ArrayList<>();
 	private static final List<ClientRegistration<?>> CLIENTBOUND = new ArrayList<>();
 	private static final Map<Class<?>, Integer> SERVERBOUND_IDS = new HashMap<>();
@@ -96,6 +97,8 @@ public final class CBPackets {
 			SonicDogCannonFirePacket::write);
 		registerClient(SonicDogCannonChargeSoundPacket.class, SonicDogCannonChargeSoundPacket::new,
 			SonicDogCannonChargeSoundPacket::write);
+		registerClient(SonicDogCannonGearAnimationPacket.class, SonicDogCannonGearAnimationPacket::new,
+			SonicDogCannonGearAnimationPacket::write);
 
 		CatnipPacketRegistry registry = new CatnipPacketRegistry(CreateBiotech.MOD_ID, NETWORK_VERSION);
 		registry.registerPacket(new CatnipPacketRegistry.PacketType<>(

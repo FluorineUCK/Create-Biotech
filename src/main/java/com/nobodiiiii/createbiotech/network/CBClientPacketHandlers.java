@@ -6,6 +6,7 @@ import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltEntityAnimationPa
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerPlacementPacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonFirePacket;
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonGearAnimationPacket;
 import com.yision.allay.block.allayport.AllayPortFlapPacket;
 import com.yision.allay.logistics.courier.hud.AllayCourierHudPacket;
 
@@ -37,6 +38,8 @@ final class CBClientPacketHandlers {
 			sonicDogCannonFire.handle(player);
 		} else if (packet instanceof SonicDogCannonChargeSoundPacket sonicDogCannonChargeSound) {
 			sonicDogCannonChargeSound.handle(player);
+		} else if (packet instanceof SonicDogCannonGearAnimationPacket sonicDogCannonGearAnimation) {
+			sonicDogCannonGearAnimation.handle(player);
 		} else {
 			throw new IllegalArgumentException("Unhandled Create Biotech clientbound packet "
 				+ packet.getClass().getName());

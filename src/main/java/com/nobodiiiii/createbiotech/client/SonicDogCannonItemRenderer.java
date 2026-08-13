@@ -1,5 +1,8 @@
 package com.nobodiiiii.createbiotech.client;
 
+import java.util.Map;
+import java.util.WeakHashMap;
+
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.CreateBiotech;
@@ -15,7 +18,11 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 
@@ -25,14 +32,23 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		CreateBiotech.asResource("item/sonic_dog_cannon/gear");
 	public static final ResourceLocation SCOPE_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/scope");
+	public static final ResourceLocation LEFT_SCOPE_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/scope_left");
 	public static final ResourceLocation FOLDED_SCOPE_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/scope_folded");
+	public static final ResourceLocation LEFT_FOLDED_SCOPE_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/scope_folded_left");
 	public static final ResourceLocation COLLAR_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/collar");
 	private static final PartialModel GEAR = PartialModel.of(GEAR_MODEL_LOCATION);
 	private static final PartialModel SCOPE = PartialModel.of(SCOPE_MODEL_LOCATION);
+	private static final PartialModel LEFT_SCOPE = PartialModel.of(LEFT_SCOPE_MODEL_LOCATION);
 	private static final PartialModel FOLDED_SCOPE = PartialModel.of(FOLDED_SCOPE_MODEL_LOCATION);
+	private static final PartialModel LEFT_FOLDED_SCOPE = PartialModel.of(LEFT_FOLDED_SCOPE_MODEL_LOCATION);
 	private static final PartialModel COLLAR = PartialModel.of(COLLAR_MODEL_LOCATION);
+	private static final float GEAR_ACCELERATION = -0.75f;
+	private static final float DECELERATION_TICKS = 10.0f;
+	private static final Map<ItemStack, GearDeceleration> GEAR_DECELERATIONS = new WeakHashMap<>();
 
 	@Override
 	protected void render(ItemStack stack, CustomRenderedItemModel model, PartialItemModelRenderer renderer,
@@ -51,14 +67,12 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		poseStack.popPose();
 
 		if (SonicDogCannonUpgrade.SCOPE.isInstalled(stack)) {
-			poseStack.pushPose();
-			if (shouldMirrorScope(transformType)) {
-				// CustomRenderedItemModelRenderer has already moved the origin to the model's
-				// [8, 8, 8] centre, so a bare negative scale moves the part to the opposite side.
-				poseStack.scale(-1.0f, 1.0f, 1.0f);
-			}
-			renderer.render((SonicDogCannonItem.isScopeFolded(stack) ? FOLDED_SCOPE : SCOPE).get(), light);
-			poseStack.popPose();
+			boolean leftSide = shouldMirrorScope(transformType);
+			boolean folded = SonicDogCannonItem.isScopeFolded(stack);
+			PartialModel scope = folded
+				? leftSide ? LEFT_FOLDED_SCOPE : FOLDED_SCOPE
+				: leftSide ? LEFT_SCOPE : SCOPE;
+			renderer.render(scope.get(), light);
 		}
 	}
 
@@ -76,14 +90,55 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 
 	private static float getGearAngle(ItemStack stack) {
 		LocalPlayer player = Minecraft.getInstance().player;
-		if (player == null || !player.isUsingItem() || player.getUseItem() != stack)
+		if (player == null)
 			return 0.0f;
 
+		float renderTime = AnimationTickHolder.getRenderTime(player.clientLevel);
+		float restingAngle = getDeceleratingAngle(stack, renderTime);
+		if (!player.isUsingItem() || player.getUseItem() != stack)
+			return restingAngle;
+
 		float elapsed = player.getTicksUsingItem() + AnimationTickHolder.getPartialTicks();
+		return (restingAngle + getChargingAngle(elapsed)) % 360.0f;
+	}
+
+	public static void onFired(LocalPlayer localPlayer, int shooterId, InteractionHand hand, int chargeTicks) {
+		Entity entity = localPlayer.clientLevel.getEntity(shooterId);
+		if (!(entity instanceof Player shooter))
+			return;
+
+		ItemStack stack = shooter.getItemInHand(hand);
+		if (!(stack.getItem() instanceof SonicDogCannonItem))
+			return;
+
+		float renderTime = AnimationTickHolder.getRenderTime(localPlayer.clientLevel);
+		float startAngle = getDeceleratingAngle(stack, renderTime)
+			+ getChargingAngle(Math.max(chargeTicks, 0));
+		float startSpeed = GEAR_ACCELERATION * Math.min(Math.max(chargeTicks, 0),
+			SonicDogCannonItem.FULL_CHARGE_TICKS);
+		GEAR_DECELERATIONS.put(stack, new GearDeceleration(renderTime, startAngle % 360.0f, startSpeed));
+	}
+
+	private static float getChargingAngle(float elapsed) {
 		float acceleratingTicks = Math.min(elapsed, SonicDogCannonItem.FULL_CHARGE_TICKS);
-		float angle = -0.375f * acceleratingTicks * acceleratingTicks;
+		float angle = GEAR_ACCELERATION * acceleratingTicks * acceleratingTicks / 2.0f;
 		if (elapsed > SonicDogCannonItem.FULL_CHARGE_TICKS)
-			angle -= 30.0f * (elapsed - SonicDogCannonItem.FULL_CHARGE_TICKS);
-		return angle % 360.0f;
+			angle += GEAR_ACCELERATION * SonicDogCannonItem.FULL_CHARGE_TICKS
+				* (elapsed - SonicDogCannonItem.FULL_CHARGE_TICKS);
+		return angle;
+	}
+
+	private static float getDeceleratingAngle(ItemStack stack, float renderTime) {
+		GearDeceleration deceleration = GEAR_DECELERATIONS.get(stack);
+		return deceleration == null ? 0.0f : deceleration.getAngle(renderTime);
+	}
+
+	private record GearDeceleration(float startTime, float startAngle, float startSpeed) {
+		private float getAngle(float renderTime) {
+			float progress = Mth.clamp((renderTime - startTime) / DECELERATION_TICKS, 0.0f, 1.0f);
+			float travel = startSpeed * DECELERATION_TICKS
+				* (progress - progress * progress / 2.0f);
+			return (startAngle + travel) % 360.0f;
+		}
 	}
 }
