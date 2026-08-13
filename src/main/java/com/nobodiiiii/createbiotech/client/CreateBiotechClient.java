@@ -202,9 +202,12 @@ public class CreateBiotechClient {
 		register.accept(SonicDogCannonItemRenderer.FOLDED_SCOPE_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.LEFT_FOLDED_SCOPE_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.COLLAR_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.WOLF_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.WOLF_ANGRY_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.PAW_LEFT_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.PAW_RIGHT_MODEL_LOCATION);
-		register.accept(SonicDogCannonItemRenderer.RED_EYES_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.PAW_LEFT_ANGRY_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.PAW_RIGHT_ANGRY_MODEL_LOCATION);
 		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_on"));
 		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_off"));
 		register.accept(CreateBiotech.asResource("block/spider_assembly_table/body"));

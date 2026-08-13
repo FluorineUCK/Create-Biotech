@@ -16,7 +16,6 @@ import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
@@ -41,21 +40,30 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		CreateBiotech.asResource("item/sonic_dog_cannon/scope_folded_left");
 	public static final ResourceLocation COLLAR_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/collar");
+	public static final ResourceLocation WOLF_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/wolf");
+	public static final ResourceLocation WOLF_ANGRY_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/wolf_angry");
 	public static final ResourceLocation PAW_LEFT_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/paw_left");
 	public static final ResourceLocation PAW_RIGHT_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/paw_right");
-	public static final ResourceLocation RED_EYES_MODEL_LOCATION =
-		CreateBiotech.asResource("item/sonic_dog_cannon/red_eyes");
+	public static final ResourceLocation PAW_LEFT_ANGRY_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/paw_left_angry");
+	public static final ResourceLocation PAW_RIGHT_ANGRY_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/paw_right_angry");
 	private static final PartialModel GEAR = PartialModel.of(GEAR_MODEL_LOCATION);
 	private static final PartialModel SCOPE = PartialModel.of(SCOPE_MODEL_LOCATION);
 	private static final PartialModel LEFT_SCOPE = PartialModel.of(LEFT_SCOPE_MODEL_LOCATION);
 	private static final PartialModel FOLDED_SCOPE = PartialModel.of(FOLDED_SCOPE_MODEL_LOCATION);
 	private static final PartialModel LEFT_FOLDED_SCOPE = PartialModel.of(LEFT_FOLDED_SCOPE_MODEL_LOCATION);
 	private static final PartialModel COLLAR = PartialModel.of(COLLAR_MODEL_LOCATION);
+	private static final PartialModel WOLF = PartialModel.of(WOLF_MODEL_LOCATION);
+	private static final PartialModel WOLF_ANGRY = PartialModel.of(WOLF_ANGRY_MODEL_LOCATION);
 	private static final PartialModel PAW_LEFT = PartialModel.of(PAW_LEFT_MODEL_LOCATION);
 	private static final PartialModel PAW_RIGHT = PartialModel.of(PAW_RIGHT_MODEL_LOCATION);
-	private static final PartialModel RED_EYES = PartialModel.of(RED_EYES_MODEL_LOCATION);
+	private static final PartialModel PAW_LEFT_ANGRY = PartialModel.of(PAW_LEFT_ANGRY_MODEL_LOCATION);
+	private static final PartialModel PAW_RIGHT_ANGRY = PartialModel.of(PAW_RIGHT_ANGRY_MODEL_LOCATION);
 	private static final float GEAR_ACCELERATION = -0.75f;
 	private static final float DECELERATION_TICKS = 10.0f;
 	private static final float PAW_BOB_AMPLITUDE = 0.5f / 16.0f;
@@ -68,11 +76,12 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		ItemDisplayContext transformType, PoseStack poseStack, MultiBufferSource buffer, int light, int overlay) {
 		renderer.render(model.getOriginalModel(), light);
 		float fullChargeAnimationTime = getFullChargeAnimationTime(stack);
-		renderPaw(renderer, poseStack, PAW_LEFT, getPawOffset(fullChargeAnimationTime, 0.0f), light);
-		renderPaw(renderer, poseStack, PAW_RIGHT,
+		boolean fullCharge = fullChargeAnimationTime >= 0.0f;
+		renderer.render((fullCharge ? WOLF_ANGRY : WOLF).get(), light);
+		renderPaw(renderer, poseStack, fullCharge ? PAW_LEFT_ANGRY : PAW_LEFT,
+			getPawOffset(fullChargeAnimationTime, 0.0f), light);
+		renderPaw(renderer, poseStack, fullCharge ? PAW_RIGHT_ANGRY : PAW_RIGHT,
 			getPawOffset(fullChargeAnimationTime, PAW_PHASE_OFFSET), light);
-		if (fullChargeAnimationTime >= 0.0f)
-			renderer.renderSolidGlowing(RED_EYES.get(), LightTexture.FULL_BRIGHT);
 
 		if (SonicDogCannonUpgrade.DOG_COLLAR.isInstalled(stack))
 			renderer.render(COLLAR.get(), light);
