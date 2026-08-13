@@ -121,7 +121,7 @@ public class CBItems {
 		() -> new WirelessTerminalItem(new Item.Properties().stacksTo(1)));
 
 	public static final DeferredHolder<Item, SonicDogCannonItem> SONIC_DOG_CANNON = ITEMS.register("sonic_dog_cannon",
-		() -> new SonicDogCannonItem(new Item.Properties().durability(100)));
+		() -> new SonicDogCannonItem(new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> HALF_SHAFT = ITEMS.register("half_shaft",
 		() -> new BlockItem(CBBlocks.HALF_SHAFT.get(), new Item.Properties()));

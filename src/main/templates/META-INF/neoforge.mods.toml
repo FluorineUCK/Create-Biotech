@@ -11,6 +11,7 @@ displayURL = "https://github.com/Nobodiiiii/Create-Biotech"
 logoFile = "logo.png"
 authors = "${mod_authors}"
 description = '''${mod_description}'''
+enumExtensions = "META-INF/enumextensions.json"
 
 [[mixins]]
 config = "create_biotech.mixins.json"

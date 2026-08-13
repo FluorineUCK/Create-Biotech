@@ -2,13 +2,20 @@ package com.nobodiiiii.createbiotech.content.sonicdogcannon;
 
 import java.util.function.Consumer;
 
-import com.simibubi.create.content.equipment.potatoCannon.PotatoCannonItem;
+import com.nobodiiiii.createbiotech.client.SonicDogCannonArmPose;
 
+import net.minecraft.client.model.HumanoidModel;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.item.Item;
+import net.minecraft.world.item.ItemStack;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
-public class SonicDogCannonItem extends PotatoCannonItem {
+import org.jetbrains.annotations.Nullable;
+
+public class SonicDogCannonItem extends Item {
 
 	public SonicDogCannonItem(Properties properties) {
 		super(properties);
@@ -17,6 +24,12 @@ public class SonicDogCannonItem extends PotatoCannonItem {
 	@Override
 	@OnlyIn(Dist.CLIENT)
 	public void initializeClient(Consumer<IClientItemExtensions> consumer) {
-		// The exported model already contains its gear, so it should use the regular item renderer.
+		consumer.accept(new IClientItemExtensions() {
+			@Override
+			@Nullable
+			public HumanoidModel.ArmPose getArmPose(LivingEntity entity, InteractionHand hand, ItemStack stack) {
+				return SonicDogCannonArmPose.ARM_POSE.getValue();
+			}
+		});
 	}
 }

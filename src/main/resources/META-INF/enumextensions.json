@@ -1,0 +1,13 @@
+{
+  "entries": [
+    {
+      "enum": "net/minecraft/client/model/HumanoidModel$ArmPose",
+      "name": "CREATE_BIOTECH_SONIC_DOG_CANNON",
+      "constructor": "(ZLnet/neoforged/neoforge/client/IArmPoseTransformer;)V",
+      "parameters": {
+        "class": "com/nobodiiiii/createbiotech/client/SonicDogCannonArmPose",
+        "field": "ARM_POSE"
+      }
+    }
+  ]
+}
