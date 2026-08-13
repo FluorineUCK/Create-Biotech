@@ -35,6 +35,7 @@ import com.nobodiiiii.createbiotech.registry.CBPoiTypes;
 import com.nobodiiiii.createbiotech.registry.CBPotions;
 import com.nobodiiiii.createbiotech.registry.CBRecipeTypes;
 import com.nobodiiiii.createbiotech.registry.CBRecipeConditions;
+import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.api.behaviour.movement.MovementBehaviour;
 import com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour;
@@ -73,6 +74,7 @@ public class CreateBiotech {
 		CBParticleTypes.register(modEventBus);
 		CBRecipeConditions.register(modEventBus);
 		CBRecipeTypes.register(modEventBus);
+		CBSoundEvents.register(modEventBus);
 		CBMobEffects.register(modEventBus);
 		CBPotions.register(modEventBus);
 		modEventBus.addListener(CBDataGenerators::gatherData);

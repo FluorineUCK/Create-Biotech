@@ -14,22 +14,25 @@ import net.minecraft.util.ExtraCodecs;
 
 import org.joml.Vector3f;
 
-public record SonicConeWaveParticleOption(Vector3f direction, int delay) implements ParticleOptions {
+public record SonicConeWaveParticleOption(Vector3f direction, float range, int delay) implements ParticleOptions {
 
 	public static final MapCodec<SonicConeWaveParticleOption> CODEC = RecordCodecBuilder.mapCodec(instance ->
 		instance.group(
 			ExtraCodecs.VECTOR3F.fieldOf("direction").forGetter(SonicConeWaveParticleOption::direction),
+			Codec.FLOAT.fieldOf("range").forGetter(SonicConeWaveParticleOption::range),
 			Codec.INT.fieldOf("delay").forGetter(SonicConeWaveParticleOption::delay))
 			.apply(instance, SonicConeWaveParticleOption::new));
 
 	public static final StreamCodec<RegistryFriendlyByteBuf, SonicConeWaveParticleOption> STREAM_CODEC =
 		StreamCodec.composite(
 			ByteBufCodecs.VECTOR3F, SonicConeWaveParticleOption::direction,
+			ByteBufCodecs.FLOAT, SonicConeWaveParticleOption::range,
 			ByteBufCodecs.VAR_INT, SonicConeWaveParticleOption::delay,
 			SonicConeWaveParticleOption::new);
 
 	public SonicConeWaveParticleOption {
 		direction = new Vector3f(direction);
+		range = Math.max(1.0f, range);
 		delay = Math.max(0, delay);
 	}
 

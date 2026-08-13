@@ -16,22 +16,22 @@ public final class SonicDogConeWave {
 
 	private SonicDogConeWave() {}
 
-	public static void fire(ServerLevel level, Player owner, Vec3 damageOrigin, Vec3 direction) {
+	public static void fire(ServerLevel level, Player owner, Vec3 damageOrigin, Vec3 direction, double range) {
 		Vec3 normalizedDirection = direction.normalize();
 		SonicDogCannonFirePacket packet = new SonicDogCannonFirePacket(
-			owner.getId(), owner.getUsedItemHand(), normalizedDirection);
+			owner.getId(), owner.getUsedItemHand(), normalizedDirection, (float) range);
 		CBPackets.sendToTrackingEntity(packet, owner);
 		if (owner instanceof ServerPlayer serverPlayer)
 			CBPackets.sendToPlayer(packet, serverPlayer);
 
 		AABB bounds = new AABB(damageOrigin,
-			damageOrigin.add(normalizedDirection.scale(SonicDogCannonItem.CONE_RANGE)))
-			.inflate(SonicDogCannonItem.CONE_RANGE * Math.sin(HALF_ANGLE_RADIANS));
+			damageOrigin.add(normalizedDirection.scale(range)))
+			.inflate(range * Math.sin(HALF_ANGLE_RADIANS));
 		for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, bounds,
 			candidate -> candidate != owner && candidate.isAlive() && !candidate.isSpectator())) {
 			Vec3 offset = target.getBoundingBox().getCenter().subtract(damageOrigin);
 			double distance = offset.length();
-			if (distance < 1.0e-5d || distance > SonicDogCannonItem.CONE_RANGE + target.getBbWidth() * 0.5d)
+			if (distance < 1.0e-5d || distance > range + target.getBbWidth() * 0.5d)
 				continue;
 			if (offset.dot(normalizedDirection) / distance >= MIN_DIRECTION_DOT)
 				target.hurt(level.damageSources().sonicBoom(owner), 1.0f);

@@ -35,6 +35,12 @@ public final class CBDataComponents {
 			builder -> builder.persistent(Codec.LONG)
 				.networkSynchronized(ByteBufCodecs.VAR_LONG));
 
+	/** Bit field containing the independently installed Big Dog Sonic Cannon upgrades. */
+	public static final Supplier<DataComponentType<Integer>> SONIC_DOG_CANNON_UPGRADES =
+		COMPONENTS.registerComponentType("sonic_dog_cannon_upgrades",
+			builder -> builder.persistent(Codec.INT)
+				.networkSynchronized(ByteBufCodecs.VAR_INT));
+
 	private CBDataComponents() {
 	}
 

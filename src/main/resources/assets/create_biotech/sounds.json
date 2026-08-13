@@ -1,0 +1,8 @@
+{
+  "sonic_dog_cannon.growl1": {
+    "subtitle": "subtitles.entity.wolf.growl",
+    "sounds": [
+      "minecraft:mob/wolf/growl1"
+    ]
+  }
+}

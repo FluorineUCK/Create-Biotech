@@ -21,12 +21,12 @@ import org.joml.Vector3f;
 public class SonicConeWaveParticle extends ShriekParticle {
 
 	private static final int LIFETIME = 16;
-	private static final float MAX_RANGE = 16.0f;
 	private static final float HALF_ANGLE = (float) Math.toRadians(60.0d);
-	private static final float MAX_WAVE_RADIUS = MAX_RANGE * Mth.sin(HALF_ANGLE);
 
 	private final Vec3 origin;
 	private final Vec3 forward;
+	private final float range;
+	private final float maxWaveRadius;
 	private final Quaternionf waveRotation;
 	private final Quaternionf reverseWaveRotation;
 	private int delay;
@@ -40,6 +40,8 @@ public class SonicConeWaveParticle extends ShriekParticle {
 		forward = suppliedDirection.lengthSqr() < 1.0e-6d
 			? new Vec3(0.0d, 0.0d, 1.0d)
 			: suppliedDirection.normalize();
+		range = option.range();
+		maxWaveRadius = range * Mth.sin(HALF_ANGLE);
 		waveRotation = new Quaternionf().rotationTo(
 			new Vector3f(0.0f, 0.0f, 1.0f),
 			new Vector3f((float) forward.x, (float) forward.y, (float) forward.z));
@@ -66,7 +68,7 @@ public class SonicConeWaveParticle extends ShriekParticle {
 		if (removed)
 			return;
 
-		double distance = MAX_RANGE * age / lifetime;
+		double distance = range * age / lifetime;
 		Vec3 waveCenter = origin.add(forward.scale(distance));
 		setPos(waveCenter.x, waveCenter.y, waveCenter.z);
 	}
@@ -75,7 +77,7 @@ public class SonicConeWaveParticle extends ShriekParticle {
 	public float getQuadSize(float partialTick) {
 		// Keep the expanded glyph on the same interpolated wavefront as its position.
 		float progress = Mth.clamp((age - 1.0f + partialTick) / lifetime, 0.0f, 1.0f);
-		return MAX_WAVE_RADIUS * progress;
+		return maxWaveRadius * progress;
 	}
 
 	@Override

@@ -4,6 +4,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastChamberHighPressureRecipe;
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonUpgradeRecipe;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterRecipe;
 import com.simibubi.create.content.processing.recipe.StandardProcessingRecipe;
 
@@ -29,6 +30,10 @@ public class CBRecipeTypes {
 	public static final DeferredHolder<RecipeSerializer<?>, RecipeSerializer<SquidPrinterRecipe>> SQUID_PRINTER_SERIALIZER =
 		RECIPE_SERIALIZERS.register("squid_printer",
 			() -> new StandardProcessingRecipe.Serializer<>(SquidPrinterRecipe::new));
+
+	public static final DeferredHolder<RecipeSerializer<?>, RecipeSerializer<SonicDogCannonUpgradeRecipe>>
+		SONIC_DOG_CANNON_UPGRADE_SERIALIZER =
+			RECIPE_SERIALIZERS.register("sonic_dog_cannon_upgrade", SonicDogCannonUpgradeRecipe.Serializer::new);
 
 	public static final DeferredHolder<RecipeType<?>, RecipeType<CreeperBlastChamberHighPressureRecipe>>
 		CREEPER_BLAST_CHAMBER_HIGH_PRESSURE_TYPE =

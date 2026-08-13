@@ -42,11 +42,12 @@ public final class SonicDogCannonClientEffects {
 
 	private SonicDogCannonClientEffects() {}
 
-	public static void fire(LocalPlayer localPlayer, int shooterId, InteractionHand hand, Vec3 suppliedDirection) {
+	public static void fire(LocalPlayer localPlayer, int shooterId, InteractionHand hand, Vec3 suppliedDirection,
+		float range) {
 		ClientLevel level = localPlayer.clientLevel;
 		Entity entity = level.getEntity(shooterId);
 		if (!(entity instanceof Player shooter) || !isFinite(suppliedDirection)
-			|| suppliedDirection.lengthSqr() < 1.0e-6d)
+			|| suppliedDirection.lengthSqr() < 1.0e-6d || !Float.isFinite(range) || range <= 0.0f)
 			return;
 
 		Vec3 direction = suppliedDirection.normalize();
@@ -60,7 +61,7 @@ public final class SonicDogCannonClientEffects {
 
 		for (int i = 0; i < PARTICLE_COUNT; i++) {
 			SonicConeWaveParticleOption particle = new SonicConeWaveParticleOption(
-				direction.toVector3f(), i * PARTICLE_DELAY_TICKS);
+				direction.toVector3f(), range, i * PARTICLE_DELAY_TICKS);
 			level.addParticle(particle, muzzle.x, muzzle.y, muzzle.z, 0.0d, 0.0d, 0.0d);
 		}
 	}
