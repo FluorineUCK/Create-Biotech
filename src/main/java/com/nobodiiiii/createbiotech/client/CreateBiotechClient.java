@@ -193,6 +193,7 @@ public class CreateBiotechClient {
 		register.accept(CreateBiotech.asResource("block/blast_chamber_display/creeper_face"));
 		register.accept(BoneRatchetRenderer.COGWHEEL_MODEL_LOCATION);
 		register.accept(ExperiencePumpRenderer.COG_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.GEAR_MODEL_LOCATION);
 		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_on"));
 		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_off"));
 		register.accept(CreateBiotech.asResource("block/spider_assembly_table/body"));
