@@ -17,7 +17,8 @@ public final class SonicDogConeWave {
 
 	private static final double HALF_ANGLE_RADIANS = Math.toRadians(60.0d);
 	private static final double MIN_DIRECTION_DOT = Math.cos(HALF_ANGLE_RADIANS);
-	private static final int STUN_DURATION_TICKS = 5 * 20;
+	private static final int MAX_STUN_DURATION_TICKS = 5 * 20;
+	private static final int MIN_STUN_DURATION_TICKS = 2 * 20;
 
 	private SonicDogConeWave() {}
 
@@ -42,7 +43,13 @@ public final class SonicDogConeWave {
 			if (offset.dot(normalizedDirection) / distance < MIN_DIRECTION_DOT)
 				continue;
 
-			target.addEffect(new MobEffectInstance(stun, STUN_DURATION_TICKS), owner);
+			target.addEffect(new MobEffectInstance(stun, stunDurationTicks(distance, range)), owner);
 		}
+	}
+
+	private static int stunDurationTicks(double distance, double range) {
+		double distanceFactor = range > 0.0d ? Math.clamp(distance / range, 0.0d, 1.0d) : 1.0d;
+		return (int) Math.round(MAX_STUN_DURATION_TICKS
+			+ (MIN_STUN_DURATION_TICKS - MAX_STUN_DURATION_TICKS) * distanceFactor);
 	}
 }

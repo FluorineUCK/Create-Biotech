@@ -1,0 +1,25 @@
+{
+	"ambientocclusion": false,
+	"textures": {
+		"0": "minecraft:block/redstone_block",
+		"particle": "minecraft:block/redstone_block"
+	},
+	"elements": [
+		{
+			"name": "red_eye_left",
+			"from": [6, 8, -11.02],
+			"to": [7, 9, -11.01],
+			"faces": {
+				"north": {"uv": [0, 0, 16, 16], "texture": "#0"}
+			}
+		},
+		{
+			"name": "red_eye_right",
+			"from": [9, 8, -11.02],
+			"to": [10, 9, -11.01],
+			"faces": {
+				"north": {"uv": [0, 0, 16, 16], "texture": "#0"}
+			}
+		}
+	]
+}

@@ -16,6 +16,7 @@ import dev.engine_room.flywheel.lib.model.baked.PartialModel;
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
@@ -40,20 +41,39 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		CreateBiotech.asResource("item/sonic_dog_cannon/scope_folded_left");
 	public static final ResourceLocation COLLAR_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/collar");
+	public static final ResourceLocation PAW_LEFT_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/paw_left");
+	public static final ResourceLocation PAW_RIGHT_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/paw_right");
+	public static final ResourceLocation RED_EYES_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/red_eyes");
 	private static final PartialModel GEAR = PartialModel.of(GEAR_MODEL_LOCATION);
 	private static final PartialModel SCOPE = PartialModel.of(SCOPE_MODEL_LOCATION);
 	private static final PartialModel LEFT_SCOPE = PartialModel.of(LEFT_SCOPE_MODEL_LOCATION);
 	private static final PartialModel FOLDED_SCOPE = PartialModel.of(FOLDED_SCOPE_MODEL_LOCATION);
 	private static final PartialModel LEFT_FOLDED_SCOPE = PartialModel.of(LEFT_FOLDED_SCOPE_MODEL_LOCATION);
 	private static final PartialModel COLLAR = PartialModel.of(COLLAR_MODEL_LOCATION);
+	private static final PartialModel PAW_LEFT = PartialModel.of(PAW_LEFT_MODEL_LOCATION);
+	private static final PartialModel PAW_RIGHT = PartialModel.of(PAW_RIGHT_MODEL_LOCATION);
+	private static final PartialModel RED_EYES = PartialModel.of(RED_EYES_MODEL_LOCATION);
 	private static final float GEAR_ACCELERATION = -0.75f;
 	private static final float DECELERATION_TICKS = 10.0f;
+	private static final float PAW_BOB_AMPLITUDE = 0.5f / 16.0f;
+	private static final float PAW_BOB_SPEED = 0.8f;
+	private static final float PAW_PHASE_OFFSET = (float) Math.PI;
 	private static final Map<ItemStack, GearDeceleration> GEAR_DECELERATIONS = new WeakHashMap<>();
 
 	@Override
 	protected void render(ItemStack stack, CustomRenderedItemModel model, PartialItemModelRenderer renderer,
 		ItemDisplayContext transformType, PoseStack poseStack, MultiBufferSource buffer, int light, int overlay) {
 		renderer.render(model.getOriginalModel(), light);
+		float fullChargeAnimationTime = getFullChargeAnimationTime(stack);
+		renderPaw(renderer, poseStack, PAW_LEFT, getPawOffset(fullChargeAnimationTime, 0.0f), light);
+		renderPaw(renderer, poseStack, PAW_RIGHT,
+			getPawOffset(fullChargeAnimationTime, PAW_PHASE_OFFSET), light);
+		if (fullChargeAnimationTime >= 0.0f)
+			renderer.renderSolidGlowing(RED_EYES.get(), LightTexture.FULL_BRIGHT);
+
 		if (SonicDogCannonUpgrade.DOG_COLLAR.isInstalled(stack))
 			renderer.render(COLLAR.get(), light);
 
@@ -74,6 +94,31 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 				: leftSide ? LEFT_SCOPE : SCOPE;
 			renderer.render(scope.get(), light);
 		}
+	}
+
+	private static void renderPaw(PartialItemModelRenderer renderer, PoseStack poseStack, PartialModel paw,
+		float verticalOffset, int light) {
+		poseStack.pushPose();
+		poseStack.translate(0.0f, verticalOffset, 0.0f);
+		renderer.render(paw.get(), light);
+		poseStack.popPose();
+	}
+
+	private static float getPawOffset(float animationTime, float phaseOffset) {
+		if (animationTime < 0.0f)
+			return 0.0f;
+		return Mth.sin(animationTime * PAW_BOB_SPEED + phaseOffset) * PAW_BOB_AMPLITUDE;
+	}
+
+	private static float getFullChargeAnimationTime(ItemStack stack) {
+		LocalPlayer player = Minecraft.getInstance().player;
+		if (player == null || !player.isUsingItem() || player.getUseItem() != stack)
+			return -1.0f;
+
+		float elapsed = player.getTicksUsingItem() + AnimationTickHolder.getPartialTicks();
+		return elapsed < SonicDogCannonItem.FULL_CHARGE_TICKS
+			? -1.0f
+			: elapsed - SonicDogCannonItem.FULL_CHARGE_TICKS;
 	}
 
 	private static boolean shouldMirrorScope(ItemDisplayContext transformType) {
