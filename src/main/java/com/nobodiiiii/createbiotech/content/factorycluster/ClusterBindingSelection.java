@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.factorycluster;
 
 import java.util.Optional;
+import java.util.UUID;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
@@ -24,26 +25,43 @@ public final class ClusterBindingSelection {
 	}
 
 	public static Optional<ClusterMember> resolve(ServerPlayer player) {
-		CompoundTag persistentData = player.getPersistentData();
-		if (!persistentData.contains(KEY, Tag.TAG_COMPOUND))
+		Optional<Selection> decoded = decode(player.getPersistentData());
+		if (decoded.isEmpty())
 			return Optional.empty();
+
+		Selection selection = decoded.get();
+		if (player.serverLevel().getGameTime() >= selection.expires())
+			return invalid(player);
+
+		SpaceAddress savedAddress = selection.address();
+		BlockEntity blockEntity = savedAddress.resolveBlockEntity(player.getServer());
+		if (!(blockEntity instanceof ClusterMember member)
+			|| !member.memberId().equals(selection.memberId())
+			|| !member.memberAddress().equals(savedAddress))
+			return invalid(player);
+		return Optional.of(member);
+	}
+
+	static Optional<Selection> decode(CompoundTag persistentData) {
+		if (!persistentData.contains(KEY))
+			return Optional.empty();
+		if (!persistentData.contains(KEY, Tag.TAG_COMPOUND))
+			return invalid(persistentData);
 
 		CompoundTag tag = persistentData.getCompound(KEY);
 		if (!tag.hasUUID(MEMBER_ID)
 			|| !tag.contains(EXPIRES, Tag.TAG_LONG)
-			|| player.serverLevel().getGameTime() >= tag.getLong(EXPIRES))
-			return invalid(player);
+			|| !tag.contains("Dimension", Tag.TAG_STRING)
+			|| tag.getString("Dimension").isBlank()
+			|| !tag.contains("Pos", Tag.TAG_LONG)
+			|| (tag.contains("SubLevel") && !tag.hasUUID("SubLevel")))
+			return invalid(persistentData);
 
 		try {
-			SpaceAddress savedAddress = SpaceAddress.load(tag);
-			BlockEntity blockEntity = savedAddress.resolveBlockEntity(player.getServer());
-			if (!(blockEntity instanceof ClusterMember member)
-				|| !member.memberId().equals(tag.getUUID(MEMBER_ID))
-				|| !member.memberAddress().equals(savedAddress))
-				return invalid(player);
-			return Optional.of(member);
+			return Optional.of(new Selection(SpaceAddress.load(tag),
+				tag.getUUID(MEMBER_ID), tag.getLong(EXPIRES)));
 		} catch (RuntimeException invalidAddress) {
-			return invalid(player);
+			return invalid(persistentData);
 		}
 	}
 
@@ -55,4 +73,11 @@ public final class ClusterBindingSelection {
 		clear(player);
 		return Optional.empty();
 	}
+
+	private static Optional<Selection> invalid(CompoundTag persistentData) {
+		persistentData.remove(KEY);
+		return Optional.empty();
+	}
+
+	record Selection(SpaceAddress address, UUID memberId, long expires) {}
 }

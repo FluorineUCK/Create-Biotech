@@ -533,5 +533,12 @@
   "create_biotech.ponder.allay_port_scene_1.text_9": "悦灵快递员运输没有距离限制，甚至可以跨越维度",
   "create_biotech.ponder.allay_port_scene_1.text_10": "但是需要确保涉及的站点位于被加载的区块中",
   "create_biotech.ponder.tag.ponderer_exported": "The Ponderer...",
-  "create_biotech.ponder.tag.ponderer_exported.description": "This mod\u0027s Ponder scenes were created and exported with The Ponderer. Learn more: https://modrinth.com/mod/the-ponderer"
+  "create_biotech.ponder.tag.ponderer_exported.description": "This mod\u0027s Ponder scenes were created and exported with The Ponderer. Learn more: https://modrinth.com/mod/the-ponderer",
+  "create_biotech.factory_cluster.binding.success": "Factory cluster bindings applied",
+  "create_biotech.factory_cluster.binding.no_source": "The selected source is no longer part of a factory cluster",
+  "create_biotech.factory_cluster.binding.active": "A factory cluster member is active and cannot be rebound",
+  "create_biotech.factory_cluster.binding.dimension": "Factory cluster members must share a root dimension",
+  "create_biotech.factory_cluster.binding.permission": "You cannot administrate every logistics network in this binding",
+  "create_biotech.factory_cluster.binding.empty_networks": "No logistics networks are configured",
+  "create_biotech.factory_cluster.binding.conflict": "Resolve the factory cluster member conflict before rebinding"
 }

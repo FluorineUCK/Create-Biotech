@@ -73,6 +73,10 @@ repositories {
     mavenCentral()
 }
 
+def minecraftTestArtifact = files(
+        layout.buildDirectory.file("moddev/artifacts/neoforge-${neo_version}.jar")
+).builtBy(tasks.named('createMinecraftArtifacts'))
+
 configurations {
     quickPlayMods
 }
@@ -119,13 +123,13 @@ dependencies {
     }
 
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    testImplementation(minecraftTestArtifact)
+    testRuntimeOnly(files(configurations.neoFormRuntimeDependenciesRuntimeClasspath))
     testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
 }
 
 tasks.named('test', Test).configure {
     useJUnitPlatform()
-    classpath += files(layout.buildDirectory.file("moddev/artifacts/neoforge-${neo_version}.jar"))
-    classpath += configurations.neoFormRuntimeDependenciesRuntimeClasspath
 }
 
 sourceSets.main.resources {

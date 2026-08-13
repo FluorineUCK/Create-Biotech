@@ -533,5 +533,12 @@
   "create_biotech.ponder.allay_port_scene_1.text_9": "悦灵快递员运输没有距离限制，甚至可以跨越维度",
   "create_biotech.ponder.allay_port_scene_1.text_10": "但是需要确保涉及的站点位于被加载的区块中",
   "create_biotech.ponder.tag.ponderer_exported": "思索者...",
-  "create_biotech.ponder.tag.ponderer_exported.description": "以上思索由模组思索者（Ponderer）制作并导出，了解更多：https://modrinth.com/mod/the-ponderer"
+  "create_biotech.ponder.tag.ponderer_exported.description": "以上思索由模组思索者（Ponderer）制作并导出，了解更多：https://modrinth.com/mod/the-ponderer",
+  "create_biotech.factory_cluster.binding.success": "工厂集群绑定已应用",
+  "create_biotech.factory_cluster.binding.no_source": "所选源已不属于任何工厂集群",
+  "create_biotech.factory_cluster.binding.active": "工厂集群中有成员正在运行，无法重新绑定",
+  "create_biotech.factory_cluster.binding.dimension": "工厂集群成员必须位于同一主维度",
+  "create_biotech.factory_cluster.binding.permission": "你没有全部物流网络的管理权限",
+  "create_biotech.factory_cluster.binding.empty_networks": "未配置任何物流网络",
+  "create_biotech.factory_cluster.binding.conflict": "请先解决工厂集群成员冲突再重新绑定"
 }
