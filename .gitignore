@@ -25,3 +25,7 @@ ref/
 src/generated/resources/.cache/
 
 video-scripts/
+
+# Local agent execution workspaces
+/.superpowers/
+/.worktrees/
