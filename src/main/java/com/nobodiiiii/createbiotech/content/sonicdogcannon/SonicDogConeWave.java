@@ -10,8 +10,6 @@ import java.util.WeakHashMap;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 
-import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
-
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
@@ -25,6 +23,8 @@ import net.neoforged.neoforge.event.tick.LevelTickEvent;
 public final class SonicDogConeWave {
 
 	private static final int TRAVEL_TICKS = 16;
+	private static final int PARTICLE_COUNT = 10;
+	private static final int PARTICLE_DELAY_TICKS = 5;
 	private static final double HALF_ANGLE_RADIANS = Math.toRadians(30.0d);
 	private static final double MIN_DIRECTION_DOT = Math.cos(HALF_ANGLE_RADIANS);
 	private static final Map<ServerLevel, List<Wave>> ACTIVE_WAVES = new WeakHashMap<>();
@@ -33,8 +33,12 @@ public final class SonicDogConeWave {
 
 	public static void fire(ServerLevel level, Player owner, Vec3 origin, Vec3 direction) {
 		Vec3 normalizedDirection = direction.normalize();
-		level.sendParticles(CBParticleTypes.SONIC_CONE_WAVE.get(), origin.x, origin.y, origin.z, 0,
-			normalizedDirection.x, normalizedDirection.y, normalizedDirection.z, 1.0d);
+		for (int i = 0; i < PARTICLE_COUNT; i++) {
+			SonicConeWaveParticleOption particle = new SonicConeWaveParticleOption(
+				normalizedDirection.toVector3f(), i * PARTICLE_DELAY_TICKS);
+			level.sendParticles(particle, origin.x, origin.y, origin.z, 1,
+				0.0d, 0.0d, 0.0d, 0.0d);
+		}
 		ACTIVE_WAVES.computeIfAbsent(level, ignored -> new ArrayList<>())
 			.add(new Wave(owner, origin, normalizedDirection));
 	}
