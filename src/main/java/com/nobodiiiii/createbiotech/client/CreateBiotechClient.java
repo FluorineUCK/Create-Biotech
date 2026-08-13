@@ -83,6 +83,7 @@ import com.simibubi.create.content.contraptions.render.ContraptionEntityRenderer
 import com.simibubi.create.content.contraptions.render.ContraptionVisual;
 import com.simibubi.create.content.decoration.encasing.EncasedCTBehaviour;
 import com.simibubi.create.content.equipment.armor.CardboardArmorStealthOverlay;
+import com.simibubi.create.content.equipment.potatoCannon.PotatoCannonItemRenderer;
 import com.simibubi.create.content.fluids.PipeAttachmentModel;
 import com.simibubi.create.content.kinetics.base.SingleAxisRotatingVisual;
 import com.simibubi.create.content.kinetics.base.KineticBlockEntityRenderer;
@@ -119,6 +120,7 @@ import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
 import net.neoforged.neoforge.client.event.RegisterMenuScreensEvent;
+import net.neoforged.neoforge.client.event.RegisterItemDecorationsEvent;
 import net.neoforged.neoforge.client.extensions.common.RegisterClientExtensionsEvent;
 import net.neoforged.neoforge.client.gui.VanillaGuiLayers;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -271,6 +273,11 @@ public class CreateBiotechClient {
 	}
 
 	@SubscribeEvent
+	public static void registerItemDecorations(RegisterItemDecorationsEvent event) {
+		event.register(CBItems.SONIC_DOG_CANNON.get(), PotatoCannonItemRenderer.DECORATOR);
+	}
+
+	@SubscribeEvent
 	public static void registerClientExtensions(RegisterClientExtensionsEvent event) {
 		// Slime armour shares Create's cardboard stealth blur overlay on the helmet slot; the overlay's
 		// opacity is driven by Create's testForStealth, which a full slime set satisfies.
@@ -418,6 +425,7 @@ public class CreateBiotechClient {
 	}
 
 	private static void registerItemTooltips() {
+		ItemDescription.useKey(CBItems.SONIC_DOG_CANNON.get(), "item.create.potato_cannon");
 		ItemDescription.useKey(CBFluids.TELEPORTATION_BUCKET.get(), "fluid.create_biotech.teleportation");
 		ItemDescription.useKey(CBItems.SMALL_EXPERIENCE_BUD.get(), "block.create_biotech.experience_bud");
 		ItemDescription.useKey(CBItems.MEDIUM_EXPERIENCE_BUD.get(), "block.create_biotech.experience_bud");
@@ -438,6 +446,7 @@ public class CreateBiotechClient {
 		registerCreateStyleTooltip(CBItems.SMART_SUPER_GLUE.get());
 		registerCreateStyleTooltip(CBItems.FIXED_CARROT_FISHING_ROD.get());
 		registerCreateStyleTooltip(CBItems.WIRELESS_TERMINAL.get());
+		registerCreateStyleTooltip(CBItems.SONIC_DOG_CANNON.get());
 		registerCreateStyleTooltip(CBItems.MAGMA_CUBE_BURNER.get());
 		registerCreateStyleTooltip(CBItems.SHULKER_PACKAGER.get());
 		registerCreateStyleTooltip(CBItems.SHULKER_TELEPORTER.get());
