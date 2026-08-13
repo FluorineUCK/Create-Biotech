@@ -32,6 +32,7 @@ import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.TooltipFlag;
 import net.minecraft.world.item.UseAnim;
@@ -119,9 +120,19 @@ public class SonicDogCannonItem extends Item {
 		tooltip.add(Component.translatable("item.create_biotech.sonic_dog_cannon.upgrades")
 			.withStyle(ChatFormatting.GRAY));
 		for (SonicDogCannonUpgrade upgrade : SonicDogCannonUpgrade.values()) {
-			if (upgrade.isInstalled(stack))
-				tooltip.add(CommonComponents.space().append(Component.translatable(upgrade.tooltipKey())
-					.withStyle(ChatFormatting.AQUA)));
+			if (!upgrade.isInstalled(stack))
+				continue;
+
+			Component upgradeName;
+			if (upgrade == SonicDogCannonUpgrade.DOG_COLLAR) {
+				DyeColor color = SonicDogCannonUpgrade.getCollarColor(stack);
+				upgradeName = Component.translatable(upgrade.tooltipKey(),
+					Component.translatable("color.minecraft." + color.getName()))
+					.withColor(color.getTextColor());
+			} else {
+				upgradeName = Component.translatable(upgrade.tooltipKey()).withStyle(ChatFormatting.AQUA);
+			}
+			tooltip.add(CommonComponents.space().append(upgradeName));
 		}
 	}
 

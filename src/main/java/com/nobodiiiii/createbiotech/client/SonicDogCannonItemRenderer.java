@@ -25,13 +25,18 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		CreateBiotech.asResource("item/sonic_dog_cannon/gear");
 	public static final ResourceLocation SCOPE_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/scope");
+	public static final ResourceLocation COLLAR_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/collar");
 	private static final PartialModel GEAR = PartialModel.of(GEAR_MODEL_LOCATION);
 	private static final PartialModel SCOPE = PartialModel.of(SCOPE_MODEL_LOCATION);
+	private static final PartialModel COLLAR = PartialModel.of(COLLAR_MODEL_LOCATION);
 
 	@Override
 	protected void render(ItemStack stack, CustomRenderedItemModel model, PartialItemModelRenderer renderer,
 		ItemDisplayContext transformType, PoseStack poseStack, MultiBufferSource buffer, int light, int overlay) {
 		renderer.render(model.getOriginalModel(), light);
+		if (SonicDogCannonUpgrade.DOG_COLLAR.isInstalled(stack))
+			renderer.render(COLLAR.get(), light);
 
 		float angle = getGearAngle(stack);
 		poseStack.pushPose();

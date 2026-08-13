@@ -51,6 +51,7 @@ import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTa
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableRenderer;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableScreen;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterRenderer;
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonUpgrade;
 import com.nobodiiiii.createbiotech.content.universaljoint.HalfShaftVisual;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointRenderer;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessStockKeeperRequestMenu;
@@ -116,6 +117,7 @@ import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.EntityRenderersEvent;
 import net.neoforged.neoforge.client.event.ModelEvent;
+import net.neoforged.neoforge.client.event.RegisterColorHandlersEvent;
 import net.neoforged.neoforge.client.event.RegisterParticleProvidersEvent;
 import net.neoforged.neoforge.client.event.RegisterClientReloadListenersEvent;
 import net.neoforged.neoforge.client.event.RegisterGuiLayersEvent;
@@ -195,6 +197,8 @@ public class CreateBiotechClient {
 		register.accept(BoneRatchetRenderer.COGWHEEL_MODEL_LOCATION);
 		register.accept(ExperiencePumpRenderer.COG_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.GEAR_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.SCOPE_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.COLLAR_MODEL_LOCATION);
 		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_on"));
 		register.accept(CreateBiotech.asResource("block/schrodingers_cat/redstone_torch_off"));
 		register.accept(CreateBiotech.asResource("block/spider_assembly_table/body"));
@@ -271,6 +275,14 @@ public class CreateBiotechClient {
 		event.registerSpriteSet(CBParticleTypes.ALLAY_COURIER_NOTE.get(), CourierNoteParticle.Provider::new);
 		event.registerSpriteSet(CBParticleTypes.FROG_PORTAL.get(), FrogPortalParticle.Provider::new);
 		event.registerSpriteSet(CBParticleTypes.SONIC_CONE_WAVE.get(), SonicConeWaveParticle.Provider::new);
+	}
+
+	@SubscribeEvent
+	public static void registerItemColors(RegisterColorHandlersEvent.Item event) {
+		event.register((stack, tintIndex) -> tintIndex == 0
+			&& SonicDogCannonUpgrade.DOG_COLLAR.isInstalled(stack)
+			? SonicDogCannonUpgrade.getCollarColor(stack).getTextureDiffuseColor()
+			: -1, CBItems.SONIC_DOG_CANNON.get());
 	}
 
 	@SubscribeEvent

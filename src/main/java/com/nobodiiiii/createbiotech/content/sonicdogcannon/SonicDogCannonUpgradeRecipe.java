@@ -10,6 +10,7 @@ import com.nobodiiiii.createbiotech.registry.CBRecipeTypes;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.StreamCodec;
+import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Ingredient;
 import net.minecraft.world.item.crafting.RecipeSerializer;
@@ -33,10 +34,7 @@ public class SonicDogCannonUpgradeRecipe implements SmithingRecipe {
 
 	@Override
 	public boolean matches(SmithingRecipeInput input, Level level) {
-		return input.template().isEmpty()
-			&& isBaseIngredient(input.base())
-			&& addition.test(input.addition())
-			&& !upgrade.isInstalled(input.base());
+		return matchesIngredients(input);
 	}
 
 	@Override
@@ -45,21 +43,36 @@ public class SonicDogCannonUpgradeRecipe implements SmithingRecipe {
 			return ItemStack.EMPTY;
 
 		ItemStack result = input.base().copyWithCount(1);
-		upgrade.install(result);
+		if (upgrade == SonicDogCannonUpgrade.DOG_COLLAR) {
+			DyeColor color = DyeColor.getColor(input.addition());
+			if (color == null)
+				return ItemStack.EMPTY;
+			SonicDogCannonUpgrade.setCollarColor(result, color);
+		} else {
+			upgrade.install(result);
+		}
 		return result;
 	}
 
 	private boolean matchesIngredients(SmithingRecipeInput input) {
-		return input.template().isEmpty()
-			&& isBaseIngredient(input.base())
-			&& addition.test(input.addition())
-			&& !upgrade.isInstalled(input.base());
+		if (!input.template().isEmpty() || !isBaseIngredient(input.base()) || !addition.test(input.addition()))
+			return false;
+
+		if (upgrade != SonicDogCannonUpgrade.DOG_COLLAR)
+			return !upgrade.isInstalled(input.base());
+
+		DyeColor color = DyeColor.getColor(input.addition());
+		return color != null && (!upgrade.isInstalled(input.base())
+			|| SonicDogCannonUpgrade.getCollarColor(input.base()) != color);
 	}
 
 	@Override
 	public ItemStack getResultItem(HolderLookup.Provider registries) {
 		ItemStack result = new ItemStack(CBItems.SONIC_DOG_CANNON.get());
-		upgrade.install(result);
+		if (upgrade == SonicDogCannonUpgrade.DOG_COLLAR)
+			SonicDogCannonUpgrade.setCollarColor(result, DyeColor.RED);
+		else
+			upgrade.install(result);
 		return result;
 	}
 
