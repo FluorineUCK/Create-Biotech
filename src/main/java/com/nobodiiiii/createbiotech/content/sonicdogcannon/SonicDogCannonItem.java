@@ -6,7 +6,9 @@ import java.util.function.Consumer;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.client.SonicDogCannonArmPose;
 import com.nobodiiiii.createbiotech.client.SonicDogCannonItemRenderer;
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket.Action;
 import com.nobodiiiii.createbiotech.network.CBPackets;
+import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
 import com.simibubi.create.content.equipment.armor.BacktankUtil;
 import com.simibubi.create.foundation.item.render.CustomRenderedItems;
 
@@ -17,6 +19,7 @@ import net.minecraft.ChatFormatting;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
@@ -43,6 +46,7 @@ public class SonicDogCannonItem extends Item {
 
 	public static final int MAX_DURABILITY = 100;
 	public static final int FULL_CHARGE_TICKS = 40;
+	private static final int VOICE_PACK_CHARGE_START_TICKS = 36;
 	private static final double MIN_NORMAL_RANGE = 4.0d;
 	private static final double MAX_NORMAL_RANGE = 16.0d;
 	private static final double MIN_SHRIEK_RANGE = 8.0d;
@@ -62,8 +66,12 @@ public class SonicDogCannonItem extends Item {
 	public InteractionResultHolder<ItemStack> use(Level level, Player player, InteractionHand hand) {
 		ItemStack stack = player.getItemInHand(hand);
 		player.startUsingItem(hand);
-		if (!level.isClientSide && !SonicDogCannonUpgrade.VOICE_PACK.isInstalled(stack))
-			sendChargeSound(player, true);
+		if (!level.isClientSide) {
+			Action action = SonicDogCannonUpgrade.VOICE_PACK.isInstalled(stack)
+				? Action.VOICE_PACK_START
+				: Action.DEFAULT_START;
+			sendChargeSound(player, action);
+		}
 		return InteractionResultHolder.consume(stack);
 	}
 
@@ -108,6 +116,10 @@ public class SonicDogCannonItem extends Item {
 			return;
 
 		int elapsed = getUseDuration(stack, entity) - remainingUseDuration;
+		if (elapsed == VOICE_PACK_CHARGE_START_TICKS
+			&& SonicDogCannonUpgrade.VOICE_PACK.isInstalled(stack))
+			sendChargeSound(player, Action.VOICE_PACK_LOOP);
+
 		if (elapsed <= 0 || elapsed % 20 != 0)
 			return;
 
@@ -124,8 +136,7 @@ public class SonicDogCannonItem extends Item {
 		if (!(entity instanceof Player player) || !(level instanceof ServerLevel serverLevel))
 			return;
 		boolean hasVoicePack = SonicDogCannonUpgrade.VOICE_PACK.isInstalled(stack);
-		if (!hasVoicePack)
-			sendChargeSound(player, false);
+		sendChargeSound(player, Action.STOP);
 
 		int chargeTicks = Math.max(0, getUseDuration(stack, entity) - timeLeft);
 		double charge = Math.min(chargeTicks, FULL_CHARGE_TICKS) / (double) FULL_CHARGE_TICKS;
@@ -140,15 +151,19 @@ public class SonicDogCannonItem extends Item {
 			SonicDogConeWave.fire(serverLevel, player, origin, direction, range);
 		}
 
-		level.playSound(null, player.getX(), player.getY(), player.getZ(),
-			hasVoicePack ? SoundEvents.WARDEN_SONIC_BOOM : SoundEvents.WOLF_AMBIENT,
+		SoundEvent fireSound = hasVoicePack
+			? chargeTicks >= FULL_CHARGE_TICKS
+				? CBSoundEvents.SONIC_DOG_CANNON_VOICE_PACK_FIRE_FULL.get()
+				: CBSoundEvents.SONIC_DOG_CANNON_VOICE_PACK_FIRE_PARTIAL.get()
+			: SoundEvents.WOLF_AMBIENT;
+		level.playSound(null, player.getX(), player.getY(), player.getZ(), fireSound,
 			SoundSource.PLAYERS, 1.0f, 1.0f);
 		player.awardStat(Stats.ITEM_USED.get(this));
 	}
 
-	private static void sendChargeSound(Player player, boolean playing) {
+	private static void sendChargeSound(Player player, Action action) {
 		SonicDogCannonChargeSoundPacket packet =
-			new SonicDogCannonChargeSoundPacket(player.getId(), playing);
+			new SonicDogCannonChargeSoundPacket(player.getId(), action);
 		CBPackets.sendToTrackingEntity(packet, player);
 		if (player instanceof net.minecraft.server.level.ServerPlayer serverPlayer)
 			CBPackets.sendToPlayer(packet, serverPlayer);

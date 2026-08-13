@@ -3,11 +3,15 @@ package com.nobodiiiii.createbiotech.client;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket.Action;
+import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
+
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.sounds.SoundEvent;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.api.distmarker.OnlyIn;
 
@@ -17,9 +21,9 @@ public final class SonicDogCannonChargeSoundHandler {
 
 	private SonicDogCannonChargeSoundHandler() {}
 
-	public static void setPlaying(LocalPlayer localPlayer, int shooterId, boolean playing) {
+	public static void handle(LocalPlayer localPlayer, int shooterId, Action action) {
 		stop(shooterId);
-		if (!playing)
+		if (action == Action.STOP)
 			return;
 
 		ClientLevel level = localPlayer.clientLevel;
@@ -27,7 +31,15 @@ public final class SonicDogCannonChargeSoundHandler {
 		if (!(entity instanceof Player shooter))
 			return;
 
-		SonicDogCannonChargeSound sound = new SonicDogCannonChargeSound(shooter);
+		SoundEvent soundEvent = switch (action) {
+			case DEFAULT_START -> CBSoundEvents.SONIC_DOG_CANNON_GROWL1.get();
+			case VOICE_PACK_START -> CBSoundEvents.SONIC_DOG_CANNON_VOICE_PACK_CHARGE_START.get();
+			case VOICE_PACK_LOOP -> CBSoundEvents.SONIC_DOG_CANNON_VOICE_PACK_CHARGE_LOOP.get();
+			case STOP -> throw new IllegalStateException("STOP was handled before sound creation");
+		};
+		boolean voicePack = action != Action.DEFAULT_START;
+		SonicDogCannonChargeSound sound = new SonicDogCannonChargeSound(shooter, soundEvent,
+			action == Action.VOICE_PACK_LOOP, voicePack);
 		ACTIVE_SOUNDS.put(shooterId, sound);
 		Minecraft.getInstance().getSoundManager().play(sound);
 	}
