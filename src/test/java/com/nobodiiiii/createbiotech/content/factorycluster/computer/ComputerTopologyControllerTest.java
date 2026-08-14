@@ -195,6 +195,32 @@ class ComputerTopologyControllerTest {
 	}
 
 	@Test
+	void inactiveSameShellLowerUuidHotAddUpdatesCoordinatorAndPreservesIdentityBinding() {
+		Fixture fixture = fixture(profiled(MID, pos(0)), profiled(HIGH, pos(2)));
+		fixture.refresh(MID);
+		UUID member = fixture.be(MID).computerStructureMemberId().orElseThrow();
+		long revision = fixture.be(MID).currentStructureRecord().orElseThrow().revision();
+		ClusterBinding binding = new ClusterBinding(uuid(700), 0, null, List.of());
+		for (ComputerBlockEntity computer : fixture.computers.values()) {
+			ComputerStructureRecord record = computer.currentStructureRecord().orElseThrow();
+			computer.applyTopologyState(record, binding, true, null, Set.of());
+		}
+		fixture.put(computer(LOW, pos(1), PROFILE));
+		fixture.snapshot = snapshot(List.of(profiledNode(MID, pos(0)),
+			profiledNode(LOW, pos(1)), profiledNode(HIGH, pos(2))));
+
+		fixture.refresh(LOW);
+
+		for (ComputerBlockEntity computer : fixture.computers.values()) {
+			ComputerStructureRecord record = computer.currentStructureRecord().orElseThrow();
+			assertEquals(member, record.computerStructureMemberId());
+			assertEquals(revision + 1, record.revision());
+			assertEquals(LOW, record.coordinatorId());
+			assertEquals(binding, computer.bindingState());
+		}
+	}
+
+	@Test
 	void lowerUuidActiveHotAddIsPendingAndDoesNotChangeRecordCoordinatorFrozenOrderOrRangeBonus() {
 		Fixture fixture = activeFixture(profiled(MID, pos(0)), profiled(HIGH, pos(2)));
 		ClusterEpoch before = fixture.be(MID).epoch().orElseThrow();

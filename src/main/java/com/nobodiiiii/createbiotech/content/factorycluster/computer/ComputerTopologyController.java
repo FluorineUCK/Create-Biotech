@@ -176,8 +176,15 @@ final class ComputerTopologyController {
 					return Reconciliation.failure(ComputerAvailabilityReason.PARTIAL_UNLOADED);
 				if (proof == ProofFailure.SPACE)
 					return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
-				if (computerIdExistsInBounds(authority.coordinatorId(),
-					List.of(authority.snapshot().bounds(), snapshot.bounds()), resolved.world()))
+				List<BlockPos> matches = computerIdPositionsInBounds(authority.coordinatorId(),
+					List.of(authority.snapshot().bounds(), snapshot.bounds()), resolved.world());
+				ComputerStructureNode currentCoordinator = snapshot
+					.node(authority.coordinatorId()).orElse(null);
+				if (currentCoordinator == null ? !matches.isEmpty()
+					: matches.size() != 1
+						|| !matches.getFirst().equals(currentCoordinator.address().localPos())
+						|| !resolved.world().address(matches.getFirst())
+							.equals(currentCoordinator.address()))
 					return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
 			}
 			reason = scan.state() == ComputerStructureScanner.State.VALID_NOT_READY
@@ -792,14 +799,15 @@ final class ComputerTopologyController {
 		return proveBounds(seed, current.bounds(), world);
 	}
 
-	private static boolean computerIdExistsInBounds(UUID computerId,
+	private static List<BlockPos> computerIdPositionsInBounds(UUID computerId,
 		List<BoundingBox> bounds, WorldAccess world) {
+		List<BlockPos> matches = new ArrayList<>();
 		for (BlockPos pos : positions(bounds, List.of())) {
 			ComputerBlockEntity computer = world.loadedComputer(pos);
 			if (computer != null && computer.computerId().filter(computerId::equals).isPresent())
-				return true;
+				matches.add(pos);
 		}
-		return false;
+		return List.copyOf(matches);
 	}
 
 	private static boolean exactLoadedCaller(ComputerBlockEntity caller,
