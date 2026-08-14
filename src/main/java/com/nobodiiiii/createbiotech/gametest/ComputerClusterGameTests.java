@@ -323,7 +323,7 @@ public final class ComputerClusterGameTests {
 		assertEmptyTemplateFixture(helper);
 		ServerLevel level = helper.getLevel();
 		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
-		ComputerBlockEntity computer = placeComputer(level, pos, LOW_ID);
+		placeComputer(level, pos, LOW_ID);
 		CapturedResident captured = capturedResident(level, NodeKind.WANDERING_TRADER, 1);
 		WanderingTrader decoded = (WanderingTrader) Objects.requireNonNull(
 			CapturedEntityBoxHelper.createCapturedEntityPreservingUuid(captured.box(), level));
@@ -332,8 +332,44 @@ public final class ComputerClusterGameTests {
 		CompoundTag offers = decoded.saveWithoutId(new CompoundTag()).getCompound("Offers").copy();
 		ServerPlayer installer = headlessPlayer(level, pos);
 		useBox(installer, level, pos, captured.box());
-		ServerPlayer breaker = survivalPlayer(helper, pos);
+		ServerPlayer breaker = headlessPlayer(level, pos);
+		helper.assertValueEqual(breaker.gameMode.getGameModeForPlayer(), GameType.SURVIVAL,
+			"Controlled-break player must report SURVIVAL game mode");
+		helper.assertFalse(breaker.isCreative(),
+			"Controlled-break SURVIVAL player must not report creative status");
+		helper.assertFalse(breaker.getAbilities().instabuild,
+			"Controlled-break SURVIVAL player must not retain instabuild ability");
 		breaker.gameMode.destroyBlock(pos);
+		List<Entity> releasedImmediately = entities(level, Entity.class, pos, 4).stream()
+			.filter(entity -> entity.getUUID().equals(captured.uuid())).toList();
+		helper.assertValueEqual(releasedImmediately.size(), 1,
+			"A controlled break must synchronously release exactly one resident");
+		helper.assertTrue(releasedImmediately.getFirst() instanceof WanderingTrader,
+			"The synchronously released resident must retain its exact type");
+		helper.assertValueEqual(((WanderingTrader) releasedImmediately.getFirst()).getDespawnDelay(),
+			despawnDelay, "Trader despawn delay must be copied exactly at release time");
+		List<ItemStack> immediateComputerDrops = new ArrayList<>();
+		long immediateWorldCount = 0;
+		for (ItemEntity item : entities(level, ItemEntity.class, pos, 5)) {
+			if (!item.getItem().is(CBItems.COMPUTER.get())) continue;
+			immediateComputerDrops.add(item.getItem());
+			immediateWorldCount += item.getItem().getCount();
+		}
+		long immediateInventoryCount = 0;
+		for (int slot = 0; slot < breaker.getInventory().getContainerSize(); slot++) {
+			ItemStack stack = breaker.getInventory().getItem(slot);
+			if (!stack.is(CBItems.COMPUTER.get())) continue;
+			immediateComputerDrops.add(stack);
+			immediateInventoryCount += stack.getCount();
+		}
+		long immediateComputerCount = immediateWorldCount + immediateInventoryCount;
+		helper.assertValueEqual(immediateComputerCount, 1L,
+			"Controlled break must synchronously emit exactly one empty Computer");
+		ItemStack emptyComputerDrop = immediateComputerDrops.getFirst().copy();
+		helper.assertTrue(emptyComputerDrop.get(DataComponents.BLOCK_ENTITY_DATA) == null,
+			"The synchronous empty Computer drop must not retain block-entity data");
+		helper.assertFalse(CapturedEntityBoxHelper.hasCapturedEntity(emptyComputerDrop),
+			"The synchronous empty Computer drop must not retain captured-resident data");
 
 		helper.runAfterDelay(3, () -> {
 			List<Entity> residents = entities(level, Entity.class, pos, 4).stream()
@@ -344,29 +380,11 @@ public final class ComputerClusterGameTests {
 			WanderingTrader trader = (WanderingTrader) residents.getFirst();
 			helper.assertTrue(Math.abs(trader.getHealth() - 1.0F) < 0.0001F,
 				"The released resident must have exactly one half-heart");
-			helper.assertValueEqual(trader.getDespawnDelay(), despawnDelay,
-				"Trader despawn delay must survive release");
 			helper.assertValueEqual(Objects.requireNonNull(trader.getCustomName()).getString(), name,
 				"Resident name must survive release");
 			helper.assertValueEqual(trader.saveWithoutId(new CompoundTag())
 				.getCompound("Offers"), offers,
 				"Resident trades must survive release");
-			List<ItemStack> computerDrops = new ArrayList<>();
-			for (ItemEntity item : entities(level, ItemEntity.class, pos, 5))
-				if (item.getItem().is(CBItems.COMPUTER.get())) computerDrops.add(item.getItem());
-			for (int slot = 0; slot < breaker.getInventory().getContainerSize(); slot++) {
-				ItemStack stack = breaker.getInventory().getItem(slot);
-				if (stack.is(CBItems.COMPUTER.get())) computerDrops.add(stack);
-			}
-			long emptyComputers = computerDrops.stream().mapToLong(ItemStack::getCount).sum();
-			helper.assertValueEqual(emptyComputers, 1L,
-				"Controlled survival break must produce exactly one empty Computer");
-			for (ItemStack drop : computerDrops) {
-				helper.assertTrue(drop.get(DataComponents.BLOCK_ENTITY_DATA) == null,
-					"The empty Computer drop must not retain block-entity data");
-				helper.assertFalse(CapturedEntityBoxHelper.hasCapturedEntity(drop),
-					"The empty Computer drop must not retain captured-resident data");
-			}
 			helper.assertValueEqual(filledRecoveryItems(level, pos, 5).size(), 0,
 				"A successful release must not emit a filled recovery box");
 			helper.succeed();
@@ -422,7 +440,7 @@ public final class ComputerClusterGameTests {
 		CapturedResident captured = capturedResident(level, NodeKind.LIBRARIAN, 4);
 		useBox(headlessPlayer(level, pos), level, pos, captured.box());
 		CompoundTag before = serverTag(computer, level);
-		ServerPlayer breaker = survivalPlayer(helper, pos);
+		ServerPlayer breaker = headlessPlayer(level, pos);
 		DoubleFailureListener listener = new DoubleFailureListener(level, captured.uuid());
 		NeoForge.EVENT_BUS.register(listener);
 		try {
@@ -647,7 +665,7 @@ public final class ComputerClusterGameTests {
 					ClusterBindingService.BindingAccess.READY,
 					"The real post-close binding must remain READY");
 				CompoundTag reboundBytes = rebound.save();
-				ServerPlayer breaker = survivalPlayer(helper, elected.getBlockPos());
+				ServerPlayer breaker = headlessPlayer(level, elected.getBlockPos());
 				breaker.gameMode.destroyBlock(elected.getBlockPos());
 
 				helper.runAfterDelay(FORMATION_DELAY, () -> {
@@ -746,6 +764,19 @@ public final class ComputerClusterGameTests {
 									"Pending installation must not change usable frozen capacity");
 								helper.assertValueEqual(coordinator.latchedEpochFaults(), frozenFaults,
 									"Pending installation must not change fault latches");
+								List<ClusterMember> indexedBefore = ClusterMemberIndex.members(server, clusterId,
+									ClusterMemberType.COMPUTER_COORDINATOR);
+								helper.assertValueEqual(indexedBefore.size(), 1,
+									"The healthy active epoch must have exactly one registered adapter");
+								helper.assertTrue(indexedBefore.getFirst() instanceof ComputerCoordinatorMember,
+									"The registered Computer member must be the concrete coordinator adapter");
+								ComputerCoordinatorMember registeredBefore =
+									(ComputerCoordinatorMember) indexedBefore.getFirst();
+								helper.assertTrue(coordinator.publishedCoordinatorMember().orElseThrow()
+									== registeredBefore,
+									"The pre-degradation index entry must be the exact published adapter");
+								helper.assertValueEqual(registeredBefore.coordinatorComputerId(), LOW_ID,
+									"The pre-degradation registered adapter must be owned by LOW");
 								level.setBlock(ordinaryPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
 
 								helper.runAfterDelay(FORMATION_DELAY, () -> {
@@ -764,14 +795,20 @@ public final class ComputerClusterGameTests {
 											"Missing a non-coordinator must preserve structure identity");
 										helper.assertValueEqual(coordinator.latchedEpochFaults(), frozenFaults,
 											"Missing a non-coordinator must preserve fault latches");
-										List<ClusterMember> registered = ClusterMemberIndex.members(server, clusterId,
+										List<ClusterMember> indexedAfter = ClusterMemberIndex.members(server, clusterId,
 											ClusterMemberType.COMPUTER_COORDINATOR);
-										helper.assertValueEqual(registered.size(), 1,
+										helper.assertValueEqual(indexedAfter.size(), 1,
 											"Missing a non-coordinator must retain exactly one registered adapter");
+										helper.assertTrue(indexedAfter.getFirst() instanceof ComputerCoordinatorMember,
+											"The degraded index entry must remain a Computer coordinator adapter");
+										ComputerCoordinatorMember registeredAfter =
+											(ComputerCoordinatorMember) indexedAfter.getFirst();
 										ComputerCoordinatorMember retained = coordinator
 											.publishedCoordinatorMember().orElseThrow();
-										helper.assertTrue(registered.getFirst() == retained,
-											"The retained registered adapter must be the exact elected object");
+										helper.assertTrue(registeredAfter == registeredBefore,
+											"Degradation must not withdraw and replace the registered adapter object");
+										helper.assertTrue(retained == registeredBefore,
+											"The published adapter must remain the exact pre-degradation object");
 										helper.assertValueEqual(retained.coordinatorComputerId(), LOW_ID,
 											"Missing a non-coordinator must retain LOW as physical coordinator");
 										helper.assertValueEqual(retained.memberId(), frozenStructureId,
@@ -1138,23 +1175,6 @@ public final class ComputerClusterGameTests {
 				for (int z = 0; z < 12; z++)
 					level.setBlock(helper.absolutePos(new BlockPos(x, y, z)),
 						Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-	}
-
-	private static ServerPlayer survivalPlayer(GameTestHelper helper, BlockPos absolutePos) {
-		MinecraftServer server = helper.getLevel().getServer();
-		List<ServerPlayer> before = List.copyOf(server.getPlayerList().getPlayers());
-		ServerPlayer player;
-		try {
-			player = helper.makeMockServerPlayerInLevel();
-		} catch (UnsupportedOperationException headlessPayload) {
-			player = server.getPlayerList().getPlayers().stream()
-				.filter(candidate -> before.stream().noneMatch(existing -> existing == candidate))
-				.findFirst().orElseThrow(() -> headlessPayload);
-		}
-		if (server.getPlayerList().getPlayers().contains(player)) server.getPlayerList().remove(player);
-		player.gameMode.changeGameModeForPlayer(GameType.SURVIVAL);
-		player.moveTo(Vec3.atCenterOf(absolutePos));
-		return player;
 	}
 
 	private static long countInventoryItem(ServerPlayer player, net.minecraft.world.item.Item item) {
