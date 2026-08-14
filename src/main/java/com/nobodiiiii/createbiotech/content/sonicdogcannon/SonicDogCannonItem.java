@@ -8,6 +8,7 @@ import com.nobodiiiii.createbiotech.client.SonicDogCannonItemRenderer;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket.Action;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBDataComponents;
+import com.nobodiiiii.createbiotech.registry.CBEnchantments;
 import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.AllSoundEvents;
@@ -51,6 +52,9 @@ public class SonicDogCannonItem extends Item {
 	public static final double MAX_NORMAL_RANGE = 16.0d;
 	private static final double MIN_SHRIEK_RANGE = 8.0d;
 	private static final double MAX_SHRIEK_RANGE = 24.0d;
+	public static final float MIN_SHRIEK_DAMAGE = 6.0f;
+	public static final float MAX_SHRIEK_DAMAGE = 12.0f;
+	public static final float SONIC_BOOM_DAMAGE_PER_LEVEL = 2.0f;
 	private static final double BEAM_HIT_RADIUS = 0.6d;
 
 	public SonicDogCannonItem(Properties properties) {
@@ -165,7 +169,12 @@ public class SonicDogCannonItem extends Item {
 
 		if (SonicDogCannonUpgrade.SHRIEK_SONIC_BOOM.isInstalled(stack)) {
 			double range = MIN_SHRIEK_RANGE + (MAX_SHRIEK_RANGE - MIN_SHRIEK_RANGE) * charge;
-			fireSonicBoom(serverLevel, player, origin, direction, range);
+			int enchantmentLevel = stack.getEnchantmentLevel(
+				serverLevel.registryAccess().holderOrThrow(CBEnchantments.SONIC_BOOM));
+			float damage = (float) (MIN_SHRIEK_DAMAGE
+				+ (MAX_SHRIEK_DAMAGE - MIN_SHRIEK_DAMAGE) * charge)
+				+ SONIC_BOOM_DAMAGE_PER_LEVEL * enchantmentLevel;
+			fireSonicBoom(serverLevel, player, origin, direction, range, damage);
 		} else {
 			double range = MIN_NORMAL_RANGE + (MAX_NORMAL_RANGE - MIN_NORMAL_RANGE) * charge;
 			SonicDogConeWave.fire(serverLevel, player, origin, direction, range);
@@ -199,7 +208,8 @@ public class SonicDogCannonItem extends Item {
 			CBPackets.sendToPlayer(packet, serverPlayer);
 	}
 
-	private static void fireSonicBoom(ServerLevel level, Player player, Vec3 origin, Vec3 direction, double range) {
+	private static void fireSonicBoom(ServerLevel level, Player player, Vec3 origin, Vec3 direction,
+		double range, float damage) {
 		Vec3 end = origin.add(direction.scale(range));
 		int particleCount = Math.max(1, (int) Math.ceil(range));
 		for (int i = 1; i <= particleCount; i++) {
@@ -213,7 +223,7 @@ public class SonicDogCannonItem extends Item {
 		for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, searchBox,
 			candidate -> candidate != player && candidate.isAlive() && !candidate.isSpectator())) {
 			if (target.getBoundingBox().inflate(BEAM_HIT_RADIUS).clip(origin, end).isPresent())
-				target.hurt(level.damageSources().sonicBoom(player), 1.0f);
+				target.hurt(level.damageSources().sonicBoom(player), damage);
 		}
 	}
 

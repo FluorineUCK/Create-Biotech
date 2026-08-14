@@ -1,0 +1,20 @@
+{
+  "anvil_cost": 8,
+  "description": {
+    "translate": "enchantment.create_biotech.sonic_boom"
+  },
+  "max_cost": {
+    "base": 75,
+    "per_level_above_first": 25
+  },
+  "max_level": 5,
+  "min_cost": {
+    "base": 25,
+    "per_level_above_first": 25
+  },
+  "slots": [
+    "any"
+  ],
+  "supported_items": "#create_biotech:enchantable/sonic_dog_cannon",
+  "weight": 1
+}
