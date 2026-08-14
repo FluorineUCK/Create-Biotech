@@ -18,8 +18,10 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.factorycluster.ClusterAuthority;
 import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBinding;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterMemberIndex;
 import com.nobodiiiii.createbiotech.content.factorycluster.ClusterMemberType;
 import com.nobodiiiii.createbiotech.content.factorycluster.LogisticsBinding;
+import com.nobodiiiii.createbiotech.content.factorycluster.SpaceAddress;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
@@ -38,6 +40,7 @@ import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -56,6 +59,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		"LogisticsBindings");
 	private static final Set<String> AUTHORITY_KEYS = Set.of("Type", "MemberId");
 	private static final Set<String> LOGISTICS_KEYS = Set.of("Id", "Alias");
+	public final ComputerCoordinatorMember coordinatorMember;
 
 	@Nullable private UUID computerId = UUID.randomUUID();
 	private ItemStack residentSnapshot = ItemStack.EMPTY;
@@ -75,6 +79,8 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	@Nullable private Tag opaqueComputerData;
 	private final Map<String, Tag> rawChildren = new LinkedHashMap<>();
 	private final Set<String> missingChildren = new HashSet<>();
+	private boolean coordinatorMemberPublished;
+	@Nullable private ComputerCoordinatorMember coordinatorPublication;
 
 	public ComputerBlockEntity(BlockPos pos, BlockState state) {
 		this(CBBlockEntityTypes.COMPUTER.get(), pos, state);
@@ -82,9 +88,15 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 
 	ComputerBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
+		coordinatorMember = new ComputerCoordinatorMember(this);
 	}
 
 	@Override public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
+	@Override
+	public void invalidate() {
+		invalidateCoordinatorPublication();
+		super.invalidate();
+	}
 	@Override
 	public void tick() {
 		super.tick();
@@ -100,6 +112,9 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	}
 
 	public Optional<UUID> computerId() { return Optional.ofNullable(computerId); }
+	public Optional<ComputerCoordinatorMember> publishedCoordinatorMember() {
+		return coordinatorMemberPublished ? Optional.of(coordinatorMember) : Optional.empty();
+	}
 	public Optional<UUID> computerStructureMemberId() {
 		return structureRecord == null ? Optional.empty()
 			: Optional.of(structureRecord.computerStructureMemberId());
@@ -194,6 +209,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	}
 
 	void installResidentSnapshot(ItemStack snapshot, ComputerProfile profile) {
+		invalidateCoordinatorPublication();
 		residentSnapshot = snapshot.copy();
 		installedProfile = profile;
 		rawChildren.remove("Resident");
@@ -204,6 +220,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	}
 
 	void installRawResident(Tag rawResident) {
+		invalidateCoordinatorPublication();
 		residentSnapshot = ItemStack.EMPTY;
 		installedProfile = null;
 		rawChildren.put("Resident", rawResident.copy());
@@ -213,6 +230,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	}
 
 	void clearResidentSource() {
+		invalidateCoordinatorPublication();
 		residentSnapshot = ItemStack.EMPTY;
 		installedProfile = null;
 		rawChildren.remove("Resident");
@@ -233,6 +251,13 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	void stageTopologyState(@Nullable ComputerStructureRecord record,
 		@Nullable ClusterBinding binding, boolean bindingValid, @Nullable ClusterEpoch epoch,
 		Set<EpochFault> faults) {
+		if (coordinatorMemberPublished && (record == null
+			|| structureRecord == null
+			|| !record.computerStructureMemberId()
+				.equals(structureRecord.computerStructureMemberId())
+			|| !record.coordinatorId().equals(computerId)
+			|| !Objects.equals(bindingState, binding)))
+			withdrawCoordinatorMember();
 		this.structureRecord = record;
 		this.bindingState = binding;
 		this.bindingStateValid = bindingValid;
@@ -249,6 +274,69 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	void publishTopologyChange() {
 		setChanged();
 		sendData();
+	}
+
+	void stagePreparedBinding(ClusterBinding prepared) {
+		bindingState = Objects.requireNonNull(prepared, "prepared");
+		bindingStateValid = true;
+		rawChildren.remove("Binding");
+		rawChildren.remove("BindingInvalid");
+		missingChildren.remove("Binding");
+		missingChildren.remove("BindingInvalid");
+		persistenceAvailable = validateCrossChildren();
+		topologyVersion++;
+	}
+
+	void publishPreparedBinding() {
+		setChanged();
+		sendData();
+	}
+
+	void publishCoordinatorMember(List<ComputerBlockEntity> replicas, Set<UUID> requiredIds) {
+		if (computerId == null || structureRecord == null
+			|| !structureRecord.coordinatorId().equals(computerId)) return;
+		coordinatorMember.acceptReplicaSet(replicas, requiredIds);
+		if (coordinatorMemberPublished) return;
+		coordinatorMemberPublished = true;
+		MinecraftServer server = coordinatorServer();
+		if (server != null) ClusterMemberIndex.register(server, coordinatorMember);
+	}
+
+	void withdrawCoordinatorMember() {
+		if (!coordinatorMemberPublished) return;
+		MinecraftServer server = coordinatorServer();
+		if (server != null) ClusterMemberIndex.unregister(server, coordinatorMember);
+		coordinatorMemberPublished = false;
+		coordinatorMember.clearReplicaSet();
+	}
+
+	private void invalidateCoordinatorPublication() {
+		ComputerCoordinatorMember publication = coordinatorPublication;
+		if (publication != null) publication.replicaInvalidated(this);
+		withdrawCoordinatorMember();
+	}
+
+	boolean isCoordinatorMemberPublished() { return coordinatorMemberPublished; }
+	void attachCoordinatorPublication(ComputerCoordinatorMember publication) {
+		if (coordinatorPublication != null && coordinatorPublication != publication)
+			coordinatorPublication.replicaInvalidated(this);
+		coordinatorPublication = publication;
+	}
+	void detachCoordinatorPublication(ComputerCoordinatorMember publication) {
+		if (coordinatorPublication == publication) coordinatorPublication = null;
+	}
+	boolean isAttachedTo(ComputerCoordinatorMember publication) {
+		return coordinatorPublication == publication;
+	}
+
+	@Nullable
+	MinecraftServer coordinatorServer() {
+		return level == null || level.isClientSide ? null : level.getServer();
+	}
+
+	SpaceAddress coordinatorMemberAddress() {
+		return SpaceAddress.capture(Objects.requireNonNull(level, "Computer has no level"),
+			worldPosition);
 	}
 
 	TopologyState topologyState() {
@@ -326,6 +414,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		if (!installationAllowedByTopology()) return ComputerInstallResult.ACTIVE_TOPOLOGY;
 
 		InstallCandidate candidate = inspection.candidate();
+		invalidateCoordinatorPublication();
 		residentSnapshot = copied;
 		installedProfile = candidate.profile();
 		rawChildren.remove("Resident");
@@ -476,6 +565,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 			ComputerClientState.load(compound).ifPresent(decoded -> clientState = decoded);
 			return;
 		}
+		invalidateCoordinatorPublication();
 		super.read(tag, registries, false);
 		resetForServerRead();
 		Tag rawRoot = tag.get(ROOT);

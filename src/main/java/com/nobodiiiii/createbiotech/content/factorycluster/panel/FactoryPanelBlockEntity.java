@@ -53,7 +53,7 @@ public class FactoryPanelBlockEntity extends SmartBlockEntity implements Cluster
 		this(CBBlockEntityTypes.FACTORY_PANEL.get(), pos, state);
 	}
 
-	FactoryPanelBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
+	protected FactoryPanelBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 		super(type, pos, state);
 	}
 

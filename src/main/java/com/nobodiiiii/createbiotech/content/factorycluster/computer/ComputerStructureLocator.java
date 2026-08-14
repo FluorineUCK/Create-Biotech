@@ -11,8 +11,14 @@ import com.nobodiiiii.createbiotech.content.factorycluster.SpaceAddress;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 
-final class ComputerStructureLocator {
+public final class ComputerStructureLocator {
 	private ComputerStructureLocator() {}
+
+	public static Optional<ComputerCoordinatorMember> findCoordinator(ServerLevel level,
+		BlockPos casingPos, ComputerStructureScanner.Limits limits) {
+		return findCoordinatorEntity(level, casingPos, limits)
+			.flatMap(ComputerBlockEntity::publishedCoordinatorMember);
+	}
 
 	static Optional<ComputerBlockEntity> findCoordinatorEntity(ServerLevel level,
 		BlockPos casingPos, ComputerStructureScanner.Limits limits) {

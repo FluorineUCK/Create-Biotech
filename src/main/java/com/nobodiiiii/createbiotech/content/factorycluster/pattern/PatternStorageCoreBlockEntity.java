@@ -97,7 +97,7 @@ public class PatternStorageCoreBlockEntity extends SmartBlockEntity implements C
 	this(CBBlockEntityTypes.PATTERN_STORAGE_CORE.get(), pos, state);
 }
 
-PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
+	protected PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState state) {
 	super(type, pos, state);
 }
 

@@ -18,6 +18,7 @@ import java.util.UUID;
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBinding;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBindingService;
 import com.nobodiiiii.createbiotech.content.factorycluster.SpaceAddress;
 import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
@@ -44,6 +45,11 @@ final class ComputerTopologyController {
 		@Nullable ComputerBlockEntity loadedComputer(BlockPos pos);
 		SpaceAddress address(BlockPos pos);
 		UUID newStructureMemberId();
+		default ClusterBindingService.BindingAccess bindingAccess(
+			ComputerCoordinatorMember member) {
+			return ClusterBindingService.BindingAccess.READY;
+		}
+		default boolean enforceFoundationPublication() { return false; }
 		default @Nullable ComputerBlockEntity resolveComputer(SpaceAddress address) {
 			return loadedComputer(address.localPos());
 		}
@@ -59,29 +65,29 @@ final class ComputerTopologyController {
 		Objects.requireNonNull(world, "world");
 		Objects.requireNonNull(limits, "limits");
 		if (!owner.persistenceAvailable() || owner.computerId().isEmpty()) {
-			owner.setAvailabilityReason(ComputerAvailabilityReason.IDENTITY_CONFLICT);
+			fail(owner, ComputerAvailabilityReason.IDENTITY_CONFLICT);
 			return;
 		}
 		ComputerStructureRecord known = owner.currentStructureRecord().orElse(null);
 		if (known != null && !chunksLoaded(known.snapshot().containingChunks(), world)) {
-			owner.setAvailabilityReason(ComputerAvailabilityReason.PARTIAL_UNLOADED);
+			fail(owner, ComputerAvailabilityReason.PARTIAL_UNLOADED);
 			return;
 		}
 
 		ComputerStructureScanner.ScanResult result = world.scan(owner.getBlockPos(), limits);
 		if (result.state() != ComputerStructureScanner.State.VALID
 			&& result.state() != ComputerStructureScanner.State.VALID_NOT_READY) {
-			owner.setAvailabilityReason(reasonFor(result.state()));
+			fail(owner, reasonFor(result.state()));
 			return;
 		}
 		ComputerStructureSnapshot snapshot = result.snapshot();
 		if (snapshot == null) {
-			owner.setAvailabilityReason(ComputerAvailabilityReason.STRUCTURE_INVALID);
+			fail(owner, ComputerAvailabilityReason.STRUCTURE_INVALID);
 			return;
 		}
 		ResolvedSnapshot resolved = resolveSnapshot(owner.getBlockPos(), snapshot, world);
 		if (resolved.failure() != ResolveFailure.NONE) {
-			owner.setAvailabilityReason(resolved.failure() == ResolveFailure.PARTIAL
+			fail(owner, resolved.failure() == ResolveFailure.PARTIAL
 				? ComputerAvailabilityReason.PARTIAL_UNLOADED
 				: resolved.failure() == ResolveFailure.IDENTITY
 					? ComputerAvailabilityReason.IDENTITY_CONFLICT
@@ -94,7 +100,7 @@ final class ComputerTopologyController {
 
 		Reconciliation reconciliation = reconcile(result, resolved);
 		if (reconciliation.failureReason() != null) {
-			setReason(resolved.computers(), reconciliation.failureReason());
+			setReasonAndWithdraw(resolved.computers(), reconciliation.failureReason());
 			return;
 		}
 		commit(resolved, reconciliation.record(), reconciliation.binding(),
@@ -134,23 +140,38 @@ final class ComputerTopologyController {
 			else if (!activeEpoch.equals(state.epoch()))
 				return Reconciliation.failure(ComputerAvailabilityReason.PERSISTENCE_INVALID);
 		}
-		ClusterBinding binding = null;
-		for (ComputerBlockEntity.TopologyState state : states) {
-			if (state.binding() == null) continue;
-			if (binding == null) binding = state.binding();
-			else if (!binding.equals(state.binding()))
-				return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
-		}
-		if (activeEpoch != null && (binding == null
-			|| !binding.clusterId().equals(activeEpoch.clusterId())))
-			return Reconciliation.failure(ComputerAvailabilityReason.PERSISTENCE_INVALID);
-
 		RecordSelection selection = authoritativeRecord(resolved, activeEpoch);
 		if (!selection.valid())
 			return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
 		ComputerStructureRecord authority = selection.record();
 		if (!recordsCompatible(states, authority, structureId))
 			return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
+		if (activeEpoch != null && !resolved.byId().containsKey(activeEpoch.coordinatorId()))
+			return Reconciliation.failure(ComputerAvailabilityReason.COORDINATOR_MISSING);
+		UUID bindingCoordinator = activeEpoch != null ? activeEpoch.coordinatorId()
+			: authority != null ? authority.coordinatorId()
+				: snapshot.nodes().getFirst().computerId();
+		ComputerBlockEntity bindingOwner = resolved.byId().get(bindingCoordinator);
+		boolean electingAfterDestruction = activeEpoch == null && authority != null
+			&& bindingOwner == null;
+		ClusterBinding binding = bindingOwner != null ? bindingOwner.bindingState()
+			: electingAfterDestruction ? states.getFirst().binding() : null;
+		for (ComputerBlockEntity.TopologyState state : states) {
+			ClusterBinding replica = state.binding();
+			if (electingAfterDestruction && !Objects.equals(binding, replica))
+				return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
+			boolean freshJoiner = state.record() == null && state.epoch() == null
+				&& replica == null;
+			if (freshJoiner) continue;
+			if (binding == null ? replica != null : replica == null
+				|| binding != null && (!binding.clusterId().equals(replica.clusterId())
+					|| replica.revision() > binding.revision()
+					|| replica.revision() == binding.revision() && !replica.equals(binding)))
+				return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
+		}
+		if (activeEpoch != null && (binding == null
+			|| !binding.clusterId().equals(activeEpoch.clusterId())))
+			return Reconciliation.failure(ComputerAvailabilityReason.PERSISTENCE_INVALID);
 
 		EnumSet<EpochFault> union = EnumSet.noneOf(EpochFault.class);
 		if (activeEpoch != null) {
@@ -284,11 +305,36 @@ final class ComputerTopologyController {
 			ComputerBlockEntity computer = resolved.computers().get(i);
 			if (!computer.topologyMatches(resolved.states().get(i))) return;
 		}
+		boolean publish = publicationReady(resolved, record, epoch, faults, reason);
+		ComputerBlockEntity elected = resolved.byId().get(record.coordinatorId());
 		for (ComputerBlockEntity computer : resolved.computers())
-			computer.stageTopologyState(record, binding, true, epoch, faults);
+			if (computer.isCoordinatorMemberPublished()
+				&& (computer != elected || !publish)) computer.withdrawCoordinatorMember();
+		for (int i = 0; i < resolved.computers().size(); i++) {
+			ComputerBlockEntity computer = resolved.computers().get(i);
+			ComputerBlockEntity.TopologyState previous = resolved.states().get(i);
+			ClusterBinding stagedBinding = epoch != null || previous.record() == null
+				? binding : previous.binding();
+			computer.stageTopologyState(record, stagedBinding, true, epoch, faults);
+		}
 		for (ComputerBlockEntity computer : resolved.computers()) {
 			computer.setAvailabilityReason(reason);
 			computer.publishTopologyChange();
+		}
+		if (publish && elected != null) {
+			elected.publishCoordinatorMember(resolved.computers(), record.snapshot().computerIds());
+			ClusterBindingService.BindingAccess access =
+				resolved.world().bindingAccess(elected.coordinatorMember);
+			boolean coherent = elected.coordinatorMember.updateBindingAccess(access);
+			if (binding != null && (access != ClusterBindingService.BindingAccess.READY
+				|| !coherent)) {
+				ComputerAvailabilityReason unavailable = access
+					== ClusterBindingService.BindingAccess.CONFLICT
+					|| access == ClusterBindingService.BindingAccess.READY && !coherent
+						? ComputerAvailabilityReason.IDENTITY_CONFLICT
+						: ComputerAvailabilityReason.AUTHORITY_OFFLINE;
+				setReason(resolved.computers(), unavailable);
+			}
 		}
 	}
 
@@ -329,6 +375,14 @@ final class ComputerTopologyController {
 				|| state.binding() == null || !state.binding().equals(callerState.binding())
 				|| state.epoch() != null || !state.faults().isEmpty())
 				return ComputerBlockEntity.EpochStartResult.NOT_READY;
+		}
+		if (world.enforceFoundationPublication()) {
+			if (!caller.isCoordinatorMemberPublished())
+				return ComputerBlockEntity.EpochStartResult.BINDING_UNAVAILABLE;
+			ClusterBindingService.BindingAccess access = world.bindingAccess(caller.coordinatorMember);
+			if (access != ClusterBindingService.BindingAccess.READY
+				|| !caller.coordinatorMember.updateBindingAccess(access))
+				return ComputerBlockEntity.EpochStartResult.BINDING_UNAVAILABLE;
 		}
 		ClusterEpoch epoch;
 		try {
@@ -386,6 +440,8 @@ final class ComputerTopologyController {
 			replica.stageTopologyState(state.record(), state.binding(), state.bindingValid(),
 				state.epoch(), union);
 		}
+		for (ComputerBlockEntity replica : replicas)
+			if (replica.isCoordinatorMemberPublished()) replica.withdrawCoordinatorMember();
 		for (ComputerBlockEntity replica : replicas) replica.publishTopologyChange();
 		return already ? ComputerBlockEntity.FaultLatchResult.ALREADY_LATCHED
 			: ComputerBlockEntity.FaultLatchResult.LATCHED;
@@ -494,17 +550,24 @@ final class ComputerTopologyController {
 				&& authority.record().snapshot().equals(snapshot) ? authority.record()
 				: new ComputerStructureRecord(authority.record().computerStructureMemberId(),
 					Math.addExact(authority.record().revision(), 1), coordinator, snapshot);
+			ComputerAvailabilityReason reason = scan.state()
+				== ComputerStructureScanner.State.VALID_NOT_READY
+					? ComputerAvailabilityReason.NOT_READY : ComputerAvailabilityReason.NONE;
+			boolean publish = reason == ComputerAvailabilityReason.NONE;
+			ComputerBlockEntity elected = resolved.byId().get(coordinator);
+			for (ComputerBlockEntity computer : resolved.computers())
+				if (computer.isCoordinatorMemberPublished()
+					&& (computer != elected || !publish)) computer.withdrawCoordinatorMember();
 			for (ComputerBlockEntity computer : resolved.computers()) {
 				ComputerBlockEntity.TopologyState state = computer.topologyState();
 				computer.stageTopologyState(updated, state.binding(), state.bindingValid(), null, Set.of());
 			}
-			ComputerAvailabilityReason reason = scan.state()
-				== ComputerStructureScanner.State.VALID_NOT_READY
-					? ComputerAvailabilityReason.NOT_READY : ComputerAvailabilityReason.NONE;
 			for (ComputerBlockEntity computer : resolved.computers()) {
 				computer.setAvailabilityReason(reason);
 				computer.publishTopologyChange();
 			}
+			if (publish && elected != null)
+				elected.publishCoordinatorMember(resolved.computers(), snapshot.computerIds());
 			return ComputerBlockEntity.EpochCloseResult.CLOSED;
 		} finally {
 			synchronized (ACTIVE_CLOSES) { ACTIVE_CLOSES.remove(key); }
@@ -623,6 +686,9 @@ final class ComputerTopologyController {
 				authorityRecord.computerStructureMemberId(),
 				Math.addExact(authorityRecord.revision(), 1),
 				replacement.coordinatorId(), snapshot);
+			ComputerBlockEntity previous = resolved.byId().get(authorityRecord.coordinatorId());
+			if (previous != null && previous.isCoordinatorMemberPublished()
+				&& previous != stagingOwner) previous.withdrawCoordinatorMember();
 			for (ComputerBlockEntity computer : resolved.computers())
 				computer.stageTopologyState(updated, authorityState.binding(), true,
 					replacement, Set.of());
@@ -630,6 +696,7 @@ final class ComputerTopologyController {
 				computer.setAvailabilityReason(ComputerAvailabilityReason.NONE);
 				computer.publishTopologyChange();
 			}
+			stagingOwner.publishCoordinatorMember(resolved.computers(), snapshot.computerIds());
 			return ComputerBlockEntity.ReformResult.REFORMED;
 		} finally {
 			synchronized (ACTIVE_REFORMS) { ACTIVE_REFORMS.remove(key); }
@@ -712,6 +779,38 @@ final class ComputerTopologyController {
 	private static void setReason(List<ComputerBlockEntity> computers,
 		ComputerAvailabilityReason reason) {
 		for (ComputerBlockEntity computer : computers) computer.setAvailabilityReason(reason);
+	}
+
+	private static void setReasonAndWithdraw(List<ComputerBlockEntity> computers,
+		ComputerAvailabilityReason reason) {
+		for (ComputerBlockEntity computer : computers) fail(computer, reason);
+	}
+
+	private static void fail(ComputerBlockEntity computer, ComputerAvailabilityReason reason) {
+		boolean activeCoordinator = computer.epoch().isPresent()
+			&& computer.currentStructureRecord().filter(record -> computer.computerId()
+				.filter(record.coordinatorId()::equals).isPresent()).isPresent();
+		if (!activeCoordinator || reason != ComputerAvailabilityReason.PARTIAL_UNLOADED)
+			computer.withdrawCoordinatorMember();
+		computer.setAvailabilityReason(reason);
+	}
+
+	private static boolean publicationReady(ResolvedSnapshot resolved,
+		ComputerStructureRecord record, @Nullable ClusterEpoch epoch, Set<EpochFault> faults,
+		ComputerAvailabilityReason reason) {
+		if (!faults.isEmpty()) return false;
+		ComputerBlockEntity elected = resolved.byId().get(record.coordinatorId());
+		if (elected == null || elected.computerId().filter(record.coordinatorId()::equals).isEmpty())
+			return false;
+		if (epoch == null)
+			return reason == ComputerAvailabilityReason.NONE
+				&& record.snapshot().nodes().stream().allMatch(node -> node.profile() != null);
+		if (reason != ComputerAvailabilityReason.NONE
+			&& reason != ComputerAvailabilityReason.FROZEN_MEMBER_MISSING) return false;
+		EpochNode frozen = epoch.nodes().stream()
+			.filter(node -> node.computerId().equals(record.coordinatorId()))
+			.findFirst().orElse(null);
+		return frozen != null && elected.installedProfile().filter(frozen.profile()::equals).isPresent();
 	}
 
 	private static boolean chunksLoaded(Set<ChunkPos> chunks, WorldAccess world) {
@@ -1116,6 +1215,11 @@ final class ComputerTopologyController {
 		}
 		@Override public SpaceAddress address(BlockPos pos) { return SpaceAddress.capture(level, pos); }
 		@Override public UUID newStructureMemberId() { return UUID.randomUUID(); }
+		@Override public ClusterBindingService.BindingAccess bindingAccess(
+			ComputerCoordinatorMember member) {
+			return ClusterBindingService.bindingAccess(level.getServer(), member);
+		}
+		@Override public boolean enforceFoundationPublication() { return true; }
 		@Override public @Nullable ComputerBlockEntity resolveComputer(SpaceAddress address) {
 			BlockEntity blockEntity = address.resolveBlockEntity(level.getServer());
 			return blockEntity instanceof ComputerBlockEntity computer ? computer : null;
