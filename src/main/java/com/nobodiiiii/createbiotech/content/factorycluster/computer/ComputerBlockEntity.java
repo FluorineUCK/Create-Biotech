@@ -49,6 +49,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class ComputerBlockEntity extends SmartBlockEntity {
+	static final long TOPOLOGY_SCAN_INTERVAL_TICKS = 20;
 	private static final int VERSION = 1;
 	private static final String ROOT = "ComputerData";
 	private static final String CLIENT_ROOT = "ComputerClientState";
@@ -71,6 +72,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	private boolean persistenceAvailable = true;
 	private boolean topologyDirty;
 	private long topologyVersion;
+	private long lastDiscoveryAttemptTick = Long.MIN_VALUE;
 	@Nullable private ComputerScanLease scanLease;
 	private ComputerAvailabilityReason availabilityReason = ComputerAvailabilityReason.NOT_READY;
 	private ComputerDisplayState displayState = ComputerDisplayState.IDLE;
@@ -114,6 +116,14 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	void markTopologyDirty() {
 		topologyDirty = true;
 		if (scanLease != null) scanLease.markDirty();
+	}
+
+	boolean beginDiscoveryAttempt(long now) {
+		if (!topologyDirty && lastDiscoveryAttemptTick != Long.MIN_VALUE
+			&& now >= lastDiscoveryAttemptTick
+			&& now - lastDiscoveryAttemptTick < TOPOLOGY_SCAN_INTERVAL_TICKS) return false;
+		lastDiscoveryAttemptTick = now;
+		return true;
 	}
 
 	@Nullable ComputerScanLease scanLease() { return scanLease; }
@@ -220,7 +230,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 			raw = opaque.get("Resident");
 		return raw == null ? null : raw.copy();
 	}
-	boolean hasResidentSource() {
+	public boolean hasResidentSource() {
 		return !residentSnapshot.isEmpty() || rawChildren.containsKey("Resident")
 			|| opaqueComputerData instanceof CompoundTag opaque && opaque.contains("Resident");
 	}
@@ -672,6 +682,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		faults = Set.of();
 		persistenceAvailable = false;
 		topologyDirty = false;
+		lastDiscoveryAttemptTick = Long.MIN_VALUE;
 		opaqueComputerData = null;
 		rawChildren.clear();
 		missingChildren.clear();

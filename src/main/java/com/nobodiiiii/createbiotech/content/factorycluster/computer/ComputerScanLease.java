@@ -17,8 +17,6 @@ import net.minecraft.world.level.ChunkPos;
  * retains a scan result; it only lets the exact loaded members agree which UUID performs a scan.
  */
 final class ComputerScanLease {
-	private static final long INTERVAL_TICKS = 20;
-
 	private final Set<ComputerBlockEntity> members = new LinkedHashSet<>();
 	private boolean dirty = true;
 	private long lastScanTick = Long.MIN_VALUE;
@@ -34,6 +32,7 @@ final class ComputerScanLease {
 		Objects.requireNonNull(limits, "limits");
 		ComputerScanLease lease = caller.scanLease();
 		if (lease == null) {
+			if (!caller.beginDiscoveryAttempt(now)) return;
 			Rebuild rebuild = rebuildPersisted(caller, world);
 			lease = rebuild.lease();
 			if (lease != null && rebuild.partial()) {
@@ -56,7 +55,8 @@ final class ComputerScanLease {
 		ComputerBlockEntity owner = lease.owner();
 		if (owner != caller) return;
 		if (!lease.dirty && lease.lastScanTick != Long.MIN_VALUE
-			&& now - lease.lastScanTick < INTERVAL_TICKS) return;
+			&& now >= lease.lastScanTick
+			&& now - lease.lastScanTick < ComputerBlockEntity.TOPOLOGY_SCAN_INTERVAL_TICKS) return;
 		lease.refreshOwner(owner, now, world, limits);
 	}
 

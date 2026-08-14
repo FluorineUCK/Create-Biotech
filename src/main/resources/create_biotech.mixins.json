@@ -33,6 +33,7 @@
     "FunnelItemMixin",
     "FluidTankBlockEntityMixin",
     "ItemHelperMixin",
+    "LevelComputerDestroyMixin",
     "MagmaBeltFunnelBlockMixin",
     "LivingEntitySlimeMimicHurtSoundMixin",
     "LivingEntitySlimeMimicMixin",

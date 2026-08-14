@@ -409,6 +409,38 @@ class ComputerTopologyControllerTest {
 	}
 
 	@Test
+	void failedDiscoveryKeepsTheTwentyTickRetryCadence() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)));
+		fixture.scanState = ComputerStructureScanner.State.OPEN_SHELL;
+		ComputerBlockEntity computer = fixture.be(LOW);
+
+		computer.scheduledTopologyTick(0, fixture, LIMITS);
+		computer.scheduledTopologyTick(1, fixture, LIMITS);
+		computer.scheduledTopologyTick(19, fixture, LIMITS);
+		assertEquals(1, fixture.scanCalls,
+			"A lease-less invalid Computer must not repeat its full scan every tick");
+
+		computer.scheduledTopologyTick(20, fixture, LIMITS);
+		assertEquals(2, fixture.scanCalls,
+			"A failed discovery must become eligible again at the 20-tick boundary");
+	}
+
+	@Test
+	void topologyDirtyWakesFailedDiscoveryOnceAndRearmsItsCadence() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)));
+		fixture.scanState = ComputerStructureScanner.State.OPEN_SHELL;
+		ComputerBlockEntity computer = fixture.be(LOW);
+
+		computer.scheduledTopologyTick(0, fixture, LIMITS);
+		computer.markTopologyDirty();
+		computer.scheduledTopologyTick(1, fixture, LIMITS);
+		computer.scheduledTopologyTick(2, fixture, LIMITS);
+
+		assertEquals(2, fixture.scanCalls,
+			"Dirty invalid topology must retry immediately once, then return to cooldown");
+	}
+
+	@Test
 	void nonOwnerDirtyProductionScheduledTickWakesLeaseOwnerOnly() {
 		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
 		fixture.be(HIGH).scheduledTopologyTick(0, fixture, LIMITS);

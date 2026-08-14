@@ -74,6 +74,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.item.trading.ItemCost;
 import net.minecraft.world.item.trading.MerchantOffer;
+import net.minecraft.world.level.GameRules;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
@@ -510,6 +511,100 @@ public final class ComputerClusterGameTests {
 		});
 	}
 
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 80)
+	public static void forcedDestroyBlockSuccessDropsOneEmptyComputer(GameTestHelper helper) {
+		assertEmptyTemplateFixture(helper);
+		ServerLevel level = helper.getLevel();
+		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
+		ComputerBlockEntity computer = placeComputer(level, pos, LOW_ID);
+		CapturedResident captured = capturedResident(level, NodeKind.LIBRARIAN, 4);
+		useBox(headlessPlayer(level, pos), level, pos, captured.box());
+
+		helper.assertTrue(level.destroyBlock(pos, true),
+			"A successful forced destroy must remove the occupied Computer");
+		helper.assertFalse(level.getBlockState(pos).is(CBBlocks.COMPUTER.get()),
+			"Successful forced destroy must leave no Computer block");
+		helper.assertFalse(level.getBlockEntity(pos) instanceof ComputerBlockEntity,
+			"Successful forced destroy must leave no Computer block entity");
+		Entity released = level.getEntity(captured.uuid());
+		helper.assertTrue(released instanceof LivingEntity,
+			"Successful forced destroy must release the exact resident UUID");
+		helper.assertValueEqual(((LivingEntity) released).getHealth(), 1.0F,
+			"Released resident health must be exactly half a heart");
+		List<ItemEntity> drops = computerDrops(level, pos, 5);
+		helper.assertValueEqual(drops.size(), 1,
+			"Successful destroyBlock(pos,true) must emit exactly one Computer stack");
+		helper.assertValueEqual(drops.getFirst().getItem().getCount(), 1,
+			"The committed Computer loot stack must contain exactly one item");
+		assertEmptyComputerStack(helper, drops.getFirst().getItem());
+		helper.assertValueEqual(filledRecoveryItems(level, pos, 5).size(), 0,
+			"Successful resident release must not emit a recovery item");
+		helper.succeed();
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 80)
+	public static void forcedDestroyWithoutDropsReleasesResidentButNoComputer(GameTestHelper helper) {
+		assertEmptyTemplateFixture(helper);
+		ServerLevel level = helper.getLevel();
+		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
+		ComputerBlockEntity computer = placeComputer(level, pos, LOW_ID);
+		CapturedResident captured = capturedResident(level, NodeKind.VILLAGER, 3);
+		useBox(headlessPlayer(level, pos), level, pos, captured.box());
+
+		helper.assertTrue(level.destroyBlock(pos, false),
+			"A no-drop forced destroy must still release and remove the occupied Computer");
+		helper.assertTrue(level.getEntity(captured.uuid()) instanceof LivingEntity,
+			"No-drop forced destruction must still preserve the resident");
+		helper.assertValueEqual(countWorldItem(level, pos, 5, CBItems.COMPUTER.get()), 0L,
+			"destroyBlock(pos,false) must not synthesize Computer loot");
+		helper.succeed();
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 80)
+	public static void forcedDestroyHonorsDisabledBlockDrops(GameTestHelper helper) {
+		assertEmptyTemplateFixture(helper);
+		ServerLevel level = helper.getLevel();
+		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
+		placeComputer(level, pos, LOW_ID);
+		CapturedResident captured = capturedResident(level, NodeKind.VILLAGER, 3);
+		useBox(headlessPlayer(level, pos), level, pos, captured.box());
+		GameRules.BooleanValue blockDrops = level.getGameRules().getRule(GameRules.RULE_DOBLOCKDROPS);
+		boolean previous = blockDrops.get();
+		try {
+			blockDrops.set(false, level.getServer());
+			helper.assertTrue(level.destroyBlock(pos, true),
+				"Forced destruction must still release and remove while block drops are disabled");
+			helper.assertTrue(level.getEntity(captured.uuid()) instanceof LivingEntity,
+				"Disabling block drops must not discard the resident");
+			helper.assertValueEqual(countWorldItem(level, pos, 5, CBItems.COMPUTER.get()), 0L,
+				"Forced destruction must honor doTileDrops=false");
+		} finally {
+			blockDrops.set(previous, level.getServer());
+		}
+		helper.succeed();
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 80)
+	public static void standaloneDropEventCannotArmLaterNoDropDestroy(GameTestHelper helper) {
+		assertEmptyTemplateFixture(helper);
+		ServerLevel level = helper.getLevel();
+		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
+		ComputerBlockEntity computer = placeComputer(level, pos, LOW_ID);
+		CapturedResident captured = capturedResident(level, NodeKind.VILLAGER, 3);
+		useBox(headlessPlayer(level, pos), level, pos, captured.box());
+
+		Block.dropResources(level.getBlockState(pos), level, pos, computer, null, ItemStack.EMPTY);
+		helper.assertValueEqual(countWorldItem(level, pos, 5, CBItems.COMPUTER.get()), 0L,
+			"A standalone drop event for an occupied Computer must not emit loot");
+		helper.assertTrue(level.destroyBlock(pos, false),
+			"A later no-drop destroy in the same tick must still release and remove the Computer");
+		helper.assertTrue(level.getEntity(captured.uuid()) instanceof LivingEntity,
+			"The no-drop destruction must preserve the resident");
+		helper.assertValueEqual(countWorldItem(level, pos, 5, CBItems.COMPUTER.get()), 0L,
+			"A prior drop event must not arm loot for an unrelated no-drop destruction");
+		helper.succeed();
+	}
+
 	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 100)
 	public static void actualExplosionDoubleFailureKeepsOccupiedComputerAndNoLoot(
 		GameTestHelper helper) {
@@ -546,6 +641,33 @@ public final class ComputerClusterGameTests {
 				"Repeated explosion rollback must leave no released resident");
 			helper.succeed();
 		});
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 100)
+	public static void actualExplosionSuccessDropsOneEmptyComputer(GameTestHelper helper) {
+		assertEmptyTemplateFixture(helper);
+		ServerLevel level = helper.getLevel();
+		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
+		ComputerBlockEntity computer = placeComputer(level, pos, LOW_ID);
+		CapturedResident captured = capturedResident(level, NodeKind.LIBRARIAN, 4);
+		useBox(headlessPlayer(level, pos), level, pos, captured.box());
+
+		level.explode(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
+			4.0F, Level.ExplosionInteraction.TNT);
+
+		helper.assertFalse(level.getBlockState(pos).is(CBBlocks.COMPUTER.get()),
+			"Successful explosion must remove the occupied Computer");
+		helper.assertTrue(level.getEntity(captured.uuid()) instanceof LivingEntity,
+			"Successful explosion must release the exact resident UUID");
+		List<ItemEntity> drops = computerDrops(level, pos, 5);
+		helper.assertValueEqual(drops.size(), 1,
+			"Successful explosion must commit exactly one Computer stack");
+		helper.assertValueEqual(drops.getFirst().getItem().getCount(), 1,
+			"Explosion Computer loot must contain exactly one item");
+		assertEmptyComputerStack(helper, drops.getFirst().getItem());
+		helper.assertValueEqual(filledRecoveryItems(level, pos, 5).size(), 0,
+			"Successful explosion release must not emit a recovery item");
+		helper.succeed();
 	}
 
 	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 140)
@@ -1262,6 +1384,20 @@ public final class ComputerClusterGameTests {
 		net.minecraft.world.item.Item item) {
 		return entities(level, ItemEntity.class, center, radius).stream()
 			.filter(entity -> entity.getItem().is(item)).mapToLong(entity -> entity.getItem().getCount()).sum();
+	}
+
+	private static List<ItemEntity> computerDrops(ServerLevel level, BlockPos center, double radius) {
+		return entities(level, ItemEntity.class, center, radius).stream()
+			.filter(entity -> entity.getItem().is(CBItems.COMPUTER.get())).toList();
+	}
+
+	private static void assertEmptyComputerStack(GameTestHelper helper, ItemStack stack) {
+		helper.assertTrue(stack.is(CBItems.COMPUTER.get()),
+			"Committed forced loot must be the Computer block item");
+		helper.assertTrue(stack.get(DataComponents.BLOCK_ENTITY_DATA) == null,
+			"Committed Computer loot must not carry block-entity data");
+		helper.assertFalse(CapturedEntityBoxHelper.hasCapturedEntity(stack),
+			"Committed Computer loot must not carry resident data");
 	}
 
 	private static List<ItemEntity> filledRecoveryItems(ServerLevel level, BlockPos center,
