@@ -1,6 +1,6 @@
 package com.nobodiiiii.createbiotech.content.dingdongchicken;
 
-import com.nobodiiiii.createbiotech.foundation.item.SpawnableRenderedLivingEntityItem;
+import com.nobodiiiii.createbiotech.foundation.item.BlockCenteredSpawnableRenderedLivingEntityItem;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 
 import net.minecraft.world.entity.Entity;
@@ -8,7 +8,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
-public class DingDongChickenItem extends SpawnableRenderedLivingEntityItem<DingDongChickenEntity> {
+public class DingDongChickenItem extends BlockCenteredSpawnableRenderedLivingEntityItem<DingDongChickenEntity> {
 
 	public DingDongChickenItem(Properties properties) {
 		super(properties, CBEntityTypes.DING_DONG_CHICKEN.get());
