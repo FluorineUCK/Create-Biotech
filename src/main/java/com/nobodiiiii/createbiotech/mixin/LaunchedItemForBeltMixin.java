@@ -12,7 +12,6 @@ import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainPlacement;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity.CasingType;
 import com.simibubi.create.content.schematics.cannon.LaunchedItem;
 
-import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.core.HolderGetter;
 import net.minecraft.nbt.CompoundTag;
@@ -27,16 +26,10 @@ public abstract class LaunchedItemForBeltMixin implements CBBeltChainData {
 	private int[] createBiotech$pulleyOffsets;
 
 	@Shadow
-	public BlockState state;
-
-	@Shadow
 	public int length;
 
 	@Shadow
 	public CasingType[] casings;
-
-	@Shadow
-	public BlockPos target;
 
 	@Override
 	@Unique
@@ -53,6 +46,7 @@ public abstract class LaunchedItemForBeltMixin implements CBBeltChainData {
 	@Inject(method = "serializeNBT", at = @At("RETURN"))
 	private void createBiotech$serializeSlimeChain(HolderLookup.Provider registries,
 		CallbackInfoReturnable<CompoundTag> cir) {
+		BlockState state = ((LaunchedItem.ForBlockState) (Object) this).state;
 		if (!CBBeltChainPlacement.isPlacementBelt(state) || createBiotech$pulleyOffsets == null)
 			return;
 		cir.getReturnValue().putIntArray(CBBeltChainPlacement.PULLEY_OFFSETS_TAG, createBiotech$pulleyOffsets);
@@ -67,8 +61,10 @@ public abstract class LaunchedItemForBeltMixin implements CBBeltChainData {
 
 	@Inject(method = "place", at = @At("HEAD"), cancellable = true)
 	private void createBiotech$placeBeltChain(Level world, CallbackInfo ci) {
+		BlockState state = ((LaunchedItem.ForBlockState) (Object) this).state;
 		if (!CBBeltChainPlacement.isPlacementBelt(state))
 			return;
+		var target = ((LaunchedItem) (Object) this).target;
 		int[] pulleys = createBiotech$pulleyOffsets == null ? new int[0] : createBiotech$pulleyOffsets;
 		CBBeltChainPlacement.placeAtomically(world, state,
 			CBBeltChainPlacement.positionsFromPayload(state, target, length), pulleys, casings);
