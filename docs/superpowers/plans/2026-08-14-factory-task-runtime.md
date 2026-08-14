@@ -72,6 +72,7 @@
 - `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/runtime/ComputerNodeRuntimeTest.java`
 - `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/runtime/RuntimePersistenceTest.java`
 - `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics/FactoryGaugeProxyTest.java`
+- `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics/PatternCommunicationServiceTest.java`
 
 **Modify**
 
@@ -404,11 +405,39 @@ git commit -m "feat: expand factory tasks in real time"
 - Create: `FactoryStockService.java`
 - Create: `FactoryDispatchService.java`
 - Create: `PatternCommunicationService.java`
+- Test: `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics/PatternCommunicationServiceTest.java`
 
 **Interfaces:**
 - Produces: server-only adapters used by `ComputerNodeRuntime`.
 
-- [ ] **Step 1: Implement actual-stock reads**
+- [ ] **Step 1: Write failing address-revalidation tests**
+
+```java
+@Test
+void staleSpaceAddressIsRejectedBeforeDistanceOrEnqueue() {
+	PatternServiceFixture fixture = fixtureWithResolvedLibrary();
+	fixture.moveLibraryWithoutRefreshingIndexedAddress();
+	assertEquals(PatternAvailability.UNAVAILABLE, fixture.service().tryQuery(fixture.request()));
+	assertEquals(0, fixture.worldCenterCalls());
+	assertEquals(0, fixture.enqueueCalls());
+}
+
+@Test
+void currentSublevelAddressUsesActualLibraryLevel() {
+	PatternServiceFixture fixture = fixtureInSublevelWithCurrentAddress();
+	assertEquals(PatternAvailability.QUEUED, fixture.service().tryQuery(fixture.request()));
+	assertSame(fixture.library().getLevel(), fixture.worldCenterLevel());
+	assertEquals(1, fixture.enqueueCalls());
+}
+```
+
+- [ ] **Step 2: Run the focused test and confirm failure**
+
+Run: `./gradlew.bat test --tests "*PatternCommunicationServiceTest" --offline`
+
+Expected: compilation fails because `PatternCommunicationService` and its validated query path do not exist.
+
+- [ ] **Step 3: Implement actual-stock reads**
 
 ```java
 public int count(UUID logisticsId, StackKey key) {
@@ -419,21 +448,25 @@ public int count(UUID logisticsId, StackKey key) {
 
 Every caller also checks `Create.LOGISTICS.mayInteract(logisticsId, submittingPlayer)` at order entry; runtime frames only use logistics IDs frozen into their validated order.
 
-- [ ] **Step 2: Implement pattern-core selection and external-coordinate range**
+- [ ] **Step 4: Implement pattern-core selection and external-coordinate range**
 
-Resolve exactly one loaded pattern core from `ClusterMemberIndex`; conflict/missing/invalid structure returns unavailable. Require `ClusterBindingService.bindingAccess(server, core) == READY` before accepting a query, then require cluster/root dimension and allowed logistics bindings. An unloaded known authority or stale/incomparable binding revision sleeps/refuses rather than using the replica. Compute:
+Resolve exactly one loaded pattern core from `ClusterMemberIndex`; conflict/missing/invalid structure returns unavailable. Require `ClusterBindingService.bindingAccess(server, core) == READY` before accepting a query, then require cluster/root dimension and allowed logistics bindings. An unloaded known authority or stale/incomparable binding revision sleeps/refuses rather than using the replica.
+
+Before calling `worldCenter` or performing any range arithmetic, capture `SpaceAddress libraryAddress = library.memberAddress()` once and revalidate it against the resolved instance: its dimension must equal the epoch root dimension, `library.getLevel()` must be a `ServerLevel`, `libraryAddress.matches(library.getLevel(), library.getBlockPos())` must be true, and `libraryAddress.resolveBlockEntity(server) == library`. Failure returns unavailable/`SLP(PATTERN)` without invoking `worldCenter`, enqueueing, or mutating a query cursor. This closes the move/rebind race between weak-index lookup and coordinate conversion. Then compute with the actual validated BE level:
 
 ```java
 int range = Math.min(configuredMax,
 	configuredBase + epoch.totalPatternRangeBonus());
 Vec3 computerWorld = SubLevelCompat.toWorld(level, coordinatorPos, localBoundsCenter);
-Vec3 libraryWorld = library.memberAddress().worldCenter(level);
+Vec3 libraryWorld = libraryAddress.worldCenter((ServerLevel) library.getLevel());
 boolean inRange = computerWorld.distanceToSqr(libraryWorld) <= (double) range * range;
 ```
 
 Do not compute distance for panel access, computer-internal messages, or Create stock.
 
-- [ ] **Step 3: Implement package dispatch without promises**
+Implement against the Step-1 fixtures: the stale-address case must leave both counters at zero, while the positive sublevel case must pass the actual validated library `ServerLevel` to `worldCenter` and enqueue once.
+
+- [ ] **Step 5: Implement package dispatch without promises**
 
 Build `PackageOrderWithCrafts.simple(List<BigItemStack>)`. Processing inputs call:
 
@@ -451,14 +484,19 @@ LogisticsManager.broadcastPackageRequest(logisticsId, RequestType.PLAYER,
 
 Re-read stock immediately before either call. `false` means `SLP(ROUTE)`. A successful call marks the local dispatch `CONFIRMED`; confirmed dispatches are never called again. A reloaded `UNCERTAIN` dispatch remains `SLP(ROUTE)` until the player explicitly cancels or chooses retry in the final UI plan.
 
-- [ ] **Step 4: Compile and commit**
+- [ ] **Step 6: Run focused tests, compile, and commit**
 
-Run: `./gradlew.bat compileJava --offline`
-
-Expected: `BUILD SUCCESSFUL`.
+Run:
 
 ```powershell
-git add src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics
+./gradlew.bat test --tests "*PatternCommunicationServiceTest" --offline
+./gradlew.bat compileJava --offline
+```
+
+Expected: stale addresses are rejected before distance/enqueue, current sublevel addresses use the actual library level, and both commands report `BUILD SUCCESSFUL`.
+
+```powershell
+git add src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics/FactoryStockService.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics/FactoryDispatchService.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics/PatternCommunicationService.java src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/logistics/PatternCommunicationServiceTest.java
 git commit -m "feat: connect factory tasks to Create logistics"
 ```
 

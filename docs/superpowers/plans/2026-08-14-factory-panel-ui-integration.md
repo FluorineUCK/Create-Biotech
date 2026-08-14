@@ -42,6 +42,7 @@
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelStockSnapshot.java` — generation accumulator and exact-component aggregation.
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelClusterSnapshot.java` — generation accumulator for current roots/frames/nodes/library/conflicts.
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelResultCode.java` — bounded translated result code, never arbitrary server text.
+- `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelRequestRules.java` — pure order validation and total Foundation binding-result to UI-result mapping used by packet handlers.
 
 **Create — packets**
 
@@ -163,7 +164,7 @@ public enum FactoryPanelResultCode {
 	INVALID_MENU, WRONG_SPACE, NO_PERMISSION, UNKNOWN_NETWORK, READ_ONLY_ALL,
 	INVALID_ITEM, INVALID_AMOUNT, INVALID_ADDRESS, CLUSTER_UNBOUND,
 	CLUSTER_CONFLICT, COORDINATOR_OFFLINE, JOB_NOT_FOUND, RETRY_NOT_UNCERTAIN,
-	PACKET_TOO_LARGE, INTERNAL_ERROR
+	TOO_MANY_BINDINGS, PACKET_TOO_LARGE, INTERNAL_ERROR
 }
 ```
 
@@ -427,6 +428,7 @@ git commit -m "feat: stream factory panel snapshots"
 ### Task 4: Submit Orders and Apply Explicit Cleanup Controls
 
 **Files:**
+- Create: `FactoryPanelRequestRules.java`
 - Create: `FactoryPanelOrderPacket.java`
 - Create: `FactoryPanelControlPacket.java`
 - Create: `FactoryPanelBindingPacket.java`
@@ -455,11 +457,24 @@ void warningDoesNotPreventDirectStreamingSubmission() {
 	OrderValidation validation = OrderValidation.warning(FactoryPanelResultCode.COORDINATOR_OFFLINE);
 	assertTrue(validation.mayAttemptSubmission());
 }
+
+@Test
+void foundationCapacityFailureMapsToBoundedUiResult() {
+	assertEquals(FactoryPanelResultCode.TOO_MANY_BINDINGS,
+		FactoryPanelRequestRules.bindingResult(
+			ClusterBindingService.BindResult.TOO_MANY_BINDINGS).orElseThrow());
+}
 ```
 
 The second test encodes the approved no-preplanning model: informational warnings do not disable the submit action. The runtime itself returns a fatal rejection only when no valid root can own the order.
 
-- [ ] **Step 2: Define exact serverbound operations**
+- [ ] **Step 2: Run the focused test and confirm failure**
+
+Run: `./gradlew.bat test --tests "*FactoryPanelRequestRulesTest" --offline`
+
+Expected: compilation fails because `FactoryPanelRequestRules` and its binding mapper do not exist.
+
+- [ ] **Step 3: Define exact serverbound operations**
 
 ```java
 public record FactoryPanelOrderPacket(int containerId, BlockPos panelPos,
@@ -485,7 +500,7 @@ Order validation normalizes output to count one and rejects empty stacks, amount
 
 An order is attempted immediately; there is no AE-style complete-plan confirmation screen. `FINITE` dispatches the final result once and ends. `CONTINUOUS` creates a fresh iteration after each successful final dispatch until cancelled.
 
-- [ ] **Step 3: Separate processing and final Create dispatch request types**
+- [ ] **Step 4: Separate processing and final Create dispatch request types**
 
 The runtime adapter must use:
 
@@ -496,7 +511,7 @@ RequestType.PLAYER   // root final-result dispatch to deliveryAddress
 
 Both calls name `RootOrder.logisticsId()`. Never choose a network by address text. Re-read actual network stock immediately before each dispatch.
 
-- [ ] **Step 4: Implement control and cleanup semantics**
+- [ ] **Step 5: Implement control and cleanup semantics**
 
 - `CANCEL_JOB` broadcasts cancellation only to loaded frozen-epoch members and leaves confirmed packages alone.
 - `STOP_ALL_AND_REFORM` is the only action that clears `BLOCK(WIDTH)` and `BLOCK(DEPTH)`: cancel all roots, wait for loaded nodes to clear owned frames/mailboxes, then create a new epoch from the current valid structure.
@@ -506,18 +521,20 @@ Both calls name `RootOrder.logisticsId()`. Never choose a network by address tex
 
 `FactoryPanelResultPacket` contains only `containerId`, `FactoryPanelResultCode`, optional `jobId`, and optional exact output stack/count. It never contains an exception message or an unbounded log string.
 
-- [ ] **Step 5: Implement binding edits with administration permissions**
+- [ ] **Step 6: Implement binding edits with administration permissions**
 
-Binding packets call the resolver with `administration=true`. The resolver also requires `ClusterBindingService.bindingAccess(server, panel) == READY`; a panel whose known authority is unloaded or whose revision conflicts cannot mutate bindings or serve an order. `RENAME` strips/truncates alias to 32 characters. `REMOVE` cannot leave an in-use selected logistics ID on an active root without confirmation: reject it while any current root references that ID. `MOVE_UP/DOWN` swaps within the ordered immutable list. Every mutation calls the public authoritative `ClusterBindingService.replaceBindings(player, panel, normalizedBindings)`; it never invokes a panel-local commit method. Only a successful cluster-wide transaction returns a fresh stock generation. A 33rd binding maps to the translated `TOO_MANY_BINDINGS` result.
+Binding packets call the resolver with `administration=true`. The resolver also requires `ClusterBindingService.bindingAccess(server, panel) == READY`; a panel whose known authority is unloaded or whose revision conflicts cannot mutate bindings or serve an order. `RENAME` strips/truncates alias to 32 characters. `REMOVE` cannot leave an in-use selected logistics ID on an active root without confirmation: reject it while any current root references that ID. `MOVE_UP/DOWN` swaps within the ordered immutable list. Every mutation calls the public authoritative `ClusterBindingService.replaceBindings(player, panel, normalizedBindings)`; it never invokes a panel-local commit method. Only a successful cluster-wide transaction returns a fresh stock generation. `FactoryPanelRequestRules.bindingResult` maps Foundation `BindResult.TOO_MANY_BINDINGS` to the UI-owned `FactoryPanelResultCode.TOO_MANY_BINDINGS`; a 33rd binding returns that translated code rather than `INTERNAL_ERROR`.
 
-- [ ] **Step 6: Run focused tests and commit**
+Implement the owned mapper in `FactoryPanelRequestRules` as a total switch returning `Optional.empty()` only for `OK`: `NO_SOURCE`/`EMPTY_NETWORKS -> CLUSTER_UNBOUND`, `ACTIVE`/`STALE_BINDING`/`PARTICIPANT_REJECTED`/`CONFLICT -> CLUSTER_CONFLICT`, `DIMENSION -> WRONG_SPACE`, `PERMISSION -> NO_PERMISSION`, `TOO_MANY_BINDINGS -> TOO_MANY_BINDINGS`, and `AUTHORITY_OFFLINE -> COORDINATOR_OFFLINE`. Packet handlers call this mapper; they do not duplicate a partial switch.
+
+- [ ] **Step 7: Run focused tests and commit**
 
 Run: `./gradlew.bat test --tests "*FactoryPanelRequestRulesTest" --offline`
 
-Expected: `BUILD SUCCESSFUL`; multi-network task keys differ, warning submission remains enabled, and fatal validation paths stay rejected.
+Expected: `BUILD SUCCESSFUL`; multi-network task keys differ, warning submission remains enabled, fatal validation paths stay rejected, and every Foundation bind result—including capacity—has the declared bounded UI mapping.
 
 ```powershell
-git add src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelOrderPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelControlPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelBindingPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelResultPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/runtime/ComputerNodeRuntime.java src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelRequestRulesTest.java
+git add src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelRequestRules.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelOrderPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelControlPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelBindingPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelResultPacket.java src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/runtime/ComputerNodeRuntime.java src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelRequestRulesTest.java
 git commit -m "feat: control factory orders from panels"
 ```
 
