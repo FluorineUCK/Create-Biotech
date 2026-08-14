@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.foundation.render;
 
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -9,15 +10,18 @@ import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.foundation.item.RenderedLivingEntityItem;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
 import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.client.ClientHooks;
 import net.neoforged.neoforge.client.extensions.common.IClientItemExtensions;
 
 /**
@@ -29,6 +33,8 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 	extends BlockEntityWithoutLevelRenderer {
 
 	private static final Vector3f BLOCK_CENTER = new Vector3f(0.5f, 0.5f, 0.5f);
+	private static final float BASE_AUTO_RENDER_SCALE = 1.5f;
+	private static final float MAX_AUTO_RENDER_SCALE = 1.5f;
 	private static final float DEFAULT_ENTITY_Y_ROTATION = 90.0f;
 	private static final float FIXED_ENTITY_Y_ROTATION = 180.0f;
 
@@ -90,6 +96,51 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 		renderBlockCenteredEntity(entity, geometryCenter, scaleMultiplier, DEFAULT_ENTITY_Y_ROTATION, poseStack, buffer,
 			packedLight);
 		poseStack.popPose();
+	}
+
+	/**
+	 * Renders an arbitrary entity in a GUI slot after applying the template item's
+	 * actual GUI display transform.
+	 */
+	public static void renderAutoScaledGuiEntityItem(GuiGraphics graphics, ItemStack transformStack,
+		LivingEntity entity, float scaleMultiplier, int x, int y) {
+		if (transformStack.isEmpty())
+			return;
+
+		Minecraft minecraft = Minecraft.getInstance();
+		BakedModel model = minecraft.getItemRenderer()
+			.getModel(transformStack, minecraft.level, minecraft.player, 0);
+		PoseStack poseStack = graphics.pose();
+		poseStack.pushPose();
+		poseStack.translate(x + 8.0f, y + 8.0f, 150.0f);
+		poseStack.mulPose(new Matrix4f().scaling(1.0f, -1.0f, 1.0f));
+		poseStack.scale(16.0f, 16.0f, 16.0f);
+		ClientHooks.handleCameraTransforms(poseStack, model, ItemDisplayContext.GUI, false);
+		poseStack.translate(-0.5f, -0.5f, -0.5f);
+		float renderScale = getGuiProjectedAutoScale(entity, scaleMultiplier, poseStack);
+		renderBlockCenteredEntity(entity, renderScale, poseStack, graphics.bufferSource(), LightTexture.FULL_BRIGHT);
+		graphics.flush();
+		poseStack.popPose();
+	}
+
+	private static float getGuiProjectedAutoScale(LivingEntity entity, float scaleMultiplier, PoseStack poseStack) {
+		GeometryBounds bounds = new GeometryBounds();
+		MultiBufferSource measuringBuffer = renderType -> new GeometryBoundsVertexConsumer(bounds);
+		renderBlockCenteredEntity(entity, 1.0f, poseStack, measuringBuffer, LightTexture.FULL_BRIGHT);
+		if (!bounds.hasVertices())
+			return scaleMultiplier;
+
+		float poseScale = poseStack.last()
+			.pose()
+			.transformDirection(1.0f, 0.0f, 0.0f, new Vector3f())
+			.length();
+		if (poseScale <= 1.0e-6f)
+			return scaleMultiplier;
+
+		float projectedDimension = Math.max(bounds.sizeX(), bounds.sizeY()) / poseScale;
+		if (projectedDimension <= 1.0e-6f)
+			return scaleMultiplier;
+		return Math.min(BASE_AUTO_RENDER_SCALE / projectedDimension, MAX_AUTO_RENDER_SCALE) * scaleMultiplier;
 	}
 
 	private static void renderBlockCenteredEntity(LivingEntity entity, Vector3f geometryCenter, float scaleMultiplier,
@@ -193,6 +244,14 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 
 		private Vector3f center() {
 			return new Vector3f((minX + maxX) / 2.0f, (minY + maxY) / 2.0f, (minZ + maxZ) / 2.0f);
+		}
+
+		private float sizeX() {
+			return maxX - minX;
+		}
+
+		private float sizeY() {
+			return maxY - minY;
 		}
 
 	}

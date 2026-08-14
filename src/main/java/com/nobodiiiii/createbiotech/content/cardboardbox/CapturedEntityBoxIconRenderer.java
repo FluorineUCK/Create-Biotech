@@ -38,7 +38,7 @@ public final class CapturedEntityBoxIconRenderer {
 	private static final float FACE_OFFSET = 1.0f / 128.0f;
 	private static final float MAX_FLATTENED_DEPTH_OFFSET = 1.0f / 512.0f;
 	private static final float ICON_FRAME_FILL = 0.6f;
-	private static final float MAX_AUTO_RENDER_SCALE = 2.0f;
+	private static final float MAX_AUTO_RENDER_SCALE = 1.5f;
 	private static final float ITEM_PLANE_TO_FACE_Y_ROT = itemPlaneToFaceYRot(ICON_FACE);
 	private static final ItemStack ENTITY_ITEM_TRANSFORM = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get());
 

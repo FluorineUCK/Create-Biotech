@@ -4,15 +4,13 @@ import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
-import com.nobodiiiii.createbiotech.foundation.render.RenderedLivingEntityItemRenderer;
-import com.nobodiiiii.createbiotech.foundation.render.RenderedLivingEntityItemRenderer.EntityRenderTuning;
+import com.nobodiiiii.createbiotech.foundation.render.BlockCenteredRenderedLivingEntityItemRenderer;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
@@ -23,7 +21,6 @@ public final class CapturedEntityBoxJeiRenderer {
 	private static final ThreadLocal<IRecipeSlotDrawable> CURRENT_SLOT = new ThreadLocal<>();
 	private static final ItemStack ENTITY_ITEM_TRANSFORM = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get());
 	private static final ItemStack LARGE_BOX_BADGE = new ItemStack(CBItems.LARGE_CARDBOARD_BOX.get());
-	private static final float SQUID_ENTITY_FOOT_Y_OFFSET = 1.1f;
 	private static final float BADGE_SCALE = 0.55f;
 	private static final int BADGE_Z = 200;
 
@@ -65,15 +62,8 @@ public final class CapturedEntityBoxJeiRenderer {
 	}
 
 	private static void renderEntity(GuiGraphics graphics, LivingEntity entity, int x, int y) {
-		RenderedLivingEntityItemRenderer.renderGuiEntityItem(graphics, ENTITY_ITEM_TRANSFORM, entity,
-			CapturedEntityBoxJeiRenderer::getEntityRenderTuning, x, y);
-	}
-
-	private static EntityRenderTuning getEntityRenderTuning(LivingEntity entity) {
-		EntityType<?> type = entity.getType();
-		if (type == EntityType.SQUID || type == EntityType.GLOW_SQUID)
-			return new EntityRenderTuning(1.0f, SQUID_ENTITY_FOOT_Y_OFFSET);
-		return new EntityRenderTuning(1.0f, 0.0f);
+		BlockCenteredRenderedLivingEntityItemRenderer.renderAutoScaledGuiEntityItem(graphics, ENTITY_ITEM_TRANSFORM,
+			entity, 1.0f, x, y);
 	}
 
 	private static void renderBadge(GuiGraphics graphics, int x, int y) {
