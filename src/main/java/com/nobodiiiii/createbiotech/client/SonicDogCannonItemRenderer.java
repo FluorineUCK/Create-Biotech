@@ -44,6 +44,8 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		CreateBiotech.asResource("item/sonic_dog_cannon/wolf");
 	public static final ResourceLocation WOLF_ANGRY_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/wolf_angry");
+	public static final ResourceLocation SHRIEK_EYES_MODEL_LOCATION =
+		CreateBiotech.asResource("item/sonic_dog_cannon/shriek_eyes");
 	public static final ResourceLocation PAW_LEFT_MODEL_LOCATION =
 		CreateBiotech.asResource("item/sonic_dog_cannon/paw_left");
 	public static final ResourceLocation PAW_RIGHT_MODEL_LOCATION =
@@ -60,6 +62,7 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 	private static final PartialModel COLLAR = PartialModel.of(COLLAR_MODEL_LOCATION);
 	private static final PartialModel WOLF = PartialModel.of(WOLF_MODEL_LOCATION);
 	private static final PartialModel WOLF_ANGRY = PartialModel.of(WOLF_ANGRY_MODEL_LOCATION);
+	private static final PartialModel SHRIEK_EYES = PartialModel.of(SHRIEK_EYES_MODEL_LOCATION);
 	private static final PartialModel PAW_LEFT = PartialModel.of(PAW_LEFT_MODEL_LOCATION);
 	private static final PartialModel PAW_RIGHT = PartialModel.of(PAW_RIGHT_MODEL_LOCATION);
 	private static final PartialModel PAW_LEFT_ANGRY = PartialModel.of(PAW_LEFT_ANGRY_MODEL_LOCATION);
@@ -78,6 +81,8 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		float fullChargeAnimationTime = getFullChargeAnimationTime(stack);
 		boolean fullCharge = fullChargeAnimationTime >= 0.0f;
 		renderer.render((fullCharge ? WOLF_ANGRY : WOLF).get(), light);
+		if (SonicDogCannonUpgrade.SHRIEK_SONIC_BOOM.isInstalled(stack))
+			renderer.render(SHRIEK_EYES.get(), light);
 		renderPaw(renderer, poseStack, fullCharge ? PAW_LEFT_ANGRY : PAW_LEFT,
 			getPawOffset(fullChargeAnimationTime, 0.0f), light);
 		renderPaw(renderer, poseStack, fullCharge ? PAW_RIGHT_ANGRY : PAW_RIGHT,

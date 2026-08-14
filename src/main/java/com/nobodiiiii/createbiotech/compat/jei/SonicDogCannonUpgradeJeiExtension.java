@@ -8,6 +8,9 @@ import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonUpgrade
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import mezz.jei.api.gui.builder.IIngredientAcceptor;
+import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
+import mezz.jei.api.recipe.IFocusGroup;
+import mezz.jei.api.recipe.RecipeIngredientRole;
 import mezz.jei.api.recipe.category.extensions.vanilla.smithing.ISmithingCategoryExtension;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.DyeItem;
@@ -42,11 +45,7 @@ public class SonicDogCannonUpgradeJeiExtension
 		T ingredientAcceptor) {
 		if (recipe.upgrade() == SonicDogCannonUpgrade.DOG_COLLAR) {
 			ingredientAcceptor.addItemStacks(Arrays.stream(DyeColor.values())
-				.map(color -> {
-					ItemStack output = new ItemStack(CBItems.SONIC_DOG_CANNON.get());
-					SonicDogCannonUpgrade.setCollarColor(output, color);
-					return output;
-				})
+				.map(SonicDogCannonUpgradeJeiExtension::collarOutput)
 				.toList());
 			return;
 		}
@@ -54,6 +53,36 @@ public class SonicDogCannonUpgradeJeiExtension
 		ItemStack output = new ItemStack(CBItems.SONIC_DOG_CANNON.get());
 		recipe.upgrade().install(output);
 		ingredientAcceptor.addItemStack(output);
+	}
+
+	@Override
+	public void onDisplayedIngredientsUpdate(SonicDogCannonUpgradeRecipe recipe,
+		IRecipeSlotDrawable templateSlot, IRecipeSlotDrawable baseSlot,
+		IRecipeSlotDrawable additionSlot, IRecipeSlotDrawable outputSlot, IFocusGroup focuses) {
+		if (recipe.upgrade() != SonicDogCannonUpgrade.DOG_COLLAR)
+			return;
+
+		DyeColor color;
+		if (focuses.getFocuses(RecipeIngredientRole.OUTPUT).findAny().isPresent()) {
+			color = outputSlot.getDisplayedItemStack()
+				.map(SonicDogCannonUpgrade::getCollarColor)
+				.orElse(DyeColor.RED);
+			additionSlot.createDisplayOverrides()
+				.addItemStack(new ItemStack(DyeItem.byColor(color)));
+		} else {
+			color = additionSlot.getDisplayedItemStack()
+				.map(DyeColor::getColor)
+				.orElse(DyeColor.RED);
+		}
+
+		outputSlot.createDisplayOverrides()
+			.addItemStack(collarOutput(color));
+	}
+
+	private static ItemStack collarOutput(DyeColor color) {
+		ItemStack output = new ItemStack(CBItems.SONIC_DOG_CANNON.get());
+		SonicDogCannonUpgrade.setCollarColor(output, color);
+		return output;
 	}
 
 	private static List<ItemStack> collarDyes() {

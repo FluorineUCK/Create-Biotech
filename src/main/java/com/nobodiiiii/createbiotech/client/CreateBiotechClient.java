@@ -204,6 +204,7 @@ public class CreateBiotechClient {
 		register.accept(SonicDogCannonItemRenderer.COLLAR_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.WOLF_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.WOLF_ANGRY_MODEL_LOCATION);
+		register.accept(SonicDogCannonItemRenderer.SHRIEK_EYES_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.PAW_LEFT_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.PAW_RIGHT_MODEL_LOCATION);
 		register.accept(SonicDogCannonItemRenderer.PAW_LEFT_ANGRY_MODEL_LOCATION);
