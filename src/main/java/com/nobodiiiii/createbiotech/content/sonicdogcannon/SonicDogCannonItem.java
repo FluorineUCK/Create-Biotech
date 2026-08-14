@@ -18,6 +18,7 @@ import com.simibubi.create.foundation.item.render.CustomRenderedItems;
 import net.minecraft.client.model.HumanoidModel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.BlockEntityWithoutLevelRenderer;
+import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvent;
 import net.minecraft.sounds.SoundEvents;
@@ -32,6 +33,8 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.UseAnim;
+import net.minecraft.world.item.enchantment.Enchantment;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -166,6 +169,8 @@ public class SonicDogCannonItem extends Item {
 			/ (double) (FULL_CHARGE_TICKS - MIN_CHARGE_TICKS);
 		Vec3 direction = player.getLookAngle().normalize();
 		Vec3 origin = player.getEyePosition().add(direction.scale(0.5d));
+		int punchLevel = stack.getEnchantmentLevel(
+			serverLevel.registryAccess().holderOrThrow(Enchantments.PUNCH));
 
 		if (SonicDogCannonUpgrade.SHRIEK_SONIC_BOOM.isInstalled(stack)) {
 			double range = MIN_SHRIEK_RANGE + (MAX_SHRIEK_RANGE - MIN_SHRIEK_RANGE) * charge;
@@ -174,10 +179,10 @@ public class SonicDogCannonItem extends Item {
 			float damage = (float) (MIN_SHRIEK_DAMAGE
 				+ (MAX_SHRIEK_DAMAGE - MIN_SHRIEK_DAMAGE) * charge)
 				+ SONIC_BOOM_DAMAGE_PER_LEVEL * enchantmentLevel;
-			fireSonicBoom(serverLevel, player, origin, direction, range, damage);
+			fireSonicBoom(serverLevel, player, origin, direction, range, damage, punchLevel);
 		} else {
 			double range = MIN_NORMAL_RANGE + (MAX_NORMAL_RANGE - MIN_NORMAL_RANGE) * charge;
-			SonicDogConeWave.fire(serverLevel, player, origin, direction, range);
+			SonicDogConeWave.fire(serverLevel, player, origin, direction, range, punchLevel);
 		}
 		sendGearAnimation(player, chargeTicks);
 
@@ -209,7 +214,7 @@ public class SonicDogCannonItem extends Item {
 	}
 
 	private static void fireSonicBoom(ServerLevel level, Player player, Vec3 origin, Vec3 direction,
-		double range, float damage) {
+		double range, float damage, int punchLevel) {
 		Vec3 end = origin.add(direction.scale(range));
 		int particleCount = Math.max(1, (int) Math.ceil(range));
 		for (int i = 1; i <= particleCount; i++) {
@@ -222,9 +227,23 @@ public class SonicDogCannonItem extends Item {
 		AABB searchBox = new AABB(origin, end).inflate(BEAM_HIT_RADIUS);
 		for (LivingEntity target : level.getEntitiesOfClass(LivingEntity.class, searchBox,
 			candidate -> candidate != player && candidate.isAlive() && !candidate.isSpectator())) {
-			if (target.getBoundingBox().inflate(BEAM_HIT_RADIUS).clip(origin, end).isPresent())
-				target.hurt(level.damageSources().sonicBoom(player), damage);
+			if (target.getBoundingBox().inflate(BEAM_HIT_RADIUS).clip(origin, end).isPresent()
+				&& target.hurt(level.damageSources().sonicBoom(player), damage)) {
+				SonicDogCannonKnockback.applyWarden(target, direction);
+				SonicDogCannonKnockback.applyPunch(target, direction, punchLevel);
+			}
 		}
+	}
+
+	@Override
+	public boolean supportsEnchantment(ItemStack stack, Holder<Enchantment> enchantment) {
+		if (enchantment.is(Enchantments.UNBREAKING)
+			|| enchantment.is(Enchantments.MENDING)
+			|| enchantment.is(Enchantments.VANISHING_CURSE)
+			|| enchantment.is(Enchantments.LOOTING)
+			|| enchantment.is(Enchantments.PUNCH))
+			return true;
+		return super.supportsEnchantment(stack, enchantment);
 	}
 
 	@Override

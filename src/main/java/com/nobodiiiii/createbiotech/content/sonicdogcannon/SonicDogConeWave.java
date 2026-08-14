@@ -22,7 +22,8 @@ public final class SonicDogConeWave {
 
 	private SonicDogConeWave() {}
 
-	public static void fire(ServerLevel level, Player owner, Vec3 damageOrigin, Vec3 direction, double range) {
+	public static void fire(ServerLevel level, Player owner, Vec3 damageOrigin, Vec3 direction, double range,
+		int punchLevel) {
 		Vec3 normalizedDirection = direction.normalize();
 		SonicDogCannonFirePacket packet = new SonicDogCannonFirePacket(
 			owner.getId(), owner.getUsedItemHand(), normalizedDirection, (float) range);
@@ -43,7 +44,9 @@ public final class SonicDogConeWave {
 			if (offset.dot(normalizedDirection) / distance < MIN_DIRECTION_DOT)
 				continue;
 
-			target.addEffect(new MobEffectInstance(stun, stunDurationTicks(distance, range)), owner);
+			int stunDuration = stunDurationTicks(distance, range);
+			target.addEffect(new MobEffectInstance(stun, stunDuration), owner);
+			SonicDogCannonKnockback.applyPunch(target, offset, punchLevel + 1);
 		}
 	}
 
