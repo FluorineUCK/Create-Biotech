@@ -17,6 +17,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 import org.junit.jupiter.api.Test;
@@ -225,6 +226,36 @@ class PatternStorageCoreBlockEntityTest {
 	}
 
 	@Test
+	void missingShelfEntityBetweenScheduledScansStopsServiceBeforeReadingOrRestarting() {
+		ReadyCore core = new ReadyCore();
+		PatternStructureSnapshot snapshot = snapshotWithChiseledShelf();
+		core.applyStructureScan(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshot),
+			Map.of(new BlockPos(1, 0, 0), 0), 0);
+		PatternPageKey key = new PatternPageKey(SHELF_ADDRESS, 0, 0);
+		core.libraryIndex().rebuildPageOrder(List.of(key));
+		core.libraryIndex().tickFingerprintChecks(ignored -> "{",
+			new PatternJsonParser(REGISTRIES), 1);
+		core.libraryIndex().enqueue(query(Items.IRON_INGOT));
+		core.libraryIndex().tickQueries(1);
+		core.libraryIndex().enqueue(query(Items.GOLD_INGOT));
+		CompoundTag retained = core.libraryIndex().save(REGISTRIES);
+		AtomicInteger reads = new AtomicInteger();
+		core.shelfEntitiesReadable = false;
+
+		boolean advanced = core.serviceIndexIfMembersLoaded(ignored -> true, ignored -> {
+			reads.incrementAndGet();
+			return "";
+		}, new PatternJsonParser(REGISTRIES), 1);
+
+		assertFalse(advanced);
+		assertEquals(0, reads.get(), "Wrong/missing shelf BE must gate before PageReader");
+		assertEquals(PatternLibraryScanner.StructureState.PARTIAL, core.structureState());
+		assertEquals(retained, core.libraryIndex().save(REGISTRIES),
+			"Incomplete inspection must retain cache, active queries, ready replies, and cursors");
+	}
+
+	@Test
 	void completedRepliesRemainQueuedUntilBoundedDrain() {
 		PatternStorageCoreBlockEntity core = new ReadyCore();
 		core.applyStructureScan(new PatternLibraryScanner.ScanResult(
@@ -339,6 +370,203 @@ class PatternStorageCoreBlockEntityTest {
 		assertEquals(retained, restored.libraryIndex().save(REGISTRIES));
 		assertEquals(1, restored.libraryIndex().activeQueryCount());
 		assertEquals(1, restored.libraryIndex().readyReplyCount());
+	}
+
+	@Test
+	void priorNestedServerShapeRestoresBindingQueriesRepliesAndCursorBeforeMatchingReconstruction() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		ReadyCore source = coreWithRetainedWork(valid, shelf);
+		source.installLibrarianSnapshot(capturedLibrarian("minecraft:plains", 3,
+			"\"Prior nested librarian\"", true));
+		source.commitClusterBinding(binding(source, UUID.randomUUID(), 11));
+		CompoundTag priorNested = source.saveWithFullMetadata(REGISTRIES);
+		CompoundTag priorIndex = serverState(priorNested).getCompound("PatternIndex");
+		priorIndex.remove("ReplyRequesterCursor");
+		serverState(priorNested).remove("PageTopologies");
+		assertEquals(Set.of("LibrarianSnapshotBox", "PendingSafeRelease", "StructureState",
+			"StructureSnapshot", "PatternIndex"), serverState(priorNested).getAllKeys());
+		assertEquals(1, priorIndex.getList("Queries", Tag.TAG_COMPOUND).size());
+		assertTrue(priorIndex.getList("Queries", Tag.TAG_COMPOUND).getCompound(0)
+			.contains("Cursor", Tag.TAG_INT));
+		assertEquals(1, priorIndex.getList("Replies", Tag.TAG_COMPOUND).size());
+
+		ReadyCore restored = new ReadyCore();
+		restored.loadWithComponents(priorNested, REGISTRIES);
+
+		assertEquals(source.memberId(), restored.memberId());
+		assertEquals(source.bindingState(), restored.bindingState());
+		assertEquals(1, restored.libraryIndex().activeQueryCount());
+		assertEquals(1, restored.libraryIndex().readyReplyCount());
+		CompoundTag restoredIndex = restored.libraryIndex().save(REGISTRIES);
+		restoredIndex.remove("ReplyRequesterCursor");
+		assertEquals(priorIndex, restoredIndex);
+		assertTrue(topologyRefreshPending(restored));
+		assertFalse(restored.queryAccessReady(),
+			"Prior nested state must remain gated until loaded shelf topology is reconstructed");
+
+		CompoundTag retained = restored.libraryIndex().save(REGISTRIES);
+		restored.applyStructureScan(valid, Map.of(shelf, 0), 0);
+
+		assertFalse(topologyRefreshPending(restored));
+		assertTrue(restored.queryAccessReady());
+		assertEquals(retained, restored.libraryIndex().save(REGISTRIES));
+	}
+
+	@Test
+	void oversizedTopologyEnvelopeIsRejectedBeforeMutatingAuthoritativeState() {
+		PatternStorageCoreBlockEntity target = seededCore();
+		CompoundTag before = authoritativeSnapshot(target);
+		ReadyCore source = coreWithRetainedWork(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf()),
+			new BlockPos(1, 0, 0));
+		CompoundTag oversized = source.saveWithFullMetadata(REGISTRIES);
+		serverState(oversized).put("PageTopologies", topologyEntries(1025, 0));
+
+		target.loadWithComponents(oversized, REGISTRIES);
+
+		assertEquals(before, authoritativeSnapshot(target));
+	}
+
+	@Test
+	void mismatchedTopologyMaskAndPageOrderRemainRecoverableButCannotServeBeforeRefresh() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		ReadyCore source = coreWithRetainedWork(valid, shelf);
+		CompoundTag mismatched = source.saveWithFullMetadata(REGISTRIES);
+		serverState(mismatched).getList("PageTopologies", Tag.TAG_COMPOUND)
+			.getCompound(0).putInt("WritableSlots", 1);
+		CompoundTag recoverableIndex = serverState(mismatched).getCompound("PatternIndex").copy();
+
+		ReadyCore restored = new ReadyCore();
+		restored.loadWithComponents(mismatched, REGISTRIES);
+
+		assertEquals(recoverableIndex, restored.libraryIndex().save(REGISTRIES));
+		assertTrue(topologyRefreshPending(restored));
+		assertFalse(restored.queryAccessReady());
+		assertFalse(restored.enqueueQuery(query(Items.DIAMOND)));
+		CompoundTag retained = restored.libraryIndex().save(REGISTRIES);
+
+		restored.applyStructureScan(valid, Map.of(shelf, 0), 0);
+
+		assertFalse(topologyRefreshPending(restored));
+		assertTrue(restored.queryAccessReady());
+		assertEquals(retained, restored.libraryIndex().save(REGISTRIES),
+			"Equivalent derived empty page order must install corrected topology without restart");
+	}
+
+	@Test
+	void topologyPositionsMustExactlyMatchPersistedValidSnapshot() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		ReadyCore source = coreWithRetainedWork(valid, shelf);
+		CompoundTag mismatched = source.saveWithFullMetadata(REGISTRIES);
+		ListTag topology = serverState(mismatched).getList("PageTopologies", Tag.TAG_COMPOUND);
+		topology.getCompound(0).putLong("Pos", new BlockPos(2, 0, 0).asLong());
+		CompoundTag recoverableIndex = serverState(mismatched).getCompound("PatternIndex").copy();
+
+		ReadyCore restored = new ReadyCore();
+		restored.loadWithComponents(mismatched, REGISTRIES);
+
+		assertEquals(recoverableIndex, restored.libraryIndex().save(REGISTRIES));
+		assertTrue(topologyRefreshPending(restored));
+		assertFalse(restored.queryAccessReady());
+	}
+
+	@Test
+	void internallyConsistentTopologyFromAnotherSpaceRemainsPendingAndCannotServe() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		ReadyCore source = new ReadyCore();
+		source.applyStructureScan(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf()),
+			Map.of(shelf, 0), 0);
+		SpaceAddress wrongShelf = new SpaceAddress(Level.NETHER, UUID.randomUUID(), shelf);
+		source.libraryIndex().rebuildPageOrder(PatternStorageCoreBlockEntity.pageKeys(
+			wrongShelf, List.of(writableBook("{}"), ItemStack.EMPTY, ItemStack.EMPTY,
+				ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY)));
+		CompoundTag wrongSpace = source.saveWithFullMetadata(REGISTRIES);
+		serverState(wrongSpace).getList("PageTopologies", Tag.TAG_COMPOUND)
+			.getCompound(0).putInt("WritableSlots", 1);
+
+		ReadyCore restored = new ReadyCore();
+		restored.loadWithComponents(wrongSpace, REGISTRIES);
+
+		assertTrue(topologyRefreshPending(restored));
+		assertFalse(restored.queryAccessReady());
+	}
+
+	@Test
+	void internallyConsistentSnapshotRootedAtAnotherCoreRemainsPendingAndCannotServe() {
+		bootstrap();
+		BlockPos otherCore = new BlockPos(5, 0, 0);
+		BlockPos otherShelf = new BlockPos(6, 0, 0);
+		PatternStructureSnapshot displaced = new PatternStructureSnapshot(
+			PatternLibraryScanner.StructureState.VALID,
+			List.of(otherCore, otherShelf), List.of(), List.of(otherShelf),
+			otherCore, otherShelf, 1);
+		ReadyCore source = new ReadyCore();
+		source.applyStructureScan(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, displaced),
+			Map.of(otherShelf, 0), 0);
+
+		ReadyCore restored = new ReadyCore();
+		restored.loadWithComponents(source.saveWithFullMetadata(REGISTRIES), REGISTRIES);
+
+		assertTrue(topologyRefreshPending(restored));
+		assertFalse(restored.queryAccessReady());
+	}
+
+	@Test
+	void topologyDecodeAcceptsExactMaximumAndRejectsMaximumPlusOneBeforeCopying() {
+		assertEquals(1024, PatternStorageCoreBlockEntity
+			.loadPageTopologies(topologyEntries(1024, 0), 1024).orElseThrow().size());
+		assertTrue(PatternStorageCoreBlockEntity
+			.loadPageTopologies(topologyEntries(1025, 0), 1024).isEmpty());
+	}
+
+	@Test
+	void validMaximumStructureCrossValidatesEmptyMasksAndEmptyPageOrder() {
+		List<BlockPos> chiseled = new ArrayList<>();
+		for (int ordinal = 0; ordinal < 1023; ordinal++)
+			chiseled.add(new BlockPos(ordinal + 1, ordinal / 1024, 0));
+		List<BlockPos> members = new ArrayList<>(1024);
+		members.add(BlockPos.ZERO);
+		members.addAll(chiseled);
+		PatternStructureSnapshot maximum = new PatternStructureSnapshot(
+			PatternLibraryScanner.StructureState.VALID, members, List.of(), chiseled,
+			BlockPos.ZERO, chiseled.getLast(), 1);
+		Map<BlockPos, Integer> topologies = PatternStorageCoreBlockEntity
+			.loadPageTopologies(topologyEntries(1023, 0), 1024).orElseThrow();
+
+		assertTrue(PatternStorageCoreBlockEntity.persistedTopologyMatches(
+			maximum, topologies, List.of(), 1024));
+	}
+
+	@Test
+	void missingExpectedShelfContentsMakesInspectionIncompleteInsteadOfShrinkingTopology() {
+		BlockPos first = new BlockPos(1, 0, 0);
+		BlockPos second = new BlockPos(2, 0, 0);
+		PatternStructureSnapshot snapshot = new PatternStructureSnapshot(
+			PatternLibraryScanner.StructureState.VALID,
+			List.of(BlockPos.ZERO, first, second), List.of(), List.of(first, second),
+			BlockPos.ZERO, second, 1);
+		List<ItemStack> emptyShelf = List.of(ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY,
+			ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY);
+		Holder<Enchantment> efficiency = Holder.direct(allocate(Enchantment.class));
+
+		var incomplete = PatternStorageCoreBlockEntity.inspectShelfContents(snapshot,
+			pos -> pos.equals(first) ? emptyShelf : null, efficiency);
+
+		assertFalse(incomplete.complete());
+		assertTrue(incomplete.topologies().isEmpty(),
+			"A partial inspection must never publish a smaller topology");
+		var complete = PatternStorageCoreBlockEntity.inspectShelfContents(snapshot,
+			ignored -> emptyShelf, efficiency);
+		assertTrue(complete.complete());
+		assertEquals(Map.of(first, 0, second, 0), complete.topologies());
 	}
 
 	@Test
@@ -752,6 +980,28 @@ class PatternStorageCoreBlockEntityTest {
 		return patternData(root).getCompound("ServerState");
 	}
 
+	private static ListTag topologyEntries(int count, int mask) {
+		ListTag entries = new ListTag();
+		for (int ordinal = 0; ordinal < count; ordinal++) {
+			CompoundTag entry = new CompoundTag();
+			entry.putLong("Pos", new BlockPos(ordinal + 1, ordinal / 1024, 0).asLong());
+			entry.putInt("WritableSlots", mask);
+			entries.add(entry);
+		}
+		return entries;
+	}
+
+	private static boolean topologyRefreshPending(PatternStorageCoreBlockEntity core) {
+		try {
+			Field field = PatternStorageCoreBlockEntity.class
+				.getDeclaredField("topologyRefreshPending");
+			field.setAccessible(true);
+			return field.getBoolean(core);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
+
 	private static void registerTestAttachment() {
 		if (testAttachmentRegistered)
 			return;
@@ -910,6 +1160,8 @@ class PatternStorageCoreBlockEntityTest {
 	}
 
 	private static final class ReadyCore extends PatternStorageCoreBlockEntity {
+		private boolean shelfEntitiesReadable = true;
+
 		private ReadyCore() {
 			super(BlockEntityType.FURNACE, BlockPos.ZERO, Blocks.FURNACE.defaultBlockState());
 			bootstrap();
@@ -917,7 +1169,18 @@ class PatternStorageCoreBlockEntityTest {
 
 		@Override
 		boolean queryAccessReady() {
-			return structureState() == PatternLibraryScanner.StructureState.VALID;
+			return structureState() == PatternLibraryScanner.StructureState.VALID
+				&& !topologyRefreshPending(this);
+		}
+
+		@Override
+		boolean shelfEntityReadable(BlockPos ignored) {
+			return shelfEntitiesReadable;
+		}
+
+		@Override
+		SpaceAddress currentLibrarySpace() {
+			return new SpaceAddress(Level.OVERWORLD, SPACE, BlockPos.ZERO);
 		}
 	}
 

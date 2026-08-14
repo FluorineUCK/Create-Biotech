@@ -1,8 +1,10 @@
 package com.nobodiiiii.createbiotech.content.factorycluster.pattern;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -10,6 +12,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 import javax.annotation.Nullable;
@@ -58,6 +61,7 @@ import net.minecraft.world.level.block.state.BlockState;
 
 /** Runtime coordinator for the incremental, chiseled-bookshelf pattern index. */
 public class PatternStorageCoreBlockEntity extends SmartBlockEntity implements ClusterMember {
+	private static final int MAX_STRUCTURE_MEMBERS = 1024;
 	private static final String LIBRARY_ID = "LibraryId";
 	private static final String PATTERN_LIBRARY = "PatternLibrary";
 	private static final String BINDING_STATE = "BindingState";
@@ -158,13 +162,15 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			return;
 		}
 		ShelfInspection inspection = inspectShelves(result.snapshot());
-		if (!authorityAccessReady() && !pageTopologies.equals(inspection.topologies())) {
+		if (!inspection.complete()) {
 			topologyRefreshPending = true;
-			applyStructureScan(result, null, inspection.efficiencyBonus());
+			applyStructureScan(new PatternLibraryScanner.ScanResult(
+				PatternLibraryScanner.StructureState.PARTIAL, null));
+			lastStructureCheck = Long.MIN_VALUE;
 			return;
 		}
-		topologyRefreshPending = false;
-		applyStructureScan(result, inspection.topologies(), inspection.efficiencyBonus());
+		applyStructureScan(result, inspection.topologies(), inspection.efficiencyBonus(),
+			authorityAccessReady());
 	}
 
 	void applyStructureScan(PatternLibraryScanner.ScanResult result) {
@@ -174,6 +180,12 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 
 	void applyStructureScan(PatternLibraryScanner.ScanResult result,
 		@Nullable Map<BlockPos, Integer> currentTopologies, int currentEfficiencyBonus) {
+		applyStructureScan(result, currentTopologies, currentEfficiencyBonus, true);
+	}
+
+	private void applyStructureScan(PatternLibraryScanner.ScanResult result,
+		@Nullable Map<BlockPos, Integer> currentTopologies, int currentEfficiencyBonus,
+		boolean permitPageOrderChange) {
 		Objects.requireNonNull(result, "result");
 		PatternCoreClientState previousClientState = currentClientState();
 		PatternLibraryScanner.StructureState previousState = structureState;
@@ -181,6 +193,7 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		int previousEfficiencyBonus = efficiencyBonus;
 		int previousQueueCount = queueCount;
 		boolean pageOrderChanged = false;
+		boolean topologyStateChanged = false;
 		structureState = result.state();
 		if (result.state() != PatternLibraryScanner.StructureState.PARTIAL) {
 			PatternStructureSnapshot next = result.snapshot();
@@ -193,11 +206,23 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 				boolean topologyChanged = !pageTopologies.equals(immutableTopologies);
 				boolean stalePageOrder = immutableTopologies.isEmpty()
 					&& !libraryIndex.pageOrder().isEmpty();
-				if (topologyChanged || stalePageOrder) {
-					libraryIndex.rebuildPageOrder(next == null ? List.of()
-						: pageKeys(next, immutableTopologies));
-					pageTopologies = immutableTopologies;
-					pageOrderChanged = true;
+				if (topologyChanged || stalePageOrder || topologyRefreshPending) {
+					List<PatternPageKey> currentPageOrder = next == null ? List.of()
+						: PatternLibraryIndex.canonicalPageOrder(pageKeys(next, immutableTopologies));
+					boolean pageOrderMismatch = !libraryIndex.pageOrder().equals(currentPageOrder);
+					if (pageOrderMismatch && !permitPageOrderChange) {
+						topologyRefreshPending = true;
+					} else if (pageOrderMismatch) {
+						libraryIndex.rebuildPageOrder(currentPageOrder);
+						pageOrderChanged = true;
+					}
+					if (!pageOrderMismatch || permitPageOrderChange) {
+						pageTopologies = immutableTopologies;
+						topologyStateChanged = topologyChanged;
+						topologyRefreshPending = false;
+					}
+				} else {
+					topologyRefreshPending = false;
 				}
 			}
 			efficiencyBonus = currentEfficiencyBonus;
@@ -206,7 +231,7 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		boolean changed = previousState != structureState
 			|| !Objects.equals(previousSnapshot, structureSnapshot)
 			|| previousEfficiencyBonus != efficiencyBonus
-			|| previousQueueCount != queueCount || pageOrderChanged;
+			|| previousQueueCount != queueCount || pageOrderChanged || topologyStateChanged;
 		if (changed)
 			setChanged();
 		if (!previousClientState.equals(currentClientState()))
@@ -224,6 +249,10 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 					PatternLibraryScanner.StructureState.PARTIAL, null));
 			return false;
 		}
+		if (!allShelfEntitiesReadable(structureSnapshot)) {
+			markShelfInspectionIncomplete();
+			return false;
+		}
 		libraryIndex.tick(pages, parser, budget);
 		if (libraryIndex.lastTotalUnits() > 0)
 			setChanged();
@@ -233,6 +262,24 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	private static boolean allMembersLoaded(@Nullable PatternStructureSnapshot snapshot,
 		Predicate<BlockPos> loaded) {
 		return snapshot == null || snapshot.members().stream().allMatch(loaded);
+	}
+
+	private boolean allShelfEntitiesReadable(@Nullable PatternStructureSnapshot snapshot) {
+		return snapshot == null || snapshot.chiseledShelves().stream()
+			.allMatch(this::shelfEntityReadable);
+	}
+
+	boolean shelfEntityReadable(BlockPos shelfPos) {
+		return level != null && SubLevelCompat.getLoadedBlockEntity(level, shelfPos)
+			instanceof ChiseledBookShelfBlockEntity;
+	}
+
+	private void markShelfInspectionIncomplete() {
+		topologyRefreshPending = true;
+		if (structureState != PatternLibraryScanner.StructureState.PARTIAL)
+			applyStructureScan(new PatternLibraryScanner.ScanResult(
+				PatternLibraryScanner.StructureState.PARTIAL, null));
+		lastStructureCheck = Long.MIN_VALUE;
 	}
 
 	private List<PatternPageKey> pageKeys(PatternStructureSnapshot snapshot,
@@ -254,17 +301,30 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	}
 
 	private ShelfInspection inspectShelves(PatternStructureSnapshot snapshot) {
+		Holder<Enchantment> efficiency = level.registryAccess().holderOrThrow(Enchantments.EFFICIENCY);
+		return inspectShelfContents(snapshot, shelfPos -> {
+			BlockEntity blockEntity = SubLevelCompat.getLoadedBlockEntity(level, shelfPos);
+			return blockEntity instanceof ChiseledBookShelfBlockEntity shelf
+				? shelfItems(shelf) : null;
+		}, efficiency);
+	}
+
+	static ShelfInspection inspectShelfContents(PatternStructureSnapshot snapshot,
+		Function<BlockPos, List<ItemStack>> shelfContents,
+		Holder<Enchantment> efficiency) {
+		Objects.requireNonNull(snapshot, "snapshot");
+		Objects.requireNonNull(shelfContents, "shelfContents");
+		Objects.requireNonNull(efficiency, "efficiency");
 		Map<BlockPos, Integer> topologies = new LinkedHashMap<>();
 		int bonus = 0;
-		Holder<Enchantment> efficiency = level.registryAccess().holderOrThrow(Enchantments.EFFICIENCY);
 		for (BlockPos shelfPos : snapshot.chiseledShelves()) {
-			if (!(SubLevelCompat.getLoadedBlockEntity(level, shelfPos) instanceof ChiseledBookShelfBlockEntity shelf))
-				continue;
-			List<ItemStack> slots = shelfItems(shelf);
+			List<ItemStack> slots = shelfContents.apply(shelfPos);
+			if (slots == null)
+				return ShelfInspection.INCOMPLETE;
 			topologies.put(shelfPos, pageTopology(slots));
 			bonus += efficiencyBonus(slots, efficiency);
 		}
-		return new ShelfInspection(Map.copyOf(topologies), bonus);
+		return new ShelfInspection(true, Map.copyOf(topologies), bonus);
 	}
 
 	static List<PatternPageKey> pageKeys(SpaceAddress shelfAddress, List<ItemStack> slots) {
@@ -322,7 +382,9 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	}
 
 	private String readPage(PatternPageKey key) {
-		if (!(SubLevelCompat.getLoadedBlockEntity(level, key.shelf().localPos()) instanceof ChiseledBookShelfBlockEntity shelf))
+		if (!key.shelf().matches(level, key.shelf().localPos())
+			|| !(SubLevelCompat.getLoadedBlockEntity(level, key.shelf().localPos())
+				instanceof ChiseledBookShelfBlockEntity shelf))
 			return "";
 		return readPage(shelfItems(shelf), key);
 	}
@@ -451,7 +513,7 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 
 	boolean queryAccessReady() {
 		return structureState == PatternLibraryScanner.StructureState.VALID
-			&& authorityAccessReady();
+			&& !topologyRefreshPending && authorityAccessReady();
 	}
 
 	private boolean authorityAccessReady() {
@@ -546,12 +608,13 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		if (!validServerProjection(pattern))
 			return;
 		CompoundTag server = pattern.getCompound(SERVER_STATE);
-		if (!validServerStateEnvelope(server))
+		int memberLimit = configuredMemberLimit();
+		Optional<ServerStateSchema> schema = serverStateSchema(server, memberLimit);
+		if (schema.isEmpty())
 			return;
-		libraryId = pattern.getUUID(LIBRARY_ID);
-		readBinding(pattern);
 
-		boolean corruption = false;
+		LoadedBinding nextBinding = loadBinding(pattern);
+		boolean corruption = nextBinding.hadCorruption();
 		boolean nextPendingSafeRelease = server.getBoolean(PENDING_SAFE_RELEASE);
 		ItemStack nextLibrarianSnapshot = ItemStack.EMPTY;
 		CompoundTag nextRawLibrarianSnapshot = null;
@@ -587,26 +650,39 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 				corruption = true;
 			}
 		}
-		Optional<Map<BlockPos, Integer>> loadedTopologies = loadPageTopologies(
-			(ListTag) server.get(PAGE_TOPOLOGIES));
-		if (loadedTopologies.isEmpty())
-			corruption = true;
+		PatternLibraryScanner.StructureState nextStructureState =
+			PatternLibraryScanner.StructureState.valueOf(server.getString(STRUCTURE_STATE));
+		Optional<Map<BlockPos, Integer>> loadedTopologies =
+			schema.orElseThrow() == ServerStateSchema.PRIOR_NESTED
+				? Optional.of(Map.of())
+				: loadPageTopologies((ListTag) server.get(PAGE_TOPOLOGIES), memberLimit);
+		boolean topologyDecoded = loadedTopologies.isPresent();
+		Map<BlockPos, Integer> nextTopologies = loadedTopologies.orElse(Map.of());
+		corruption |= !topologyDecoded;
 		PatternLibraryIndex.LoadResult loadedIndex = PatternLibraryIndex.load(
 			server.getCompound(LIBRARY_INDEX), registries);
 		corruption |= loadedIndex.hadCorruption();
+		boolean nextTopologyRefreshPending = schema.orElseThrow()
+			== ServerStateSchema.PRIOR_NESTED || !topologyDecoded
+			|| loadedIndex.hadCorruption() || nextStructureSnapshot == null
+			|| nextStructureState != PatternLibraryScanner.StructureState.VALID
+			|| !persistedTopologyMatches(nextStructureSnapshot, nextTopologies,
+				loadedIndex.index().pageOrder(), memberLimit, currentLibrarySpace());
 
+		libraryId = pattern.getUUID(LIBRARY_ID);
+		bindingState = nextBinding.binding();
+		bindingStateValid = nextBinding.valid();
 		librarianSnapshotBox = nextLibrarianSnapshot;
 		rawLibrarianSnapshotBox = nextRawLibrarianSnapshot;
 		pendingSafeRelease = nextPendingSafeRelease;
-		structureState = PatternLibraryScanner.StructureState.valueOf(
-			server.getString(STRUCTURE_STATE));
+		structureState = nextStructureState;
 		if (replaceStructureSnapshot)
 			structureSnapshot = nextStructureSnapshot;
-		loadedTopologies.ifPresent(topologies -> pageTopologies = topologies);
-		topologyRefreshPending = false;
+		pageTopologies = nextTopologies;
+		topologyRefreshPending = nextTopologyRefreshPending;
 		libraryIndex = loadedIndex.index();
 		queueCount = structureSnapshot == null ? 1 : structureSnapshot.queueCount();
-		if (corruption)
+		if (corruption || nextTopologyRefreshPending)
 			setChanged();
 	}
 
@@ -621,9 +697,13 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			&& hasType(tag, SERVER_STATE, Tag.TAG_COMPOUND);
 	}
 
-	private static boolean validServerStateEnvelope(CompoundTag server) {
+	private static Optional<ServerStateSchema> serverStateSchema(CompoundTag server,
+		int memberLimit) {
+		boolean hasTopologies = server.contains(PAGE_TOPOLOGIES);
 		Set<String> expected = new HashSet<>(Set.of(PENDING_SAFE_RELEASE, STRUCTURE_STATE,
-			PAGE_TOPOLOGIES, LIBRARY_INDEX));
+			LIBRARY_INDEX));
+		if (hasTopologies)
+			expected.add(PAGE_TOPOLOGIES);
 		if (server.contains(LIBRARIAN_SNAPSHOT))
 			expected.add(LIBRARIAN_SNAPSHOT);
 		if (server.contains(STRUCTURE_SNAPSHOT))
@@ -632,19 +712,21 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			|| !hasType(server, PENDING_SAFE_RELEASE, Tag.TAG_BYTE)
 			|| !booleanValue(server, PENDING_SAFE_RELEASE)
 			|| !hasType(server, STRUCTURE_STATE, Tag.TAG_STRING)
-			|| !hasType(server, PAGE_TOPOLOGIES, Tag.TAG_LIST)
 			|| !hasType(server, LIBRARY_INDEX, Tag.TAG_COMPOUND)
 			|| (server.contains(LIBRARIAN_SNAPSHOT)
 				&& !hasType(server, LIBRARIAN_SNAPSHOT, Tag.TAG_COMPOUND))
 			|| (server.contains(STRUCTURE_SNAPSHOT)
 				&& !hasType(server, STRUCTURE_SNAPSHOT, Tag.TAG_COMPOUND))
-			|| !isCompoundList((ListTag) server.get(PAGE_TOPOLOGIES)))
-			return false;
+			|| (hasTopologies && (!hasType(server, PAGE_TOPOLOGIES, Tag.TAG_LIST)
+				|| ((ListTag) server.get(PAGE_TOPOLOGIES)).size() > memberLimit
+				|| !isCompoundList((ListTag) server.get(PAGE_TOPOLOGIES)))))
+			return Optional.empty();
 		try {
 			PatternLibraryScanner.StructureState.valueOf(server.getString(STRUCTURE_STATE));
-			return true;
+			return Optional.of(hasTopologies ? ServerStateSchema.CURRENT
+				: ServerStateSchema.PRIOR_NESTED);
 		} catch (IllegalArgumentException invalidState) {
-			return false;
+			return Optional.empty();
 		}
 	}
 
@@ -666,7 +748,12 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		return saved;
 	}
 
-	private static Optional<Map<BlockPos, Integer>> loadPageTopologies(ListTag saved) {
+	static Optional<Map<BlockPos, Integer>> loadPageTopologies(ListTag saved,
+		int memberLimit) {
+		Objects.requireNonNull(saved, "saved");
+		int effectiveLimit = effectiveMemberLimit(memberLimit);
+		if (saved.size() > effectiveLimit)
+			return Optional.empty();
 		Map<BlockPos, Integer> loaded = new LinkedHashMap<>();
 		for (Tag value : saved) {
 			if (!(value instanceof CompoundTag child)
@@ -682,6 +769,80 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		return Optional.of(Map.copyOf(loaded));
 	}
 
+	static boolean persistedTopologyMatches(PatternStructureSnapshot snapshot,
+		Map<BlockPos, Integer> topologies, List<PatternPageKey> pageOrder,
+		int memberLimit) {
+		Objects.requireNonNull(snapshot, "snapshot");
+		Objects.requireNonNull(topologies, "topologies");
+		Objects.requireNonNull(pageOrder, "pageOrder");
+		int effectiveLimit = effectiveMemberLimit(memberLimit);
+		if (snapshot.state() != PatternLibraryScanner.StructureState.VALID
+			|| snapshot.members().size() > effectiveLimit
+			|| topologies.size() > effectiveLimit
+			|| !new LinkedHashSet<>(snapshot.chiseledShelves()).equals(topologies.keySet())
+			|| !PatternLibraryIndex.isCanonicalPageOrder(pageOrder))
+			return false;
+
+		long expectedPages = 0;
+		for (int mask : topologies.values()) {
+			if (mask < 0 || mask > 0x3f)
+				return false;
+			expectedPages += (long) Integer.bitCount(mask) * 100L;
+		}
+		if (expectedPages != pageOrder.size())
+			return false;
+
+		Map<BlockPos, SpaceAddress> shelfAddresses = new HashMap<>();
+		SpaceAddress commonSpace = null;
+		for (PatternPageKey key : pageOrder) {
+			BlockPos shelfPos = key.shelf().localPos();
+			Integer mask = topologies.get(shelfPos);
+			if (mask == null || (mask & (1 << key.slot())) == 0)
+				return false;
+			SpaceAddress previous = shelfAddresses.putIfAbsent(shelfPos, key.shelf());
+			if (previous != null && !previous.equals(key.shelf()))
+				return false;
+			if (commonSpace == null)
+				commonSpace = key.shelf();
+			else if (!commonSpace.dimension().equals(key.shelf().dimension())
+				|| !Objects.equals(commonSpace.subLevelId(), key.shelf().subLevelId()))
+				return false;
+		}
+		return true;
+	}
+
+	static boolean persistedTopologyMatches(PatternStructureSnapshot snapshot,
+		Map<BlockPos, Integer> topologies, List<PatternPageKey> pageOrder,
+		int memberLimit, @Nullable SpaceAddress currentSpace) {
+		if (currentSpace == null
+			|| !snapshot.members().getFirst().equals(currentSpace.localPos())
+			|| !persistedTopologyMatches(snapshot, topologies, pageOrder, memberLimit))
+			return false;
+		for (PatternPageKey key : pageOrder) {
+			if (!currentSpace.dimension().equals(key.shelf().dimension())
+				|| !Objects.equals(currentSpace.subLevelId(), key.shelf().subLevelId()))
+				return false;
+		}
+		return true;
+	}
+
+	@Nullable
+	SpaceAddress currentLibrarySpace() {
+		return level == null ? null : SpaceAddress.capture(level, worldPosition);
+	}
+
+	private static int effectiveMemberLimit(int configured) {
+		return Math.max(1, Math.min(MAX_STRUCTURE_MEMBERS, configured));
+	}
+
+	private static int configuredMemberLimit() {
+		try {
+			return effectiveMemberLimit(CBConfigs.SERVER.factoryCluster.libraryMaxMembers.get());
+		} catch (IllegalStateException configNotLoaded) {
+			return MAX_STRUCTURE_MEMBERS;
+		}
+	}
+
 	private static boolean isCompoundList(ListTag list) {
 		return list.isEmpty() || list.getElementType() == Tag.TAG_COMPOUND;
 	}
@@ -691,17 +852,13 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		return value == 0 || value == 1;
 	}
 
-	private void readBinding(CompoundTag tag) {
+	private static LoadedBinding loadBinding(CompoundTag tag) {
 		boolean explicitlyInvalid = tag.getBoolean(BINDING_STATE_INVALID);
-		if (!tag.contains(BINDING_STATE)) {
-			bindingState = null;
-			bindingStateValid = !explicitlyInvalid;
-			return;
-		}
+		if (!tag.contains(BINDING_STATE))
+			return new LoadedBinding(null, !explicitlyInvalid, false);
 		var loaded = ClusterBinding.tryLoad(tag.getCompound(BINDING_STATE));
-		if (loaded.isPresent())
-			bindingState = loaded.orElseThrow();
-		bindingStateValid = !explicitlyInvalid && loaded.isPresent();
+		return new LoadedBinding(loaded.orElse(null),
+			!explicitlyInvalid && loaded.isPresent(), loaded.isEmpty());
 	}
 
 	private void readClient(CompoundTag tag) {
@@ -747,9 +904,16 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			ResourceLocation.withDefaultNamespace("plains"), 1, null);
 	}
 
-	private record ShelfInspection(Map<BlockPos, Integer> topologies, int efficiencyBonus) {
-		private static final ShelfInspection EMPTY = new ShelfInspection(Map.of(), 0);
-		private ShelfInspection {
+	private enum ServerStateSchema { CURRENT, PRIOR_NESTED }
+
+	private record LoadedBinding(@Nullable ClusterBinding binding, boolean valid,
+		boolean hadCorruption) {}
+
+	static record ShelfInspection(boolean complete, Map<BlockPos, Integer> topologies,
+		int efficiencyBonus) {
+		private static final ShelfInspection INCOMPLETE =
+			new ShelfInspection(false, Map.of(), 0);
+		ShelfInspection {
 			topologies = Map.copyOf(topologies);
 		}
 	}

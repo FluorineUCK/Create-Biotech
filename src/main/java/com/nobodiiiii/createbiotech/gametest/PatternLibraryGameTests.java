@@ -64,6 +64,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LecternBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChiseledBookShelfBlockEntity;
+import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
@@ -504,6 +505,8 @@ public final class PatternLibraryGameTests {
 				PatternValueCodecs.saveQuery(active, level.registryAccess()));
 			seededIndex.getList("Replies", Tag.TAG_COMPOUND).add(
 				PatternValueCodecs.saveReply(ready, level.registryAccess()));
+			seeded.getCompound("PatternLibrary").getCompound("ServerState")
+				.remove("PageTopologies");
 			original.loadWithComponents(seeded, level.registryAccess());
 			CompoundTag fullMetadata = original.saveWithFullMetadata(level.registryAccess());
 			CompoundTag retainedIndex = serializedIndex(original, level);
@@ -571,6 +574,75 @@ public final class PatternLibraryGameTests {
 							}
 						});
 					});
+				});
+			});
+		});
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 80)
+	public static void wrongLoadedShelfBlockEntityIsPartialAndRetainsWorkUntilRestored(
+		GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos lower = helper.absolutePos(new BlockPos(4, 2, 4));
+		BlockPos shelfPos = lower.east();
+		level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		placeCore(level, lower, null);
+		level.setBlock(shelfPos, Blocks.CHISELED_BOOKSHELF.defaultBlockState(), Block.UPDATE_ALL);
+		if (!(level.getBlockEntity(shelfPos) instanceof ChiseledBookShelfBlockEntity shelf))
+			throw new IllegalStateException("Chiseled shelf fixture did not create its block entity");
+		shelf.setItem(0, new ItemStack(Items.WRITABLE_BOOK));
+		shelf.setChanged();
+
+		helper.runAfterDelay(ASSERTION_DELAY, () -> {
+			PatternStorageCoreBlockEntity core = core(level, lower);
+			helper.assertValueEqual(core.structureState(),
+				PatternLibraryScanner.StructureState.VALID,
+				"Shelf-BE retention fixture must begin as a valid library");
+			CompoundTag seeded = core.saveWithoutMetadata(level.registryAccess());
+			CompoundTag index = seeded.getCompound("PatternLibrary")
+				.getCompound("ServerState").getCompound("PatternIndex");
+			long generation = index.getLong("Generation");
+			UUID requester = UUID.randomUUID();
+			UUID logistics = UUID.randomUUID();
+			index.getList("Queries", Tag.TAG_COMPOUND).add(PatternValueCodecs.saveQuery(
+				new PatternQuery(UUID.randomUUID(), requester, logistics,
+					new StackKey(new ItemStack(Items.DIAMOND)), generation, 0),
+				level.registryAccess()));
+			index.getList("Replies", Tag.TAG_COMPOUND).add(PatternValueCodecs.saveReply(
+				new PatternReply(UUID.randomUUID(), requester, logistics, generation,
+					PatternReplyStatus.NOT_FOUND, null), level.registryAccess()));
+			core.loadWithComponents(seeded, level.registryAccess());
+			CompoundTag retained = serializedIndex(core, level);
+			CompoundTag shelfMetadata = shelf.saveWithFullMetadata(level.registryAccess());
+			BlockState shelfState = level.getBlockState(shelfPos);
+
+			level.removeBlockEntity(shelfPos);
+			level.setBlockEntity(new FurnaceBlockEntity(shelfPos,
+				Blocks.FURNACE.defaultBlockState()));
+
+			helper.runAfterDelay(22, () -> {
+				PatternStorageCoreBlockEntity partial = core(level, lower);
+				helper.assertValueEqual(partial.structureState(),
+					PatternLibraryScanner.StructureState.PARTIAL,
+					"Wrong loaded chiseled-shelf BE must be incomplete/SLP, not a smaller topology");
+				helper.assertTrue(serializedIndex(partial, level).equals(retained),
+					"Incomplete shelf inspection must retain index, query, reply, and cursors");
+
+				level.removeBlockEntity(shelfPos);
+				BlockEntity restoredShelf = BlockEntity.loadStatic(shelfPos, shelfState,
+					shelfMetadata, level.registryAccess());
+				helper.assertTrue(restoredShelf instanceof ChiseledBookShelfBlockEntity,
+					"Saved shelf metadata must recreate the correct chiseled shelf BE");
+				level.setBlockEntity(Objects.requireNonNull(restoredShelf));
+
+				helper.runAfterDelay(2, () -> {
+					PatternStorageCoreBlockEntity resumed = core(level, lower);
+					helper.assertValueEqual(resumed.structureState(),
+						PatternLibraryScanner.StructureState.VALID,
+						"Restoring the expected loaded shelf BE must resume the same valid topology");
+					helper.assertTrue(serializedIndex(resumed, level).equals(retained),
+						"Matching BE recovery must not restart or drop retained work");
+					helper.succeed();
 				});
 			});
 		});

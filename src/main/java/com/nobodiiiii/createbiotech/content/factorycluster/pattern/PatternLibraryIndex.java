@@ -14,8 +14,11 @@ import java.util.Map;
 import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Set;
+import java.util.Spliterator;
 import java.util.TreeMap;
 import java.util.UUID;
+import java.util.function.Consumer;
+import java.util.function.Predicate;
 
 import javax.annotation.Nullable;
 
@@ -52,8 +55,11 @@ public final class PatternLibraryIndex {
 	private List<PatternRecord> recordBuilder = new ArrayList<>();
 	private final NavigableMap<PatternPageKey, PatternPageError> errors =
 		new TreeMap<>(PAGE_COMPARATOR);
-	private final ArrayDeque<PatternQuery> activeQueries = new ArrayDeque<>();
-	private ArrayDeque<PatternReply> readyReplies = new ArrayDeque<>();
+	private final RestartTraversalProbe restartTraversalProbe = new RestartTraversalProbe();
+	private final RestartTrackedDeque<PatternQuery> activeQueries =
+		new RestartTrackedDeque<>(restartTraversalProbe, RestartQueue.QUERY);
+	private RestartTrackedDeque<PatternReply> readyReplies =
+		new RestartTrackedDeque<>(restartTraversalProbe, RestartQueue.REPLY);
 	@Nullable private UUID nextReplyRequester;
 	private WorkLane nextLane = WorkLane.FINGERPRINT;
 	private TickStats lastTickStats = new TickStats(0, 0, List.of());
@@ -62,8 +68,7 @@ public final class PatternLibraryIndex {
 	private int lastRecordMaintenanceUnits;
 	private int lastInvalidationMaintenanceUnits;
 	private int lastGenerationTransitionUnits;
-	private int lastRestartQueryVisits;
-	private int lastRestartReplyVisits;
+	private RestartTraversalStats lastRestartTraversalStats = RestartTraversalStats.ZERO;
 	private int lastLoadMembershipChecks;
 	private int lastLoadRecordVisits;
 
@@ -71,13 +76,28 @@ public final class PatternLibraryIndex {
 
 	public void rebuildPageOrder(Collection<PatternPageKey> keys) {
 		Objects.requireNonNull(keys, "keys");
-		List<PatternPageKey> canonical = keys.stream().map(key -> Objects.requireNonNull(key, "page key"))
-			.distinct().sorted(PAGE_COMPARATOR).toList();
+		List<PatternPageKey> canonical = canonicalPageOrder(keys);
 		pageOrder = List.copyOf(canonical);
 		Set<PatternPageKey> retained = new HashSet<>(pageOrder);
 		cache.keySet().retainAll(retained);
 		errors.keySet().retainAll(retained);
 		restartGeneration();
+	}
+
+	static List<PatternPageKey> canonicalPageOrder(Collection<PatternPageKey> keys) {
+		Objects.requireNonNull(keys, "keys");
+		return keys.stream().map(key -> Objects.requireNonNull(key, "page key"))
+			.distinct().sorted(PAGE_COMPARATOR).toList();
+	}
+
+	static boolean isCanonicalPageOrder(List<PatternPageKey> keys) {
+		Objects.requireNonNull(keys, "keys");
+		for (int index = 0; index < keys.size(); index++) {
+			PatternPageKey key = Objects.requireNonNull(keys.get(index), "page key");
+			if (index > 0 && PAGE_COMPARATOR.compare(keys.get(index - 1), key) >= 0)
+				return false;
+		}
+		return true;
 	}
 
 	public void enqueue(PatternQuery query) {
@@ -351,8 +371,9 @@ public final class PatternLibraryIndex {
 	int lastRecordMaintenanceUnits() { return lastRecordMaintenanceUnits; }
 	int lastInvalidationMaintenanceUnits() { return lastInvalidationMaintenanceUnits; }
 	int lastGenerationTransitionUnits() { return lastGenerationTransitionUnits; }
-	int lastRestartQueryVisits() { return lastRestartQueryVisits; }
-	int lastRestartReplyVisits() { return lastRestartReplyVisits; }
+	int lastRestartQueryVisits() { return lastRestartTraversalStats.queryVisits(); }
+	int lastRestartReplyVisits() { return lastRestartTraversalStats.replyVisits(); }
+	RestartTraversalStats lastRestartTraversalStats() { return lastRestartTraversalStats; }
 	int lastLoadMembershipChecks() { return lastLoadMembershipChecks; }
 	int lastLoadRecordVisits() { return lastLoadRecordVisits; }
 	List<WorkLane> lastLaneTrace() { return lastTickStats.lanes(); }
@@ -442,14 +463,19 @@ public final class PatternLibraryIndex {
 	}
 
 	private void restartGeneration() {
-		lastGenerationTransitionUnits++;
-		generation++;
-		fingerprintCursor = 0;
-		indexPassComplete = pageOrder.isEmpty();
-		records = List.of();
-		recordBuilder = new ArrayList<>();
-		readyReplies = new ArrayDeque<>();
-		nextReplyRequester = null;
+		restartTraversalProbe.begin();
+		try {
+			lastGenerationTransitionUnits++;
+			generation++;
+			fingerprintCursor = 0;
+			indexPassComplete = pageOrder.isEmpty();
+			records = List.of();
+			recordBuilder = new ArrayList<>();
+			readyReplies = new RestartTrackedDeque<>(restartTraversalProbe, RestartQueue.REPLY);
+			nextReplyRequester = null;
+		} finally {
+			lastRestartTraversalStats = restartTraversalProbe.finish();
+		}
 	}
 
 	private PatternQuery currentGeneration(PatternQuery query) {
@@ -536,8 +562,7 @@ public final class PatternLibraryIndex {
 		lastRecordMaintenanceUnits = 0;
 		lastInvalidationMaintenanceUnits = 0;
 		lastGenerationTransitionUnits = 0;
-		lastRestartQueryVisits = 0;
-		lastRestartReplyVisits = 0;
+		lastRestartTraversalStats = RestartTraversalStats.ZERO;
 	}
 
 	private void finishDiagnostics(List<WorkLane> lanes) {
@@ -698,4 +723,286 @@ record TickStats(int fingerprintUnits, int queryUnits, List<WorkLane> lanes) {
 	}
 
 	int totalUnits() { return fingerprintUnits + queryUnits; }
+}
+
+enum RestartQueue { QUERY, REPLY }
+
+record RestartTraversalStats(int queryVisits, int replyVisits) {
+	static final RestartTraversalStats ZERO = new RestartTraversalStats(0, 0);
+
+	RestartTraversalStats {
+		if (queryVisits < 0 || replyVisits < 0)
+			throw new IllegalArgumentException("Restart traversal counts cannot be negative");
+	}
+
+	int totalVisits() { return queryVisits + replyVisits; }
+}
+
+/** Measures element visits only while a generation transition is in progress. */
+final class RestartTraversalProbe {
+	private boolean active;
+	private int queryVisits;
+	private int replyVisits;
+
+	void begin() {
+		if (active)
+			throw new IllegalStateException("Restart traversal measurement is already active");
+		queryVisits = 0;
+		replyVisits = 0;
+		active = true;
+	}
+
+	RestartTraversalStats finish() {
+		if (!active)
+			throw new IllegalStateException("Restart traversal measurement is not active");
+		active = false;
+		return new RestartTraversalStats(queryVisits, replyVisits);
+	}
+
+	boolean active() { return active; }
+
+	void visit(RestartQueue queue, int units) {
+		if (!active || units <= 0)
+			return;
+		if (queue == RestartQueue.QUERY)
+			queryVisits += units;
+		else
+			replyVisits += units;
+	}
+}
+
+/**
+ * Queue wrapper used by production restart logic so eager stream/remove/copy/clear
+ * regressions become observable operation counts rather than dead test counters.
+ */
+final class RestartTrackedDeque<E> extends ArrayDeque<E> {
+	private static final long serialVersionUID = 1L;
+	private final RestartTraversalProbe probe;
+	private final RestartQueue queue;
+
+	RestartTrackedDeque(RestartTraversalProbe probe, RestartQueue queue) {
+		this.probe = Objects.requireNonNull(probe, "probe");
+		this.queue = Objects.requireNonNull(queue, "queue");
+	}
+
+	@Override
+	public E removeFirst() {
+		E value = super.pollFirst();
+		if (value == null)
+			throw new java.util.NoSuchElementException();
+		probe.visit(queue, 1);
+		return value;
+	}
+
+	@Override
+	public E removeLast() {
+		E value = super.pollLast();
+		if (value == null)
+			throw new java.util.NoSuchElementException();
+		probe.visit(queue, 1);
+		return value;
+	}
+
+	@Override
+	public E pollFirst() {
+		E value = super.pollFirst();
+		if (value != null)
+			probe.visit(queue, 1);
+		return value;
+	}
+
+	@Override
+	public E pollLast() {
+		E value = super.pollLast();
+		if (value != null)
+			probe.visit(queue, 1);
+		return value;
+	}
+
+	@Override
+	public boolean removeFirstOccurrence(Object candidate) {
+		if (!probe.active())
+			return super.removeFirstOccurrence(candidate);
+		Iterator<E> iterator = iterator();
+		while (iterator.hasNext()) {
+			if (!Objects.equals(candidate, iterator.next()))
+				continue;
+			iterator.remove();
+			return true;
+		}
+		return false;
+	}
+
+	@Override
+	public boolean removeLastOccurrence(Object candidate) {
+		if (!probe.active())
+			return super.removeLastOccurrence(candidate);
+		Iterator<E> iterator = descendingIterator();
+		while (iterator.hasNext()) {
+			if (!Objects.equals(candidate, iterator.next()))
+				continue;
+			iterator.remove();
+			return true;
+		}
+		return false;
+	}
+
+	@Override
+	public boolean contains(Object candidate) {
+		if (!probe.active())
+			return super.contains(candidate);
+		Iterator<E> iterator = iterator();
+		while (iterator.hasNext()) {
+			if (Objects.equals(candidate, iterator.next()))
+				return true;
+		}
+		return false;
+	}
+
+	@Override
+	public boolean removeAll(Collection<?> candidates) {
+		Objects.requireNonNull(candidates, "candidates");
+		if (!probe.active())
+			return super.removeAll(candidates);
+		boolean removed = false;
+		Iterator<E> iterator = iterator();
+		while (iterator.hasNext()) {
+			if (!candidates.contains(iterator.next()))
+				continue;
+			iterator.remove();
+			removed = true;
+		}
+		return removed;
+	}
+
+	@Override
+	public boolean retainAll(Collection<?> retained) {
+		Objects.requireNonNull(retained, "retained");
+		if (!probe.active())
+			return super.retainAll(retained);
+		boolean removed = false;
+		Iterator<E> iterator = iterator();
+		while (iterator.hasNext()) {
+			if (retained.contains(iterator.next()))
+				continue;
+			iterator.remove();
+			removed = true;
+		}
+		return removed;
+	}
+
+	@Override
+	@SuppressWarnings("unchecked")
+	public RestartTrackedDeque<E> clone() {
+		probe.visit(queue, size());
+		return (RestartTrackedDeque<E>) super.clone();
+	}
+
+	@Override
+	public Iterator<E> iterator() {
+		return counting(super.iterator());
+	}
+
+	@Override
+	public Iterator<E> descendingIterator() {
+		return counting(super.descendingIterator());
+	}
+
+	@Override
+	public Spliterator<E> spliterator() {
+		return counting(super.spliterator());
+	}
+
+	@Override
+	public void forEach(Consumer<? super E> action) {
+		Objects.requireNonNull(action, "action");
+		if (!probe.active()) {
+			super.forEach(action);
+			return;
+		}
+		Iterator<E> iterator = iterator();
+		while (iterator.hasNext())
+			action.accept(iterator.next());
+	}
+
+	@Override
+	public boolean removeIf(Predicate<? super E> filter) {
+		Objects.requireNonNull(filter, "filter");
+		if (!probe.active())
+			return super.removeIf(filter);
+		boolean removed = false;
+		Iterator<E> iterator = iterator();
+		while (iterator.hasNext()) {
+			if (!filter.test(iterator.next()))
+				continue;
+			iterator.remove();
+			removed = true;
+		}
+		return removed;
+	}
+
+	@Override
+	public Object[] toArray() {
+		probe.visit(queue, size());
+		return super.toArray();
+	}
+
+	@Override
+	public <T> T[] toArray(T[] destination) {
+		probe.visit(queue, size());
+		return super.toArray(destination);
+	}
+
+	@Override
+	public void clear() {
+		probe.visit(queue, size());
+		super.clear();
+	}
+
+	private Iterator<E> counting(Iterator<E> delegate) {
+		return new Iterator<>() {
+			@Override public boolean hasNext() { return delegate.hasNext(); }
+			@Override public E next() {
+				E value = delegate.next();
+				probe.visit(queue, 1);
+				return value;
+			}
+			@Override public void remove() { delegate.remove(); }
+			@Override public void forEachRemaining(Consumer<? super E> action) {
+				Objects.requireNonNull(action, "action");
+				delegate.forEachRemaining(value -> {
+					probe.visit(queue, 1);
+					action.accept(value);
+				});
+			}
+		};
+	}
+
+	private Spliterator<E> counting(Spliterator<E> delegate) {
+		return new Spliterator<>() {
+			@Override public boolean tryAdvance(Consumer<? super E> action) {
+				Objects.requireNonNull(action, "action");
+				return delegate.tryAdvance(value -> {
+					probe.visit(queue, 1);
+					action.accept(value);
+				});
+			}
+			@Override public void forEachRemaining(Consumer<? super E> action) {
+				Objects.requireNonNull(action, "action");
+				delegate.forEachRemaining(value -> {
+					probe.visit(queue, 1);
+					action.accept(value);
+				});
+			}
+			@Override public Spliterator<E> trySplit() {
+				Spliterator<E> split = delegate.trySplit();
+				return split == null ? null : counting(split);
+			}
+			@Override public long estimateSize() { return delegate.estimateSize(); }
+			@Override public int characteristics() { return delegate.characteristics(); }
+			@Override public java.util.Comparator<? super E> getComparator() {
+				return delegate.getComparator();
+			}
+		};
+	}
 }
