@@ -282,6 +282,46 @@ class PatternLibraryIndexTest {
 	}
 
 	@Test
+	void zeroInputCachedPatternAndReadyMatchReplyRoundTripExactly() {
+		PatternQuery query = queryFor(Items.IRON_INGOT);
+		FakePages pages = new FakePages().put(PAGE_A,
+			"{\"v\":1,\"in\":[],\"out\":[{\"item\":\"minecraft:iron_ingot\",\"count\":1}],\"to\":\"free\"}");
+		PatternLibraryIndex index = fullyIndex(pages);
+		index.enqueue(query);
+		index.tickQueries(1);
+		CompoundTag saved = index.save(REGISTRIES);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(saved, REGISTRIES);
+
+		assertFalse(loaded.hadCorruption());
+		assertEquals(saved, loaded.index().save(REGISTRIES));
+		assertEquals(1, loaded.index().cachedPageCount());
+		assertEquals(0, loaded.index().activeQueryCount());
+		PatternReply reply = loaded.index().pollReplies(1).getFirst();
+		assertEquals(query.queryId(), reply.queryId());
+		assertEquals(PatternReplyStatus.MATCH, reply.status());
+		assertTrue(reply.pattern().inputs().isEmpty());
+	}
+
+	@Test
+	void blankAndInvalidCacheVariantsRoundTripExactly() {
+		FakePages pages = new FakePages().put(PAGE_A, "   ").put(PAGE_B, "{");
+		PatternLibraryIndex index = fullyIndex(pages);
+		CompoundTag saved = index.save(REGISTRIES);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(saved, REGISTRIES);
+
+		assertFalse(loaded.hadCorruption());
+		assertEquals(saved, loaded.index().save(REGISTRIES));
+		assertEquals(2, loaded.index().cachedPageCount());
+		assertTrue(loaded.index().indexPassComplete());
+		assertEquals(2, loaded.index().fingerprintCursor());
+		loaded.index().enqueue(queryFor(Items.DIAMOND));
+		loaded.index().tickQueries(1);
+		assertEquals(PatternReplyStatus.NOT_FOUND, loaded.index().pollReplies(1).getFirst().status());
+	}
+
+	@Test
 	void corruptNestedEntriesAreIsolatedDuringLoad() {
 		Indexed fixture = indexed(Items.IRON_INGOT, Items.COPPER_INGOT);
 		fixture.index.enqueue(queryFor(Items.GOLD_INGOT));
@@ -298,6 +338,95 @@ class PatternLibraryIndexTest {
 		assertTrue(loaded.hadCorruption());
 		assertFalse(loaded.index().indexPassComplete());
 		assertEquals(0, loaded.index().fingerprintCursor());
+		assertEquals(0, loaded.index().activeQueries().getFirst().cursor());
+	}
+
+	@Test
+	void malformedReplyChildIsDiscardedWhileValidSiblingSurvives() {
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		PatternQuery first = queryFor(Items.GOLD_INGOT);
+		PatternQuery second = queryFor(Items.DIAMOND);
+		index.enqueue(first);
+		index.enqueue(second);
+		index.tickQueries(2);
+		CompoundTag saved = index.save(REGISTRIES);
+		saved.getList("Replies", Tag.TAG_COMPOUND).getCompound(0).remove("QueryId");
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(saved, REGISTRIES);
+
+		assertTrue(loaded.hadCorruption());
+		assertEquals(0, loaded.index().generation());
+		assertTrue(loaded.index().indexPassComplete());
+		PatternReply surviving = loaded.index().pollReplies(2).getFirst();
+		assertEquals(second.queryId(), surviving.queryId());
+		assertEquals(PatternReplyStatus.NOT_FOUND, surviving.status());
+		assertTrue(loaded.index().pollReplies(1).isEmpty());
+	}
+
+	@Test
+	void staleReadyReplyIsDiscardedWhileCurrentSiblingSurvives() {
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		PatternQuery stale = queryFor(Items.GOLD_INGOT);
+		PatternQuery current = queryFor(Items.DIAMOND);
+		index.enqueue(stale);
+		index.enqueue(current);
+		index.tickQueries(2);
+		CompoundTag saved = index.save(REGISTRIES);
+		saved.getList("Replies", Tag.TAG_COMPOUND).getCompound(0)
+			.putLong("Generation", saved.getLong("Generation") - 1);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(saved, REGISTRIES);
+
+		assertTrue(loaded.hadCorruption());
+		assertEquals(saved.getLong("Generation"), loaded.index().generation());
+		assertTrue(loaded.index().indexPassComplete());
+		List<PatternReply> replies = loaded.index().pollReplies(2);
+		assertEquals(1, replies.size());
+		assertEquals(current.queryId(), replies.getFirst().queryId());
+	}
+
+	@Test
+	void mismatchedQueryGenerationIsRejectedWithoutRestartingValidSiblings() {
+		Indexed fixture = indexed(Items.IRON_INGOT, Items.COPPER_INGOT);
+		PatternQuery stale = queryFor(Items.GOLD_INGOT);
+		PatternQuery current = queryFor(Items.DIAMOND);
+		fixture.index.enqueue(stale);
+		fixture.index.enqueue(current);
+		CompoundTag saved = fixture.index.save(REGISTRIES);
+		long generation = saved.getLong("Generation");
+		saved.getList("Queries", Tag.TAG_COMPOUND).getCompound(0)
+			.putLong("Generation", generation - 1);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(saved, REGISTRIES);
+
+		assertTrue(loaded.hadCorruption());
+		assertEquals(generation, loaded.index().generation());
+		assertTrue(loaded.index().indexPassComplete());
+		assertEquals(2, loaded.index().fingerprintCursor());
+		assertEquals(1, loaded.index().activeQueryCount());
+		assertEquals(current.queryId(), loaded.index().activeQueries().getFirst().queryId());
+		assertEquals(generation, loaded.index().activeQueries().getFirst().passGeneration());
+	}
+
+	@Test
+	void outOfBoundsQueryCursorIsRejectedWithoutRestartingValidSiblings() {
+		Indexed fixture = indexed(Items.IRON_INGOT, Items.COPPER_INGOT);
+		PatternQuery invalid = queryFor(Items.GOLD_INGOT);
+		PatternQuery valid = queryFor(Items.DIAMOND);
+		fixture.index.enqueue(invalid);
+		fixture.index.enqueue(valid);
+		CompoundTag saved = fixture.index.save(REGISTRIES);
+		long generation = saved.getLong("Generation");
+		saved.getList("Queries", Tag.TAG_COMPOUND).getCompound(0).putInt("Cursor", 3);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(saved, REGISTRIES);
+
+		assertTrue(loaded.hadCorruption());
+		assertEquals(generation, loaded.index().generation());
+		assertTrue(loaded.index().indexPassComplete());
+		assertEquals(2, loaded.index().fingerprintCursor());
+		assertEquals(1, loaded.index().activeQueryCount());
+		assertEquals(valid.queryId(), loaded.index().activeQueries().getFirst().queryId());
 		assertEquals(0, loaded.index().activeQueries().getFirst().cursor());
 	}
 
