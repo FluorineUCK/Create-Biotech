@@ -229,7 +229,10 @@ public final class PatternValueCodecs {
 	}
 
 	private static boolean hasCompoundList(CompoundTag tag, String key) {
-		return hasType(tag, key, Tag.TAG_LIST) && ((ListTag) tag.get(key)).getElementType() == Tag.TAG_COMPOUND;
+		if (!hasType(tag, key, Tag.TAG_LIST))
+			return false;
+		ListTag list = (ListTag) tag.get(key);
+		return list.isEmpty() || list.getElementType() == Tag.TAG_COMPOUND;
 	}
 
 	private static boolean hasUuid(CompoundTag tag, String key) {

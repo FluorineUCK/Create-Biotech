@@ -233,6 +233,24 @@ class PatternJsonParserTest {
 	}
 
 	@Test
+	void zeroInputRecordAndMatchReplyRoundTripThroughPersistedCodecs() {
+		PatternRecord zeroInput = new PatternRecord(
+			UUID.fromString("00000000-0000-0000-0000-000000000006"), PAGE, List.of(),
+			List.of(new PatternOutput(new StackKey(new ItemStack(Items.IRON_INGOT, 1)), 1)), "no_inputs");
+		PatternQuery query = new PatternQuery(
+			UUID.fromString("00000000-0000-0000-0000-000000000007"),
+			UUID.fromString("00000000-0000-0000-0000-000000000008"),
+			UUID.fromString("00000000-0000-0000-0000-000000000009"),
+			zeroInput.mainOutput().stack(), 4, 0);
+		PatternReply reply = new PatternReply(query.queryId(), 4, PatternReplyStatus.MATCH, zeroInput);
+
+		assertEquals(zeroInput, PatternValueCodecs.loadRecord(
+			PatternValueCodecs.saveRecord(zeroInput, registries), registries).orElseThrow());
+		assertEquals(reply, PatternValueCodecs.loadReply(
+			PatternValueCodecs.saveReply(reply, registries), registries).orElseThrow());
+	}
+
+	@Test
 	void canonicalPatternIdSurvivesPageKeyRoundTripAndChangesWithIdentityInputs() {
 		PatternRecord first = assertInstanceOf(ParseResult.Valid.class,
 			parser.parse(PAGE, VALID_JSON)).pattern();
