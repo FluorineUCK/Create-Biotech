@@ -67,14 +67,17 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 		if (entity == null)
 			return;
 
+		item.configureRenderedEntity(entity, stack, transformType);
 		Vector3f geometryCenter = measureGeometryCenter(entity);
 		float scaleMultiplier = item.getRenderedEntityScaleMultiplier();
+		float yRotation = transformType == ItemDisplayContext.FIXED
+			? FIXED_ENTITY_Y_ROTATION
+			: DEFAULT_ENTITY_Y_ROTATION;
+		yRotation += item.getRenderedEntityYRotation(stack, transformType);
 
 		poseStack.pushPose();
 		poseStack.translate(BLOCK_CENTER.x, BLOCK_CENTER.y, BLOCK_CENTER.z);
-		poseStack.mulPose(Axis.YP.rotationDegrees(transformType == ItemDisplayContext.FIXED
-			? FIXED_ENTITY_Y_ROTATION
-			: DEFAULT_ENTITY_Y_ROTATION));
+		poseStack.mulPose(Axis.YP.rotationDegrees(yRotation));
 		poseStack.scale(scaleMultiplier, scaleMultiplier, scaleMultiplier);
 		poseStack.translate(-geometryCenter.x, -geometryCenter.y, -geometryCenter.z);
 		renderEntity(entity, poseStack, buffer, packedLight);
