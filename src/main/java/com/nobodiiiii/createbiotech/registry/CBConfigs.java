@@ -110,6 +110,7 @@ public class CBConfigs {
 		public final ShulkerTeleporter shulkerTeleporter;
 		public final TeleportationFluid teleportationFluid;
 		public final AllayCourier allayCourier;
+		public final FactoryCluster factoryCluster;
 		public final Features features;
 
 		Server(ModConfigSpec.Builder builder) {
@@ -140,7 +141,34 @@ public class CBConfigs {
 			shulkerTeleporter = new ShulkerTeleporter(builder);
 			teleportationFluid = new TeleportationFluid(builder);
 			allayCourier = new AllayCourier(builder);
+			factoryCluster = new FactoryCluster(builder);
 			features = new Features(builder);
+		}
+	}
+
+	public static class FactoryCluster {
+		public final ModConfigSpec.IntValue computerMinSize;
+		public final ModConfigSpec.IntValue computerMaxSize;
+		public final ModConfigSpec.IntValue computerMaxNodes;
+		public final ModConfigSpec.IntValue libraryMaxMembers;
+		public final ModConfigSpec.IntValue libraryMaxSpan;
+		public final ModConfigSpec.IntValue patternBaseRange;
+		public final ModConfigSpec.IntValue wanderingTraderRangeBonus;
+		public final ModConfigSpec.IntValue patternMaxRange;
+		public final ModConfigSpec.IntValue patternMaxPagesPerTick;
+
+		FactoryCluster(ModConfigSpec.Builder builder) {
+			builder.push("factoryCluster");
+			computerMinSize = builder.defineInRange("computerMinSize", 3, 3, 7);
+			computerMaxSize = builder.defineInRange("computerMaxSize", 7, 3, 16);
+			computerMaxNodes = builder.defineInRange("computerMaxNodes", 32, 1, 256);
+			libraryMaxMembers = builder.defineInRange("libraryMaxMembers", 64, 1, 1024);
+			libraryMaxSpan = builder.defineInRange("libraryMaxSpan", 16, 1, 128);
+			patternBaseRange = builder.defineInRange("patternBaseRange", 64, 1, 4096);
+			wanderingTraderRangeBonus = builder.defineInRange("wanderingTraderRangeBonus", 64, 0, 4096);
+			patternMaxRange = builder.defineInRange("patternMaxRange", 512, 1, 16384);
+			patternMaxPagesPerTick = builder.defineInRange("patternMaxPagesPerTick", 600, 1, 10000);
+			builder.pop();
 		}
 	}
 
