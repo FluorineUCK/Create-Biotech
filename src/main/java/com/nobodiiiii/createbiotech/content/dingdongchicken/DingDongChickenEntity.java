@@ -2,8 +2,8 @@ package com.nobodiiiii.createbiotech.content.dingdongchicken;
 
 import javax.annotation.Nullable;
 
+import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
-import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
 import com.simibubi.create.AllSoundEvents;
 
 import net.minecraft.nbt.CompoundTag;
@@ -11,8 +11,6 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.sounds.SoundEvents;
-import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.AgeableMob;
@@ -79,12 +77,12 @@ public class DingDongChickenEntity extends Chicken {
 	public InteractionResult mobInteract(Player player, InteractionHand hand) {
 		ItemStack heldItem = player.getItemInHand(hand);
 		if (heldItem.is(Blocks.NOTE_BLOCK.asItem()) && !hasVoicePack()) {
-			level().playSound(player, getX(), getY(), getZ(), SoundEvents.NOTE_BLOCK_PLING.value(),
-				SoundSource.NEUTRAL, 1.0F, 1.0F);
 			if (!level().isClientSide) {
 				entityData.set(HAS_VOICE_PACK, true);
 				if (!player.hasInfiniteMaterials())
 					heldItem.shrink(1);
+				activate();
+				playVoicePackSound();
 			}
 			return InteractionResult.sidedSuccess(level().isClientSide);
 		}
@@ -94,8 +92,7 @@ public class DingDongChickenEntity extends Chicken {
 			return original;
 
 		if (hasVoicePack())
-			level().playSound(player, getX(), getY(), getZ(), CBSoundEvents.DING_DONG_CHICKEN_VOICE_PACK.get(),
-				SoundSource.NEUTRAL, 1.0F, 1.0F);
+			playVoicePackSound();
 		else
 			AllSoundEvents.DESK_BELL_USE.play(level(), player, blockPosition());
 		if (!level().isClientSide)
@@ -116,6 +113,11 @@ public class DingDongChickenEntity extends Chicken {
 
 	public boolean hasVoicePack() {
 		return entityData.get(HAS_VOICE_PACK);
+	}
+
+	private void playVoicePackSound() {
+		if (!level().isClientSide)
+			CBPackets.sendToTrackingEntity(new DingDongChickenVoiceSoundPacket(getId()), this);
 	}
 
 	@Override
