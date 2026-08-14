@@ -120,6 +120,12 @@ public class CBItems {
 		ITEMS.register("factory_panel", () -> new FactoryPanelBlockItem(CBBlocks.FACTORY_PANEL.get(),
 			new Item.Properties().stacksTo(1)));
 
+	public static final DeferredHolder<Item, Item> COMPUTER = ITEMS.register("computer",
+		() -> new BlockItem(CBBlocks.COMPUTER.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> COMPUTER_CASING = ITEMS.register("computer_casing",
+		() -> new BlockItem(CBBlocks.COMPUTER_CASING.get(), new Item.Properties()));
+
 	public static final DeferredHolder<Item, Item> HALF_SHAFT = ITEMS.register("half_shaft",
 		() -> new BlockItem(CBBlocks.HALF_SHAFT.get(), new Item.Properties()));
 

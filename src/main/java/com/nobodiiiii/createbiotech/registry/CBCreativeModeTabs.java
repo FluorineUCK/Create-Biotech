@@ -39,6 +39,8 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.SMART_SUPER_GLUE.get());
 				output.accept(CBItems.WIRELESS_TERMINAL.get());
 				output.accept(CBItems.FACTORY_PANEL.get());
+				output.accept(CBItems.COMPUTER.get());
+				output.accept(CBItems.COMPUTER_CASING.get());
 				output.accept(CBItems.MAGMA_CUBE_BURNER.get());
 				output.accept(CBItems.AUTOMATIC_FISH_RELEASE_MACHINE.get());
 				output.accept(CBItems.BIO_PACKAGER.get());

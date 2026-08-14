@@ -1,6 +1,8 @@
 {
   "values": [
     "create_biotech:factory_panel",
+    "create_biotech:computer",
+    "create_biotech:computer_casing",
     "create_biotech:slime_belt",
     "create_biotech:magma_belt",
     "create_biotech:power_belt",

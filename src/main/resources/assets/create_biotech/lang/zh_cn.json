@@ -548,5 +548,9 @@
   "create_biotech.factory_cluster.binding.participant_rejected": "工厂集群成员拒绝了绑定更新",
   "block.create_biotech.pattern_storage_core": "样板存储核心",
   "block.create_biotech.pattern_storage_core.status.ready": "样板库已就绪",
-  "block.create_biotech.pattern_storage_core.status.pending_safe_release": "图书管理员暂无安全释放空间"
+  "block.create_biotech.pattern_storage_core.status.pending_safe_release": "图书管理员暂无安全释放空间",
+  "block.create_biotech.computer": "计算机",
+  "item.create_biotech.computer": "计算机",
+  "block.create_biotech.computer_casing": "计算机外壳",
+  "item.create_biotech.computer_casing": "计算机外壳"
 }

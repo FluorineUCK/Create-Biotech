@@ -548,5 +548,9 @@
   "create_biotech.factory_cluster.binding.participant_rejected": "A factory cluster member rejected the binding update",
   "block.create_biotech.pattern_storage_core": "Pattern Storage Core",
   "block.create_biotech.pattern_storage_core.status.ready": "Pattern library ready",
-  "block.create_biotech.pattern_storage_core.status.pending_safe_release": "Safe librarian release is blocked"
+  "block.create_biotech.pattern_storage_core.status.pending_safe_release": "Safe librarian release is blocked",
+  "block.create_biotech.computer": "Computer",
+  "item.create_biotech.computer": "Computer",
+  "block.create_biotech.computer_casing": "Computer Casing",
+  "item.create_biotech.computer_casing": "Computer Casing"
 }

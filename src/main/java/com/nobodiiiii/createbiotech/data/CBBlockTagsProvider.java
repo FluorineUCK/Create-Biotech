@@ -39,6 +39,8 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 
 		add(BlockTags.MINEABLE_WITH_PICKAXE,
 			CBBlocks.FACTORY_PANEL.get(),
+			CBBlocks.COMPUTER.get(),
+			CBBlocks.COMPUTER_CASING.get(),
 			CBBlocks.SLIME_BELT.get(),
 			CBBlocks.MAGMA_BELT.get(),
 			CBBlocks.POWER_BELT.get(),
