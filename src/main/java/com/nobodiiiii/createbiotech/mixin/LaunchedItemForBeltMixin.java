@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.mixin;
 
+import java.util.Arrays;
+
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -34,13 +36,14 @@ public abstract class LaunchedItemForBeltMixin implements CBBeltChainData {
 	@Override
 	@Unique
 	public void createBiotech$setPulleyOffsets(int[] offsets) {
-		createBiotech$pulleyOffsets = offsets == null ? null : offsets.clone();
+		createBiotech$pulleyOffsets = offsets == null ? null : Arrays.copyOf(offsets, offsets.length);
 	}
 
 	@Override
 	@Unique
 	public int[] createBiotech$getPulleyOffsets() {
-		return createBiotech$pulleyOffsets == null ? null : createBiotech$pulleyOffsets.clone();
+		return createBiotech$pulleyOffsets == null ? null
+			: Arrays.copyOf(createBiotech$pulleyOffsets, createBiotech$pulleyOffsets.length);
 	}
 
 	@Inject(method = "serializeNBT", at = @At("RETURN"))
