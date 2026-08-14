@@ -22,6 +22,6 @@ public abstract class RedStoneWireEntityRedstoneMixin {
 	private int createBiotech$addEntityPower(int original, Level level, BlockPos pos) {
 		if (original >= 15 || !(level instanceof ServerLevel serverLevel))
 			return original;
-		return Math.max(original, EntityRedstoneIndex.get(serverLevel).getExternalPowerForWire(serverLevel, pos));
+		return Math.max(original, EntityRedstoneIndex.get(serverLevel).getExternalPowerForWire(pos));
 	}
 }

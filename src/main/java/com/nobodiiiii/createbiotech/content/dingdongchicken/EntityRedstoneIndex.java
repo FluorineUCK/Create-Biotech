@@ -6,7 +6,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
-import net.minecraft.world.level.block.state.BlockState;
 
 /**
  * Per-level runtime index for active entity-backed redstone sources. Nothing in this cache is
@@ -18,7 +17,6 @@ public final class EntityRedstoneIndex {
 
 	private final Long2IntOpenHashMap sourceReferences = new Long2IntOpenHashMap();
 	private final Long2IntOpenHashMap directReceiverReferences = new Long2IntOpenHashMap();
-	private final Long2IntOpenHashMap twoHopCandidateReferences = new Long2IntOpenHashMap();
 
 	private int activePositionCount;
 	private long singleSourcePosition;
@@ -88,8 +86,9 @@ public final class EntityRedstoneIndex {
 		level.updateNeighborsAt(pos, Blocks.REDSTONE_BLOCK);
 		level.updateNeighbourForOutputSignal(pos, Blocks.REDSTONE_BLOCK);
 
-		// Direct power can strongly power an adjacent conductor. Notify the consumers around each
-		// of those six cells too, so both activation and removal propagate symmetrically.
+		// Revisit the consumers around the six receiving cells too. This is notification coverage,
+		// not signal propagation: power queries below still accept only the source cell and its
+		// immediate neighbors. The wider notification clears cached states reliably on removal.
 		for (Direction direction : DIRECTIONS) {
 			BlockPos receiverPos = pos.relative(direction);
 			level.updateNeighborsAt(receiverPos, Blocks.REDSTONE_BLOCK);
@@ -98,50 +97,18 @@ public final class EntityRedstoneIndex {
 	}
 
 	/**
-	 * Supplies an external-power result to redstone-wire evaluators which do not necessarily call
-	 * {@code SignalGetter#getSignal}. Far-away wires stop after the primitive candidate lookup.
+	 * Supplies redstone-block-style weak power to wire evaluators which bypass
+	 * {@code SignalGetter#getSignal}. The occupied cell is an intentional extension; otherwise only
+	 * the six immediately adjacent wire positions receive power.
 	 */
-	public int getExternalPowerForWire(ServerLevel level, BlockPos wirePos) {
+	public int getExternalPowerForWire(BlockPos wirePos) {
 		if (activePositionCount == 0)
 			return 0;
 
 		long packedWirePos = wirePos.asLong();
-		if (!twoHopCandidateReferences.containsKey(packedWirePos))
-			return 0;
 		if (isSource(packedWirePos))
 			return 15;
-		if (directReceiverReferences.containsKey(packedWirePos))
-			return 15;
-
-		for (Direction direction : DIRECTIONS) {
-			BlockPos conductorPos = wirePos.relative(direction);
-			long packedConductorPos = conductorPos.asLong();
-			if (!directReceiverReferences.containsKey(packedConductorPos))
-				continue;
-
-			BlockState state = level.getBlockState(conductorPos);
-			if (!state.isRedstoneConductor(level, conductorPos))
-				continue;
-			if (hasAdjacentSourceExcept(packedConductorPos, packedWirePos))
-				return 15;
-		}
-
-		return 0;
-	}
-
-	private boolean hasAdjacentSourceExcept(long packedCenter, long packedExcludedPos) {
-		int x = BlockPos.getX(packedCenter);
-		int y = BlockPos.getY(packedCenter);
-		int z = BlockPos.getZ(packedCenter);
-		for (Direction direction : DIRECTIONS) {
-			long neighbor = BlockPos.asLong(
-				x + direction.getStepX(),
-				y + direction.getStepY(),
-				z + direction.getStepZ());
-			if (neighbor != packedExcludedPos && isSource(neighbor))
-				return true;
-		}
-		return false;
+		return directReceiverReferences.containsKey(packedWirePos) ? 15 : 0;
 	}
 
 	private void updateNearbyCaches(long packedSourcePos, int delta) {
@@ -154,17 +121,6 @@ public final class EntityRedstoneIndex {
 				x + direction.getStepX(),
 				y + direction.getStepY(),
 				z + direction.getStepZ()), delta);
-		}
-
-		for (int dx = -2; dx <= 2; dx++) {
-			for (int dy = -2; dy <= 2; dy++) {
-				for (int dz = -2; dz <= 2; dz++) {
-					if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 2)
-						continue;
-					updateReference(twoHopCandidateReferences,
-						BlockPos.asLong(x + dx, y + dy, z + dz), delta);
-				}
-			}
 		}
 	}
 

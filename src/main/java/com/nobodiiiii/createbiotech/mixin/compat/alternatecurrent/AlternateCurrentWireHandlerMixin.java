@@ -29,6 +29,6 @@ public abstract class AlternateCurrentWireHandlerMixin {
 	@ModifyReturnValue(method = "getExternalPower", at = @At("RETURN"), remap = false)
 	private int createBiotech$includeEntitySource(int original, WireNode wire) {
 		BlockPos wirePos = ((AlternateCurrentNodeAccess) (Object) wire).createBiotech$getPos();
-		return Math.max(original, EntityRedstoneIndex.get(level).getExternalPowerForWire(level, wirePos));
+		return Math.max(original, EntityRedstoneIndex.get(level).getExternalPowerForWire(wirePos));
 	}
 }

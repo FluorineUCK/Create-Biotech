@@ -19,20 +19,10 @@ public interface SignalGetterEntityRedstoneMixin {
 		return addEntitySignal(original, pos);
 	}
 
-	@ModifyReturnValue(method = "getDirectSignal", at = @At("RETURN"))
-	private int createBiotech$addDirectEntitySignal(int original, BlockPos pos, Direction direction) {
-		return addEntitySignal(original, pos);
-	}
-
 	@ModifyReturnValue(method = "getControlInputSignal", at = @At("RETURN"))
 	private int createBiotech$addEntityControlSignal(int original, BlockPos pos, Direction direction,
 		boolean diodesOnly) {
 		return diodesOnly ? original : addEntitySignal(original, pos);
-	}
-
-	@ModifyReturnValue(method = "getDirectSignalTo", at = @At("RETURN"))
-	private int createBiotech$powerOccupiedBlockDirectly(int original, BlockPos pos) {
-		return addEntitySignal(original, pos);
 	}
 
 	@ModifyReturnValue(method = "getBestNeighborSignal", at = @At("RETURN"))
