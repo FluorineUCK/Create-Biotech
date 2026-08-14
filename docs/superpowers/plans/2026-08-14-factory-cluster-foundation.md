@@ -18,6 +18,18 @@
 - Do not add `LogisticallyLinkedBehaviour` to Factory Panel.
 - Do not add recipes whose material balance was not approved; make the panel available in the Create Biotech creative tab.
 
+## Final-Review Binding Amendment (Normative)
+
+This section supersedes the earlier Task 1–4 snippets where they show a two-field `ClusterBinding`, `SpaceAddress.load`, or one-phase `applyClusterBinding`:
+
+- `ClusterBinding` is member-local schema version 1 and stores `clusterId`, nonnegative `revision`, optional `ClusterAuthority(type, memberId)`, and the exact ordered bindings. `ClusterBinding.MAX_BINDINGS` is 32; constructors reject an oversized normalized list and strict NBT decode rejects oversized, duplicate, malformed, or wrong-version data.
+- `SpaceAddress.tryLoad(tag[, expectedDimension])` is the only foundation decode boundary. It requires exact NBT field types, a valid dimension resource location, an exact optional UUID, and an exact long position. Selection and member decoders use it instead of duplicating lenient checks.
+- `ClusterMember` exposes `bindingState`, side-effect-free `prepareClusterBinding(ClusterBinding)`, and no-fail `commitClusterBinding(ClusterBinding)`. Every service transaction prepares every participant before committing any participant.
+- `ClusterBindingService.replaceBindings(...)` is the public cluster-wide mutation API. It validates all old/proposed logistics permissions, all loaded participants, all known authorities, activity, dimension, revision, and the 32-entry cap before a single commit.
+- Binding authority priority is computer coordinator, then pattern core, then lowest currently participating panel UUID. Authority transfer requires every known old authority loaded and every participant idle. A stale replica only adopts a loaded authority's newer/equal verified state; missing authority or incomparable state blocks mutation/orders without loading chunks.
+- `ClusterMemberIndex` remains a weak runtime index. It performs load-time reconciliation and reports binding conflicts but never becomes persistent state and never forces a save.
+- A linked-block `useOn` appends a network only when the player is not sneaking; sneak-use delegates to normal block placement.
+
 ---
 
 ## File Map
@@ -26,6 +38,8 @@
 
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/LogisticsBinding.java` — ordered binding value, alias normalization, NBT.
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterBinding.java` — cluster UUID plus immutable normalized bindings.
+- `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterAuthority.java` — stable binding-authority type and member UUID.
+- `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterBindingPreparation.java` — two-phase participant preparation result.
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/SpaceAddress.java` — root dimension, optional sublevel UUID, local block position, non-loading resolution.
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterMemberType.java` — panel/pattern/coordinator discriminator.
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterMember.java` — shared binding/discovery contract.
@@ -36,6 +50,8 @@
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelBlockEntity.java` — panel/cluster IDs, ordered bindings, index lifecycle.
 - `src/main/java/com/nobodiiiii/createbiotech/content/factorycluster/panel/FactoryPanelBlockItem.java` — append/clear Create logistics bindings on the unplaced panel.
 - `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/LogisticsBindingTest.java`
+- `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterBindingTest.java`
+- `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/SpaceAddressTest.java`
 - `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterMemberIndexTest.java`
 - `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/ClusterBindingServiceTest.java`
 - `src/main/resources/assets/create_biotech/blockstates/factory_panel.json`
@@ -64,7 +80,7 @@
 - Test: `src/test/java/com/nobodiiiii/createbiotech/content/factorycluster/LogisticsBindingTest.java`
 
 **Interfaces:**
-- Produces: `LogisticsBinding.normalize(List<LogisticsBinding>)`, `LogisticsBinding.save()`, `LogisticsBinding.load(CompoundTag)`, `ClusterBinding.withBindings(List<LogisticsBinding>)`.
+- Produces: `LogisticsBinding.normalize(List<LogisticsBinding>)`, strict binding/address decoders, and the versioned `ClusterBinding` value used only through `ClusterBindingService` transactions.
 
 - [ ] **Step 1: Configure JUnit Jupiter**
 
@@ -151,14 +167,15 @@ public record LogisticsBinding(UUID logisticsId, String alias) {
 	}
 }
 
-public record ClusterBinding(UUID clusterId, List<LogisticsBinding> logisticsBindings) {
+public record ClusterBinding(UUID clusterId, long revision,
+	@Nullable ClusterAuthority authority, List<LogisticsBinding> logisticsBindings) {
+	public static final int MAX_BINDINGS = 32;
+
 	public ClusterBinding {
 		Objects.requireNonNull(clusterId, "clusterId");
 		logisticsBindings = LogisticsBinding.normalize(logisticsBindings);
-	}
-
-	public ClusterBinding withBindings(List<LogisticsBinding> bindings) {
-		return new ClusterBinding(clusterId, bindings);
+		if (revision < 0 || logisticsBindings.size() > MAX_BINDINGS)
+			throw new IllegalArgumentException("invalid cluster binding state");
 	}
 }
 ```
@@ -251,7 +268,7 @@ public record SpaceAddress(ResourceKey<Level> dimension, @Nullable UUID subLevel
 }
 ```
 
-Add explicit `save()`/`load(CompoundTag)` using keys `Dimension`, `SubLevel`, and `Pos`; dimension parsing uses `ResourceKey.create(Registries.DIMENSION, ResourceLocation.parse(...))`.
+Add explicit `save()`/strict `tryLoad(CompoundTag)` using keys `Dimension`, `SubLevel`, and `Pos`; `tryLoad(tag, expectedDimension)` also rejects a root-dimension mismatch. `resolveBlockEntity` remains non-loading. Add a later GameTest case proving an unloaded address does not load its chunk and an outer-world/null-sublevel address rejects Sable plot-grid positions.
 
 - [ ] **Step 4: Implement member/index types**
 
@@ -260,12 +277,15 @@ public enum ClusterMemberType { PANEL, PATTERN_CORE, COMPUTER_COORDINATOR }
 
 public interface ClusterMember {
 	UUID memberId();
-	@Nullable UUID clusterId();
-	List<LogisticsBinding> logisticsBindings();
+	@Nullable ClusterBinding bindingState();
+	default @Nullable UUID clusterId();
+	default List<LogisticsBinding> logisticsBindings();
+	default boolean hasValidBindingState();
 	ClusterMemberType memberType();
 	SpaceAddress memberAddress();
 	boolean canRebind();
-	void applyClusterBinding(UUID clusterId, List<LogisticsBinding> bindings);
+	ClusterBindingPreparation prepareClusterBinding(ClusterBinding proposed);
+	void commitClusterBinding(ClusterBinding prepared);
 }
 ```
 
@@ -273,8 +293,10 @@ public interface ClusterMember {
 
 ```java
 public record ConflictReport(boolean patternConflict, boolean computerConflict,
-	boolean panelConflict) {
-	public boolean blocksNewTasks() { return patternConflict || computerConflict; }
+	boolean panelConflict, boolean bindingConflict) {
+	public boolean blocksNewTasks() {
+		return patternConflict || computerConflict || bindingConflict;
+	}
 }
 ```
 
@@ -365,7 +387,9 @@ Resolution uses `SpaceAddress.resolveBlockEntity`, then requires the BE to imple
 
 ```java
 public enum BindResult {
-	OK, NO_SOURCE, ACTIVE, DIMENSION, PERMISSION, EMPTY_NETWORKS, CONFLICT;
+	OK, NO_SOURCE, ACTIVE, DIMENSION, PERMISSION, EMPTY_NETWORKS,
+	TOO_MANY_BINDINGS, AUTHORITY_OFFLINE, STALE_BINDING,
+	PARTICIPANT_REJECTED, CONFLICT;
 
 	public boolean succeeded() {
 		return this == OK;
@@ -390,7 +414,7 @@ static BindResult validate(ClusterMember source, ClusterMember target,
 }
 ```
 
-The server entrypoint obtains all loaded members for the source cluster, checks `ClusterMemberIndex.conflicts`, invokes `Create.LOGISTICS.mayAdministrate(id, player)`, applies the full binding atomically, clears the player selection, and sends Create-style success/refusal messages.
+The server entrypoint obtains all loaded members for both old clusters, invokes `Create.LOGISTICS.mayAdministrate(id, player)` for every old and proposed network, resolves every member-local authority, creates revision `max(old)+1`, prepares every participant, then commits the one exact immutable state. It clears player selection only after all commits. `replaceBindings(ServerPlayer, ClusterMember, List<LogisticsBinding>)` follows the same transaction and is the sole API for later UI edits.
 
 - [ ] **Step 5: Run tests and commit**
 
@@ -446,7 +470,7 @@ LogisticsBindings: List<CompoundTag>
 SelectedNetwork: UUID (optional UI preference)
 ```
 
-Constructor creates `panelId = UUID.randomUUID()` and `clusterId = UUID.randomUUID()`. `read` replaces them only when the tags exist. `initialize` registers on the server; `invalidate` unregisters before `super.invalidate()`. `applyClusterBinding` unregisters the old identity, writes normalized bindings, re-registers, calls `setChanged()` and `sendData()`.
+Constructor creates stable `panelId` plus an initial self-authoritative version-1 binding state. `read` strictly decodes `BindingState`, migrates legacy `ClusterId`/`LogisticsBindings`, and marks malformed or oversized persisted state invalid. `initialize` registers and reconciles from a loaded authority; `invalidate` unregisters before `super.invalidate()`. `prepareClusterBinding` only validates identity/revision/cap/activity. `commitClusterBinding` performs the already-validated rekey, assignment, dirty mark, and sync without a second refusal path.
 
 Use this Sable-aware interaction check:
 

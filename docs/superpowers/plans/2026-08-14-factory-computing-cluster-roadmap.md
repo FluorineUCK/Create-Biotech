@@ -70,14 +70,28 @@ public enum ClusterMemberType {
 	PANEL, PATTERN_CORE, COMPUTER_COORDINATOR
 }
 
+public record ClusterAuthority(ClusterMemberType type, UUID memberId) {}
+
+public record ClusterBinding(UUID clusterId, long revision,
+	@Nullable ClusterAuthority authority, List<LogisticsBinding> logisticsBindings) {
+	public static final int MAX_BINDINGS = 32;
+}
+
+public enum ClusterBindingPreparation {
+	READY, IDENTITY, REVISION, CAPACITY, ACTIVE
+}
+
 public interface ClusterMember {
 	UUID memberId();
-	@Nullable UUID clusterId();
-	List<LogisticsBinding> logisticsBindings();
+	@Nullable ClusterBinding bindingState();
+	default @Nullable UUID clusterId();
+	default List<LogisticsBinding> logisticsBindings();
+	default boolean hasValidBindingState();
 	ClusterMemberType memberType();
 	SpaceAddress memberAddress();
 	boolean canRebind();
-	void applyClusterBinding(UUID clusterId, List<LogisticsBinding> bindings);
+	ClusterBindingPreparation prepareClusterBinding(ClusterBinding proposed);
+	void commitClusterBinding(ClusterBinding prepared); // no-fail after READY
 }
 
 public record StackKey(ItemStack stack) {}

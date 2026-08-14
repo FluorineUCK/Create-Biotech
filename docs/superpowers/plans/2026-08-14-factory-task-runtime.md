@@ -421,7 +421,7 @@ Every caller also checks `Create.LOGISTICS.mayInteract(logisticsId, submittingPl
 
 - [ ] **Step 2: Implement pattern-core selection and external-coordinate range**
 
-Resolve exactly one loaded pattern core from `ClusterMemberIndex`; conflict/missing/invalid structure returns unavailable. Require cluster/root dimension and allowed logistics bindings. Compute:
+Resolve exactly one loaded pattern core from `ClusterMemberIndex`; conflict/missing/invalid structure returns unavailable. Require `ClusterBindingService.bindingAccess(server, core) == READY` before accepting a query, then require cluster/root dimension and allowed logistics bindings. An unloaded known authority or stale/incomparable binding revision sleeps/refuses rather than using the replica. Compute:
 
 ```java
 int range = Math.min(configuredMax,

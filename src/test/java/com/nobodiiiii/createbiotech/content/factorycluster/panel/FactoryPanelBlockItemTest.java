@@ -2,13 +2,18 @@ package com.nobodiiiii.createbiotech.content.factorycluster.panel;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
 import com.nobodiiiii.createbiotech.content.factorycluster.LogisticsBinding;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBinding;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterAuthority;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterMemberType;
 
 import net.minecraft.nbt.CompoundTag;
 
@@ -40,6 +45,43 @@ class FactoryPanelBlockItemTest {
 		assertFalse(blockEntityData.contains("LogisticsBindings"));
 		assertEquals("kept", blockEntityData.getString("Unrelated"));
 		assertTrueIdentitiesRemain(blockEntityData);
+	}
+
+	@Test
+	void thirtyThirdItemBindingIsRefusedWithoutChangingPersistedBindings() {
+		CompoundTag blockEntityData = new CompoundTag();
+		List<LogisticsBinding> maximum = bindings(ClusterBinding.MAX_BINDINGS);
+		assertTrue(FactoryPanelBlockItem.writeBindingsToTag(blockEntityData, maximum));
+
+		List<LogisticsBinding> oversized = new ArrayList<>(maximum);
+		oversized.add(new LogisticsBinding(UUID.randomUUID(), "overflow"));
+
+		assertFalse(FactoryPanelBlockItem.writeBindingsToTag(blockEntityData, oversized));
+		assertEquals(maximum, FactoryPanelBlockItem.readBindingsFromTag(blockEntityData));
+	}
+
+	@Test
+	void nonAuthorityConfiguredPanelCannotEditItsOfflineBindingReplica() {
+		UUID panelId = UUID.randomUUID();
+		CompoundTag blockEntityData = new CompoundTag();
+		blockEntityData.putUUID("PanelId", panelId);
+		ClusterBinding replica = new ClusterBinding(UUID.randomUUID(), 7,
+			new ClusterAuthority(ClusterMemberType.COMPUTER_COORDINATOR,
+				UUID.randomUUID()), bindings(1));
+		blockEntityData.put("BindingState", replica.save());
+
+		assertFalse(FactoryPanelBlockItem.writeBindingsToTag(blockEntityData,
+			bindings(2)));
+		assertEquals(replica,
+			ClusterBinding.tryLoad(blockEntityData.getCompound("BindingState"))
+				.orElseThrow());
+	}
+
+	private static List<LogisticsBinding> bindings(int count) {
+		List<LogisticsBinding> bindings = new ArrayList<>();
+		for (int index = 0; index < count; index++)
+			bindings.add(new LogisticsBinding(new UUID(0, index + 1L), "network-" + index));
+		return List.copyOf(bindings);
 	}
 
 	private static void assertTrueIdentitiesRemain(CompoundTag tag) {

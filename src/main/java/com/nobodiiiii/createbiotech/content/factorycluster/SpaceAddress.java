@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.factorycluster;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
@@ -10,6 +11,7 @@ import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
@@ -57,10 +59,26 @@ public record SpaceAddress(ResourceKey<Level> dimension, @Nullable UUID subLevel
 		return tag;
 	}
 
-	public static SpaceAddress load(CompoundTag tag) {
-		ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION,
-			ResourceLocation.parse(tag.getString("Dimension")));
+	public static Optional<SpaceAddress> tryLoad(CompoundTag tag) {
+		return tryLoad(tag, null);
+	}
+
+	public static Optional<SpaceAddress> tryLoad(CompoundTag tag,
+		@Nullable ResourceKey<Level> expectedDimension) {
+		if (!tag.contains("Dimension", Tag.TAG_STRING)
+			|| tag.getString("Dimension").isBlank()
+			|| !tag.contains("Pos", Tag.TAG_LONG)
+			|| (tag.contains("SubLevel") && !tag.hasUUID("SubLevel")))
+			return Optional.empty();
+
+		ResourceLocation location = ResourceLocation.tryParse(tag.getString("Dimension"));
+		if (location == null)
+			return Optional.empty();
+		ResourceKey<Level> dimension = ResourceKey.create(Registries.DIMENSION, location);
+		if (expectedDimension != null && !expectedDimension.equals(dimension))
+			return Optional.empty();
 		UUID subLevelId = tag.hasUUID("SubLevel") ? tag.getUUID("SubLevel") : null;
-		return new SpaceAddress(dimension, subLevelId, BlockPos.of(tag.getLong("Pos")));
+		return Optional.of(new SpaceAddress(dimension, subLevelId,
+			BlockPos.of(tag.getLong("Pos"))));
 	}
 }

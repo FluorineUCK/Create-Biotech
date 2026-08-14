@@ -9,6 +9,10 @@ import java.util.UUID;
 
 import org.junit.jupiter.api.Test;
 
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterAuthority;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBinding;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBindingPreparation;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterMemberType;
 import com.nobodiiiii.createbiotech.content.factorycluster.LogisticsBinding;
 
 import net.minecraft.core.BlockPos;
@@ -28,10 +32,14 @@ class FactoryPanelBlockEntityTest {
 	@Test
 	void bindingStateRoundTripsAndMissingIdentityTagsDoNotEraseGeneratedIds() {
 		FactoryPanelBlockEntity source = panel();
-		source.applyClusterBinding(REBOUND_CLUSTER, List.of(
+		ClusterBinding rebound = new ClusterBinding(REBOUND_CLUSTER, 4,
+			new ClusterAuthority(ClusterMemberType.PANEL, source.memberId()), List.of(
 			new LogisticsBinding(FIRST_NETWORK, "First"),
 			new LogisticsBinding(FIRST_NETWORK, "Duplicate"),
 			new LogisticsBinding(SECOND_NETWORK, "Second")));
+		assertEquals(ClusterBindingPreparation.READY,
+			source.prepareClusterBinding(rebound));
+		source.commitClusterBinding(rebound);
 		source.setSelectedNetwork(SECOND_NETWORK);
 		CompoundTag saved = new CompoundTag();
 		source.write(saved, RegistryAccess.EMPTY, false);
@@ -41,6 +49,8 @@ class FactoryPanelBlockEntityTest {
 
 		assertEquals(source.memberId(), restored.memberId());
 		assertEquals(REBOUND_CLUSTER, restored.clusterId());
+		assertEquals(4, restored.bindingState().revision());
+		assertEquals(rebound.authority(), restored.bindingState().authority());
 		assertEquals(List.of(FIRST_NETWORK, SECOND_NETWORK), restored.logisticsBindings().stream()
 			.map(LogisticsBinding::logisticsId).toList());
 		assertEquals(SECOND_NETWORK, restored.selectedNetwork());
@@ -50,6 +60,52 @@ class FactoryPanelBlockEntityTest {
 		restored.read(new CompoundTag(), RegistryAccess.EMPTY, false);
 		assertEquals(generatedPanelId, restored.memberId());
 		assertEquals(loadedClusterId, restored.clusterId());
+	}
+
+	@Test
+	void oversizedPersistedBindingStateIsMarkedInvalidInsteadOfTruncated() {
+		FactoryPanelBlockEntity panel = panel();
+		CompoundTag saved = new CompoundTag();
+		panel.write(saved, RegistryAccess.EMPTY, false);
+		net.minecraft.nbt.ListTag oversized = new net.minecraft.nbt.ListTag();
+		for (int index = 0; index <= ClusterBinding.MAX_BINDINGS; index++)
+			oversized.add(new LogisticsBinding(new UUID(0, index + 1L),
+				"network-" + index).save());
+		saved.getCompound(FactoryPanelBlockEntity.BINDING_STATE_KEY)
+			.put("LogisticsBindings", oversized);
+
+		FactoryPanelBlockEntity restored = panel();
+		restored.read(saved, RegistryAccess.EMPTY, false);
+
+		assertFalse(restored.hasValidBindingState());
+		assertFalse(restored.canRebind());
+		CompoundTag resaved = new CompoundTag();
+		restored.write(resaved, RegistryAccess.EMPTY, false);
+		FactoryPanelBlockEntity reloaded = panel();
+		reloaded.read(resaved, RegistryAccess.EMPTY, false);
+		assertFalse(reloaded.hasValidBindingState());
+	}
+
+	@Test
+	void legacyClusterAndBindingTagsMigrateToSelfAuthoritativeRevisionZero() {
+		UUID panelId = UUID.randomUUID();
+		CompoundTag legacy = new CompoundTag();
+		legacy.putUUID(FactoryPanelBlockEntity.PANEL_ID_KEY, panelId);
+		legacy.putUUID(FactoryPanelBlockEntity.CLUSTER_ID_KEY, REBOUND_CLUSTER);
+		net.minecraft.nbt.ListTag bindings = new net.minecraft.nbt.ListTag();
+		bindings.add(new LogisticsBinding(FIRST_NETWORK, "First").save());
+		legacy.put(FactoryPanelBlockEntity.LOGISTICS_BINDINGS_KEY, bindings);
+
+		FactoryPanelBlockEntity restored = panel();
+		restored.read(legacy, RegistryAccess.EMPTY, false);
+
+		assertTrue(restored.hasValidBindingState());
+		assertEquals(REBOUND_CLUSTER, restored.clusterId());
+		assertEquals(0, restored.bindingState().revision());
+		assertEquals(new ClusterAuthority(ClusterMemberType.PANEL, panelId),
+			restored.bindingState().authority());
+		assertEquals(List.of(new LogisticsBinding(FIRST_NETWORK, "First")),
+			restored.logisticsBindings());
 	}
 
 	@Test

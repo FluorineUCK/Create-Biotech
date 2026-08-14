@@ -172,7 +172,7 @@ public enum FactoryPanelResultCode {
 Hard limits used by both encoders and decoders:
 
 ```java
-static final int MAX_BINDINGS = 32;
+static final int MAX_BINDINGS = ClusterBinding.MAX_BINDINGS;
 static final int MAX_STOCK_ENTRIES_PER_CHUNK = 100;
 static final int MAX_ROOTS = 128;
 static final int MAX_FRAMES = 512;
@@ -508,7 +508,7 @@ Both calls name `RootOrder.logisticsId()`. Never choose a network by address tex
 
 - [ ] **Step 5: Implement binding edits with administration permissions**
 
-Binding packets call the resolver with `administration=true`. `RENAME` strips/truncates alias to 32 characters. `REMOVE` cannot leave an in-use selected logistics ID on an active root without confirmation: reject it while any current root references that ID. `MOVE_UP/DOWN` swaps within the ordered immutable list. Every mutation calls `applyClusterBinding(panel.clusterId(), normalizedBindings)`, marks the panel changed, sends block update, and returns a fresh stock generation.
+Binding packets call the resolver with `administration=true`. The resolver also requires `ClusterBindingService.bindingAccess(server, panel) == READY`; a panel whose known authority is unloaded or whose revision conflicts cannot mutate bindings or serve an order. `RENAME` strips/truncates alias to 32 characters. `REMOVE` cannot leave an in-use selected logistics ID on an active root without confirmation: reject it while any current root references that ID. `MOVE_UP/DOWN` swaps within the ordered immutable list. Every mutation calls the public authoritative `ClusterBindingService.replaceBindings(player, panel, normalizedBindings)`; it never invokes a panel-local commit method. Only a successful cluster-wide transaction returns a fresh stock generation. A 33rd binding maps to the translated `TOO_MANY_BINDINGS` result.
 
 - [ ] **Step 6: Run focused tests and commit**
 

@@ -18,6 +18,7 @@ public final class ClusterMemberIndex {
 
 	public static void register(MinecraftServer server, ClusterMember member) {
 		serverIndex(server).register(member);
+		ClusterBindingService.reconcileLoaded(server, member);
 	}
 
 	public static void unregister(MinecraftServer server, ClusterMember member) {
@@ -47,7 +48,7 @@ public final class ClusterMemberIndex {
 		synchronized (SERVERS) {
 			index = SERVERS.get(server);
 		}
-		return index == null ? new ConflictReport(false, false, false)
+		return index == null ? new ConflictReport(false, false, false, false)
 			: index.conflicts(clusterId);
 	}
 
@@ -119,20 +120,24 @@ public final class ClusterMemberIndex {
 		}
 
 		ConflictReport conflicts(UUID clusterId) {
-			boolean patternConflict =
-				members(clusterId, ClusterMemberType.PATTERN_CORE).size() > 1;
-			boolean computerConflict =
-				members(clusterId, ClusterMemberType.COMPUTER_COORDINATOR).size() > 1;
-			return new ConflictReport(patternConflict, computerConflict, false);
+			List<ClusterMember> panels = members(clusterId, ClusterMemberType.PANEL);
+			List<ClusterMember> patterns = members(clusterId, ClusterMemberType.PATTERN_CORE);
+			List<ClusterMember> computers = members(clusterId,
+				ClusterMemberType.COMPUTER_COORDINATOR);
+			List<ClusterMember> all = new ArrayList<>(panels);
+			all.addAll(patterns);
+			all.addAll(computers);
+			return new ConflictReport(patterns.size() > 1, computers.size() > 1,
+				false, !all.isEmpty() && ClusterBindingService.loadedBindingConflict(all));
 		}
 	}
 
 	private record MemberKey(ClusterMemberType type, UUID memberId) {}
 
 	public record ConflictReport(boolean patternConflict, boolean computerConflict,
-		boolean panelConflict) {
+		boolean panelConflict, boolean bindingConflict) {
 		public boolean blocksNewTasks() {
-			return patternConflict || computerConflict;
+			return patternConflict || computerConflict || bindingConflict;
 		}
 	}
 }

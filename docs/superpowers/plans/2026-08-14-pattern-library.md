@@ -491,7 +491,7 @@ Structure changes rebuild page order; partial chunks retain the previous snapsho
 
 - [ ] **Step 3: Implement cluster membership**
 
-The lower BE implements `ClusterMember` with stable `libraryId`, optional `clusterId`, normalized bindings, `PATTERN_CORE` type, and `canRebind()` false while active queries/replies exist. `initialize/invalidate` register/unregister in `ClusterMemberIndex`. `applyClusterBinding` uses the same unregister-update-register pattern as Factory Panel.
+The lower BE implements `ClusterMember` with stable `libraryId`, optional versioned `ClusterBinding`, `PATTERN_CORE` type, and `canRebind()` false while active queries/replies exist. `initialize/invalidate` register/unregister in `ClusterMemberIndex`; initialization reconciles only from the loaded binding authority. `prepareClusterBinding` validates the exact cluster/revision/authority/cap without side effects. `commitClusterBinding` performs only the previously prepared unregister-update-register, dirty, and sync operations and cannot refuse. Before a computer coordinator is bound, this core becomes binding authority; afterward it is a non-authority replica and cannot edit or answer cluster queries until its revision is reconciled.
 
 Expose these runtime methods with exact signatures:
 

@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
 
 public record LogisticsBinding(UUID logisticsId, String alias) {
 	public static final int MAX_ALIAS_LENGTH = 32;
@@ -26,7 +27,7 @@ public record LogisticsBinding(UUID logisticsId, String alias) {
 	}
 
 	public static Optional<LogisticsBinding> load(CompoundTag tag) {
-		return tag.hasUUID("Id")
+		return tag.hasUUID("Id") && tag.contains("Alias", Tag.TAG_STRING)
 			? Optional.of(new LogisticsBinding(tag.getUUID("Id"), tag.getString("Alias")))
 			: Optional.empty();
 	}

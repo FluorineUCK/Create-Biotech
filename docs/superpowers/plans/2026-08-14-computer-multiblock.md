@@ -417,7 +417,7 @@ git commit -m "feat: freeze computer cluster epochs"
 
 `ComputerCasingBlock.onSneakWrenched` resolves an active `ClusterBindingSelection`. With no selection, it returns `IWrenchable.super.onSneakWrenched`; with a selection and valid coordinator, it calls `ClusterBindingService.bind`.
 
-`ComputerBlockEntity.applyClusterBinding` on the coordinator first verifies every structure member is loaded, idle, and has empty mailboxes, then applies the exact same `clusterId` and normalized binding list to every Computer. If any member fails validation, no member changes.
+The coordinator's side-effect-free `prepareClusterBinding(ClusterBinding proposed)` verifies every structure member is loaded, belongs to the frozen stable structure identity, is idle, has empty mailboxes, accepts the exact revision/authority, and can store all bindings. It stages no mutation. Only after the cluster service has prepared every external participant does `commitClusterBinding(prepared)` write that exact immutable state to every Computer; this commit is no-fail for a prepared snapshot and does not rescan or refuse. On load, a non-authority Computer never publishes its older binding over the coordinator; it adopts only a verified coordinator revision through the foundation reconciliation contract.
 
 - [ ] **Step 3: Verify cross-space rejection and normal Sable movement**
 

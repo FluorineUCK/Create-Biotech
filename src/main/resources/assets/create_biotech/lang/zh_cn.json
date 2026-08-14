@@ -541,5 +541,9 @@
   "create_biotech.factory_cluster.binding.dimension": "工厂集群成员必须位于同一主维度",
   "create_biotech.factory_cluster.binding.permission": "你没有全部物流网络的管理权限",
   "create_biotech.factory_cluster.binding.empty_networks": "未配置任何物流网络",
-  "create_biotech.factory_cluster.binding.conflict": "请先解决工厂集群成员冲突再重新绑定"
+  "create_biotech.factory_cluster.binding.conflict": "请先解决工厂集群成员冲突再重新绑定",
+  "create_biotech.factory_cluster.binding.too_many_bindings": "一个工厂集群最多可绑定 32 个物流网络",
+  "create_biotech.factory_cluster.binding.authority_offline": "请先加载工厂集群的绑定权威结构，再修改物流网络",
+  "create_biotech.factory_cluster.binding.stale_binding": "工厂集群的绑定版本冲突，请停止全部任务并重新组网",
+  "create_biotech.factory_cluster.binding.participant_rejected": "工厂集群成员拒绝了绑定更新"
 }

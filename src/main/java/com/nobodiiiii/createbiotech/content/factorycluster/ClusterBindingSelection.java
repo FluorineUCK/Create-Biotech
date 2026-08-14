@@ -49,20 +49,14 @@ public final class ClusterBindingSelection {
 			return invalid(persistentData);
 
 		CompoundTag tag = persistentData.getCompound(KEY);
-		if (!tag.hasUUID(MEMBER_ID)
-			|| !tag.contains(EXPIRES, Tag.TAG_LONG)
-			|| !tag.contains("Dimension", Tag.TAG_STRING)
-			|| tag.getString("Dimension").isBlank()
-			|| !tag.contains("Pos", Tag.TAG_LONG)
-			|| (tag.contains("SubLevel") && !tag.hasUUID("SubLevel")))
+		if (!tag.hasUUID(MEMBER_ID) || !tag.contains(EXPIRES, Tag.TAG_LONG))
 			return invalid(persistentData);
 
-		try {
-			return Optional.of(new Selection(SpaceAddress.load(tag),
-				tag.getUUID(MEMBER_ID), tag.getLong(EXPIRES)));
-		} catch (RuntimeException invalidAddress) {
+		Optional<SpaceAddress> address = SpaceAddress.tryLoad(tag);
+		if (address.isEmpty())
 			return invalid(persistentData);
-		}
+		return Optional.of(new Selection(address.get(), tag.getUUID(MEMBER_ID),
+			tag.getLong(EXPIRES)));
 	}
 
 	public static void clear(ServerPlayer player) {

@@ -541,5 +541,9 @@
   "create_biotech.factory_cluster.binding.dimension": "Factory cluster members must share a root dimension",
   "create_biotech.factory_cluster.binding.permission": "You cannot administrate every logistics network in this binding",
   "create_biotech.factory_cluster.binding.empty_networks": "No logistics networks are configured",
-  "create_biotech.factory_cluster.binding.conflict": "Resolve the factory cluster member conflict before rebinding"
+  "create_biotech.factory_cluster.binding.conflict": "Resolve the factory cluster member conflict before rebinding",
+  "create_biotech.factory_cluster.binding.too_many_bindings": "A factory cluster can bind at most 32 logistics networks",
+  "create_biotech.factory_cluster.binding.authority_offline": "Load the factory cluster binding authority before changing its networks",
+  "create_biotech.factory_cluster.binding.stale_binding": "Factory cluster binding revisions conflict; stop all work and reform the cluster",
+  "create_biotech.factory_cluster.binding.participant_rejected": "A factory cluster member rejected the binding update"
 }

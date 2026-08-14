@@ -8,6 +8,9 @@ import java.util.UUID;
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.content.factorycluster.ClusterMember;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterAuthority;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBinding;
+import com.nobodiiiii.createbiotech.content.factorycluster.ClusterBindingPreparation;
 import com.nobodiiiii.createbiotech.content.factorycluster.ClusterMemberIndex;
 import com.nobodiiiii.createbiotech.content.factorycluster.ClusterMemberType;
 import com.nobodiiiii.createbiotech.content.factorycluster.LogisticsBinding;
@@ -36,10 +39,13 @@ public class FactoryPanelBlockEntity extends SmartBlockEntity implements Cluster
 	static final String CLUSTER_ID_KEY = "ClusterId";
 	static final String LOGISTICS_BINDINGS_KEY = "LogisticsBindings";
 	static final String SELECTED_NETWORK_KEY = "SelectedNetwork";
+	static final String BINDING_STATE_KEY = "BindingState";
+	static final String BINDING_STATE_INVALID_KEY = "BindingStateInvalid";
 
 	private UUID panelId = UUID.randomUUID();
-	private UUID clusterId = UUID.randomUUID();
-	private List<LogisticsBinding> logisticsBindings = List.of();
+	private ClusterBinding bindingState = new ClusterBinding(UUID.randomUUID(), 0,
+		new ClusterAuthority(ClusterMemberType.PANEL, panelId), List.of());
+	private boolean bindingStateValid = true;
 	@Nullable
 	private UUID selectedNetwork;
 
@@ -76,13 +82,13 @@ public class FactoryPanelBlockEntity extends SmartBlockEntity implements Cluster
 	}
 
 	@Override
-	public UUID clusterId() {
-		return clusterId;
+	public ClusterBinding bindingState() {
+		return bindingState;
 	}
 
 	@Override
-	public List<LogisticsBinding> logisticsBindings() {
-		return logisticsBindings;
+	public boolean hasValidBindingState() {
+		return bindingStateValid;
 	}
 
 	@Override
@@ -97,28 +103,41 @@ public class FactoryPanelBlockEntity extends SmartBlockEntity implements Cluster
 
 	@Override
 	public boolean canRebind() {
-		return true;
+		return bindingStateValid;
 	}
 
 	@Override
-	public void applyClusterBinding(UUID clusterId, List<LogisticsBinding> bindings) {
-		Objects.requireNonNull(clusterId, "clusterId");
-		List<LogisticsBinding> normalizedBindings = LogisticsBinding.normalize(bindings);
+	public ClusterBindingPreparation prepareClusterBinding(ClusterBinding proposed) {
+		if (!bindingStateValid || proposed.authority() == null)
+			return ClusterBindingPreparation.IDENTITY;
+		if (!canRebind())
+			return ClusterBindingPreparation.ACTIVE;
+		if (proposed.logisticsBindings().size() > ClusterBinding.MAX_BINDINGS)
+			return ClusterBindingPreparation.CAPACITY;
+		if (proposed.revision() < bindingState.revision()
+			|| (proposed.revision() == bindingState.revision()
+				&& !proposed.equals(bindingState)))
+			return ClusterBindingPreparation.REVISION;
+		return ClusterBindingPreparation.READY;
+	}
+
+	@Override
+	public void commitClusterBinding(ClusterBinding prepared) {
 		MinecraftServer server = server();
 		if (server == null) {
-			applyBindingState(clusterId, normalizedBindings);
+			applyBindingState(prepared);
 		} else {
 			ClusterMemberIndex.rebind(server, this,
-				() -> applyBindingState(clusterId, normalizedBindings));
+				() -> applyBindingState(prepared));
 		}
 		setChanged();
 		sendData();
 	}
 
-	private void applyBindingState(UUID clusterId, List<LogisticsBinding> bindings) {
-		this.clusterId = clusterId;
-		this.logisticsBindings = bindings;
-		if (selectedNetwork != null && bindings.stream()
+	private void applyBindingState(ClusterBinding prepared) {
+		bindingState = prepared;
+		bindingStateValid = true;
+		if (selectedNetwork != null && prepared.logisticsBindings().stream()
 			.noneMatch(binding -> binding.logisticsId().equals(selectedNetwork)))
 			selectedNetwork = null;
 	}
@@ -153,10 +172,8 @@ public class FactoryPanelBlockEntity extends SmartBlockEntity implements Cluster
 	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		super.write(tag, registries, clientPacket);
 		tag.putUUID(PANEL_ID_KEY, panelId);
-		tag.putUUID(CLUSTER_ID_KEY, clusterId);
-		ListTag bindings = new ListTag();
-		logisticsBindings.forEach(binding -> bindings.add(binding.save()));
-		tag.put(LOGISTICS_BINDINGS_KEY, bindings);
+		tag.put(BINDING_STATE_KEY, bindingState.save());
+		tag.putBoolean(BINDING_STATE_INVALID_KEY, !bindingStateValid);
 		if (selectedNetwork != null)
 			tag.putUUID(SELECTED_NETWORK_KEY, selectedNetwork);
 		else
@@ -168,16 +185,62 @@ public class FactoryPanelBlockEntity extends SmartBlockEntity implements Cluster
 		super.read(tag, registries, clientPacket);
 		if (tag.hasUUID(PANEL_ID_KEY))
 			panelId = tag.getUUID(PANEL_ID_KEY);
-		if (tag.hasUUID(CLUSTER_ID_KEY))
-			clusterId = tag.getUUID(CLUSTER_ID_KEY);
 
-		List<LogisticsBinding> loadedBindings = new ArrayList<>();
-		ListTag bindings = tag.getList(LOGISTICS_BINDINGS_KEY, Tag.TAG_COMPOUND);
-		for (int index = 0; index < bindings.size(); index++)
-			LogisticsBinding.load(bindings.getCompound(index)).ifPresent(loadedBindings::add);
-		logisticsBindings = LogisticsBinding.normalize(loadedBindings);
+		if (tag.contains(BINDING_STATE_INVALID_KEY)
+			&& (!tag.contains(BINDING_STATE_INVALID_KEY, Tag.TAG_BYTE)
+				|| tag.getBoolean(BINDING_STATE_INVALID_KEY))) {
+			bindingStateValid = false;
+		} else if (tag.contains(BINDING_STATE_KEY)) {
+			if (!tag.contains(BINDING_STATE_KEY, Tag.TAG_COMPOUND)) {
+				bindingStateValid = false;
+			} else {
+				java.util.Optional<ClusterBinding> decoded = ClusterBinding.tryLoad(
+					tag.getCompound(BINDING_STATE_KEY));
+				if (decoded.isPresent()) {
+					bindingState = decoded.get();
+					bindingStateValid = true;
+				} else {
+					bindingStateValid = false;
+				}
+			}
+		} else if (tag.hasUUID(CLUSTER_ID_KEY) || tag.contains(LOGISTICS_BINDINGS_KEY)) {
+			readLegacyBindingState(tag);
+		}
 		selectedNetwork = tag.hasUUID(SELECTED_NETWORK_KEY)
 			? tag.getUUID(SELECTED_NETWORK_KEY) : null;
+		if (selectedNetwork != null && logisticsBindings().stream()
+			.noneMatch(binding -> binding.logisticsId().equals(selectedNetwork)))
+			selectedNetwork = null;
+	}
+
+	private void readLegacyBindingState(CompoundTag tag) {
+		if (tag.contains(LOGISTICS_BINDINGS_KEY)
+			&& !tag.contains(LOGISTICS_BINDINGS_KEY, Tag.TAG_LIST)) {
+			bindingStateValid = false;
+			return;
+		}
+		ListTag bindings = tag.getList(LOGISTICS_BINDINGS_KEY, Tag.TAG_COMPOUND);
+		if (bindings.size() > ClusterBinding.MAX_BINDINGS
+			|| (!bindings.isEmpty() && bindings.getElementType() != Tag.TAG_COMPOUND)) {
+			bindingStateValid = false;
+			return;
+		}
+		List<LogisticsBinding> loadedBindings = new ArrayList<>();
+		for (int index = 0; index < bindings.size(); index++) {
+			java.util.Optional<LogisticsBinding> binding =
+				LogisticsBinding.load(bindings.getCompound(index));
+			if (binding.isEmpty() || loadedBindings.stream().anyMatch(existing ->
+				existing.logisticsId().equals(binding.get().logisticsId()))) {
+				bindingStateValid = false;
+				return;
+			}
+			loadedBindings.add(binding.get());
+		}
+		UUID clusterId = tag.hasUUID(CLUSTER_ID_KEY)
+			? tag.getUUID(CLUSTER_ID_KEY) : bindingState.clusterId();
+		bindingState = new ClusterBinding(clusterId, 0,
+			new ClusterAuthority(ClusterMemberType.PANEL, panelId), loadedBindings);
+		bindingStateValid = true;
 	}
 
 	@Nullable

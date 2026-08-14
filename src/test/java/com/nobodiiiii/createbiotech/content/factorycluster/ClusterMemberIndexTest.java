@@ -66,8 +66,9 @@ class ClusterMemberIndexTest {
 	private record FakeMember(UUID memberId, UUID clusterId,
 		ClusterMemberType memberType) implements ClusterMember {
 		@Override
-		public List<LogisticsBinding> logisticsBindings() {
-			return List.of();
+		public ClusterBinding bindingState() {
+			return new ClusterBinding(clusterId, 0,
+				new ClusterAuthority(memberType, memberId), List.of());
 		}
 
 		@Override
@@ -81,7 +82,12 @@ class ClusterMemberIndexTest {
 		}
 
 		@Override
-		public void applyClusterBinding(UUID clusterId, List<LogisticsBinding> bindings) {}
+		public ClusterBindingPreparation prepareClusterBinding(ClusterBinding proposed) {
+			return ClusterBindingPreparation.READY;
+		}
+
+		@Override
+		public void commitClusterBinding(ClusterBinding prepared) {}
 	}
 
 	private static final class MutableMember implements ClusterMember {
@@ -99,13 +105,9 @@ class ClusterMemberIndexTest {
 		}
 
 		@Override
-		public UUID clusterId() {
-			return clusterId;
-		}
-
-		@Override
-		public List<LogisticsBinding> logisticsBindings() {
-			return List.of();
+		public ClusterBinding bindingState() {
+			return new ClusterBinding(clusterId, 0,
+				new ClusterAuthority(ClusterMemberType.PANEL, memberId), List.of());
 		}
 
 		@Override
@@ -124,8 +126,13 @@ class ClusterMemberIndexTest {
 		}
 
 		@Override
-		public void applyClusterBinding(UUID clusterId, List<LogisticsBinding> bindings) {
-			this.clusterId = clusterId;
+		public ClusterBindingPreparation prepareClusterBinding(ClusterBinding proposed) {
+			return ClusterBindingPreparation.READY;
+		}
+
+		@Override
+		public void commitClusterBinding(ClusterBinding prepared) {
+			this.clusterId = prepared.clusterId();
 		}
 	}
 }
