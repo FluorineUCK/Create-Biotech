@@ -157,32 +157,38 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 
 		@Override
 		public VertexConsumer addVertex(float x, float y, float z) {
-			return delegate.addVertex(pose, x, y, z);
+			delegate.addVertex(pose, x, y, z);
+			return this;
 		}
 
 		@Override
 		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
-			return delegate.setColor(red, green, blue, alpha);
+			delegate.setColor(red, green, blue, alpha);
+			return this;
 		}
 
 		@Override
 		public VertexConsumer setUv(float u, float v) {
-			return delegate.setUv(u, v);
+			delegate.setUv(u, v);
+			return this;
 		}
 
 		@Override
 		public VertexConsumer setUv1(int u, int v) {
-			return delegate.setUv1(u, v);
+			delegate.setUv1(u, v);
+			return this;
 		}
 
 		@Override
 		public VertexConsumer setUv2(int u, int v) {
-			return delegate.setUv2(u, v);
+			delegate.setUv2(u, v);
+			return this;
 		}
 
 		@Override
 		public VertexConsumer setNormal(float x, float y, float z) {
-			return delegate.setNormal(x, y, z);
+			delegate.setNormal(x, y, z);
+			return this;
 		}
 	}
 
