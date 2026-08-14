@@ -22,6 +22,12 @@ public class BlockCenteredSpawnableRenderedLivingEntityItem<T extends Mob>
 	}
 
 	public BlockCenteredSpawnableRenderedLivingEntityItem(Properties properties, EntityType<T> entityType,
+		float scaleMultiplier) {
+		super(properties, entityType, entity -> {
+		}, scaleMultiplier);
+	}
+
+	public BlockCenteredSpawnableRenderedLivingEntityItem(Properties properties, EntityType<T> entityType,
 		Consumer<T> entityConfigurer) {
 		super(properties, entityType, entityConfigurer);
 	}

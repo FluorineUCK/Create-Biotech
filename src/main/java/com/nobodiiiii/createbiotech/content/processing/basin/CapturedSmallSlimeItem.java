@@ -11,8 +11,10 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 public class CapturedSmallSlimeItem extends BlockCenteredSpawnableRenderedLivingEntityItem<Slime> {
+	private static final float ITEM_RENDER_SCALE = 1.8f;
+
 	public CapturedSmallSlimeItem(Properties properties) {
-		super(properties, EntityType.SLIME, CapturedSmallSlimeItem::configureSlime);
+		super(properties, EntityType.SLIME, CapturedSmallSlimeItem::configureSlime, ITEM_RENDER_SCALE);
 	}
 
 	@Override

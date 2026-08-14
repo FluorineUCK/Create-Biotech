@@ -21,6 +21,12 @@ public class BlockCenteredRenderedLivingEntityItem<T extends LivingEntity> exten
 	}
 
 	public BlockCenteredRenderedLivingEntityItem(Properties properties, EntityType<T> entityType,
+		float scaleMultiplier) {
+		super(properties, entityType, entity -> {
+		}, scaleMultiplier);
+	}
+
+	public BlockCenteredRenderedLivingEntityItem(Properties properties, EntityType<T> entityType,
 		Consumer<T> entityConfigurer) {
 		super(properties, entityType, entityConfigurer);
 	}

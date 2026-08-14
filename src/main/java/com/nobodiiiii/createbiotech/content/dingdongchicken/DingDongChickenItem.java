@@ -9,9 +9,10 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 public class DingDongChickenItem extends BlockCenteredSpawnableRenderedLivingEntityItem<DingDongChickenEntity> {
+	private static final float ITEM_RENDER_SCALE = 1.8f;
 
 	public DingDongChickenItem(Properties properties) {
-		super(properties, CBEntityTypes.DING_DONG_CHICKEN.get());
+		super(properties, CBEntityTypes.DING_DONG_CHICKEN.get(), ITEM_RENDER_SCALE);
 	}
 
 	@Override
