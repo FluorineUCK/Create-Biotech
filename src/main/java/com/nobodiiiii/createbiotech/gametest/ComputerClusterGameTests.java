@@ -26,6 +26,7 @@ import com.nobodiiiii.createbiotech.content.factorycluster.computer.ClusterEpoch
 import com.nobodiiiii.createbiotech.content.factorycluster.computer.ComputerAvailabilityReason;
 import com.nobodiiiii.createbiotech.content.factorycluster.computer.ComputerBlockEntity;
 import com.nobodiiiii.createbiotech.content.factorycluster.computer.ComputerCasingBlock;
+import com.nobodiiiii.createbiotech.content.factorycluster.computer.ComputerCoordinatorMember;
 import com.nobodiiiii.createbiotech.content.factorycluster.computer.ComputerNodeView;
 import com.nobodiiiii.createbiotech.content.factorycluster.computer.ComputerProfile;
 import com.nobodiiiii.createbiotech.content.factorycluster.computer.ComputerStructureSnapshot;
@@ -715,45 +716,80 @@ public final class ComputerClusterGameTests {
 				CompoundTag frozenBytes = frozen.save();
 				UUID frozenStructureId = frozen.computerStructureMemberId();
 				CompoundTag frozenBindingBytes = bindingTag(coordinator, level);
+				Set<EpochFault> frozenFaults = coordinator.latchedEpochFaults();
 				int frozenCapacity = frozen.nodes().stream().mapToInt(node -> node.profile().slots()).sum();
 				ComputerBlockEntity pending = placeComputer(level, pendingPos, HIGH_ID);
 
 				helper.runAfterDelay(FORMATION_DELAY, () -> {
-					List<ComputerNodeView> pendingBefore = coordinator.pendingNodes();
-					helper.assertValueEqual(pendingBefore.size(), 1,
-						"A hot-added empty Computer must appear only as pending");
-					helper.assertTrue(pendingBefore.getFirst().pending() && !pendingBefore.getFirst().online(),
-						"An empty pending Computer must be pending=true, online=false");
-					useBox(player, level, pendingPos,
-						capturedResident(level, NodeKind.VILLAGER, 4).box());
-
-					helper.runAfterDelay(FORMATION_DELAY, () -> {
-						List<ComputerNodeView> pendingAfter = coordinator.pendingNodes();
-						helper.assertValueEqual(pendingAfter.size(), 1,
-							"Installed hot-add must remain outside the frozen epoch");
-						helper.assertTrue(pendingAfter.getFirst().pending() && pendingAfter.getFirst().online(),
-							"Installed hot-add must become pending=true, online=true");
-						helper.assertValueEqual(coordinator.epoch().orElseThrow().save(), frozenBytes,
-							"Pending installation must not change frozen epoch bytes/order/range");
-						helper.assertValueEqual(coordinator.epoch().orElseThrow().nodes().stream()
-							.mapToInt(node -> node.profile().slots()).sum(), frozenCapacity,
-							"Pending installation must not change usable frozen capacity");
-						helper.assertTrue(coordinator.latchedEpochFaults().isEmpty(),
-							"Pending installation must not add a fault latch");
-						helper.assertValueEqual(coordinator.latchEpochFault(frozen.epochId(), EpochFault.WIDTH),
-							ComputerBlockEntity.FaultLatchResult.LATCHED,
-							"The reform fixture must persist a real epoch fault");
-						level.setBlock(ordinaryPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
-						helper.assertValueEqual(coordinator.epoch().orElseThrow().save(), frozenBytes,
-							"Removing a non-coordinator must preserve the complete frozen epoch");
-						helper.assertValueEqual(bindingTag(coordinator, level), frozenBindingBytes,
-							"Removing a non-coordinator must preserve binding bytes");
-						helper.assertValueEqual(coordinator.computerStructureMemberId().orElseThrow(),
-							frozenStructureId,
-							"Removing a non-coordinator must preserve structure identity");
-						level.setBlock(coordinatorPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+					try {
+						List<ComputerNodeView> pendingBefore = coordinator.pendingNodes();
+						helper.assertValueEqual(pendingBefore.size(), 1,
+							"A hot-added empty Computer must appear only as pending");
+						helper.assertTrue(pendingBefore.getFirst().pending()
+							&& !pendingBefore.getFirst().online(),
+							"An empty pending Computer must be pending=true, online=false");
+						useBox(player, level, pendingPos,
+							capturedResident(level, NodeKind.VILLAGER, 4).box());
 
 						helper.runAfterDelay(FORMATION_DELAY, () -> {
+							try {
+								List<ComputerNodeView> pendingAfter = coordinator.pendingNodes();
+								helper.assertValueEqual(pendingAfter.size(), 1,
+									"Installed hot-add must remain outside the frozen epoch");
+								helper.assertTrue(pendingAfter.getFirst().pending()
+									&& pendingAfter.getFirst().online(),
+									"Installed hot-add must become pending=true, online=true");
+								helper.assertValueEqual(coordinator.epoch().orElseThrow().save(), frozenBytes,
+									"Pending installation must not change frozen epoch bytes/order/range");
+								helper.assertValueEqual(coordinator.epoch().orElseThrow().nodes().stream()
+									.mapToInt(node -> node.profile().slots()).sum(), frozenCapacity,
+									"Pending installation must not change usable frozen capacity");
+								helper.assertValueEqual(coordinator.latchedEpochFaults(), frozenFaults,
+									"Pending installation must not change fault latches");
+								level.setBlock(ordinaryPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+
+								helper.runAfterDelay(FORMATION_DELAY, () -> {
+									try {
+										helper.assertValueEqual(coordinator.availabilityReason(),
+											ComputerAvailabilityReason.FROZEN_MEMBER_MISSING,
+											"A production rescan must observe the missing frozen non-coordinator");
+										helper.assertValueEqual(coordinator.epoch().orElseThrow().save(), frozenBytes,
+											"Missing a non-coordinator must preserve complete frozen epoch/order bytes");
+										helper.assertValueEqual(coordinator.epoch().orElseThrow().coordinatorId(),
+											LOW_ID, "Missing a non-coordinator must not replace the frozen coordinator");
+										helper.assertValueEqual(bindingTag(coordinator, level), frozenBindingBytes,
+											"Missing a non-coordinator must preserve binding bytes");
+										helper.assertValueEqual(coordinator.computerStructureMemberId().orElseThrow(),
+											frozenStructureId,
+											"Missing a non-coordinator must preserve structure identity");
+										helper.assertValueEqual(coordinator.latchedEpochFaults(), frozenFaults,
+											"Missing a non-coordinator must preserve fault latches");
+										List<ClusterMember> registered = ClusterMemberIndex.members(server, clusterId,
+											ClusterMemberType.COMPUTER_COORDINATOR);
+										helper.assertValueEqual(registered.size(), 1,
+											"Missing a non-coordinator must retain exactly one registered adapter");
+										ComputerCoordinatorMember retained = coordinator
+											.publishedCoordinatorMember().orElseThrow();
+										helper.assertTrue(registered.getFirst() == retained,
+											"The retained registered adapter must be the exact elected object");
+										helper.assertValueEqual(retained.coordinatorComputerId(), LOW_ID,
+											"Missing a non-coordinator must retain LOW as physical coordinator");
+										helper.assertValueEqual(retained.memberId(), frozenStructureId,
+											"The retained adapter must keep the stable Foundation identity");
+										helper.assertValueEqual(Objects.requireNonNull(retained.bindingState()).authority(),
+											new ClusterAuthority(ClusterMemberType.COMPUTER_COORDINATOR,
+												frozenStructureId),
+											"Missing a non-coordinator must not replace Foundation authority");
+										helper.assertValueEqual(ClusterBindingService.bindingAccess(server, retained),
+											ClusterBindingService.BindingAccess.READY,
+											"The retained registered authority must remain READY");
+
+										helper.assertValueEqual(coordinator.latchEpochFault(frozen.epochId(),
+											EpochFault.WIDTH), ComputerBlockEntity.FaultLatchResult.LATCHED,
+											"The reform fixture must persist a real epoch fault");
+										level.setBlock(coordinatorPos, Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
+
+										helper.runAfterDelay(FORMATION_DELAY, () -> {
 							try {
 								helper.assertValueEqual(pending.availabilityReason(),
 									ComputerAvailabilityReason.COORDINATOR_MISSING,
@@ -815,8 +851,21 @@ public final class ComputerClusterGameTests {
 							} finally {
 								Create.LOGISTICS.linkRemoved(logisticsId, link);
 							}
+										});
+									} catch (RuntimeException | Error failure) {
+										Create.LOGISTICS.linkRemoved(logisticsId, link);
+										throw failure;
+									}
+								});
+							} catch (RuntimeException | Error failure) {
+								Create.LOGISTICS.linkRemoved(logisticsId, link);
+								throw failure;
+							}
 						});
-					});
+					} catch (RuntimeException | Error failure) {
+						Create.LOGISTICS.linkRemoved(logisticsId, link);
+						throw failure;
+					}
 				});
 			} catch (RuntimeException | Error failure) {
 				Create.LOGISTICS.linkRemoved(logisticsId, link);
