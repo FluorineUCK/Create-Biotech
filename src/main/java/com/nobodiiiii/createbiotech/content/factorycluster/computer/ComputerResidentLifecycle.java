@@ -76,18 +76,25 @@ final class ComputerResidentLifecycle {
 		boolean confirmResident(ResidentIdentity identity);
 		void discard(ResidentHandle resident);
 		boolean addRecovery(ItemStack snapshot, byte[] serializedSnapshot, Vec3 target);
+		void rollbackRecovery();
 		boolean emitComputerLoot(Vec3 target);
 		void rollbackComputerLoot();
 	}
 
 	interface RestoreOps {
 		void clearSource();
-		RemovalDisposition restore(CompoundTag fullServerNbt);
+		boolean commitFinalRemoval();
+		boolean restore(CompoundTag fullServerNbt);
 	}
 
 	@FunctionalInterface
 	interface StationaryRemoval {
 		RemovalDisposition remove();
+	}
+
+	@FunctionalInterface
+	interface ControlledRemoval {
+		boolean remove();
 	}
 
 	record RemovalInput(BlockPos computerPos, ItemStack snapshot, byte[] serializedSnapshot,
@@ -122,25 +129,25 @@ final class ComputerResidentLifecycle {
 			|| !(state.getBlock() instanceof ComputerBlock) || oldComputer == null
 			|| isRemovalActive(level, pos) || !oldComputer.hasResidentSource())
 			return RemovalDisposition.CALL_SUPER;
-		RemovalInput input = removalInput(level, pos, oldComputer);
-		WorldRestoreOps restore = new WorldRestoreOps(level, pos, state, oldComputer, input.fullServerNbt());
-		return runGuardedRemoval(level, pos, input, new WorldSpawnOps(level, pos, null), restore);
+		return runGuardedRemoval(level, pos, () -> {
+			RemovalInput input = removalInput(level, pos, oldComputer);
+			WorldRestoreOps restore = WorldRestoreOps.forForced(level, pos, state, newState,
+				oldComputer, input.fullServerNbt());
+			return runForcedRemoval(input, new WorldSpawnOps(level, pos, null), restore);
+		});
 	}
 
 	static boolean controlledPlayerBreak(ServerLevel level, BlockPos pos, BlockState oldState,
 		ComputerBlockEntity oldComputer, @Nullable Player player, ItemStack tool) {
-		if (!oldComputer.hasResidentSource()) return false;
-		RemovalInput input = removalInput(level, pos, oldComputer);
-		PlayerBreakOutput output = PlayerBreakOutput.prepare(level, pos, oldState, oldComputer,
-			player, tool);
-		WorldRestoreOps restore = new WorldRestoreOps(level, pos, oldState, oldComputer,
-			input.fullServerNbt());
-		WorldSpawnOps spawns = new WorldSpawnOps(level, pos, output);
-		boolean committed = runControlledBreak(input, spawns, restore);
-		if (!committed) return false;
-		withRemovalGuard(level, pos, () -> level.setBlock(pos, Blocks.AIR.defaultBlockState(),
-			Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS));
-		return true;
+		return runGuardedControlledBreak(level, pos, () -> {
+			if (!oldComputer.hasResidentSource()) return false;
+			RemovalInput input = removalInput(level, pos, oldComputer);
+			PlayerBreakOutput output = PlayerBreakOutput.prepare(level, pos, oldState, oldComputer,
+				player, tool);
+			WorldRestoreOps restore = WorldRestoreOps.forControlled(level, pos, oldState,
+				oldComputer, input.fullServerNbt());
+			return runControlledBreak(input, new WorldSpawnOps(level, pos, output), restore);
+		});
 	}
 
 	private static RemovalInput removalInput(Level level, BlockPos pos,
@@ -152,16 +159,31 @@ final class ComputerResidentLifecycle {
 	}
 
 	static RemovalDisposition runGuardedRemoval(Object levelIdentity, BlockPos pos,
-		RemovalInput input, SpawnOps spawns, RestoreOps restore) {
+		StationaryRemoval stationaryRemoval) {
 		return isRemovalActive(levelIdentity, pos) ? RemovalDisposition.CALL_SUPER
-			: runForcedRemoval(input, spawns, restore);
+			: withRemovalGuard(levelIdentity, pos, stationaryRemoval::remove);
+	}
+
+	static boolean runGuardedControlledBreak(Object levelIdentity, BlockPos pos,
+		ControlledRemoval controlledRemoval) {
+		return !isRemovalActive(levelIdentity, pos)
+			&& withRemovalGuard(levelIdentity, pos, controlledRemoval::remove);
 	}
 
 	static RemovalDisposition runForcedRemoval(RemovalInput input, SpawnOps spawns,
 		RestoreOps restore) {
 		ReleaseResult release = attemptResidentOrRecovery(input, spawns);
-		if (!release.confirmed()) return restore.restore(input.fullServerNbt());
+		if (!release.confirmed()) {
+			restore.restore(input.fullServerNbt());
+			return RemovalDisposition.RESTORED;
+		}
 		restore.clearSource();
+		if (!restore.commitFinalRemoval()) {
+			release.rollback(spawns);
+			restore.restore(input.fullServerNbt());
+			return RemovalDisposition.RESTORED;
+		}
+		release.commit();
 		return RemovalDisposition.CALL_SUPER;
 	}
 
@@ -179,21 +201,25 @@ final class ComputerResidentLifecycle {
 			return false;
 		}
 		restore.clearSource();
+		if (!restore.commitFinalRemoval()) {
+			release.rollback(spawns);
+			spawns.rollbackComputerLoot();
+			restore.restore(input.fullServerNbt());
+			return false;
+		}
+		release.commit();
 		return true;
 	}
 
 	private static ReleaseResult attemptResidentOrRecovery(RemovalInput input, SpawnOps spawns) {
 		if (input.rawResident() != null || input.snapshot().isEmpty())
-			return ReleaseResult.FAILED;
+			return ReleaseResult.failed();
 		ResidentIdentity expected = spawns.inspect(input.snapshot());
-		if (expected == null) return ReleaseResult.FAILED;
+		if (expected == null) return ReleaseResult.failed();
 
 		ResidentHandle loaded = spawns.findLoaded(expected.uuid());
 		if (loaded != null) {
-			if (matches(loaded, expected)) {
-				loaded.setHealthToOne();
-				return ReleaseResult.RESIDENT;
-			}
+			if (matches(loaded, expected)) return ReleaseResult.existing(loaded);
 			return recover(input, spawns);
 		}
 
@@ -218,9 +244,8 @@ final class ComputerResidentLifecycle {
 				}
 			}
 			if (positioned) {
-				resident.setHealthToOne();
 				if (spawns.addResident(resident) && spawns.confirmResident(expected))
-					return ReleaseResult.RESIDENT;
+					return ReleaseResult.spawned(resident);
 			}
 			spawns.discard(resident);
 		} else if (resident != null) spawns.discard(resident);
@@ -230,7 +255,7 @@ final class ComputerResidentLifecycle {
 	private static ReleaseResult recover(RemovalInput input, SpawnOps spawns) {
 		Vec3 target = spawns.project(Vec3.atCenterOf(input.computerPos()));
 		return spawns.addRecovery(input.snapshot(), input.serializedSnapshot(), target)
-			? ReleaseResult.RECOVERY : ReleaseResult.FAILED;
+			? ReleaseResult.recovery() : ReleaseResult.failed();
 	}
 
 	private static boolean collisionFree(SpawnOps spawns, ResidentHandle resident, Vec3 target) {
@@ -242,12 +267,25 @@ final class ComputerResidentLifecycle {
 		return expected.uuid().equals(resident.uuid()) && expected.type().equals(resident.type());
 	}
 
-	private enum ReleaseResult {
-		FAILED(false), RESIDENT(true), RECOVERY(true);
-
-		private final boolean confirmed;
-		ReleaseResult(boolean confirmed) { this.confirmed = confirmed; }
-		boolean confirmed() { return confirmed; }
+	private record ReleaseResult(boolean confirmed, @Nullable ResidentHandle resident,
+		boolean spawnedResident, boolean recoveryOutput) {
+		private static ReleaseResult failed() { return new ReleaseResult(false, null, false, false); }
+		private static ReleaseResult existing(ResidentHandle resident) {
+			return new ReleaseResult(true, resident, false, false);
+		}
+		private static ReleaseResult spawned(ResidentHandle resident) {
+			return new ReleaseResult(true, resident, true, false);
+		}
+		private static ReleaseResult recovery() {
+			return new ReleaseResult(true, null, false, true);
+		}
+		private void commit() {
+			if (resident != null) resident.setHealthToOne();
+		}
+		private void rollback(SpawnOps spawns) {
+			if (spawnedResident && resident != null) spawns.discard(resident);
+			if (recoveryOutput) spawns.rollbackRecovery();
+		}
 	}
 
 	private static Vec3 entityWorldPosition(net.minecraft.world.level.Level level,
@@ -275,6 +313,7 @@ final class ComputerResidentLifecycle {
 		private final Level level;
 		private final BlockPos computerPos;
 		@Nullable private final PlayerBreakOutput output;
+		@Nullable private RecoveryItemEntity recoveryOutput;
 
 		private WorldSpawnOps(Level level, BlockPos computerPos,
 			@Nullable PlayerBreakOutput output) {
@@ -333,7 +372,16 @@ final class ComputerResidentLifecycle {
 		@Override public boolean addRecovery(ItemStack snapshot, byte[] serializedSnapshot, Vec3 target) {
 			RecoveryItemEntity recovery = new RecoveryItemEntity(level, target.x, target.y, target.z,
 				snapshot.copy());
-			return level.addFreshEntity(recovery) && !recovery.isRemoved();
+			if (!level.addFreshEntity(recovery) || recovery.isRemoved()) {
+				recovery.discard();
+				return false;
+			}
+			recoveryOutput = recovery;
+			return true;
+		}
+		@Override public void rollbackRecovery() {
+			if (recoveryOutput != null) recoveryOutput.discard();
+			recoveryOutput = null;
 		}
 		@Override public boolean emitComputerLoot(Vec3 target) {
 			return output != null && output.emit(level, target);
@@ -347,38 +395,73 @@ final class ComputerResidentLifecycle {
 		private final Level level;
 		private final BlockPos pos;
 		private final BlockState oldState;
+		private final BlockState committedState;
+		private final boolean placeCommittedState;
 		private final ComputerBlockEntity original;
 		private final CompoundTag expected;
 
 		private WorldRestoreOps(Level level, BlockPos pos, BlockState oldState,
+			BlockState committedState, boolean placeCommittedState,
 			ComputerBlockEntity original, CompoundTag expected) {
 			this.level = level;
 			this.pos = pos.immutable();
 			this.oldState = oldState;
+			this.committedState = committedState;
+			this.placeCommittedState = placeCommittedState;
 			this.original = original;
 			this.expected = expected.copy();
 		}
 
+		private static WorldRestoreOps forControlled(Level level, BlockPos pos,
+			BlockState oldState, ComputerBlockEntity original, CompoundTag expected) {
+			return new WorldRestoreOps(level, pos, oldState, Blocks.AIR.defaultBlockState(), true,
+				original, expected);
+		}
+
+		private static WorldRestoreOps forForced(Level level, BlockPos pos, BlockState oldState,
+			BlockState newState, ComputerBlockEntity original, CompoundTag expected) {
+			return new WorldRestoreOps(level, pos, oldState, newState, false, original, expected);
+		}
+
 		@Override public void clearSource() { original.clearResidentSource(); }
+		@Override public boolean commitFinalRemoval() {
+			boolean changed = !placeCommittedState || level.setBlock(pos, committedState,
+				Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
+			return changed && level.getBlockState(pos).equals(committedState)
+				&& (!placeCommittedState
+					|| !(level.getBlockEntity(pos) instanceof ComputerBlockEntity));
+		}
 
 		@Override
-		public RemovalDisposition restore(CompoundTag fullServerNbt) {
+		public boolean restore(CompoundTag fullServerNbt) {
 			return withRemovalGuard(level, pos, () -> {
-				if (level.getBlockState(pos).equals(oldState)
-					&& level.getBlockEntity(pos) instanceof ComputerBlockEntity current
-					&& current.saveWithoutMetadata(level.registryAccess()).equals(expected))
-					return RemovalDisposition.RESTORED;
-				level.removeBlockEntity(pos);
-				if (level.getBlockState(pos).getBlock() instanceof ComputerBlock)
-					level.setBlock(pos, Blocks.AIR.defaultBlockState(),
-						Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
-				if (!level.setBlock(pos, oldState, Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS)
-					|| !(level.getBlockEntity(pos) instanceof ComputerBlockEntity restored))
-					return RemovalDisposition.CALL_SUPER;
-				restored.loadWithComponents(fullServerNbt.copy(), level.registryAccess());
-				return restored.saveWithoutMetadata(level.registryAccess()).equals(expected)
-					? RemovalDisposition.RESTORED : RemovalDisposition.CALL_SUPER;
+				CompoundTag authoritative = fullServerNbt.copy();
+				for (int attempt = 0; attempt < 2; attempt++)
+					if (restoreOnce(authoritative)) return true;
+				return false;
 			});
+		}
+
+		private boolean restoreOnce(CompoundTag authoritative) {
+			if (level.getBlockState(pos).equals(oldState)
+				&& level.getBlockEntity(pos) instanceof ComputerBlockEntity current) {
+				current.loadWithComponents(authoritative.copy(), level.registryAccess());
+				return matchesExpected(current);
+			}
+			level.removeBlockEntity(pos);
+			if (level.getBlockState(pos).equals(oldState))
+				level.setBlock(pos, Blocks.AIR.defaultBlockState(),
+					Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
+			if (!level.getBlockState(pos).equals(oldState))
+				level.setBlock(pos, oldState, Block.UPDATE_ALL | Block.UPDATE_SUPPRESS_DROPS);
+			if (!(level.getBlockEntity(pos) instanceof ComputerBlockEntity restored)) return false;
+			restored.loadWithComponents(authoritative.copy(), level.registryAccess());
+			return matchesExpected(restored);
+		}
+
+		private boolean matchesExpected(ComputerBlockEntity computer) {
+			return level.getBlockState(pos).equals(oldState)
+				&& computer.saveWithoutMetadata(level.registryAccess()).equals(expected);
 		}
 	}
 
@@ -403,7 +486,8 @@ final class ComputerResidentLifecycle {
 		private boolean emit(Level level, Vec3 target) {
 			for (ItemStack stack : stacks) {
 				ItemEntity entity = new ItemEntity(level, target.x, target.y, target.z, stack.copy());
-				if (!level.addFreshEntity(entity)) {
+				if (!level.addFreshEntity(entity) || entity.isRemoved()) {
+					entity.discard();
 					rollback();
 					return false;
 				}

@@ -287,6 +287,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		if (clientPacket) {
 			clientState = currentClientState();
+			for (String key : List.copyOf(tag.getAllKeys())) tag.remove(key);
 			tag.put(CLIENT_ROOT, clientState.save());
 			return;
 		}
@@ -324,6 +325,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	@Override
 	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		if (clientPacket) {
+			if (!tag.getAllKeys().equals(Set.of(CLIENT_ROOT))) return;
 			Tag raw = tag.get(CLIENT_ROOT);
 			if (!(raw instanceof CompoundTag compound)) return;
 			ComputerClientState.load(compound).ifPresent(decoded -> clientState = decoded);

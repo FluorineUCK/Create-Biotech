@@ -18,6 +18,7 @@ import dev.ryanhcode.sable.companion.math.BoundingBox3d;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Position;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.StringTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.ItemStack;
@@ -123,17 +124,47 @@ class ComputerResidentLifecycleTest {
 	}
 
 	@Test
-	void duplicateCallbackDoesNotSpawnRecoverOrRestoreTwice() {
+	void productionForcedEntryGuardsSynchronousResidentReentry() {
 		FakeOps ops = new FakeOps();
 		Object level = new Object();
 		BlockPos pos = new BlockPos(4, 5, 6);
+		int[] nestedTransactions = {0};
+		ops.onResidentAdded = () -> {
+			ComputerResidentLifecycle.RemovalDisposition nested =
+				ComputerResidentLifecycle.runGuardedRemoval(level, pos, () -> {
+					nestedTransactions[0]++;
+					return ComputerResidentLifecycle.runForcedRemoval(input(), ops, ops);
+				});
+			assertEquals(ComputerResidentLifecycle.RemovalDisposition.CALL_SUPER, nested);
+		};
 
-		ComputerResidentLifecycle.withRemovalGuard(level, pos, () -> {
-			assertEquals(ComputerResidentLifecycle.RemovalDisposition.CALL_SUPER,
-				ComputerResidentLifecycle.runGuardedRemoval(level, pos, input(), ops, ops));
-		});
+		assertEquals(ComputerResidentLifecycle.RemovalDisposition.CALL_SUPER,
+			ComputerResidentLifecycle.runGuardedRemoval(level, pos,
+				() -> ComputerResidentLifecycle.runForcedRemoval(input(), ops, ops)));
 
-		assertEquals(0, ops.totalEffects());
+		assertEquals(0, nestedTransactions[0]);
+		assertEquals(1, ops.residentAdds);
+		assertEquals(1, ops.clears);
+	}
+
+	@Test
+	void productionControlledEntryGuardsSynchronousLootReentry() {
+		FakeOps ops = new FakeOps();
+		Object level = new Object();
+		BlockPos pos = new BlockPos(7, 8, 9);
+		int[] nestedTransactions = {0};
+		ops.onLootEmitted = () -> assertFalse(
+			ComputerResidentLifecycle.runGuardedControlledBreak(level, pos, () -> {
+				nestedTransactions[0]++;
+				return ComputerResidentLifecycle.runControlledBreak(input(), ops, ops);
+			}));
+
+		assertTrue(ComputerResidentLifecycle.runGuardedControlledBreak(level, pos,
+			() -> ComputerResidentLifecycle.runControlledBreak(input(), ops, ops)));
+
+		assertEquals(0, nestedTransactions[0]);
+		assertEquals(1, ops.residentAdds);
+		assertEquals(1, ops.clears);
 	}
 
 	@Test
@@ -166,9 +197,70 @@ class ComputerResidentLifecycleTest {
 
 		assertTrue(ComputerResidentLifecycle.runControlledBreak(input(), ops, ops));
 
-		assertEquals(List.of("loot", "resident", "clear"), ops.events);
+		assertEquals(List.of("loot", "resident", "clear", "remove"), ops.events);
 		assertEquals(1, ops.clears);
+		assertEquals(1, ops.finalRemovalAttempts);
 		assertEquals(0, ops.rollbacks);
+	}
+
+	@Test
+	void failedFinalRemovalRollsBackSpawnAndLootThenRestoresFullTag() {
+		FakeOps ops = new FakeOps();
+		ops.finalRemovalSucceeds = false;
+
+		assertFalse(ComputerResidentLifecycle.runControlledBreak(input(), ops, ops));
+
+		assertEquals(List.of("loot", "resident", "clear", "remove", "rollback",
+			"restore"), ops.events);
+		assertEquals(1, ops.discards, "accepted resident output must be revoked");
+		assertEquals(1, ops.rollbacks);
+		assertEquals(1, ops.restores);
+		assertEquals(input().fullServerNbt(), ops.restored);
+	}
+
+	@Test
+	void failedFinalRemovalRollsBackRecoveryAndLootThenRestoresFullTag() {
+		FakeOps ops = new FakeOps();
+		ops.acceptResident = false;
+		ops.finalRemovalSucceeds = false;
+
+		assertFalse(ComputerResidentLifecycle.runControlledBreak(input(), ops, ops));
+
+		assertEquals(1, ops.recoveries);
+		assertEquals(1, ops.recoveryRollbacks);
+		assertEquals(1, ops.rollbacks);
+		assertEquals(1, ops.restores);
+	}
+
+	@Test
+	void forcedFinalRemovalFailureRevokesResidentAndRetainsAuthoritativeTag() {
+		FakeOps ops = new FakeOps();
+		ops.finalRemovalSucceeds = false;
+
+		assertEquals(ComputerResidentLifecycle.RemovalDisposition.RESTORED,
+			ComputerResidentLifecycle.runForcedRemoval(input(), ops, ops));
+
+		assertEquals(List.of("resident", "clear", "remove", "restore"), ops.events);
+		assertEquals(1, ops.discards, "accepted resident output must be revoked");
+		assertEquals(input().fullServerNbt(), ops.restored);
+		assertEquals(1, ops.restores);
+	}
+
+	@Test
+	void failedRestoreNeverAllowsForcedRemovalToContinueOrLoseOpaqueState() {
+		ComputerResidentLifecycle.RemovalInput opaque = opaqueInput();
+		FakeOps ops = new FakeOps();
+		ops.restoreSucceeds = false;
+
+		assertEquals(ComputerResidentLifecycle.RemovalDisposition.RESTORED,
+			ComputerResidentLifecycle.runForcedRemoval(opaque, ops, ops));
+
+		assertEquals(opaque.fullServerNbt(), ops.restored);
+		assertEquals(1, ops.restores);
+		assertEquals(0, ops.clears);
+		assertEquals(0, ops.inspections);
+		assertEquals(0, ops.residentAdds);
+		assertEquals(0, ops.recoveries);
 	}
 
 	@Test
@@ -201,6 +293,16 @@ class ComputerResidentLifecycleTest {
 		snapshot.setCount(3);
 		return new ComputerResidentLifecycle.RemovalInput(BlockPos.ZERO, snapshot,
 			new byte[] {3, 1, 4}, null, full);
+	}
+
+	private static ComputerResidentLifecycle.RemovalInput opaqueInput() {
+		CompoundTag full = new CompoundTag();
+		CompoundTag computerData = new CompoundTag();
+		computerData.put("Resident", StringTag.valueOf("opaque-resident-payload"));
+		computerData.putByteArray("UnknownOpaqueBytes", new byte[] {8, 5, 3, 1});
+		full.put("ComputerData", computerData);
+		return new ComputerResidentLifecycle.RemovalInput(BlockPos.ZERO, ItemStack.EMPTY,
+			new byte[0], computerData.get("Resident"), full);
 	}
 
 	private static SubLevelAccess translatedRotatedSubLevel() {
@@ -265,6 +367,10 @@ class ComputerResidentLifecycleTest {
 		private SubLevelAccess subLevel;
 		private boolean acceptResident = true;
 		private boolean acceptRecovery = true;
+		private boolean finalRemovalSucceeds = true;
+		private boolean restoreSucceeds = true;
+		private Runnable onResidentAdded = () -> {};
+		private Runnable onLootEmitted = () -> {};
 		private int rejectedCollisions;
 		private int inspections;
 		private int projections;
@@ -276,6 +382,8 @@ class ComputerResidentLifecycleTest {
 		private int clears;
 		private int restores;
 		private int rollbacks;
+		private int recoveryRollbacks;
+		private int finalRemovalAttempts;
 		private byte[] recoveryBytes;
 		private Vec3 recoveryTarget;
 		private Vec3 lootTarget;
@@ -318,6 +426,7 @@ class ComputerResidentLifecycleTest {
 		public boolean addResident(ComputerResidentLifecycle.ResidentHandle resident) {
 			residentAdds++;
 			events.add("resident");
+			onResidentAdded.run();
 			return acceptResident;
 		}
 
@@ -336,27 +445,36 @@ class ComputerResidentLifecycleTest {
 			return acceptRecovery;
 		}
 
+		@Override public void rollbackRecovery() { recoveryRollbacks++; }
+
 		@Override
 		public boolean emitComputerLoot(Vec3 target) {
 			events.add("loot");
 			lootTarget = target;
+			onLootEmitted.run();
 			return true;
 		}
 
 		@Override public void rollbackComputerLoot() { events.add("rollback"); rollbacks++; }
 		@Override public void clearSource() { events.add("clear"); clears++; }
+		@Override public boolean commitFinalRemoval() {
+			events.add("remove");
+			finalRemovalAttempts++;
+			return finalRemovalSucceeds;
+		}
 
 		@Override
-		public ComputerResidentLifecycle.RemovalDisposition restore(CompoundTag fullServerNbt) {
+		public boolean restore(CompoundTag fullServerNbt) {
 			events.add("restore");
 			restores++;
 			restored = fullServerNbt.copy();
-			return ComputerResidentLifecycle.RemovalDisposition.RESTORED;
+			return restoreSucceeds;
 		}
 
 		private int totalEffects() {
 			return inspections + projections + collisionChecks + decodes + residentAdds + recoveries
-				+ discards + clears + restores + rollbacks + events.size();
+				+ discards + clears + restores + rollbacks + recoveryRollbacks
+				+ finalRemovalAttempts + events.size();
 		}
 	}
 }

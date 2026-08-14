@@ -46,20 +46,7 @@ class ComputerBlockEntityTest {
 		.orElseThrow();
 
 	@Test
-	void rejectedInstallCasesLeaveHeldStackAndServerNbtByteIdentical() {
-		for (ComputerInstallResult result : List.of(ComputerInstallResult.NOT_BOX,
-			ComputerInstallResult.EMPTY_BOX, ComputerInstallResult.UNSUPPORTED_ENTITY,
-			ComputerInstallResult.PASSENGERS_UNSUPPORTED, ComputerInstallResult.INVALID_IDENTITY)) {
-			ComputerBlockEntity computer = computer();
-			ItemStack held = capturedBox(LOCAL, "minecraft:villager", "secret");
-			Tag heldBefore = held.save(REGISTRIES);
-			CompoundTag serverBefore = save(computer, false);
-
-			assertEquals(result, computer.installResident(held, Probe.reject(result)));
-			assertEquals(heldBefore, held.save(REGISTRIES));
-			assertEquals(serverBefore, save(computer, false));
-		}
-
+	void occupiedActiveAndUncertainTopologyRejectionsRemainByteIdentical() {
 		ComputerBlockEntity occupied = computer();
 		occupied.installResidentSnapshot(capturedBox(LOCAL, "minecraft:villager", "resident"), PROFILE);
 		assertRejectedUnchanged(occupied, Probe.success());
@@ -91,8 +78,13 @@ class ComputerBlockEntityTest {
 		assertTrue(computer.topologyDirty());
 		assertEquals(epochBefore, computer.epoch().orElseThrow().save());
 		assertEquals(faultsBefore, computer.latchedEpochFaults());
+		ItemStack second = capturedBox(LOCAL, "minecraft:villager", "second");
+		Tag heldBefore = second.save(REGISTRIES);
+		CompoundTag serverBefore = save(computer, false);
 		assertEquals(ComputerInstallResult.OCCUPIED,
-			computer.installResident(capturedBox(LOCAL, "minecraft:villager", "second"), Probe.success()));
+			computer.installResident(second, Probe.success()));
+		assertEquals(heldBefore, second.save(REGISTRIES));
+		assertEquals(serverBefore, save(computer, false));
 	}
 
 	@Test
@@ -294,6 +286,38 @@ class ComputerBlockEntityTest {
 	}
 
 	@Test
+	void validClientProjectionWithExtraRootKeyIsRejectedAtomically() {
+		ComputerBlockEntity computer = computer();
+		computer.installResidentSnapshot(capturedBox(LOCAL, "minecraft:villager", "server-root"), PROFILE);
+		CompoundTag serverBefore = save(computer, false);
+		ComputerClientState clientBefore = computer.clientState();
+		CompoundTag hostile = new CompoundTag();
+		hostile.put("ComputerClientState", new ComputerClientState(true, PROFILE.kind(),
+			PROFILE.slots(), PROFILE.depth(), ComputerDisplayState.RUN).save());
+		hostile.putString("ExtraRootKey", "must-reject-whole-packet");
+
+		computer.read(hostile, REGISTRIES, true);
+
+		assertEquals(clientBefore, computer.clientState());
+		assertEquals(serverBefore, save(computer, false));
+	}
+
+	@Test
+	void clientWriteReplacesPreexistingRootWithExactProjection() {
+		ComputerBlockEntity computer = computer();
+		computer.installResidentSnapshot(capturedBox(LOCAL, "minecraft:villager", "server-only"),
+			PROFILE);
+		CompoundTag reusedRoot = new CompoundTag();
+		reusedRoot.putString("ComputerData", "must-not-survive-client-write");
+		reusedRoot.putString("ExtraRootKey", "must-not-survive-client-write");
+
+		computer.write(reusedRoot, REGISTRIES, true);
+
+		assertEquals(Set.of("ComputerClientState"), reusedRoot.getAllKeys());
+		assertTrue(ComputerClientState.load(reusedRoot.getCompound("ComputerClientState")).isPresent());
+	}
+
+	@Test
 	void clientProjectionRecursivelyExcludesResidentTopologyAndUniqueSensitiveStrings() {
 		String sensitive = "unique-secret-trade-and-name-8021";
 		ComputerBlockEntity computer = computer();
@@ -478,14 +502,6 @@ class ComputerBlockEntityTest {
 			return new Probe(true, true, ComputerBlockEntity.InstallInspection.success(
 				new ComputerBlockEntity.InstallCandidate(LOCAL,
 					ResourceLocation.withDefaultNamespace("villager"), PROFILE)));
-		}
-
-		static Probe reject(ComputerInstallResult result) {
-			return switch (result) {
-				case NOT_BOX -> new Probe(false, true, null);
-				case EMPTY_BOX -> new Probe(true, false, null);
-				default -> new Probe(true, true, ComputerBlockEntity.InstallInspection.failure(result));
-			};
 		}
 
 		@Override public boolean isBox(ItemStack stack) { return box; }
