@@ -13,6 +13,7 @@ import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlockEntity
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlockEntity;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlockEntity;
 import com.nobodiiiii.createbiotech.content.factorycluster.panel.FactoryPanelBlockEntity;
+import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternStorageCoreBlockEntity;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlockEntity;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlockEntity;
 import com.nobodiiiii.createbiotech.content.fluid.NetherPortalFluidBlockEntity;
@@ -50,6 +51,11 @@ public class CBBlockEntityTypes {
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<FactoryPanelBlockEntity>> FACTORY_PANEL =
 		BLOCK_ENTITY_TYPES.register("factory_panel", () -> BlockEntityType.Builder
 			.of(FactoryPanelBlockEntity::new, CBBlocks.FACTORY_PANEL.get()).build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<PatternStorageCoreBlockEntity>>
+		PATTERN_STORAGE_CORE = BLOCK_ENTITY_TYPES.register("pattern_storage_core",
+			() -> BlockEntityType.Builder.of(PatternStorageCoreBlockEntity::new,
+				CBBlocks.PATTERN_STORAGE_CORE.get()).build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AutomaticFishReleaseMachineBlockEntity>>
 		AUTOMATIC_FISH_RELEASE_MACHINE = BLOCK_ENTITY_TYPES.register("automatic_fish_release_machine",

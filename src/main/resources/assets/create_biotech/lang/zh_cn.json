@@ -545,5 +545,8 @@
   "create_biotech.factory_cluster.binding.too_many_bindings": "一个工厂集群最多可绑定 32 个物流网络",
   "create_biotech.factory_cluster.binding.authority_offline": "请先加载工厂集群的绑定权威结构，再修改物流网络",
   "create_biotech.factory_cluster.binding.stale_binding": "工厂集群的绑定版本冲突，请停止全部任务并重新组网",
-  "create_biotech.factory_cluster.binding.participant_rejected": "工厂集群成员拒绝了绑定更新"
+  "create_biotech.factory_cluster.binding.participant_rejected": "工厂集群成员拒绝了绑定更新",
+  "block.create_biotech.pattern_storage_core": "样板存储核心",
+  "block.create_biotech.pattern_storage_core.status.ready": "样板库已就绪",
+  "block.create_biotech.pattern_storage_core.status.pending_safe_release": "图书管理员暂无安全释放空间"
 }

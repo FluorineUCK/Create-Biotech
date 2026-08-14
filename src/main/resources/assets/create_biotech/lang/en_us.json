@@ -545,5 +545,8 @@
   "create_biotech.factory_cluster.binding.too_many_bindings": "A factory cluster can bind at most 32 logistics networks",
   "create_biotech.factory_cluster.binding.authority_offline": "Load the factory cluster binding authority before changing its networks",
   "create_biotech.factory_cluster.binding.stale_binding": "Factory cluster binding revisions conflict; stop all work and reform the cluster",
-  "create_biotech.factory_cluster.binding.participant_rejected": "A factory cluster member rejected the binding update"
+  "create_biotech.factory_cluster.binding.participant_rejected": "A factory cluster member rejected the binding update",
+  "block.create_biotech.pattern_storage_core": "Pattern Storage Core",
+  "block.create_biotech.pattern_storage_core.status.ready": "Pattern library ready",
+  "block.create_biotech.pattern_storage_core.status.pending_safe_release": "Safe librarian release is blocked"
 }

@@ -34,7 +34,8 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 			CBBlocks.SPIDER_ASSEMBLY_TABLE.get(),
 			CBBlocks.SPIDER_ASSEMBLY_TABLE_COG.get(),
 			CBBlocks.ASURINE_CASING.get(),
-			CBBlocks.BIOTECH_CASING.get());
+			CBBlocks.BIOTECH_CASING.get(),
+			CBBlocks.PATTERN_STORAGE_CORE.get());
 
 		add(BlockTags.MINEABLE_WITH_PICKAXE,
 			CBBlocks.FACTORY_PANEL.get(),
@@ -74,6 +75,7 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 			CBBlocks.BLAST_PROOF_GLASS.get(),
 			CBBlocks.BLAST_PROOF_FRAMED_GLASS.get(),
 			CBBlocks.BLAST_PROOF_CHAIN_DRIVE.get());
+		tag(BlockTags.MINEABLE_WITH_PICKAXE).add(CBBlocks.PATTERN_STORAGE_CORE.get());
 
 		add(BlockTags.NEEDS_DIAMOND_TOOL,
 			CBBlocks.CREEPER_BLAST_CHAMBER.get(),

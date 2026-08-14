@@ -20,6 +20,7 @@ import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlock;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlock;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
 import com.nobodiiiii.createbiotech.content.factorycluster.panel.FactoryPanelBlock;
+import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternStorageCoreBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractWallBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSecretionBlock;
@@ -70,6 +71,10 @@ public class CBBlocks {
 	public static final DeferredHolder<Block, FactoryPanelBlock> FACTORY_PANEL =
 		BLOCKS.register("factory_panel", () -> new FactoryPanelBlock(CBSharedProperties.createSoftMetal()
 			.noOcclusion().mapColor(MapColor.COLOR_LIGHT_BLUE)));
+
+	public static final DeferredHolder<Block, PatternStorageCoreBlock> PATTERN_STORAGE_CORE =
+		BLOCKS.register("pattern_storage_core", () -> new PatternStorageCoreBlock(
+			Block.Properties.ofFullCopy(Blocks.LECTERN).noOcclusion()));
 
 	public static final DeferredHolder<Block, SlimeBeltBlock> SLIME_BELT = BLOCKS.register("slime_belt",
 		() -> new SlimeBeltBlock(CBSharedProperties.createWooden()
