@@ -135,8 +135,10 @@ class PatternJsonParserTest {
 		PatternQuery query = new PatternQuery(UUID.fromString("00000000-0000-0000-0000-000000000003"),
 			UUID.fromString("00000000-0000-0000-0000-000000000004"),
 			UUID.fromString("00000000-0000-0000-0000-000000000005"), stack, 7, 0);
-		PatternReply match = new PatternReply(query.queryId(), 7, PatternReplyStatus.MATCH, record);
-		PatternReply notFound = new PatternReply(query.queryId(), 7, PatternReplyStatus.NOT_FOUND, null);
+		PatternReply match = new PatternReply(query.queryId(), query.requesterComputerId(), query.logisticsId(),
+			7, PatternReplyStatus.MATCH, record);
+		PatternReply notFound = new PatternReply(query.queryId(), query.requesterComputerId(), query.logisticsId(),
+			7, PatternReplyStatus.NOT_FOUND, null);
 
 		assertEquals(stack, PatternValueCodecs.loadStackKey(PatternValueCodecs.saveStackKey(stack, registries), registries).orElseThrow());
 		assertEquals(itemIngredient, PatternValueCodecs.loadIngredient(PatternValueCodecs.saveIngredient(itemIngredient, registries), registries).orElseThrow());
@@ -181,7 +183,8 @@ class PatternJsonParserTest {
 		StackKey stack = new StackKey(new ItemStack(Items.PAPER, 1));
 		PatternOutput output = new PatternOutput(stack, 1);
 		PatternQuery query = new PatternQuery(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), stack, 1, 0);
-		PatternReply found = new PatternReply(query.queryId(), 1, PatternReplyStatus.NOT_FOUND, null);
+		PatternReply found = new PatternReply(query.queryId(), query.requesterComputerId(), query.logisticsId(),
+			1, PatternReplyStatus.NOT_FOUND, null);
 		CompoundTag missingStack = PatternValueCodecs.saveStackKey(stack, registries);
 		missingStack.remove("Stack");
 		CompoundTag wrongOutput = PatternValueCodecs.saveOutput(output, registries);
@@ -194,8 +197,9 @@ class PatternJsonParserTest {
 		defaultedCursor.putInt("Cursor", -1);
 		CompoundTag replyWithUnexpectedPattern = PatternValueCodecs.saveReply(found, registries);
 		replyWithUnexpectedPattern.put("Pattern", PatternValueCodecs.saveRecord(componentSensitivePattern(), registries));
-		CompoundTag replyWithoutMatch = PatternValueCodecs.saveReply(new PatternReply(query.queryId(), 1,
-			PatternReplyStatus.MATCH, componentSensitivePattern()), registries);
+		CompoundTag replyWithoutMatch = PatternValueCodecs.saveReply(new PatternReply(query.queryId(),
+			query.requesterComputerId(), query.logisticsId(), 1, PatternReplyStatus.MATCH,
+			componentSensitivePattern()), registries);
 		replyWithoutMatch.remove("Pattern");
 
 		assertTrue(PatternValueCodecs.loadStackKey(missingStack, registries).isEmpty());
@@ -242,7 +246,8 @@ class PatternJsonParserTest {
 			UUID.fromString("00000000-0000-0000-0000-000000000008"),
 			UUID.fromString("00000000-0000-0000-0000-000000000009"),
 			zeroInput.mainOutput().stack(), 4, 0);
-		PatternReply reply = new PatternReply(query.queryId(), 4, PatternReplyStatus.MATCH, zeroInput);
+		PatternReply reply = new PatternReply(query.queryId(), query.requesterComputerId(), query.logisticsId(),
+			4, PatternReplyStatus.MATCH, zeroInput);
 
 		assertEquals(zeroInput, PatternValueCodecs.loadRecord(
 			PatternValueCodecs.saveRecord(zeroInput, registries), registries).orElseThrow());

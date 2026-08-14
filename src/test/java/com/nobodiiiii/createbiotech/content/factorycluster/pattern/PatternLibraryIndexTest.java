@@ -66,6 +66,77 @@ class PatternLibraryIndexTest {
 	}
 
 	@Test
+	void defaultMaximumLibraryHasLinearBudgetedRecordMaintenance() {
+		int pageCount = 63 * 6 * 100;
+		String raw = validJson(Items.IRON_INGOT);
+		FakePages pages = new FakePages();
+		for (int ordinal = pageCount - 1; ordinal >= 0; ordinal--)
+			pages.put(pageForOrdinal(ordinal), raw);
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		index.rebuildPageOrder(pages.keys());
+
+		long recordMaintenance = 0;
+		while (!index.indexPassComplete()) {
+			index.tickFingerprintChecks(pages, parser, 600);
+			assertTrue(index.lastRecordMaintenanceUnits() <= index.lastFingerprintUnits());
+			recordMaintenance += index.lastRecordMaintenanceUnits();
+		}
+
+		assertEquals(pageCount, pages.readCount());
+		assertEquals(pageCount, recordMaintenance);
+		assertEquals(pageCount, index.indexedPatternCount());
+	}
+
+	@Test
+	void largePersistedLibraryUsesSetMembershipAndOneLinearRecordPassOnLoad() {
+		int pageCount = 6_000;
+		FakePages pages = new FakePages();
+		String raw = validJson(Items.IRON_INGOT);
+		for (int ordinal = 0; ordinal < pageCount; ordinal++)
+			pages.put(pageForOrdinal(ordinal), raw);
+		PatternLibraryIndex source = fullyIndex(pages);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(source.save(REGISTRIES), REGISTRIES);
+
+		assertFalse(loaded.hadCorruption());
+		assertEquals(pageCount, loaded.index().lastLoadMembershipChecks());
+		assertEquals(pageCount, loaded.index().lastLoadRecordVisits());
+		assertEquals(pageCount, loaded.index().indexedPatternCount());
+	}
+
+	@Test
+	void publicSummaryIsBoundedSortedAndReportsProgressWithoutNbtTraversal() {
+		FakePages pages = new FakePages();
+		for (int ordinal = 199; ordinal >= 0; ordinal--)
+			pages.put(pageForOrdinal(ordinal), "{");
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		index.rebuildPageOrder(pages.keys());
+		index.tickFingerprintChecks(pages, parser, 37);
+
+		PatternLibrarySummary scanning = index.summary(
+			PatternLibraryScanner.StructureState.VALID, 600);
+		assertEquals(200, scanning.pages());
+		assertEquals(600, scanning.capacity());
+		assertEquals(37, scanning.indexedPages());
+		assertEquals(163, scanning.queuedPages());
+		assertEquals(37, scanning.errorPages());
+		assertTrue(scanning.scanning());
+
+		index.tickFingerprintChecks(pages, parser, 200);
+		PatternLibrarySummary complete = index.summary(
+			PatternLibraryScanner.StructureState.VALID, 600);
+		assertFalse(complete.scanning());
+		assertEquals(200, complete.indexedPages());
+		assertEquals(0, complete.indexedPatterns());
+		assertEquals(200, complete.errorPages());
+		assertEquals(0, complete.queuedPages());
+		assertEquals(128, complete.errors().size());
+		assertEquals(index.pageOrder().subList(0, 128),
+			complete.errors().stream().map(PatternPageError::source).toList());
+		assertThrows(UnsupportedOperationException.class, () -> complete.errors().clear());
+	}
+
+	@Test
 	void pageOrderIsCanonicalImmutableAndDuplicateFree() {
 		PatternLibraryIndex index = new PatternLibraryIndex();
 		index.rebuildPageOrder(List.of(PAGE_C, PAGE_A, PAGE_B, PAGE_A));
@@ -246,6 +317,40 @@ class PatternLibraryIndexTest {
 		assertTrue(index.pollReplies(-1).isEmpty());
 		assertEquals(first.queryId(), index.pollReplies(1).getFirst().queryId());
 		assertEquals(second.queryId(), index.pollReplies(4).getFirst().queryId());
+	}
+
+	@Test
+	void repliesRetainBothRoutingIdentitiesAcrossCompletionAndPersistence() {
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		PatternQuery query = queryFor(Items.GOLD_INGOT);
+		index.enqueue(query);
+		index.tickQueries(1);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(
+			index.save(REGISTRIES), REGISTRIES);
+		PatternReply reply = loaded.index().drainReplies(query.requesterComputerId(), 1).getFirst();
+
+		assertEquals(query.queryId(), reply.queryId());
+		assertEquals(query.requesterComputerId(), reply.requesterComputerId());
+		assertEquals(query.logisticsId(), reply.logisticsId());
+		assertEquals(PatternReplyStatus.NOT_FOUND, reply.status());
+	}
+
+	@Test
+	void requesterDrainCannotStealAnotherRequestersReply() {
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		PatternQuery first = queryFor(Items.GOLD_INGOT);
+		PatternQuery second = queryFor(Items.DIAMOND);
+		index.enqueue(first);
+		index.enqueue(second);
+		index.tickQueries(2);
+
+		assertTrue(index.drainReplies(UUID.randomUUID(), 99).isEmpty());
+		assertEquals(second.queryId(), index.drainReplies(second.requesterComputerId(), 99)
+			.getFirst().queryId());
+		assertEquals(1, index.readyReplyCount());
+		assertEquals(first.queryId(), index.drainReplies(first.requesterComputerId(), 99)
+			.getFirst().queryId());
 	}
 
 	@Test
@@ -502,6 +607,12 @@ class PatternLibraryIndexTest {
 
 	private static PatternPageKey page(int x, int y, int z, int slot, int page) {
 		return new PatternPageKey(new SpaceAddress(Level.OVERWORLD, SPACE, new BlockPos(x, y, z)), slot, page);
+	}
+
+	private static PatternPageKey pageForOrdinal(int ordinal) {
+		int shelf = ordinal / 600;
+		int withinShelf = ordinal % 600;
+		return page(shelf, shelf / 1024, 0, withinShelf / 100, withinShelf % 100);
 	}
 
 	private static String validJson(Item output) {

@@ -7,9 +7,11 @@ import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternLibraryScanner.StructureState;
 
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.entity.npc.VillagerType;
 
 /** Strict, bounded client projection for a pattern library core. */
 public record PatternCoreClientState(boolean renderLibrarian, ResourceLocation villagerType,
@@ -54,12 +56,15 @@ public record PatternCoreClientState(boolean renderLibrarian, ResourceLocation v
 			|| !has(tag, "LogicalMembers", Tag.TAG_INT) || !has(tag, "OrdinaryBookshelves", Tag.TAG_INT)
 			|| !has(tag, "ChiseledBookshelves", Tag.TAG_INT) || !has(tag, "SearchBudget", Tag.TAG_INT)
 			|| !has(tag, "QueueCount", Tag.TAG_INT)
-			|| (tag.contains(CUSTOM_NAME) && !has(tag, CUSTOM_NAME, Tag.TAG_STRING)))
+			|| (tag.contains(CUSTOM_NAME) && !has(tag, CUSTOM_NAME, Tag.TAG_STRING))
+			|| !canonicalBoolean(tag, "RenderLibrarian")
+			|| !canonicalBoolean(tag, "PendingSafeRelease"))
 			return Optional.empty();
 		try {
 			ResourceLocation type = ResourceLocation.tryParse(tag.getString("VillagerType"));
 			StructureState state = StructureState.valueOf(tag.getString("StructureState"));
-			if (type == null)
+			BuiltInRegistries.VILLAGER_TYPE.getKey(VillagerType.PLAINS);
+			if (type == null || !BuiltInRegistries.VILLAGER_TYPE.containsKey(type))
 				return Optional.empty();
 			return Optional.of(new PatternCoreClientState(tag.getBoolean("RenderLibrarian"), type,
 				tag.getInt("LibrarianLevel"), tag.contains(CUSTOM_NAME) ? tag.getString(CUSTOM_NAME) : null,
@@ -80,5 +85,10 @@ public record PatternCoreClientState(boolean renderLibrarian, ResourceLocation v
 	private static boolean has(CompoundTag tag, String key, int type) {
 		Tag value = tag.get(key);
 		return value != null && value.getId() == type;
+	}
+
+	private static boolean canonicalBoolean(CompoundTag tag, String key) {
+		byte value = tag.getByte(key);
+		return value == 0 || value == 1;
 	}
 }

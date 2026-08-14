@@ -14,8 +14,10 @@ import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Supplier;
 
 import org.junit.jupiter.api.Test;
 
@@ -49,10 +51,30 @@ import net.minecraft.world.item.enchantment.ItemEnchantments;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;
+import net.neoforged.neoforge.attachment.AttachmentType;
+import net.neoforged.neoforge.attachment.IAttachmentHolder;
+import net.neoforged.neoforge.attachment.IAttachmentSerializer;
 
 class PatternStorageCoreBlockEntityTest {
 	private static final RegistryAccess REGISTRIES = RegistryAccess.EMPTY;
 	private static final UUID SPACE = UUID.fromString("69d47c2c-71ee-488c-8dc9-21e4d2b143b4");
+	private static final ResourceLocation TEST_ATTACHMENT_ID = ResourceLocation.fromNamespaceAndPath(
+		"create_biotech", "pattern_core_round_trip_test");
+	private static final IAttachmentSerializer<StringTag, String> TEST_ATTACHMENT_SERIALIZER =
+		new IAttachmentSerializer<>() {
+			@Override
+			public String read(IAttachmentHolder holder, StringTag tag,
+				net.minecraft.core.HolderLookup.Provider provider) {
+				return tag.getAsString();
+			}
+
+			@Override
+			public StringTag write(String value, net.minecraft.core.HolderLookup.Provider provider) {
+				return StringTag.valueOf(value);
+			}
+		};
+	private static final AttachmentType<String> TEST_ATTACHMENT = createTestAttachment();
+	private static boolean testAttachmentRegistered;
 	private static final SpaceAddress SHELF_ADDRESS = new SpaceAddress(Level.OVERWORLD, SPACE,
 		new BlockPos(1, 0, 0));
 
@@ -120,8 +142,72 @@ class PatternStorageCoreBlockEntityTest {
 	}
 
 	@Test
+	void pageTopologyChangesOnlyWhenWritableSlotMembershipChanges() {
+		List<ItemStack> first = List.of(writableBook("first"), ItemStack.EMPTY, ItemStack.EMPTY,
+			ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY);
+		List<ItemStack> edited = List.of(writableBook("edited body"), ItemStack.EMPTY, ItemStack.EMPTY,
+			ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY);
+		List<ItemStack> moved = List.of(ItemStack.EMPTY, writableBook("edited body"), ItemStack.EMPTY,
+			ItemStack.EMPTY, ItemStack.EMPTY, ItemStack.EMPTY);
+
+		assertEquals(PatternStorageCoreBlockEntity.pageTopology(first),
+			PatternStorageCoreBlockEntity.pageTopology(edited));
+		assertNotEquals(PatternStorageCoreBlockEntity.pageTopology(first),
+			PatternStorageCoreBlockEntity.pageTopology(moved));
+	}
+
+	@Test
+	void ordinaryShelfChangesDoNotRebuildUnchangedPageTopology() {
+		bootstrap();
+		PatternStorageCoreBlockEntity core = new ReadyCore();
+		BlockPos chiseled = new BlockPos(1, 0, 0);
+		Map<BlockPos, Integer> topology = Map.of(chiseled, 0);
+		PatternStructureSnapshot initial = new PatternStructureSnapshot(
+			PatternLibraryScanner.StructureState.VALID,
+			List.of(BlockPos.ZERO, chiseled), List.of(), List.of(chiseled),
+			BlockPos.ZERO, chiseled, 1);
+		core.applyStructureScan(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, initial), topology, 0);
+		long indexedGeneration = core.libraryIndex().generation();
+		BlockPos ordinary = new BlockPos(0, 0, 1);
+		PatternStructureSnapshot queueOnlyChange = new PatternStructureSnapshot(
+			PatternLibraryScanner.StructureState.VALID,
+			List.of(BlockPos.ZERO, chiseled, ordinary), List.of(ordinary), List.of(chiseled),
+			BlockPos.ZERO, new BlockPos(1, 0, 1), 2);
+
+		core.applyStructureScan(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, queueOnlyChange), topology, 0);
+
+		assertEquals(indexedGeneration, core.libraryIndex().generation());
+		assertTrue(core.libraryIndex().pageOrder().isEmpty());
+		assertEquals(2, core.queueCount());
+	}
+
+	@Test
+	void coreExposesBoundedPanelSummaryFromRuntimeCounters() {
+		PatternStorageCoreBlockEntity core = new ReadyCore();
+		PatternStructureSnapshot snapshot = snapshotWithChiseledShelf();
+		core.applyStructureScan(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshot));
+		PatternPageKey key = new PatternPageKey(SHELF_ADDRESS, 0, 0);
+		core.libraryIndex().rebuildPageOrder(List.of(key));
+		core.libraryIndex().tickFingerprintChecks(ignored -> "{",
+			new PatternJsonParser(REGISTRIES), 1);
+
+		PatternLibrarySummary summary = core.summary();
+
+		assertAll(
+			() -> assertEquals(PatternLibraryScanner.StructureState.VALID, summary.reason()),
+			() -> assertEquals(600, summary.capacity()),
+			() -> assertEquals(1, summary.pages()),
+			() -> assertEquals(1, summary.indexedPages()),
+			() -> assertEquals(1, summary.errorPages()),
+			() -> assertEquals(1, summary.errors().size()));
+	}
+
+	@Test
 	void unloadedKnownMemberStopsAllIndexAdvancementAndRetainsPriorState() {
-		PatternStorageCoreBlockEntity core = core();
+		PatternStorageCoreBlockEntity core = new ReadyCore();
 		PatternStructureSnapshot snapshot = snapshotWithChiseledShelf();
 		core.applyStructureScan(new PatternLibraryScanner.ScanResult(
 			PatternLibraryScanner.StructureState.VALID, snapshot));
@@ -140,9 +226,13 @@ class PatternStorageCoreBlockEntityTest {
 
 	@Test
 	void completedRepliesRemainQueuedUntilBoundedDrain() {
-		PatternStorageCoreBlockEntity core = core();
-		core.libraryIndex().enqueue(query(Items.IRON_INGOT));
-		core.libraryIndex().enqueue(query(Items.GOLD_INGOT));
+		PatternStorageCoreBlockEntity core = new ReadyCore();
+		core.applyStructureScan(new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, coreOnlySnapshot()));
+		PatternQuery first = query(Items.IRON_INGOT);
+		PatternQuery second = query(Items.GOLD_INGOT);
+		core.libraryIndex().enqueue(first);
+		core.libraryIndex().enqueue(second);
 
 		assertTrue(core.serviceIndexIfMembersLoaded(ignored -> true, ignored -> "",
 			new PatternJsonParser(REGISTRIES), 2));
@@ -151,10 +241,10 @@ class PatternStorageCoreBlockEntityTest {
 			new PatternJsonParser(REGISTRIES), 2));
 		assertEquals(2, core.libraryIndex().readyReplyCount());
 		assertFalse(core.canRebind());
-		assertEquals(1, core.drainReplies(99).size());
+		assertEquals(1, core.libraryIndex().drainReplies(first.requesterComputerId(), 99).size());
 		assertEquals(1, core.libraryIndex().readyReplyCount());
 		assertFalse(core.canRebind());
-		assertEquals(1, core.drainReplies(99).size());
+		assertEquals(1, core.libraryIndex().drainReplies(second.requesterComputerId(), 99).size());
 		assertTrue(core.canRebind());
 	}
 
@@ -181,6 +271,20 @@ class PatternStorageCoreBlockEntityTest {
 			client.getCompound("ClientState")).orElseThrow();
 		assertEquals(PatternLibraryScanner.StructureState.PARTIAL, projected.structureState());
 		assertEquals(1, projected.logicalMembers());
+	}
+
+	@Test
+	void repeatedIdenticalStructureScanDoesNotResyncSteadyState() {
+		bootstrap();
+		SyncTrackingCore core = new SyncTrackingCore();
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, coreOnlySnapshot());
+		core.applyStructureScan(valid);
+		int afterChange = core.syncs;
+
+		core.applyStructureScan(valid);
+
+		assertEquals(afterChange, core.syncs);
 	}
 
 	@Test
@@ -239,6 +343,42 @@ class PatternStorageCoreBlockEntityTest {
 				ClusterBindingService.BindingAccess.READY, proposed, UUID.randomUUID())),
 			() -> assertFalse(PatternStorageCoreBlockEntity.bindingAllowsQuery(
 				ClusterBindingService.BindingAccess.READY, null, logistics)));
+	}
+
+	@Test
+	void everyQueryOperationRequiresValidStructureAndReadyAuthority() {
+		assertAll(
+			() -> assertTrue(PatternStorageCoreBlockEntity.queryOperationAllowed(
+				PatternLibraryScanner.StructureState.VALID,
+				ClusterBindingService.BindingAccess.READY)),
+			() -> assertFalse(PatternStorageCoreBlockEntity.queryOperationAllowed(
+				PatternLibraryScanner.StructureState.UNFORMED,
+				ClusterBindingService.BindingAccess.READY)),
+			() -> assertFalse(PatternStorageCoreBlockEntity.queryOperationAllowed(
+				PatternLibraryScanner.StructureState.PARTIAL,
+				ClusterBindingService.BindingAccess.READY)),
+			() -> assertFalse(PatternStorageCoreBlockEntity.queryOperationAllowed(
+				PatternLibraryScanner.StructureState.VALID,
+				ClusterBindingService.BindingAccess.AUTHORITY_OFFLINE)),
+			() -> assertFalse(PatternStorageCoreBlockEntity.queryOperationAllowed(
+				PatternLibraryScanner.StructureState.VALID,
+				ClusterBindingService.BindingAccess.CONFLICT)));
+	}
+
+	@Test
+	void replyDispatchAllowanceCannotBeResetByRepeatedCallsInOneTick() {
+		ReplyDispatchAllowance allowance = new ReplyDispatchAllowance();
+
+		assertEquals(2, allowance.available(40, 2, 99));
+		assertEquals(2, allowance.available(40, 2, 99),
+			"A requester with no matching reply must not consume another requester's allowance");
+		allowance.consume(2);
+		assertEquals(0, allowance.available(40, 2, 99));
+		assertEquals(1, allowance.available(41, 1, 99));
+		allowance.consume(1);
+		assertEquals(0, allowance.available(41, 1, 1));
+		assertEquals(0, allowance.available(42, 3, -1));
+		assertEquals(3, allowance.available(42, 3, 3));
 	}
 
 	@Test
@@ -306,6 +446,47 @@ class PatternStorageCoreBlockEntityTest {
 		CompoundTag extraKey = defaults.save();
 		extraKey.putBoolean("Debug", true);
 		assertTrue(PatternCoreClientState.load(extraKey).isEmpty());
+		for (String key : List.of("RenderLibrarian", "PendingSafeRelease")) {
+			CompoundTag nonCanonicalBoolean = defaults.save();
+			nonCanonicalBoolean.putByte(key, (byte) 2);
+			assertTrue(PatternCoreClientState.load(nonCanonicalBoolean).isEmpty(), key);
+		}
+		CompoundTag unknownVillagerType = defaults.save();
+		unknownVillagerType.putString("VillagerType", "create_biotech:not_a_villager_type");
+		assertTrue(PatternCoreClientState.load(unknownVillagerType).isEmpty());
+	}
+
+	@Test
+	void fullMetadataAndNeoForgeStateRoundTripThroughRealBlockEntityApis() {
+		PatternStorageCoreBlockEntity source = seededCore();
+		registerTestAttachment();
+		source.getPersistentData().putString("PatternReviewMarker", "persistent-data");
+		source.setData(TEST_ATTACHMENT, "attachment-data");
+
+		CompoundTag saved = source.saveWithFullMetadata(REGISTRIES);
+		saved.putBoolean("keepPacked", true);
+
+		assertTrue(saved.contains("id", Tag.TAG_STRING));
+		assertTrue(saved.contains("x", Tag.TAG_INT));
+		assertTrue(saved.contains("y", Tag.TAG_INT));
+		assertTrue(saved.contains("z", Tag.TAG_INT));
+		assertTrue(saved.contains("NeoForgeData", Tag.TAG_COMPOUND));
+		assertTrue(saved.contains("neoforge:attachments", Tag.TAG_COMPOUND));
+		assertEquals(Set.of("LibraryId", "BindingState", "BindingStateInvalid", "ServerState"),
+			patternData(saved).getAllKeys());
+
+		PatternStorageCoreBlockEntity restored = core();
+		restored.loadWithComponents(saved, REGISTRIES);
+
+		assertAll(
+			() -> assertEquals(source.memberId(), restored.memberId()),
+			() -> assertEquals(source.bindingState(), restored.bindingState()),
+			() -> assertEquals(source.structureSnapshot(), restored.structureSnapshot()),
+			() -> assertEquals(source.libraryIndex().save(REGISTRIES),
+				restored.libraryIndex().save(REGISTRIES)),
+			() -> assertEquals("persistent-data",
+				restored.getPersistentData().getString("PatternReviewMarker")),
+			() -> assertEquals("attachment-data", restored.getData(TEST_ATTACHMENT)));
 	}
 
 	@Test
@@ -360,10 +541,11 @@ class PatternStorageCoreBlockEntityTest {
 		PatternStorageCoreBlockEntity source = seededCore();
 		CompoundTag saved = new CompoundTag();
 		source.write(saved, REGISTRIES, false);
+		assertEquals(Set.of("PatternLibrary"), saved.getAllKeys());
 		assertEquals(Set.of("LibraryId", "BindingState", "BindingStateInvalid", "ServerState"),
-			saved.getAllKeys());
+			patternData(saved).getAllKeys());
 		assertEquals(Set.of("LibrarianSnapshotBox", "PendingSafeRelease", "StructureState",
-			"StructureSnapshot", "PatternIndex"), saved.getCompound("ServerState").getAllKeys());
+			"StructureSnapshot", "PatternIndex"), serverState(saved).getAllKeys());
 		assertFalse(saved.contains("ClientState"));
 
 		PatternStorageCoreBlockEntity restored = core();
@@ -374,12 +556,12 @@ class PatternStorageCoreBlockEntityTest {
 
 		PatternStructureSnapshot retained = restored.structureSnapshot();
 		CompoundTag corruptStructure = saved.copy();
-		corruptStructure.getCompound("ServerState").put("StructureSnapshot", new CompoundTag());
+		serverState(corruptStructure).put("StructureSnapshot", new CompoundTag());
 		restored.read(corruptStructure, REGISTRIES, false);
 		assertEquals(retained, restored.structureSnapshot());
 
 		CompoundTag corruptIndexChild = saved.copy();
-		corruptIndexChild.getCompound("ServerState").getCompound("PatternIndex")
+		serverState(corruptIndexChild).getCompound("PatternIndex")
 			.getList("Queries", Tag.TAG_COMPOUND).getCompound(0).remove("QueryId");
 		PatternStorageCoreBlockEntity isolated = core();
 		isolated.read(corruptIndexChild, REGISTRIES, false);
@@ -392,25 +574,25 @@ class PatternStorageCoreBlockEntityTest {
 		CompoundTag corruptBox = saved.copy();
 		CompoundTag raw = new CompoundTag();
 		raw.putString("RecoveryMarker", "retain-this-exact-tag");
-		corruptBox.getCompound("ServerState").put("LibrarianSnapshotBox", raw);
+		serverState(corruptBox).put("LibrarianSnapshotBox", raw);
 		PatternStorageCoreBlockEntity recovery = core();
 		recovery.read(corruptBox, REGISTRIES, false);
 		CompoundTag recoverySaved = new CompoundTag();
 		recovery.write(recoverySaved, REGISTRIES, false);
 		assertTrue(recovery.pendingSafeRelease());
-		assertEquals(raw, recoverySaved.getCompound("ServerState")
+		assertEquals(raw, serverState(recoverySaved)
 			.getCompound("LibrarianSnapshotBox"));
 
 		CompoundTag unknownType = saved.copy();
 		CompoundTag unknownRaw = (CompoundTag) capturedLibrarian("evil:missing", 4,
 			"\"Unknown\"", false).save(REGISTRIES);
-		unknownType.getCompound("ServerState").put("LibrarianSnapshotBox", unknownRaw);
+		serverState(unknownType).put("LibrarianSnapshotBox", unknownRaw);
 		PatternStorageCoreBlockEntity unknownRecovery = core();
 		unknownRecovery.read(unknownType, REGISTRIES, false);
 		CompoundTag unknownResaved = new CompoundTag();
 		unknownRecovery.write(unknownResaved, REGISTRIES, false);
 		assertTrue(unknownRecovery.pendingSafeRelease());
-		assertEquals(unknownRaw, unknownResaved.getCompound("ServerState")
+		assertEquals(unknownRaw, serverState(unknownResaved)
 			.getCompound("LibrarianSnapshotBox"));
 	}
 
@@ -419,8 +601,8 @@ class PatternStorageCoreBlockEntityTest {
 		PatternStorageCoreBlockEntity target = seededCore();
 		CompoundTag before = authoritativeSnapshot(target);
 		CompoundTag malformed = before.copy();
-		malformed.getCompound("ServerState").putString("PendingSafeRelease", "wrong-type");
-		malformed.getCompound("ServerState").putString("StructureState", "VALID");
+		serverState(malformed).putString("PendingSafeRelease", "wrong-type");
+		serverState(malformed).putString("StructureState", "VALID");
 
 		target.read(malformed, REGISTRIES, false);
 
@@ -470,6 +652,42 @@ class PatternStorageCoreBlockEntityTest {
 		CompoundTag saved = new CompoundTag();
 		core.write(saved, REGISTRIES, false);
 		return saved;
+	}
+
+	private static CompoundTag patternData(CompoundTag root) {
+		return root.getCompound("PatternLibrary");
+	}
+
+	private static CompoundTag serverState(CompoundTag root) {
+		return patternData(root).getCompound("ServerState");
+	}
+
+	private static void registerTestAttachment() {
+		if (testAttachmentRegistered)
+			return;
+		try {
+			Class<?> registryClass = Class.forName("net.minecraft.core.Registry");
+			Object registry = Class.forName("net.neoforged.neoforge.registries.NeoForgeRegistries")
+				.getField("ATTACHMENT_TYPES").get(null);
+			registryClass.getMethod("register", registryClass, ResourceLocation.class, Object.class)
+				.invoke(null, registry, TEST_ATTACHMENT_ID, TEST_ATTACHMENT);
+			testAttachmentRegistered = true;
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
+	}
+
+	@SuppressWarnings("unchecked")
+	private static AttachmentType<String> createTestAttachment() {
+		try {
+			Object builder = AttachmentType.class.getMethod("builder", Supplier.class)
+				.invoke(null, (Supplier<String>) () -> "");
+			builder.getClass().getMethod("serialize", IAttachmentSerializer.class)
+				.invoke(builder, TEST_ATTACHMENT_SERIALIZER);
+			return (AttachmentType<String>) builder.getClass().getMethod("build").invoke(builder);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
 	}
 
 	private static PatternQuery query(net.minecraft.world.item.Item item) {
@@ -598,6 +816,18 @@ class PatternStorageCoreBlockEntityTest {
 		@Override
 		public void sendData() {
 			syncs++;
+		}
+	}
+
+	private static final class ReadyCore extends PatternStorageCoreBlockEntity {
+		private ReadyCore() {
+			super(BlockEntityType.FURNACE, BlockPos.ZERO, Blocks.FURNACE.defaultBlockState());
+			bootstrap();
+		}
+
+		@Override
+		boolean queryAccessReady() {
+			return structureState() == PatternLibraryScanner.StructureState.VALID;
 		}
 	}
 

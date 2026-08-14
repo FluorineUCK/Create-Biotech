@@ -59,6 +59,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LecternBlock;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
@@ -78,7 +79,7 @@ public final class PatternLibraryGameTests {
 
 	private PatternLibraryGameTests() {}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 80)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 80)
 	public static void librarianConversionAndRelease(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos lower = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -149,6 +150,9 @@ public final class PatternLibraryGameTests {
 				helper.assertValueEqual(drops.stream()
 					.filter(drop -> !drop.getItem().is(Items.LECTERN)).count(), 0L,
 					"Direct release must not emit a recovery box or unrelated block loot");
+				helper.assertValueEqual(entities(level, CardboardBoxEntity.class,
+					around(lower, 5)).size(), 0,
+					"Direct release must not emit a custom cardboard-box entity");
 				helper.assertFalse(isCore(level.getBlockState(lower)),
 					"Controlled release must remove the lower half");
 				helper.assertFalse(isCore(level.getBlockState(lower.above())),
@@ -158,7 +162,7 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 40)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 40)
 	public static void blockedUpperHalfRefusesConversion(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos lower = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -188,7 +192,7 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 60)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
 	public static void sixtyFourMemberBoundary(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos cubeMin = helper.absolutePos(new BlockPos(1, 2, 1));
@@ -219,7 +223,7 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 60)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
 	public static void seventeenPositionAxisIsTooWide(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		assertEmptyTemplateFixture(helper);
@@ -244,7 +248,7 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 40)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 40)
 	public static void upperSideShelfDoesNotBridge(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos lower = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -267,7 +271,7 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 40)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 40)
 	public static void secondCoreConflicts(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos first = helper.absolutePos(new BlockPos(2, 2, 2));
@@ -294,7 +298,7 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 60)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
 	public static void blockedControlledBreakKeepsCoreAndSnapshot(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos lower = helper.absolutePos(new BlockPos(5, 3, 5));
@@ -313,11 +317,14 @@ public final class PatternLibraryGameTests {
 				"A blocked controlled break must not lose the snapshot into a librarian");
 			helper.assertValueEqual(entities(level, ItemEntity.class, around(lower, 7)).size(), 0,
 				"Break-event cancellation must roll back prepared lower-half loot");
+			helper.assertValueEqual(entities(level, CardboardBoxEntity.class,
+				around(lower, 7)).size(), 0,
+				"Canceled controlled break must not emit a custom cardboard-box entity");
 			helper.succeed();
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 60)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
 	public static void forcedBlockedRemovalDropsRecoverableSnapshot(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos lower = helper.absolutePos(new BlockPos(5, 3, 5));
@@ -359,7 +366,7 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 60)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
 	public static void upperRemovalDelegatesExactlyOnce(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		BlockPos lower = helper.absolutePos(new BlockPos(3, 2, 3));
@@ -413,7 +420,106 @@ public final class PatternLibraryGameTests {
 		});
 	}
 
-	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 100)
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
+	public static void fullMetadataReloadRetainsLibrarianSnapshot(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos lower = helper.absolutePos(new BlockPos(3, 2, 3));
+		ItemStack sourceSnapshot = capturedLibrarian(level, CAPTURED_HEALTH);
+		level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		placeCore(level, lower, sourceSnapshot);
+		PatternStorageCoreBlockEntity original = core(level, lower);
+		CompoundTag fullMetadata = original.saveWithFullMetadata(level.registryAccess());
+		helper.assertTrue(fullMetadata.contains("id", Tag.TAG_STRING)
+			&& fullMetadata.contains("x", Tag.TAG_INT)
+			&& fullMetadata.contains("PatternLibrary", Tag.TAG_COMPOUND),
+			"Full metadata fixture must contain vanilla identity and owned nested state");
+
+		level.removeBlockEntity(lower);
+		BlockEntity loaded = BlockEntity.loadStatic(lower, level.getBlockState(lower),
+			fullMetadata, level.registryAccess());
+		helper.assertTrue(loaded instanceof PatternStorageCoreBlockEntity,
+			"loadStatic must recreate the registered pattern core from full metadata");
+		level.setBlockEntity(Objects.requireNonNull(loaded));
+
+		helper.runAfterDelay(1, () -> {
+			assertStackEqual(helper, sourceSnapshot, serializedSnapshot(core(level, lower), level),
+				"A real block-entity reload must retain the exact librarian snapshot");
+			assertCoreHalves(helper, level, lower);
+			helper.succeed();
+		});
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
+	public static void sameBlockLowerUpperTransitionsConserveBothLibrarians(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos first = helper.absolutePos(new BlockPos(3, 2, 3));
+		BlockPos second = helper.absolutePos(new BlockPos(9, 2, 3));
+		ItemStack firstSnapshot = capturedLibrarian(level, CAPTURED_HEALTH);
+		ItemStack secondSnapshot = capturedLibrarian(level, CAPTURED_HEALTH + 1);
+		UUID firstUuid = loadedLibrarian(firstSnapshot, level).getUUID();
+		UUID secondUuid = loadedLibrarian(secondSnapshot, level).getUUID();
+		for (BlockPos lower : List.of(first, second))
+			level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		placeCore(level, first, firstSnapshot);
+		placeCore(level, second, secondSnapshot);
+
+		BlockState firstLower = level.getBlockState(first);
+		BlockState secondUpper = level.getBlockState(second.above());
+		level.setBlock(first, firstLower.setValue(PatternStorageCoreBlock.HALF,
+			DoubleBlockHalf.UPPER), Block.UPDATE_ALL);
+		level.setBlock(second.above(), secondUpper.setValue(PatternStorageCoreBlock.HALF,
+			DoubleBlockHalf.LOWER), Block.UPDATE_ALL);
+		AABB transitionBounds = new AABB(Vec3.atCenterOf(first),
+			Vec3.atCenterOf(second.above())).inflate(6);
+
+		helper.runAfterDelay(ASSERTION_DELAY, () -> {
+			List<Villager> released = entities(level, Villager.class, transitionBounds);
+			helper.assertValueEqual(released.size(), 2,
+				"Lower-to-upper and upper-to-lower replacements must each conserve one librarian");
+			helper.assertTrue(released.stream().map(Entity::getUUID).collect(java.util.stream.Collectors.toSet())
+				.equals(java.util.Set.of(firstUuid, secondUuid)),
+				"Both same-block half transitions must preserve their source UUIDs exactly");
+			helper.assertValueEqual(entities(level, ItemEntity.class, transitionBounds).size(), 0,
+				"Clear same-block transitions must not emit recovery items");
+			helper.assertValueEqual(entities(level, CardboardBoxEntity.class, transitionBounds).size(), 0,
+				"Same-block transitions must not emit custom box entities");
+			helper.succeed();
+		});
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 60)
+	public static void corruptRawSnapshotSurvivesForcedRemoval(GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		BlockPos lower = helper.absolutePos(new BlockPos(3, 2, 3));
+		level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		placeCore(level, lower, null);
+		PatternStorageCoreBlockEntity core = core(level, lower);
+		CompoundTag raw = new CompoundTag();
+		raw.putString("id", "create_biotech:deliberately_corrupt_item");
+		raw.putByteArray("OpaqueRecoveryBytes", new byte[] { 7, 1, 9, 4 });
+		CompoundTag saved = core.saveWithoutMetadata(level.registryAccess());
+		saved.getCompound("PatternLibrary").getCompound("ServerState")
+			.put("LibrarianSnapshotBox", raw.copy());
+		core.loadWithComponents(saved, level.registryAccess());
+		helper.assertValueEqual(serializedRawSnapshot(core, level), raw,
+			"Corrupt raw snapshot fixture must survive initial server load byte-for-byte");
+
+		level.setBlock(lower, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		helper.runAfterDelay(ASSERTION_DELAY, () -> {
+			assertCoreHalves(helper, level, lower);
+			helper.assertValueEqual(serializedRawSnapshot(core(level, lower), level), raw,
+				"Forced removal must restore corrupt raw snapshot state losslessly");
+			helper.assertValueEqual(entities(level, Villager.class, around(lower, 6)).size(), 0,
+				"Opaque corrupt state must not be guessed into an entity");
+			helper.assertValueEqual(entities(level, ItemEntity.class, around(lower, 6)).size(), 0,
+				"Opaque corrupt state must remain recoverable in the restored core");
+			helper.assertValueEqual(entities(level, CardboardBoxEntity.class, around(lower, 6)).size(), 0,
+				"Opaque corrupt state must not duplicate into a custom box entity");
+			helper.succeed();
+		});
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 100)
 	public static void foundationBindReconcileAndAccessGate(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
 		MinecraftServer server = level.getServer();
@@ -478,13 +584,41 @@ public final class PatternLibraryGameTests {
 					ClusterBindingService.BindingAccess.READY,
 					"The core must reconcile as a READY replica");
 				assertCommittedIndex(helper, server, clusterId);
+				PatternQuery completed = new PatternQuery(UUID.randomUUID(), coordinator.memberId(),
+					logisticsId, new StackKey(new ItemStack(Items.DIAMOND)), 0, 0);
+				helper.assertTrue(core.enqueueQuery(completed),
+					"READY authority must accept a reply-retention fixture");
+				core.tick();
 				PatternQuery queued = new PatternQuery(UUID.randomUUID(), coordinator.memberId(),
 					logisticsId, new StackKey(new ItemStack(Items.GOLD_INGOT)), 23, 0);
 				helper.assertTrue(core.enqueueQuery(queued),
-					"A READY core must accept the query used by the offline advancement fixture");
+					"A READY core must accept the query used by both SLP fixtures");
+				CompoundTag invalidState = core.saveWithoutMetadata(level.registryAccess());
+				invalidState.getCompound("PatternLibrary").getCompound("ServerState")
+					.putString("StructureState", PatternLibraryScanner.StructureState.CORE_CONFLICT.name());
+				core.loadWithComponents(invalidState, level.registryAccess());
+				helper.assertValueEqual(ClusterBindingService.bindingAccess(server, core),
+					ClusterBindingService.BindingAccess.READY,
+					"Invalid-structure fixture must isolate SLP from an otherwise READY authority");
+				CompoundTag invalidIndex = serializedIndex(core, level);
+				PatternQuery invalidDenied = new PatternQuery(UUID.randomUUID(), coordinator.memberId(),
+					logisticsId, new StackKey(new ItemStack(Items.IRON_INGOT)), 0, 0);
+				helper.assertFalse(core.enqueueQuery(invalidDenied),
+					"CORE_CONFLICT must reject enqueue despite READY authority");
+				helper.assertTrue(core.drainReplies(coordinator.memberId(), 99).isEmpty(),
+					"CORE_CONFLICT must retain rather than drain its ready reply");
+				core.tick();
+				helper.assertValueEqual(serializedIndex(core, level), invalidIndex,
+					"CORE_CONFLICT must not advance a queued query or consume a ready reply");
+				CompoundTag validState = core.saveWithoutMetadata(level.registryAccess());
+				validState.getCompound("PatternLibrary").getCompound("ServerState")
+					.putString("StructureState", PatternLibraryScanner.StructureState.VALID.name());
+				core.loadWithComponents(validState, level.registryAccess());
 				CompoundTag queuedIndex = serializedIndex(core, level);
 				helper.assertValueEqual(queuedIndex.getList("Queries", Tag.TAG_COMPOUND).size(), 1,
 					"The offline advancement fixture must begin with one queued query");
+				helper.assertValueEqual(queuedIndex.getList("Replies", Tag.TAG_COMPOUND).size(), 1,
+					"The offline drain fixture must begin with one retained ready reply");
 
 				ClusterMemberIndex.unregister(server, coordinator);
 				helper.assertValueEqual(ClusterBindingService.bindingAccess(server, core),
@@ -494,6 +628,8 @@ public final class PatternLibraryGameTests {
 					logisticsId, new StackKey(new ItemStack(Items.IRON_INGOT)), 17, 0);
 				helper.assertFalse(core.enqueueQuery(denied),
 					"An offline authority must reject enqueue at the server gate");
+				helper.assertTrue(core.drainReplies(coordinator.memberId(), 99).isEmpty(),
+					"An offline authority must reject draining without stealing its retained reply");
 				core.tick();
 				helper.assertValueEqual(serializedIndex(core, level), queuedIndex,
 					"A public offline tick must not advance the queued query or cursor");
@@ -528,8 +664,8 @@ public final class PatternLibraryGameTests {
 
 	private static void assertEmptyTemplateFixture(GameTestHelper helper) {
 		try (InputStream stream = PatternLibraryGameTests.class
-			.getResourceAsStream("/data/minecraft/structure/empty.nbt")) {
-			helper.assertTrue(stream != null, "minecraft:empty must be present on the runtime classpath");
+			.getResourceAsStream("/data/create_biotech/structure/empty.nbt")) {
+			helper.assertTrue(stream != null, "create_biotech:empty must be present on the runtime classpath");
 			CompoundTag root = NbtIo.readCompressed(Objects.requireNonNull(stream),
 				NbtAccounter.unlimitedHeap());
 			ListTag size = root.getList("size", Tag.TAG_INT);
@@ -548,14 +684,15 @@ public final class PatternLibraryGameTests {
 				helper.getLevel().getBlockState(pos).isAir(),
 				"Empty template placed content at " + pos.toShortString()));
 		} catch (IOException exception) {
-			helper.fail("Could not decode minecraft:empty: " + exception.getMessage());
+			helper.fail("Could not decode create_biotech:empty: " + exception.getMessage());
 		}
 	}
 
 	private static CompoundTag serializedIndex(PatternStorageCoreBlockEntity core,
 		ServerLevel level) {
 		return core.saveWithoutMetadata(level.registryAccess())
-			.getCompound("ServerState").getCompound("PatternIndex").copy();
+			.getCompound("PatternLibrary").getCompound("ServerState")
+			.getCompound("PatternIndex").copy();
 	}
 
 	private static Villager loadedLibrarian(ItemStack snapshot, ServerLevel level) {
@@ -656,9 +793,15 @@ public final class PatternLibraryGameTests {
 	private static ItemStack serializedSnapshot(PatternStorageCoreBlockEntity core,
 		ServerLevel level) {
 		CompoundTag root = core.saveWithoutMetadata(level.registryAccess());
-		CompoundTag server = root.getCompound("ServerState");
+		CompoundTag server = root.getCompound("PatternLibrary").getCompound("ServerState");
 		return ItemStack.parseOptional(level.registryAccess(),
 			server.getCompound("LibrarianSnapshotBox"));
+	}
+
+	private static CompoundTag serializedRawSnapshot(PatternStorageCoreBlockEntity core,
+		ServerLevel level) {
+		return core.saveWithoutMetadata(level.registryAccess()).getCompound("PatternLibrary")
+			.getCompound("ServerState").getCompound("LibrarianSnapshotBox").copy();
 	}
 
 	private static void assertStackEqual(GameTestHelper helper, ItemStack expected,

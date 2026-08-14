@@ -9,9 +9,14 @@ import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
+
+import dev.ryanhcode.sable.companion.SubLevelAccess;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.Position;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -67,7 +72,7 @@ final class PatternStorageCoreLifecycle {
 
 	private static RemovalDisposition onStationaryRemove(BlockState state, Level level, BlockPos pos,
 		BlockState newState, SpawnSink spawnSink) {
-		if (level.isClientSide || state.is(newState.getBlock())
+		if (level.isClientSide || sameLogicalPart(state, newState)
 			|| !(state.getBlock() instanceof PatternStorageCoreBlock))
 			return RemovalDisposition.CALL_SUPER;
 
@@ -79,6 +84,7 @@ final class PatternStorageCoreLifecycle {
 			return RemovalDisposition.CALL_SUPER;
 
 		ItemStack originalSnapshot = oldLower.snapshot().copy();
+		CompoundTag originalRawSnapshot = oldLower.rawLibrarianSnapshot();
 		BlockState lowerState = state.getValue(PatternStorageCoreBlock.HALF) == DoubleBlockHalf.LOWER
 			? state : level.getBlockState(anchor);
 		if (!PatternStorageCoreBlock.isHalf(lowerState, DoubleBlockHalf.LOWER))
@@ -86,10 +92,13 @@ final class PatternStorageCoreLifecycle {
 		BlockState upperState = lowerState.setValue(PatternStorageCoreBlock.HALF,
 			DoubleBlockHalf.UPPER);
 
-		if (originalSnapshot.isEmpty()) {
+		if (originalSnapshot.isEmpty() && originalRawSnapshot == null) {
 			withRemovalGuard(level, anchor, () -> removeCounterpart(level, anchor, pos));
 			return RemovalDisposition.CALL_SUPER;
 		}
+		if (originalRawSnapshot != null)
+			return restoreAfterDoubleFailure(level, anchor, lowerState, upperState,
+				ItemStack.EMPTY, originalRawSnapshot);
 
 		Entity librarian = CapturedEntityBoxHelper.createCapturedEntityPreservingUuid(originalSnapshot, level);
 		return runForcedRemoval(new ForcedRemovalOps() {
@@ -101,8 +110,9 @@ final class PatternStorageCoreLifecycle {
 
 			@Override
 			public boolean tryDropRecoveryBox() {
-				ItemEntity recovery = new RecoveryItemEntity(level, anchor.getX() + 0.5,
-					anchor.getY() + 0.5, anchor.getZ() + 0.5, originalSnapshot.copy());
+				Vec3 recoveryPos = entityWorldPosition(level, anchor, Vec3.atCenterOf(anchor));
+				ItemEntity recovery = new RecoveryItemEntity(level, recoveryPos.x,
+					recoveryPos.y, recoveryPos.z, originalSnapshot.copy());
 				return spawnSink.add(recovery);
 			}
 
@@ -117,7 +127,7 @@ final class PatternStorageCoreLifecycle {
 			@Override
 			public RemovalDisposition restoreAfterDoubleFailure() {
 				return PatternStorageCoreLifecycle.restoreAfterDoubleFailure(level, anchor,
-					lowerState, upperState, originalSnapshot);
+					lowerState, upperState, originalSnapshot, null);
 			}
 		});
 	}
@@ -241,11 +251,11 @@ final class PatternStorageCoreLifecycle {
 		BlockState lowerState = level.getBlockState(anchor);
 		if (!PatternStorageCoreBlock.isHalf(lowerState, DoubleBlockHalf.LOWER))
 			return null;
+		Vec3 dropPos = entityWorldPosition(level, anchor, Vec3.atCenterOf(anchor));
 		List<ItemEntity> drops = Block.getDrops(lowerState, serverLevel, anchor, lower, player, tool)
 			.stream()
 			.filter(stack -> !stack.isEmpty())
-			.map(stack -> new ItemEntity(level, anchor.getX() + 0.5, anchor.getY() + 0.5,
-				anchor.getZ() + 0.5, stack))
+			.map(stack -> new ItemEntity(level, dropPos.x, dropPos.y, dropPos.z, stack))
 			.toList();
 		return new PlayerBreakOutput(drops);
 	}
@@ -294,9 +304,9 @@ final class PatternStorageCoreLifecycle {
 
 	private static boolean moveToSafeRelease(Level level, BlockPos anchor, Entity entity) {
 		for (BlockPos candidate : releaseCandidates(anchor)) {
-			if (!level.getWorldBorder().isWithinBounds(candidate))
+			Vec3 target = entityWorldPosition(level, anchor, Vec3.atBottomCenterOf(candidate));
+			if (!level.getWorldBorder().isWithinBounds(BlockPos.containing(target)))
 				continue;
-			Vec3 target = Vec3.atBottomCenterOf(candidate);
 			AABB movedBounds = entity.getBoundingBox().move(target.subtract(entity.position()));
 			if (!level.noCollision(entity, movedBounds))
 				continue;
@@ -304,6 +314,21 @@ final class PatternStorageCoreLifecycle {
 			return true;
 		}
 		return false;
+	}
+
+	private static Vec3 entityWorldPosition(Level level, BlockPos spaceAnchor, Position localPosition) {
+		return SubLevelCompat.toWorld(level, spaceAnchor, localPosition);
+	}
+
+	static Vec3 entityWorldPosition(@Nullable SubLevelAccess subLevel, Position localPosition) {
+		return SubLevelCompat.toWorld(subLevel, localPosition);
+	}
+
+	static boolean sameLogicalPart(BlockState state, BlockState newState) {
+		return state.getBlock() == newState.getBlock()
+			&& (!(state.getBlock() instanceof PatternStorageCoreBlock)
+				|| state.getValue(PatternStorageCoreBlock.HALF)
+					== newState.getValue(PatternStorageCoreBlock.HALF));
 	}
 
 	private static List<BlockPos> releaseCandidates(BlockPos anchor) {
@@ -320,7 +345,8 @@ final class PatternStorageCoreLifecycle {
 	}
 
 	private static RemovalDisposition restoreAfterDoubleFailure(Level level, BlockPos anchor,
-		BlockState lowerState, BlockState upperState, ItemStack originalSnapshot) {
+		BlockState lowerState, BlockState upperState, ItemStack originalSnapshot,
+		@Nullable CompoundTag originalRawSnapshot) {
 		return withRemovalGuard(level, anchor, () -> {
 			level.removeBlockEntity(anchor);
 			if (PatternStorageCoreBlock.isHalf(level.getBlockState(anchor), DoubleBlockHalf.LOWER))
@@ -332,7 +358,10 @@ final class PatternStorageCoreLifecycle {
 				&& level.setBlock(anchor.above(), upperState, REPLACE_FLAGS);
 			if (!(level.getBlockEntity(anchor) instanceof PatternStorageCoreBlockEntity restored))
 				return RemovalDisposition.CALL_SUPER;
-			restored.installLibrarianSnapshot(originalSnapshot.copy());
+			if (originalRawSnapshot == null)
+				restored.installLibrarianSnapshot(originalSnapshot.copy());
+			else
+				restored.installRawLibrarianSnapshot(originalRawSnapshot);
 			boolean complete = upperPlaced && PatternStorageCoreBlock.isComplete(
 				level.getBlockState(anchor), level.getBlockState(anchor.above()));
 			return complete ? RemovalDisposition.RESTORED : RemovalDisposition.CALL_SUPER;

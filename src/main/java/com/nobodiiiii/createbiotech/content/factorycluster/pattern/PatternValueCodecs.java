@@ -164,6 +164,8 @@ public final class PatternValueCodecs {
 	public static CompoundTag saveReply(PatternReply value, HolderLookup.Provider registries) {
 		CompoundTag tag = new CompoundTag();
 		tag.putUUID("QueryId", value.queryId());
+		tag.putUUID("RequesterComputerId", value.requesterComputerId());
+		tag.putUUID("LogisticsId", value.logisticsId());
 		tag.putLong("Generation", value.generation());
 		tag.putString("Status", value.status().name());
 		if (value.pattern() != null)
@@ -172,21 +174,25 @@ public final class PatternValueCodecs {
 	}
 
 	public static Optional<PatternReply> loadReply(CompoundTag tag, HolderLookup.Provider registries) {
-		if (!hasUuid(tag, "QueryId") || !hasType(tag, "Generation", Tag.TAG_LONG)
+		if (!hasUuid(tag, "QueryId") || !hasUuid(tag, "RequesterComputerId")
+			|| !hasUuid(tag, "LogisticsId") || !hasType(tag, "Generation", Tag.TAG_LONG)
 			|| !hasType(tag, "Status", Tag.TAG_STRING))
 			return Optional.empty();
 		return enumValue(PatternReplyStatus.class, tag.getString("Status")).flatMap(status -> {
 			boolean containsPattern = tag.contains("Pattern");
 			if ((status == PatternReplyStatus.MATCH) != containsPattern
-				|| !hasExactKeys(tag, containsPattern ? new String[] { "QueryId", "Generation", "Status", "Pattern" }
-					: new String[] { "QueryId", "Generation", "Status" })
+				|| !hasExactKeys(tag, containsPattern ? new String[] { "QueryId", "RequesterComputerId",
+					"LogisticsId", "Generation", "Status", "Pattern" }
+					: new String[] { "QueryId", "RequesterComputerId", "LogisticsId", "Generation", "Status" })
 				|| (containsPattern && !hasType(tag, "Pattern", Tag.TAG_COMPOUND)))
 				return Optional.empty();
 			Optional<PatternRecord> pattern = containsPattern
 				? loadRecord(tag.getCompound("Pattern"), registries) : Optional.ofNullable(null);
 			return containsPattern ? pattern.flatMap(value -> safely(() -> new PatternReply(tag.getUUID("QueryId"),
-				tag.getLong("Generation"), status, value))) : safely(() -> new PatternReply(tag.getUUID("QueryId"),
-					tag.getLong("Generation"), status, null));
+				tag.getUUID("RequesterComputerId"), tag.getUUID("LogisticsId"), tag.getLong("Generation"),
+				status, value))) : safely(() -> new PatternReply(tag.getUUID("QueryId"),
+					tag.getUUID("RequesterComputerId"), tag.getUUID("LogisticsId"), tag.getLong("Generation"),
+					status, null));
 		});
 	}
 

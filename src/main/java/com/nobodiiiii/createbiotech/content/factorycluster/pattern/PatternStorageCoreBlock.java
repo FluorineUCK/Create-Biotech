@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.factorycluster.pattern;
 
 import com.mojang.serialization.MapCodec;
 import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
+import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 
@@ -147,9 +148,9 @@ public class PatternStorageCoreBlock extends BaseEntityBlock
 	public InteractionResult onSneakWrenched(BlockState state, UseOnContext context) {
 		Level level = context.getLevel();
 		if (level instanceof ServerLevel server) {
-			PatternStorageCoreLifecycle.controlledWrench(level, context.getClickedPos(),
-				server::addFreshEntity);
-			IWrenchable.playRemoveSound(level, context.getClickedPos());
+			if (PatternStorageCoreLifecycle.controlledWrench(level, context.getClickedPos(),
+				server::addFreshEntity))
+				IWrenchable.playRemoveSound(level, context.getClickedPos());
 		}
 		return InteractionResult.SUCCESS;
 	}
@@ -171,7 +172,8 @@ public class PatternStorageCoreBlock extends BaseEntityBlock
 
 	public static boolean hasSpaceForUpperHalf(Level level, BlockPos lowerPos) {
 		return lowerPos.getY() < level.getMaxBuildHeight() - 1
-			&& level.getWorldBorder().isWithinBounds(lowerPos.above())
+			&& level.getWorldBorder().isWithinBounds(BlockPos.containing(
+				SubLevelCompat.toWorld(level, lowerPos, net.minecraft.world.phys.Vec3.atCenterOf(lowerPos.above()))))
 			&& level.getBlockState(lowerPos.above()).canBeReplaced();
 	}
 

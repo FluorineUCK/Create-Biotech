@@ -5,14 +5,12 @@ import java.util.UUID;
 
 import javax.annotation.Nullable;
 
-enum PatternReplyStatus {
-	MATCH, NOT_FOUND, INVALID_LIBRARY
-}
-
-public record PatternReply(UUID queryId, long generation, PatternReplyStatus status,
-	@Nullable PatternRecord pattern) {
+public record PatternReply(UUID queryId, UUID requesterComputerId, UUID logisticsId,
+	long generation, PatternReplyStatus status, @Nullable PatternRecord pattern) {
 	public PatternReply {
 		queryId = Objects.requireNonNull(queryId, "queryId");
+		requesterComputerId = Objects.requireNonNull(requesterComputerId, "requesterComputerId");
+		logisticsId = Objects.requireNonNull(logisticsId, "logisticsId");
 		status = Objects.requireNonNull(status, "status");
 		if ((status == PatternReplyStatus.MATCH) != (pattern != null))
 			throw new IllegalArgumentException("Only match replies carry a pattern");

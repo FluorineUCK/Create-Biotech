@@ -10,11 +10,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.UUID;
+import java.lang.reflect.Proxy;
 
 import org.junit.jupiter.api.Test;
 
+import dev.ryanhcode.sable.companion.SubLevelAccess;
+import dev.ryanhcode.sable.companion.math.BoundingBox3d;
+
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.core.Direction;
+import net.minecraft.world.level.block.state.BlockBehaviour;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.phys.Vec3;
 
 class PatternStorageCoreLifecycleTest {
 	private static final PatternStorageCoreConversionHandler.CandidateFacts ADULT_LIBRARIAN =
@@ -189,6 +198,58 @@ class PatternStorageCoreLifecycleTest {
 		assertEquals(0, effects[0], "entity spawn");
 		assertEquals(0, effects[1], "item spawn");
 		assertEquals(0, effects[2], "counterpart mutation");
+	}
+
+	@Test
+	void sameBlockHalfTransitionIsARealRemovalButSameLogicalHalfIsNot() {
+		PatternStorageCoreBlock block = new PatternStorageCoreBlock(BlockBehaviour.Properties.of());
+		var lower = block.defaultBlockState()
+			.setValue(PatternStorageCoreBlock.HALF, DoubleBlockHalf.LOWER);
+		var rotatedLower = lower.setValue(PatternStorageCoreBlock.FACING, Direction.EAST);
+		var upper = lower.setValue(PatternStorageCoreBlock.HALF, DoubleBlockHalf.UPPER);
+
+		assertTrue(PatternStorageCoreLifecycle.sameLogicalPart(lower, rotatedLower));
+		assertFalse(PatternStorageCoreLifecycle.sameLogicalPart(lower, upper));
+		assertFalse(PatternStorageCoreLifecycle.sameLogicalPart(upper, lower));
+	}
+
+	@Test
+	void entityCoordinatesPassThroughNormallyAndUseSubLevelCompatProjection() {
+		Vec3 local = new Vec3(2, 3, 4);
+		assertEquals(local, PatternStorageCoreLifecycle.entityWorldPosition(null, local));
+
+		Object translated = translatedRotatedPose(100, 50, -20);
+		SubLevelAccess subLevel = (SubLevelAccess) Proxy.newProxyInstance(
+			SubLevelAccess.class.getClassLoader(), new Class<?>[] { SubLevelAccess.class },
+			(proxy, method, arguments) -> switch (method.getName()) {
+				case "logicalPose", "lastPose" -> translated;
+				case "boundingBox" -> new BoundingBox3d(0, 0, 0, 16, 16, 16);
+				case "getUniqueId" -> UUID.fromString("00000000-0000-0000-0000-000000000099");
+				case "getName" -> "projected-test";
+				default -> throw new UnsupportedOperationException(method.getName());
+			});
+
+		assertEquals(new Vec3(104, 53, -22),
+			PatternStorageCoreLifecycle.entityWorldPosition(subLevel, local));
+	}
+
+	private static Object translatedRotatedPose(double x, double y, double z) {
+		try {
+			Class<?> vector = Class.forName("org.joml.Vector3d");
+			Class<?> quaternion = Class.forName("org.joml.Quaterniond");
+			Object position = vector.getConstructor(double.class, double.class, double.class)
+				.newInstance(x, y, z);
+			Object orientation = quaternion.getConstructor().newInstance();
+			quaternion.getMethod("rotateY", double.class).invoke(orientation, Math.PI / 2);
+			Object rotationPoint = vector.getConstructor().newInstance();
+			Object scale = vector.getConstructor(double.class, double.class, double.class)
+				.newInstance(1, 1, 1);
+			return Class.forName("dev.ryanhcode.sable.companion.math.Pose3d")
+				.getConstructor(vector, quaternion, vector, vector)
+				.newInstance(position, orientation, rotationPoint, scale);
+		} catch (ReflectiveOperationException exception) {
+			throw new IllegalStateException(exception);
+		}
 	}
 
 	@Test

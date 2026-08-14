@@ -3,13 +3,18 @@ package com.nobodiiiii.createbiotech.content.factorycluster.pattern;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.NavigableMap;
 import java.util.Objects;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.UUID;
 
 import javax.annotation.Nullable;
@@ -43,12 +48,18 @@ public final class PatternLibraryIndex {
 	private long generation;
 	private boolean indexPassComplete = true;
 	private List<PatternRecord> records = List.of();
+	private List<PatternRecord> recordBuilder = new ArrayList<>();
+	private final NavigableMap<PatternPageKey, PatternPageError> errors =
+		new TreeMap<>(PAGE_COMPARATOR);
 	private final ArrayDeque<PatternQuery> activeQueries = new ArrayDeque<>();
 	private final ArrayDeque<PatternReply> readyReplies = new ArrayDeque<>();
 	private WorkLane nextLane = WorkLane.FINGERPRINT;
 	private TickStats lastTickStats = new TickStats(0, 0, List.of());
 	private Set<PatternPageKey> lastInvalidatedKeys = Set.of();
 	private int reparsedPageCount;
+	private int lastRecordMaintenanceUnits;
+	private int lastLoadMembershipChecks;
+	private int lastLoadRecordVisits;
 
 	public PatternLibraryIndex() {}
 
@@ -57,7 +68,9 @@ public final class PatternLibraryIndex {
 		List<PatternPageKey> canonical = keys.stream().map(key -> Objects.requireNonNull(key, "page key"))
 			.distinct().sorted(PAGE_COMPARATOR).toList();
 		pageOrder = List.copyOf(canonical);
-		cache.keySet().retainAll(pageOrder);
+		Set<PatternPageKey> retained = new HashSet<>(pageOrder);
+		cache.keySet().retainAll(retained);
+		errors.keySet().retainAll(retained);
 		atomicRestart();
 	}
 
@@ -65,11 +78,28 @@ public final class PatternLibraryIndex {
 		activeQueries.addLast(Objects.requireNonNull(query, "query").restart(generation));
 	}
 
-	public List<PatternReply> pollReplies(int queueCount) {
+	List<PatternReply> pollReplies(int queueCount) {
 		int count = Math.min(Math.max(0, queueCount), readyReplies.size());
 		List<PatternReply> replies = new ArrayList<>(count);
 		for (int i = 0; i < count; i++)
 			replies.add(readyReplies.removeFirst());
+		return List.copyOf(replies);
+	}
+
+	List<PatternReply> drainReplies(UUID requesterComputerId, int maxReplies) {
+		Objects.requireNonNull(requesterComputerId, "requesterComputerId");
+		int count = Math.max(0, maxReplies);
+		if (count == 0 || readyReplies.isEmpty())
+			return List.of();
+		List<PatternReply> replies = new ArrayList<>(Math.min(count, readyReplies.size()));
+		Iterator<PatternReply> iterator = readyReplies.iterator();
+		while (iterator.hasNext() && replies.size() < count) {
+			PatternReply reply = iterator.next();
+			if (!reply.requesterComputerId().equals(requesterComputerId))
+				continue;
+			replies.add(reply);
+			iterator.remove();
+		}
 		return List.copyOf(replies);
 	}
 
@@ -200,6 +230,7 @@ public final class PatternLibraryIndex {
 				|| (!index.indexPassComplete && index.fingerprintCursor == index.pageOrder.size()))))
 				return new LoadResult(new PatternLibraryIndex(), true);
 
+			Set<PatternPageKey> orderMembership = new HashSet<>(index.pageOrder);
 			Set<PatternPageKey> seenCacheKeys = new LinkedHashSet<>();
 			for (Tag value : (ListTag) root.get(CACHE)) {
 				if (!(value instanceof CompoundTag child)) {
@@ -208,19 +239,20 @@ public final class PatternLibraryIndex {
 					continue;
 				}
 				LoadedCachedPage loaded = loadCachedPage(child, registries);
-				if (loaded == null || !index.pageOrder.contains(loaded.key())
+				index.lastLoadMembershipChecks++;
+				if (loaded == null || !orderMembership.contains(loaded.key())
 					|| !seenCacheKeys.add(loaded.key())) {
 					corruption.found = true;
 					restart = true;
 					continue;
 				}
-				index.cache.put(loaded.key(), loaded.page());
+				index.putCachedPage(loaded.key(), loaded.page());
 			}
 			if (index.indexPassComplete && index.cache.size() != index.pageOrder.size()) {
 				corruption.found = true;
 				restart = true;
 			}
-			index.rebuildRecordView();
+			index.initializeLoadedRecordView();
 
 			for (Tag value : (ListTag) root.get(QUERIES)) {
 				if (!(value instanceof CompoundTag child)) {
@@ -277,13 +309,25 @@ public final class PatternLibraryIndex {
 	List<PatternQuery> activeQueries() { return List.copyOf(activeQueries); }
 	int activeQueryCount() { return activeQueries.size(); }
 	int readyReplyCount() { return readyReplies.size(); }
-	List<PatternPageError> pageErrors() { return cache.values().stream().filter(page -> page.kind() == CacheKind.INVALID).map(CachedPage::error).toList(); }
+	List<PatternPageError> pageErrors() { return errors.values().stream().limit(PatternLibrarySummary.MAX_ERRORS).toList(); }
+	int indexedPatternCount() { return indexPassComplete ? records.size() : recordBuilder.size(); }
+	int lastRecordMaintenanceUnits() { return lastRecordMaintenanceUnits; }
+	int lastLoadMembershipChecks() { return lastLoadMembershipChecks; }
+	int lastLoadRecordVisits() { return lastLoadRecordVisits; }
 	List<WorkLane> lastLaneTrace() { return lastTickStats.lanes(); }
 	int lastFingerprintUnits() { return lastTickStats.fingerprintUnits(); }
 	int lastQueryUnits() { return lastTickStats.queryUnits(); }
 	int lastTotalUnits() { return lastTickStats.totalUnits(); }
 	Set<PatternPageKey> lastInvalidatedKeys() { return lastInvalidatedKeys; }
 	int reparsedPageCount() { return reparsedPageCount; }
+
+	PatternLibrarySummary summary(PatternLibraryScanner.StructureState reason, int capacity) {
+		int indexedPages = indexPassComplete ? pageOrder.size() : fingerprintCursor;
+		return new PatternLibrarySummary(reason, Math.max(0, capacity), pageOrder.size(),
+			indexedPages, indexedPatternCount(), errors.size(),
+			indexPassComplete ? 0 : pageOrder.size() - fingerprintCursor,
+			!indexPassComplete, pageErrors());
+	}
 
 	private boolean fingerprintEligible() {
 		return fingerprintCursor < pageOrder.size();
@@ -299,25 +343,33 @@ public final class PatternLibraryIndex {
 		String raw = Objects.requireNonNullElse(pages.read(key), "");
 		PageInspection inspection = parser.inspect(key, raw, previous == null ? null : previous.fingerprint());
 		if (inspection.changedResult().isEmpty()) {
-			advanceFingerprintCursor();
+			completeFingerprintUnit(key);
 			return;
 		}
 
 		reparsedPageCount++;
-		cache.put(key, cachedPage(inspection.changedResult().orElseThrow()));
-		rebuildRecordView();
+		putCachedPage(key, cachedPage(inspection.changedResult().orElseThrow()));
 		if (previous == null) {
-			advanceFingerprintCursor();
+			completeFingerprintUnit(key);
 		} else {
 			lastInvalidatedKeys = addInvalidated(lastInvalidatedKeys, key);
 			atomicRestart();
 		}
 	}
 
-	private void advanceFingerprintCursor() {
+	private void completeFingerprintUnit(PatternPageKey key) {
+		if (!indexPassComplete) {
+			lastRecordMaintenanceUnits++;
+			CachedPage page = cache.get(key);
+			if (page != null && page.kind() == CacheKind.VALID)
+				recordBuilder.add(snapshotRecord(page.pattern()));
+		}
 		fingerprintCursor++;
-		if (fingerprintCursor == pageOrder.size())
+		if (fingerprintCursor == pageOrder.size() && !indexPassComplete) {
+			records = Collections.unmodifiableList(recordBuilder);
+			recordBuilder = new ArrayList<>();
 			indexPassComplete = true;
+		}
 	}
 
 	private void queryUnit() {
@@ -325,7 +377,8 @@ public final class PatternLibraryIndex {
 		if (query.passGeneration() != generation)
 			query = query.restart(generation);
 		if (query.cursor() == records.size()) {
-			readyReplies.addLast(new PatternReply(query.queryId(), generation,
+			readyReplies.addLast(new PatternReply(query.queryId(), query.requesterComputerId(),
+				query.logisticsId(), generation,
 				PatternReplyStatus.NOT_FOUND, null));
 			return;
 		}
@@ -333,10 +386,12 @@ public final class PatternLibraryIndex {
 		PatternRecord candidate = records.get(query.cursor());
 		int nextCursor = query.cursor() + 1;
 		if (candidate.mainOutput().stack().equals(query.requestedOutput())) {
-			readyReplies.addLast(new PatternReply(query.queryId(), generation,
+			readyReplies.addLast(new PatternReply(query.queryId(), query.requesterComputerId(),
+				query.logisticsId(), generation,
 				PatternReplyStatus.MATCH, snapshotRecord(candidate)));
 		} else if (nextCursor == records.size()) {
-			readyReplies.addLast(new PatternReply(query.queryId(), generation,
+			readyReplies.addLast(new PatternReply(query.queryId(), query.requesterComputerId(),
+				query.logisticsId(), generation,
 				PatternReplyStatus.NOT_FOUND, null));
 		} else {
 			activeQueries.addLast(new PatternQuery(query.queryId(), query.requesterComputerId(),
@@ -348,7 +403,8 @@ public final class PatternLibraryIndex {
 		generation++;
 		fingerprintCursor = 0;
 		indexPassComplete = pageOrder.isEmpty();
-		rebuildRecordView();
+		records = List.of();
+		recordBuilder = new ArrayList<>();
 		readyReplies.removeIf(reply -> reply.generation() < generation);
 		if (!activeQueries.isEmpty()) {
 			List<PatternQuery> restarted = activeQueries.stream().map(query -> query.restart(generation)).toList();
@@ -357,20 +413,37 @@ public final class PatternLibraryIndex {
 		}
 	}
 
-	private void rebuildRecordView() {
-		List<PatternRecord> rebuilt = new ArrayList<>();
-		for (PatternPageKey key : pageOrder) {
+	private void putCachedPage(PatternPageKey key, CachedPage page) {
+		cache.put(key, page);
+		errors.remove(key);
+		if (page.kind() == CacheKind.INVALID)
+			errors.put(key, page.error());
+	}
+
+	private void initializeLoadedRecordView() {
+		List<PatternRecord> loadedRecords = new ArrayList<>();
+		int end = indexPassComplete ? pageOrder.size() : fingerprintCursor;
+		for (int i = 0; i < end; i++) {
+			PatternPageKey key = pageOrder.get(i);
+			lastLoadRecordVisits++;
 			CachedPage page = cache.get(key);
 			if (page != null && page.kind() == CacheKind.VALID)
-				rebuilt.add(snapshotRecord(page.pattern()));
+				loadedRecords.add(snapshotRecord(page.pattern()));
 		}
-		records = List.copyOf(rebuilt);
+		if (indexPassComplete) {
+			records = Collections.unmodifiableList(loadedRecords);
+			recordBuilder = new ArrayList<>();
+		} else {
+			records = List.of();
+			recordBuilder = loadedRecords;
+		}
 	}
 
 	private void beginDiagnostics() {
 		lastTickStats = new TickStats(0, 0, List.of());
 		lastInvalidatedKeys = Set.of();
 		reparsedPageCount = 0;
+		lastRecordMaintenanceUnits = 0;
 	}
 
 	private void finishDiagnostics(List<WorkLane> lanes) {
@@ -455,7 +528,8 @@ public final class PatternLibraryIndex {
 	}
 
 	private static PatternReply snapshotReply(PatternReply reply) {
-		return new PatternReply(reply.queryId(), reply.generation(), reply.status(),
+		return new PatternReply(reply.queryId(), reply.requesterComputerId(), reply.logisticsId(),
+			reply.generation(), reply.status(),
 			reply.pattern() == null ? null : snapshotRecord(reply.pattern()));
 	}
 

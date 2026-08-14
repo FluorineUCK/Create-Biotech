@@ -2,7 +2,9 @@ package com.nobodiiiii.createbiotech.content.factorycluster.pattern;
 
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -55,6 +57,7 @@ import net.minecraft.world.level.block.state.BlockState;
 /** Runtime coordinator for the incremental, chiseled-bookshelf pattern index. */
 public class PatternStorageCoreBlockEntity extends SmartBlockEntity implements ClusterMember {
 	private static final String LIBRARY_ID = "LibraryId";
+	private static final String PATTERN_LIBRARY = "PatternLibrary";
 	private static final String BINDING_STATE = "BindingState";
 	private static final String BINDING_STATE_INVALID = "BindingStateInvalid";
 	private static final String SERVER_STATE = "ServerState";
@@ -77,7 +80,9 @@ public class PatternStorageCoreBlockEntity extends SmartBlockEntity implements C
 	private int searchBudget;
 	private int queueCount = 1;
 	private int efficiencyBonus;
+	private Map<BlockPos, Integer> pageTopologies = Map.of();
 	private long lastStructureCheck = Long.MIN_VALUE;
+	private final ReplyDispatchAllowance replyDispatchAllowance = new ReplyDispatchAllowance();
 	private PatternCoreClientState clientState = defaultClientState();
 
 	public PatternStorageCoreBlockEntity(BlockPos pos, BlockState state) {
@@ -122,14 +127,17 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 					PatternLibraryScanner.StructureState.PARTIAL, null));
 			return;
 		}
-		searchBudget = Math.min(CBConfigs.SERVER.factoryCluster.patternMaxPagesPerTick.get(),
-			baseBudget(librarianLevel()) + efficiencyBonus);
+		PatternCoreClientState previousClientState = currentClientState();
+		searchBudget = structureState == PatternLibraryScanner.StructureState.VALID
+			? Math.min(CBConfigs.SERVER.factoryCluster.patternMaxPagesPerTick.get(),
+				baseBudget(librarianLevel()) + efficiencyBonus) : 0;
 		queueCount = structureSnapshot == null ? 1 : structureSnapshot.queueCount();
+		if (!previousClientState.equals(currentClientState()))
+			sendData();
 		if (!queryAccessReady())
 			return;
 		serviceIndexIfMembersLoaded(loaded, this::readPage,
 			new PatternJsonParser(level.registryAccess()), searchBudget);
-		setChanged();
 	}
 
 	private void refreshStructure() {
@@ -141,39 +149,61 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			return;
 		}
 		PatternStructureSnapshot snapshot = result.snapshot();
-		applyStructureScan(result, snapshot == null ? List.of() : pageKeys(snapshot),
-			snapshot == null ? efficiencyBonus : efficiencyBonus(snapshot));
+		ShelfInspection inspection = result.state() == PatternLibraryScanner.StructureState.VALID
+			&& snapshot != null ? inspectShelves(snapshot) : ShelfInspection.EMPTY;
+		applyStructureScan(result, inspection.topologies(), inspection.efficiencyBonus());
 	}
 
 	void applyStructureScan(PatternLibraryScanner.ScanResult result) {
-		applyStructureScan(result, null, efficiencyBonus);
+		applyStructureScan(result, null,
+			result.state() == PatternLibraryScanner.StructureState.VALID ? efficiencyBonus : 0);
 	}
 
-	private void applyStructureScan(PatternLibraryScanner.ScanResult result,
-		@Nullable List<PatternPageKey> currentPageKeys, int currentEfficiencyBonus) {
+	void applyStructureScan(PatternLibraryScanner.ScanResult result,
+		@Nullable Map<BlockPos, Integer> currentTopologies, int currentEfficiencyBonus) {
 		Objects.requireNonNull(result, "result");
+		PatternCoreClientState previousClientState = currentClientState();
+		PatternLibraryScanner.StructureState previousState = structureState;
+		PatternStructureSnapshot previousSnapshot = structureSnapshot;
+		int previousEfficiencyBonus = efficiencyBonus;
+		int previousQueueCount = queueCount;
+		boolean pageOrderChanged = false;
 		structureState = result.state();
 		if (result.state() != PatternLibraryScanner.StructureState.PARTIAL) {
 			PatternStructureSnapshot next = result.snapshot();
 			boolean structureChanged = !Objects.equals(structureSnapshot, next);
 			if (structureChanged)
 				structureSnapshot = next;
-			if (currentPageKeys != null) {
-				if (structureChanged)
-					libraryIndex.rebuildPageOrder(currentPageKeys);
-				else
-					synchronizePageOrder(libraryIndex, currentPageKeys);
+			if (currentTopologies != null) {
+				Map<BlockPos, Integer> immutableTopologies = Map.copyOf(currentTopologies);
+				boolean topologyChanged = !pageTopologies.equals(immutableTopologies);
+				boolean stalePageOrder = immutableTopologies.isEmpty()
+					&& !libraryIndex.pageOrder().isEmpty();
+				if (topologyChanged || stalePageOrder) {
+					libraryIndex.rebuildPageOrder(next == null ? List.of()
+						: pageKeys(next, immutableTopologies));
+					pageTopologies = immutableTopologies;
+					pageOrderChanged = true;
+				}
 			}
 			efficiencyBonus = currentEfficiencyBonus;
 			queueCount = next == null ? 1 : next.queueCount();
 		}
-		setChanged();
-		sendData();
+		boolean changed = previousState != structureState
+			|| !Objects.equals(previousSnapshot, structureSnapshot)
+			|| previousEfficiencyBonus != efficiencyBonus
+			|| previousQueueCount != queueCount || pageOrderChanged;
+		if (changed)
+			setChanged();
+		if (!previousClientState.equals(currentClientState()))
+			sendData();
 	}
 
 	boolean serviceIndexIfMembersLoaded(Predicate<BlockPos> loaded, PageReader pages,
 		PatternJsonParser parser, int budget) {
 		Objects.requireNonNull(loaded, "loaded");
+		if (!queryAccessReady())
+			return false;
 		if (!allMembersLoaded(structureSnapshot, loaded)) {
 			if (structureState != PatternLibraryScanner.StructureState.PARTIAL)
 				applyStructureScan(new PatternLibraryScanner.ScanResult(
@@ -181,6 +211,8 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			return false;
 		}
 		libraryIndex.tick(pages, parser, budget);
+		if (libraryIndex.lastTotalUnits() > 0)
+			setChanged();
 		return true;
 	}
 
@@ -189,14 +221,36 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		return snapshot == null || snapshot.members().stream().allMatch(loaded);
 	}
 
-	private List<PatternPageKey> pageKeys(PatternStructureSnapshot snapshot) {
+	private List<PatternPageKey> pageKeys(PatternStructureSnapshot snapshot,
+		Map<BlockPos, Integer> topologies) {
 		List<PatternPageKey> keys = new ArrayList<>();
+		for (BlockPos shelfPos : snapshot.chiseledShelves()) {
+			int topology = topologies.getOrDefault(shelfPos, 0);
+			if (topology == 0)
+				continue;
+			SpaceAddress address = SpaceAddress.capture(level, shelfPos);
+			for (int slot = 0; slot < 6; slot++) {
+				if ((topology & (1 << slot)) == 0)
+					continue;
+				for (int page = 0; page < 100; page++)
+					keys.add(new PatternPageKey(address, slot, page));
+			}
+		}
+		return List.copyOf(keys);
+	}
+
+	private ShelfInspection inspectShelves(PatternStructureSnapshot snapshot) {
+		Map<BlockPos, Integer> topologies = new LinkedHashMap<>();
+		int bonus = 0;
+		Holder<Enchantment> efficiency = level.registryAccess().holderOrThrow(Enchantments.EFFICIENCY);
 		for (BlockPos shelfPos : snapshot.chiseledShelves()) {
 			if (!(SubLevelCompat.getLoadedBlockEntity(level, shelfPos) instanceof ChiseledBookShelfBlockEntity shelf))
 				continue;
-			keys.addAll(pageKeys(SpaceAddress.capture(level, shelfPos), shelfItems(shelf)));
+			List<ItemStack> slots = shelfItems(shelf);
+			topologies.put(shelfPos, pageTopology(slots));
+			bonus += efficiencyBonus(slots, efficiency);
 		}
-		return keys;
+		return new ShelfInspection(Map.copyOf(topologies), bonus);
 	}
 
 	static List<PatternPageKey> pageKeys(SpaceAddress shelfAddress, List<ItemStack> slots) {
@@ -213,6 +267,17 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		return List.copyOf(keys);
 	}
 
+	static int pageTopology(List<ItemStack> slots) {
+		Objects.requireNonNull(slots, "slots");
+		int topology = 0;
+		for (int slot = 0; slot < Math.min(6, slots.size()); slot++) {
+			ItemStack stack = Objects.requireNonNull(slots.get(slot), "slot stack");
+			if (stack.is(Items.WRITABLE_BOOK))
+				topology |= 1 << slot;
+		}
+		return topology;
+	}
+
 	static boolean synchronizePageOrder(PatternLibraryIndex index,
 		List<PatternPageKey> currentPageKeys) {
 		Objects.requireNonNull(index, "index");
@@ -224,17 +289,6 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			return false;
 		index.rebuildPageOrder(currentPageKeys);
 		return true;
-	}
-
-	private int efficiencyBonus(PatternStructureSnapshot snapshot) {
-		int result = 0;
-		Holder<Enchantment> efficiency = level.registryAccess().holderOrThrow(Enchantments.EFFICIENCY);
-		for (BlockPos shelfPos : snapshot.chiseledShelves()) {
-			if (!(SubLevelCompat.getLoadedBlockEntity(level, shelfPos) instanceof ChiseledBookShelfBlockEntity shelf))
-				continue;
-			result += efficiencyBonus(shelfItems(shelf), efficiency);
-		}
-		return result;
 	}
 
 	static int efficiencyBonus(List<ItemStack> slots, Holder<Enchantment> efficiency) {
@@ -342,6 +396,11 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	public int searchBudget() { return searchBudget; }
 	public int queueCount() { return queueCount; }
 	public List<PatternPageError> pageErrors() { return libraryIndex.pageErrors(); }
+	public PatternLibrarySummary summary() {
+		int capacity = structureSnapshot == null ? 0
+			: Math.multiplyExact(structureSnapshot.chiseledShelves().size(), 600);
+		return libraryIndex.summary(structureState, capacity);
+	}
 
 	public boolean enqueueQuery(PatternQuery query) {
 		if (!queryAccessReady() || !bindingAllowsQuery(ClusterBindingService.bindingAccess(server(), this), bindingState,
@@ -351,11 +410,16 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		return true;
 	}
 
-	public List<PatternReply> drainReplies(int maxReplies) {
-		List<PatternReply> replies = libraryIndex.pollReplies(
-			Math.min(Math.max(0, maxReplies), queueCount));
-		if (!replies.isEmpty())
+	public List<PatternReply> drainReplies(UUID requesterComputerId, int maxReplies) {
+		Objects.requireNonNull(requesterComputerId, "requesterComputerId");
+		if (!queryAccessReady() || level == null)
+			return List.of();
+		int allowed = replyDispatchAllowance.available(level.getGameTime(), queueCount, maxReplies);
+		List<PatternReply> replies = libraryIndex.drainReplies(requesterComputerId, allowed);
+		if (!replies.isEmpty()) {
+			replyDispatchAllowance.consume(replies.size());
 			setChanged();
+		}
 		return replies;
 	}
 
@@ -365,11 +429,17 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			&& state.logisticsBindings().stream().anyMatch(binding -> binding.logisticsId().equals(logisticsId));
 	}
 
-	private boolean queryAccessReady() {
+	static boolean queryOperationAllowed(PatternLibraryScanner.StructureState structureState,
+		ClusterBindingService.BindingAccess access) {
+		return structureState == PatternLibraryScanner.StructureState.VALID
+			&& access == ClusterBindingService.BindingAccess.READY;
+	}
+
+	boolean queryAccessReady() {
 		MinecraftServer server = server();
 		return server != null && bindingState != null && bindingStateValid
 			&& !ClusterMemberIndex.conflicts(server, bindingState.clusterId()).blocksNewTasks()
-			&& ClusterBindingService.bindingAccess(server, this) == ClusterBindingService.BindingAccess.READY;
+			&& queryOperationAllowed(structureState, ClusterBindingService.bindingAccess(server, this));
 	}
 
 	@Override public UUID memberId() { return libraryId; }
@@ -404,6 +474,15 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	ItemStack snapshot() { return librarianSnapshotBox.copy(); }
 	boolean hasSnapshot() { return !librarianSnapshotBox.isEmpty() && CapturedEntityBoxHelper.hasCapturedEntity(librarianSnapshotBox); }
 	void clearSnapshot() { librarianSnapshotBox = ItemStack.EMPTY; rawLibrarianSnapshotBox = null; pendingSafeRelease = false; setChanged(); }
+	@Nullable CompoundTag rawLibrarianSnapshot() {
+		return rawLibrarianSnapshotBox == null ? null : rawLibrarianSnapshotBox.copy();
+	}
+	void installRawLibrarianSnapshot(CompoundTag rawSnapshot) {
+		librarianSnapshotBox = ItemStack.EMPTY;
+		rawLibrarianSnapshotBox = Objects.requireNonNull(rawSnapshot, "rawSnapshot").copy();
+		pendingSafeRelease = true;
+		setChanged();
+	}
 	boolean pendingSafeRelease() { return pendingSafeRelease; }
 	void markPendingSafeRelease() { pendingSafeRelease = true; setChanged(); }
 	PatternLibraryIndex libraryIndex() { return libraryIndex; }
@@ -418,9 +497,11 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			return;
 		}
 		super.write(tag, registries, false);
-		tag.putUUID(LIBRARY_ID, libraryId);
-		if (bindingState != null) tag.put(BINDING_STATE, bindingState.save());
-		tag.putBoolean(BINDING_STATE_INVALID, !bindingStateValid);
+		CompoundTag pattern = new CompoundTag();
+		pattern.putUUID(LIBRARY_ID, libraryId);
+		if (bindingState != null)
+			pattern.put(BINDING_STATE, bindingState.save());
+		pattern.putBoolean(BINDING_STATE_INVALID, !bindingStateValid);
 		CompoundTag server = new CompoundTag();
 		if (rawLibrarianSnapshotBox != null)
 			server.put(LIBRARIAN_SNAPSHOT, rawLibrarianSnapshotBox.copy());
@@ -430,20 +511,24 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		server.putString(STRUCTURE_STATE, structureState.name());
 		if (structureSnapshot != null) server.put(STRUCTURE_SNAPSHOT, structureSnapshot.save());
 		server.put(LIBRARY_INDEX, libraryIndex.save(registries));
-		tag.put(SERVER_STATE, server);
+		pattern.put(SERVER_STATE, server);
+		tag.put(PATTERN_LIBRARY, pattern);
 	}
 
 	@Override
 	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		if (clientPacket) { readClient(tag); return; }
-		if (!validServerProjection(tag))
+		super.read(tag, registries, false);
+		if (!hasType(tag, PATTERN_LIBRARY, Tag.TAG_COMPOUND))
 			return;
-		CompoundTag server = tag.getCompound(SERVER_STATE);
+		CompoundTag pattern = tag.getCompound(PATTERN_LIBRARY);
+		if (!validServerProjection(pattern))
+			return;
+		CompoundTag server = pattern.getCompound(SERVER_STATE);
 		if (!validServerStateEnvelope(server))
 			return;
-		super.read(tag, registries, false);
-		libraryId = tag.getUUID(LIBRARY_ID);
-		readBinding(tag);
+		libraryId = pattern.getUUID(LIBRARY_ID);
+		readBinding(pattern);
 
 		boolean corruption = false;
 		boolean nextPendingSafeRelease = server.getBoolean(PENDING_SAFE_RELEASE);
@@ -598,5 +683,12 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		@Nullable String customName) {
 		private static final LibrarianProjection DEFAULT = new LibrarianProjection(false,
 			ResourceLocation.withDefaultNamespace("plains"), 1, null);
+	}
+
+	private record ShelfInspection(Map<BlockPos, Integer> topologies, int efficiencyBonus) {
+		private static final ShelfInspection EMPTY = new ShelfInspection(Map.of(), 0);
+		private ShelfInspection {
+			topologies = Map.copyOf(topologies);
+		}
 	}
 }
