@@ -13,7 +13,10 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.NbtOps;
 import net.minecraft.nbt.Tag;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.item.ItemStack;
 
 public final class PatternValueCodecs {
@@ -53,7 +56,10 @@ public final class PatternValueCodecs {
 				: new String[] { "Tag", "Count", "Components" }))
 			return Optional.empty();
 		ResourceLocation selector = ResourceLocation.tryParse(item ? tag.getString("Item") : tag.getString("Tag"));
-		if (selector == null || tag.getInt("Count") <= 0 || tag.getInt("Count") > com.simibubi.create.content.logistics.BigItemStack.INF)
+		if (selector == null || tag.getInt("Count") <= 0
+			|| tag.getInt("Count") > com.simibubi.create.content.logistics.BigItemStack.INF
+			|| (item && !BuiltInRegistries.ITEM.containsKey(selector))
+			|| (!item && BuiltInRegistries.ITEM.getTag(TagKey.create(Registries.ITEM, selector)).isEmpty()))
 			return Optional.empty();
 		return decode(DataComponentPredicate.CODEC, tag.getCompound("Components"), registries)
 			.flatMap(components -> safely(() -> new PatternIngredient(item ? selector : null,

@@ -25,6 +25,7 @@ import net.minecraft.core.component.DataComponentPredicate;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.tags.ItemTags;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -121,6 +122,114 @@ class PatternJsonParserTest {
 		CompoundTag corrupt = PatternValueCodecs.saveRecord(record, registries);
 		corrupt.putString("Inputs", "not-a-list");
 		assertTrue(PatternValueCodecs.loadRecord(corrupt, registries).isEmpty());
+	}
+
+	@Test
+	void persistedValueCodecsRoundTripEveryPublicValue() {
+		StackKey stack = new StackKey(new ItemStack(Items.PAPER, 1));
+		PatternIngredient itemIngredient = new PatternIngredient(
+			ResourceLocation.withDefaultNamespace("iron_nugget"), null, 9, DataComponentPredicate.EMPTY);
+		PatternOutput output = new PatternOutput(stack, 3);
+		PatternRecord record = componentSensitivePattern();
+		PatternPageError error = new PatternPageError(PAGE, PatternErrorReason.COUNT, "bad count");
+		PatternQuery query = new PatternQuery(UUID.fromString("00000000-0000-0000-0000-000000000003"),
+			UUID.fromString("00000000-0000-0000-0000-000000000004"),
+			UUID.fromString("00000000-0000-0000-0000-000000000005"), stack, 7, 0);
+		PatternReply match = new PatternReply(query.queryId(), 7, PatternReplyStatus.MATCH, record);
+		PatternReply notFound = new PatternReply(query.queryId(), 7, PatternReplyStatus.NOT_FOUND, null);
+
+		assertEquals(stack, PatternValueCodecs.loadStackKey(PatternValueCodecs.saveStackKey(stack, registries), registries).orElseThrow());
+		assertEquals(itemIngredient, PatternValueCodecs.loadIngredient(PatternValueCodecs.saveIngredient(itemIngredient, registries), registries).orElseThrow());
+		assertEquals(output, PatternValueCodecs.loadOutput(PatternValueCodecs.saveOutput(output, registries), registries).orElseThrow());
+		assertEquals(PAGE, PatternValueCodecs.loadPageKey(PatternValueCodecs.savePageKey(PAGE)).orElseThrow());
+		assertEquals(error, PatternValueCodecs.loadPageError(PatternValueCodecs.savePageError(error)).orElseThrow());
+		assertEquals(record, PatternValueCodecs.loadRecord(PatternValueCodecs.saveRecord(record, registries), registries).orElseThrow());
+		assertEquals(query, PatternValueCodecs.loadQuery(PatternValueCodecs.saveQuery(query, registries), registries).orElseThrow());
+		assertEquals(match, PatternValueCodecs.loadReply(PatternValueCodecs.saveReply(match, registries), registries).orElseThrow());
+		assertEquals(notFound, PatternValueCodecs.loadReply(PatternValueCodecs.saveReply(notFound, registries), registries).orElseThrow());
+	}
+
+	@Test
+	void ingredientCodecRejectsUnknownSelectorsAndNonCanonicalSelectorStates() {
+		PatternIngredient item = new PatternIngredient(ResourceLocation.withDefaultNamespace("iron_nugget"), null,
+			1, DataComponentPredicate.EMPTY);
+		PatternIngredient tag = new PatternIngredient(null, ItemTags.PLANKS.location(), 1,
+			DataComponentPredicate.EMPTY);
+		CompoundTag unknownItem = PatternValueCodecs.saveIngredient(item, registries);
+		unknownItem.putString("Item", "minecraft:unknown_pattern_item");
+		CompoundTag unknownTag = PatternValueCodecs.saveIngredient(tag, registries);
+		unknownTag.putString("Tag", "minecraft:unknown_pattern_tag");
+		CompoundTag bothSelectors = PatternValueCodecs.saveIngredient(item, registries);
+		bothSelectors.putString("Tag", ItemTags.PLANKS.location().toString());
+		CompoundTag missingSelector = PatternValueCodecs.saveIngredient(item, registries);
+		missingSelector.remove("Item");
+		CompoundTag wrongCountType = PatternValueCodecs.saveIngredient(item, registries);
+		wrongCountType.putString("Count", "1");
+		CompoundTag extraMember = PatternValueCodecs.saveIngredient(item, registries);
+		extraMember.putString("Extra", "no");
+
+		assertTrue(PatternValueCodecs.loadIngredient(unknownItem, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadIngredient(unknownTag, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadIngredient(bothSelectors, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadIngredient(missingSelector, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadIngredient(wrongCountType, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadIngredient(extraMember, registries).isEmpty());
+	}
+
+	@Test
+	void persistedCodecsRejectRepresentativeWrongTypesMissingFieldsExtrasAndInvariants() {
+		StackKey stack = new StackKey(new ItemStack(Items.PAPER, 1));
+		PatternOutput output = new PatternOutput(stack, 1);
+		PatternQuery query = new PatternQuery(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(), stack, 1, 0);
+		PatternReply found = new PatternReply(query.queryId(), 1, PatternReplyStatus.NOT_FOUND, null);
+		CompoundTag missingStack = PatternValueCodecs.saveStackKey(stack, registries);
+		missingStack.remove("Stack");
+		CompoundTag wrongOutput = PatternValueCodecs.saveOutput(output, registries);
+		wrongOutput.putString("Count", "1");
+		CompoundTag extraPage = PatternValueCodecs.savePageKey(PAGE);
+		extraPage.putString("Extra", "no");
+		CompoundTag invalidError = PatternValueCodecs.savePageError(new PatternPageError(PAGE, PatternErrorReason.JSON, "x"));
+		invalidError.putString("Reason", "NOPE");
+		CompoundTag defaultedCursor = PatternValueCodecs.saveQuery(query, registries);
+		defaultedCursor.putInt("Cursor", -1);
+		CompoundTag replyWithUnexpectedPattern = PatternValueCodecs.saveReply(found, registries);
+		replyWithUnexpectedPattern.put("Pattern", PatternValueCodecs.saveRecord(componentSensitivePattern(), registries));
+		CompoundTag replyWithoutMatch = PatternValueCodecs.saveReply(new PatternReply(query.queryId(), 1,
+			PatternReplyStatus.MATCH, componentSensitivePattern()), registries);
+		replyWithoutMatch.remove("Pattern");
+
+		assertTrue(PatternValueCodecs.loadStackKey(missingStack, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadOutput(wrongOutput, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadPageKey(extraPage).isEmpty());
+		assertTrue(PatternValueCodecs.loadPageError(invalidError).isEmpty());
+		assertTrue(PatternValueCodecs.loadQuery(defaultedCursor, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadReply(replyWithUnexpectedPattern, registries).isEmpty());
+		assertTrue(PatternValueCodecs.loadReply(replyWithoutMatch, registries).isEmpty());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = {
+		"{\"v\":1,\"in\":[],\"out\":[],\"to\":\"x\",\"extra\":true}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:stone\",\"count\":1,\"extra\":true}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"count\":1}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:unknown_pattern_item\",\"count\":1}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"tag\":\"minecraft:unknown_pattern_tag\",\"count\":1}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:stone\",\"count\":1000000001}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:stone\",\"count\":1,\"components\":{\"minecraft:unknown_component\":1}}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:stone\",\"count\":1}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1,\"extra\":true}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:stone\",\"count\":1}],\"out\":[{\"item\":\"minecraft:unknown_pattern_item\",\"count\":1}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:stone\",\"count\":1}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1000000001}],\"to\":\"x\"}",
+		"{\"v\":1,\"in\":[{\"item\":\"minecraft:stone\",\"count\":1}],\"out\":[{\"item\":\"minecraft:dirt\",\"count\":1,\"components\":{\"minecraft:max_stack_size\":0}}],\"to\":\"x\"}"
+	})
+	void parserRejectsAdversarialSchemaAndValueStates(String json) {
+		assertInstanceOf(ParseResult.Invalid.class, parser.parse(PAGE, json));
+	}
+
+	@Test
+	void inspectReturnsNoChangedResultForTheCachedRawFingerprint() {
+		PageInspection inspection = parser.inspect(PAGE, VALID_JSON, sha256LowerHex(VALID_JSON));
+		assertEquals(sha256LowerHex(VALID_JSON), inspection.fingerprint());
+		assertTrue(inspection.changedResult().isEmpty());
 	}
 
 	@Test

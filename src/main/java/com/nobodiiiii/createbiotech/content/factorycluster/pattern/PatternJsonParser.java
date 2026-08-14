@@ -136,12 +136,7 @@ public final class PatternJsonParser {
 			stack.applyComponentsAndValidate(patch.orElseThrow());
 			if (!patch.orElseThrow().isEmpty() && ItemStack.isSameItemSameComponents(before, stack))
 				return Optional.empty();
-			try {
-				Math.multiplyExact(stack.getCount(), count.orElseThrow());
-				results.add(new PatternOutput(new StackKey(stack), count.orElseThrow()));
-			} catch (ArithmeticException exception) {
-				return Optional.empty();
-			}
+			results.add(new PatternOutput(new StackKey(stack), count.orElseThrow()));
 		}
 		return Optional.of(List.copyOf(results));
 	}
