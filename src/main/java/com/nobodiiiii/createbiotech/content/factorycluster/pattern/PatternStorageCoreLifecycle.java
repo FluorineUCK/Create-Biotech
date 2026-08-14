@@ -101,7 +101,7 @@ final class PatternStorageCoreLifecycle {
 
 			@Override
 			public boolean tryDropRecoveryBox() {
-				ItemEntity recovery = new ItemEntity(level, anchor.getX() + 0.5,
+				ItemEntity recovery = new RecoveryItemEntity(level, anchor.getX() + 0.5,
 					anchor.getY() + 0.5, anchor.getZ() + 0.5, originalSnapshot.copy());
 				return spawnSink.add(recovery);
 			}
@@ -272,6 +272,14 @@ final class PatternStorageCoreLifecycle {
 		private void rollback() {
 			emitted.forEach(Entity::discard);
 			emitted.clear();
+		}
+	}
+
+	/** Keeps the transactional recovery drop as an ItemEntity instead of NeoForge
+	 * replacing the filled box during EntityJoinLevelEvent and reporting a failed add. */
+	private static final class RecoveryItemEntity extends ItemEntity {
+		private RecoveryItemEntity(Level level, double x, double y, double z, ItemStack stack) {
+			super(level, x, y, z, stack);
 		}
 	}
 

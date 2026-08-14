@@ -25,6 +25,8 @@ import net.minecraft.world.level.block.Mirror;
 import net.minecraft.world.level.block.RenderShape;
 import net.minecraft.world.level.block.Rotation;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.BlockEntityTicker;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.StateDefinition;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
@@ -131,6 +133,14 @@ public class PatternStorageCoreBlock extends BaseEntityBlock
 		if (state.getValue(HALF) != DoubleBlockHalf.LOWER)
 			return null;
 		return CBBlockEntityTypes.PATTERN_STORAGE_CORE.get().create(pos, state);
+	}
+
+	@Override
+	public <T extends BlockEntity> BlockEntityTicker<T> getTicker(Level level, BlockState state,
+		BlockEntityType<T> type) {
+		return level.isClientSide ? null : createTickerHelper(type,
+			CBBlockEntityTypes.PATTERN_STORAGE_CORE.get(),
+			(ignoredLevel, ignoredPos, ignoredState, core) -> core.tick());
 	}
 
 	@Override
