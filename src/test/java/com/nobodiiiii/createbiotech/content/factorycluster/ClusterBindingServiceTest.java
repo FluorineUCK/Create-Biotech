@@ -284,6 +284,84 @@ class ClusterBindingServiceTest {
 	}
 
 	@Test
+	void targetReplicaOfflineDuringMergeFollowsAuthorityAcrossClusterIds() {
+		FakeMember offlineTargetReplica = member(UUID.randomUUID(),
+			target.binding.clusterId(), target.binding.revision(), ClusterMemberType.PANEL,
+			target.binding.authority(), address(Level.OVERWORLD), target.logisticsBindings());
+
+		assertEquals(ClusterBindingService.BindResult.OK,
+			ClusterBindingService.bind(source, target, List.of(source, target),
+				id -> true, false, () -> {}));
+		ClusterBinding merged = source.binding;
+		assertEquals(merged, target.binding);
+
+		assertEquals(ClusterBindingService.ReconcileResult.UPDATED,
+			ClusterBindingService.reconcileLoaded(offlineTargetReplica,
+				List.of(offlineTargetReplica, target, source)));
+		assertSame(merged, offlineTargetReplica.binding);
+		assertEquals(merged.clusterId(), offlineTargetReplica.clusterId());
+		assertEquals(merged.revision(), offlineTargetReplica.binding.revision());
+		assertEquals(merged.authority(), offlineTargetReplica.binding.authority());
+		assertEquals(merged.logisticsBindings(), offlineTargetReplica.logisticsBindings());
+		assertEquals(1, offlineTargetReplica.commitCount);
+	}
+
+	@Test
+	void crossClusterReconciliationRefusesMissingAuthorityRedirect() {
+		UUID missingAuthorityId = UUID.randomUUID();
+		FakeMember offlineReplica = member(UUID.randomUUID(), UUID.randomUUID(), 4,
+			ClusterMemberType.PANEL,
+			new ClusterAuthority(ClusterMemberType.PANEL, missingAuthorityId),
+			address(Level.OVERWORLD), source.logisticsBindings());
+
+		assertEquals(ClusterBindingService.ReconcileResult.AUTHORITY_OFFLINE,
+			ClusterBindingService.reconcileLoaded(offlineReplica,
+				List.of(offlineReplica, source)));
+		assertEquals(0, offlineReplica.commitCount);
+	}
+
+	@Test
+	void crossClusterReconciliationRefusesAuthorityRedirectCycle() {
+		UUID oldCluster = UUID.randomUUID();
+		UUID mergedCluster = UUID.randomUUID();
+		UUID firstAuthorityId = UUID.randomUUID();
+		UUID secondAuthorityId = UUID.randomUUID();
+		ClusterAuthority firstAuthority = new ClusterAuthority(ClusterMemberType.PANEL,
+			firstAuthorityId);
+		ClusterAuthority secondAuthority = new ClusterAuthority(ClusterMemberType.PANEL,
+			secondAuthorityId);
+		FakeMember offlineReplica = member(UUID.randomUUID(), oldCluster, 1,
+			ClusterMemberType.PANEL, firstAuthority, address(Level.OVERWORLD),
+			source.logisticsBindings());
+		FakeMember first = member(firstAuthorityId, mergedCluster, 2,
+			ClusterMemberType.PANEL, secondAuthority, address(Level.OVERWORLD),
+			source.logisticsBindings());
+		FakeMember second = member(secondAuthorityId, mergedCluster, 3,
+			ClusterMemberType.PANEL, firstAuthority, address(Level.OVERWORLD),
+			source.logisticsBindings());
+
+		assertEquals(ClusterBindingService.ReconcileResult.CONFLICT,
+			ClusterBindingService.reconcileLoaded(offlineReplica,
+				List.of(offlineReplica, first, second)));
+		assertEquals(0, offlineReplica.commitCount);
+	}
+
+	@Test
+	void crossClusterReconciliationRefusesDuplicateLoadingMemberIdentity() {
+		FakeMember offlineReplica = replica(SOURCE_ID, TARGET_ID, 1,
+			List.of(new LogisticsBinding(PARTICIPANT_OLD, "stale")));
+		FakeMember duplicate = member(TARGET_ID, UUID.randomUUID(), 2,
+			ClusterMemberType.PANEL,
+			new ClusterAuthority(ClusterMemberType.PANEL, TARGET_ID),
+			address(Level.OVERWORLD), source.logisticsBindings());
+
+		assertEquals(ClusterBindingService.ReconcileResult.CONFLICT,
+			ClusterBindingService.reconcileLoaded(offlineReplica,
+				List.of(offlineReplica, duplicate, source)));
+		assertEquals(0, offlineReplica.commitCount);
+	}
+
+	@Test
 	void wrongTypedSelectionRootIsCleared() {
 		CompoundTag persistentData = new CompoundTag();
 		persistentData.putString(SELECTION_KEY, "not a compound");

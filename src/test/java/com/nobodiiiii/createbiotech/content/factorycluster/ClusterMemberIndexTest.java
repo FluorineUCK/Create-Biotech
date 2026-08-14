@@ -59,6 +59,54 @@ class ClusterMemberIndexTest {
 		assertEquals(List.of(panel), index.members(replacementCluster, ClusterMemberType.PANEL));
 	}
 
+	@Test
+	void stableLookupFindsMemberAfterItMovesToAnotherCluster() {
+		ClusterMemberIndex.ServerIndex index = new ClusterMemberIndex.ServerIndex();
+		UUID mergedCluster = UUID.fromString("00000000-0000-0000-0000-000000000003");
+		FakeMember migratedAuthority = member(PANEL_ID, mergedCluster,
+			ClusterMemberType.PANEL);
+		index.register(migratedAuthority);
+
+		ClusterMemberIndex.StableLookup lookup = index.lookupStable(
+			ClusterMemberType.PANEL, PANEL_ID);
+
+		assertEquals(ClusterMemberIndex.LookupStatus.FOUND, lookup.status());
+		assertSame(migratedAuthority, lookup.member());
+	}
+
+	@Test
+	void stableLookupReportsDuplicateIdentityAcrossClusters() {
+		ClusterMemberIndex.ServerIndex index = new ClusterMemberIndex.ServerIndex();
+		FakeMember oldClusterMember = member(PANEL_ID, CLUSTER_ID,
+			ClusterMemberType.PANEL);
+		FakeMember migratedClusterMember = member(PANEL_ID,
+			UUID.fromString("00000000-0000-0000-0000-000000000003"),
+			ClusterMemberType.PANEL);
+		index.register(oldClusterMember);
+		index.register(migratedClusterMember);
+
+		ClusterMemberIndex.StableLookup lookup = index.lookupStable(
+			ClusterMemberType.PANEL, PANEL_ID);
+
+		assertEquals(ClusterMemberIndex.LookupStatus.CONFLICT, lookup.status());
+	}
+
+	@Test
+	void stableLookupReportsDuplicateIdentityInsideOneCluster() {
+		ClusterMemberIndex.ServerIndex index = new ClusterMemberIndex.ServerIndex();
+		FakeMember first = member(PANEL_ID, CLUSTER_ID, ClusterMemberType.PANEL);
+		FakeMember duplicate = member(PANEL_ID, CLUSTER_ID, ClusterMemberType.PANEL);
+		index.register(first);
+		index.register(duplicate);
+
+		assertEquals(ClusterMemberIndex.LookupStatus.CONFLICT,
+			index.lookupStable(ClusterMemberType.PANEL, PANEL_ID).status());
+
+		index.unregister(first);
+		assertSame(duplicate,
+			index.lookupStable(ClusterMemberType.PANEL, PANEL_ID).member());
+	}
+
 	private static FakeMember member(UUID memberId, UUID clusterId, ClusterMemberType type) {
 		return new FakeMember(memberId, clusterId, type);
 	}

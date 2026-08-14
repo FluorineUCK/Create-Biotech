@@ -9,6 +9,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.WeakHashMap;
 
+import javax.annotation.Nullable;
+
 import net.minecraft.server.MinecraftServer;
 
 public final class ClusterMemberIndex {
@@ -52,6 +54,16 @@ public final class ClusterMemberIndex {
 			: index.conflicts(clusterId);
 	}
 
+	static StableLookup lookupStable(MinecraftServer server, ClusterMemberType type,
+		UUID memberId) {
+		ServerIndex index;
+		synchronized (SERVERS) {
+			index = SERVERS.get(server);
+		}
+		return index == null ? StableLookup.missing()
+			: index.lookupStable(type, memberId);
+	}
+
 	private static ServerIndex serverIndex(MinecraftServer server) {
 		synchronized (SERVERS) {
 			return SERVERS.computeIfAbsent(server, ignored -> new ServerIndex());
@@ -59,7 +71,7 @@ public final class ClusterMemberIndex {
 	}
 
 	static final class ServerIndex {
-		private final Map<UUID, Map<MemberKey, WeakReference<ClusterMember>>> membersByCluster =
+		private final Map<UUID, Map<MemberKey, List<WeakReference<ClusterMember>>>> membersByCluster =
 			new HashMap<>();
 
 		ServerIndex() {}
@@ -68,23 +80,33 @@ public final class ClusterMemberIndex {
 			UUID clusterId = member.clusterId();
 			if (clusterId == null)
 				return;
-			Map<MemberKey, WeakReference<ClusterMember>> members =
+			Map<MemberKey, List<WeakReference<ClusterMember>>> members =
 				membersByCluster.computeIfAbsent(clusterId, ignored -> new HashMap<>());
-			members.put(new MemberKey(member.memberType(), member.memberId()),
-				new WeakReference<>(member));
+			List<WeakReference<ClusterMember>> references = members.computeIfAbsent(
+				new MemberKey(member.memberType(), member.memberId()),
+				ignored -> new ArrayList<>());
+			if (references.stream().map(WeakReference::get).noneMatch(indexed -> indexed == member))
+				references.add(new WeakReference<>(member));
 		}
 
 		void unregister(ClusterMember member) {
 			UUID clusterId = member.clusterId();
 			if (clusterId == null)
 				return;
-			Map<MemberKey, WeakReference<ClusterMember>> members = membersByCluster.get(clusterId);
+			Map<MemberKey, List<WeakReference<ClusterMember>>> members =
+				membersByCluster.get(clusterId);
 			if (members == null)
 				return;
 			MemberKey key = new MemberKey(member.memberType(), member.memberId());
-			WeakReference<ClusterMember> reference = members.get(key);
-			if (reference != null && reference.get() == member)
-				members.remove(key);
+			List<WeakReference<ClusterMember>> references = members.get(key);
+			if (references != null) {
+				references.removeIf(reference -> {
+					ClusterMember indexed = reference.get();
+					return indexed == null || indexed == member;
+				});
+				if (references.isEmpty())
+					members.remove(key);
+			}
 			if (members.isEmpty())
 				membersByCluster.remove(clusterId);
 		}
@@ -99,24 +121,62 @@ public final class ClusterMemberIndex {
 		}
 
 		List<ClusterMember> members(UUID clusterId, ClusterMemberType type) {
-			Map<MemberKey, WeakReference<ClusterMember>> members = membersByCluster.get(clusterId);
+			Map<MemberKey, List<WeakReference<ClusterMember>>> members =
+				membersByCluster.get(clusterId);
 			if (members == null)
 				return List.of();
 			List<ClusterMember> loaded = new ArrayList<>();
-			Iterator<Map.Entry<MemberKey, WeakReference<ClusterMember>>> iterator =
+			Iterator<Map.Entry<MemberKey, List<WeakReference<ClusterMember>>>> iterator =
 				members.entrySet().iterator();
 			while (iterator.hasNext()) {
-				Map.Entry<MemberKey, WeakReference<ClusterMember>> entry = iterator.next();
-				ClusterMember member = entry.getValue().get();
-				if (member == null) {
+				Map.Entry<MemberKey, List<WeakReference<ClusterMember>>> entry =
+					iterator.next();
+				List<ClusterMember> live = new ArrayList<>();
+				entry.getValue().removeIf(reference -> {
+					ClusterMember member = reference.get();
+					if (member != null)
+						live.add(member);
+					return member == null;
+				});
+				if (entry.getValue().isEmpty()) {
 					iterator.remove();
 				} else if (entry.getKey().type() == type) {
-					loaded.add(member);
+					loaded.addAll(live);
 				}
 			}
 			if (members.isEmpty())
 				membersByCluster.remove(clusterId);
 			return List.copyOf(loaded);
+		}
+
+		StableLookup lookupStable(ClusterMemberType type, UUID memberId) {
+			MemberKey key = new MemberKey(type, memberId);
+			ClusterMember found = null;
+			Iterator<Map.Entry<UUID, Map<MemberKey, List<WeakReference<ClusterMember>>>>> clusters =
+				membersByCluster.entrySet().iterator();
+			while (clusters.hasNext()) {
+				Map<MemberKey, List<WeakReference<ClusterMember>>> members =
+					clusters.next().getValue();
+				List<WeakReference<ClusterMember>> references = members.get(key);
+				if (references == null)
+					continue;
+				Iterator<WeakReference<ClusterMember>> iterator = references.iterator();
+				while (iterator.hasNext()) {
+					ClusterMember member = iterator.next().get();
+					if (member == null) {
+						iterator.remove();
+						continue;
+					}
+					if (found != null && found != member)
+						return StableLookup.conflict();
+					found = member;
+				}
+				if (references.isEmpty())
+					members.remove(key);
+				if (members.isEmpty())
+					clusters.remove();
+			}
+			return found == null ? StableLookup.missing() : StableLookup.found(found);
 		}
 
 		ConflictReport conflicts(UUID clusterId) {
@@ -133,6 +193,26 @@ public final class ClusterMemberIndex {
 	}
 
 	private record MemberKey(ClusterMemberType type, UUID memberId) {}
+
+	enum LookupStatus {
+		FOUND,
+		MISSING,
+		CONFLICT
+	}
+
+	record StableLookup(LookupStatus status, @Nullable ClusterMember member) {
+		private static StableLookup found(ClusterMember member) {
+			return new StableLookup(LookupStatus.FOUND, member);
+		}
+
+		private static StableLookup missing() {
+			return new StableLookup(LookupStatus.MISSING, null);
+		}
+
+		private static StableLookup conflict() {
+			return new StableLookup(LookupStatus.CONFLICT, null);
+		}
+	}
 
 	public record ConflictReport(boolean patternConflict, boolean computerConflict,
 		boolean panelConflict, boolean bindingConflict) {

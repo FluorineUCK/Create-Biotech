@@ -103,11 +103,26 @@ public final class ClusterBindingService {
 		ClusterMember loadingMember) {
 		UUID clusterId = loadingMember.clusterId();
 		return clusterId == null ? ReconcileResult.CONFLICT
-			: reconcileLoaded(loadingMember, loadedMembers(server, clusterId));
+			: reconcileLoaded(loadingMember, loadedMembers(server, clusterId),
+				authority -> ClusterMemberIndex.lookupStable(server, authority.type(),
+					authority.memberId()));
 	}
 
 	static ReconcileResult reconcileLoaded(ClusterMember loadingMember,
 		Collection<ClusterMember> loadedClusterMembers) {
+		List<ClusterMember> loaded = participants(loadingMember, null,
+			loadedClusterMembers);
+		return reconcileLoaded(loadingMember, loaded,
+			authority -> lookupStable(authority, loaded));
+	}
+
+	private static ReconcileResult reconcileLoaded(ClusterMember loadingMember,
+		Collection<ClusterMember> loadedClusterMembers, AuthorityLookup lookup) {
+		ClusterMemberIndex.StableLookup loadingIdentity = lookup.find(
+			new ClusterAuthority(loadingMember.memberType(), loadingMember.memberId()));
+		if (loadingIdentity.status() != ClusterMemberIndex.LookupStatus.FOUND
+			|| loadingIdentity.member() != loadingMember)
+			return ReconcileResult.CONFLICT;
 		ClusterBinding loadingState = loadingMember.bindingState();
 		if (loadingState == null || !loadingMember.hasValidBindingState()
 			|| loadingState.authority() == null)
@@ -117,7 +132,7 @@ public final class ClusterBindingService {
 			loadedClusterMembers).stream()
 			.filter(member -> loadingState.clusterId().equals(member.clusterId()))
 			.toList();
-		AuthorityResolution canonical = resolveAuthority(loadingState, participants);
+		AuthorityResolution canonical = resolveAuthority(loadingState, lookup);
 		if (canonical.result() != ReconcileResult.CURRENT)
 			return canonical.result();
 		ClusterBinding authoritativeState = canonical.state();
@@ -127,7 +142,7 @@ public final class ClusterBindingService {
 			ClusterBinding state = participant.bindingState();
 			if (state == null || !participant.hasValidBindingState())
 				return ReconcileResult.CONFLICT;
-			AuthorityResolution resolution = resolveAuthority(state, participants);
+			AuthorityResolution resolution = resolveAuthority(state, lookup);
 			if (resolution.result() != ReconcileResult.CURRENT)
 				return resolution.result();
 			if (!canonical.authority().equals(resolution.authority())
@@ -314,28 +329,51 @@ public final class ClusterBindingService {
 	}
 
 	private static AuthorityResolution resolveAuthority(ClusterBinding startingState,
-		List<ClusterMember> participants) {
+		AuthorityLookup lookup) {
 		ClusterAuthority authority = startingState.authority();
 		if (authority == null)
 			return AuthorityResolution.conflict();
 		Set<ClusterAuthority> visited = new java.util.HashSet<>();
-		long minimumRevision = startingState.revision();
+		ClusterBinding observedState = startingState;
 		while (visited.add(authority)) {
-			ClusterMember authorityMember = findAuthority(authority, participants);
-			if (authorityMember == null)
+			ClusterMemberIndex.StableLookup authorityLookup = lookup.find(authority);
+			if (authorityLookup.status() == ClusterMemberIndex.LookupStatus.MISSING)
 				return AuthorityResolution.offline();
+			if (authorityLookup.status() != ClusterMemberIndex.LookupStatus.FOUND)
+				return AuthorityResolution.conflict();
+			ClusterMember authorityMember = authorityLookup.member();
 			ClusterBinding state = authorityMember.bindingState();
-			if (state == null || !authorityMember.hasValidBindingState()
-				|| !startingState.clusterId().equals(state.clusterId())
-				|| state.authority() == null || state.revision() < minimumRevision)
+			if (!authority.identifies(authorityMember) || state == null
+				|| !authorityMember.hasValidBindingState() || state.authority() == null
+				|| state.revision() < observedState.revision()
+				|| (state.revision() == observedState.revision()
+					&& !state.equals(observedState)))
 				return AuthorityResolution.conflict();
 			ClusterAuthority next = state.authority();
 			if (next.equals(authority))
 				return AuthorityResolution.current(authority, state);
-			minimumRevision = state.revision();
+			observedState = state;
 			authority = next;
 		}
 		return AuthorityResolution.conflict();
+	}
+
+	private static ClusterMemberIndex.StableLookup lookupStable(
+		ClusterAuthority authority, Collection<ClusterMember> loadedMembers) {
+		ClusterMember found = null;
+		for (ClusterMember member : loadedMembers) {
+			if (!authority.identifies(member))
+				continue;
+			if (found != null && found != member)
+				return new ClusterMemberIndex.StableLookup(
+					ClusterMemberIndex.LookupStatus.CONFLICT, null);
+			found = member;
+		}
+		return found == null
+			? new ClusterMemberIndex.StableLookup(ClusterMemberIndex.LookupStatus.MISSING,
+				null)
+			: new ClusterMemberIndex.StableLookup(ClusterMemberIndex.LookupStatus.FOUND,
+				found);
 	}
 
 	@Nullable
@@ -494,5 +532,10 @@ public final class ClusterBindingService {
 		private static AuthorityResolution conflict() {
 			return new AuthorityResolution(ReconcileResult.CONFLICT, null, null);
 		}
+	}
+
+	@FunctionalInterface
+	private interface AuthorityLookup {
+		ClusterMemberIndex.StableLookup find(ClusterAuthority authority);
 	}
 }
