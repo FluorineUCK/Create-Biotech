@@ -14,6 +14,7 @@ import java.util.List;
 import org.junit.jupiter.api.Test;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 
 class PatternStorageCoreLifecycleTest {
 	private static final PatternStorageCoreConversionHandler.CandidateFacts ADULT_LIBRARIAN =
@@ -70,24 +71,41 @@ class PatternStorageCoreLifecycleTest {
 
 	@Test
 	void blockedControlledReleaseMarksPendingWithoutClearingSnapshot() {
-		FakeControlledRemoval controlled = new FakeControlledRemoval(false);
+		FakeControlledRemoval controlled = new FakeControlledRemoval(true, false);
 
 		assertFalse(PatternStorageCoreLifecycle.runControlledRemoval(controlled));
 
 		assertTrue(controlled.pending);
+		assertFalse(controlled.outputPresent);
 		assertArrayEquals(FakeControlledRemoval.ORIGINAL_SNAPSHOT, controlled.snapshot);
-		assertEquals(List.of("entity-rejected", "pending"), controlled.events);
+		assertEquals(List.of("output-emitted", "entity-rejected", "rollback-output", "pending"),
+			controlled.events);
 	}
 
 	@Test
 	void controlledSuccessClearsOnlyAfterEntitySpawnConfirmation() {
-		FakeControlledRemoval controlled = new FakeControlledRemoval(true);
+		FakeControlledRemoval controlled = new FakeControlledRemoval(true, true);
 
 		assertTrue(PatternStorageCoreLifecycle.runControlledRemoval(controlled));
 
 		assertNull(controlled.snapshot);
 		assertFalse(controlled.pending);
-		assertEquals(List.of("entity-accepted", "clear-and-replace"), controlled.events);
+		assertTrue(controlled.outputPresent);
+		assertEquals(List.of("output-emitted", "entity-accepted", "clear-and-replace"),
+			controlled.events);
+	}
+
+	@Test
+	void rejectedRequiredLootOutputPreventsEntitySpawnAndPreservesSnapshot() {
+		FakeControlledRemoval controlled = new FakeControlledRemoval(false, true);
+
+		assertFalse(PatternStorageCoreLifecycle.runControlledRemoval(controlled));
+
+		assertEquals(0, controlled.entityAttempts);
+		assertTrue(controlled.pending);
+		assertFalse(controlled.outputPresent);
+		assertArrayEquals(FakeControlledRemoval.ORIGINAL_SNAPSHOT, controlled.snapshot);
+		assertEquals(List.of("output-rejected", "pending"), controlled.events);
 	}
 
 	@Test
@@ -151,6 +169,52 @@ class PatternStorageCoreLifecycleTest {
 		assertFalse(PatternStorageCoreLifecycle.isRemovalActive(level, anchor));
 	}
 
+	@Test
+	void movingRemovalEntryLeavesSerializedSnapshotAndAllOutputsUntouched() {
+		byte[] original = { 9, 7, 9, 3 };
+		byte[] snapshot = original.clone();
+		int[] effects = new int[3];
+
+		PatternStorageCoreLifecycle.RemovalDisposition disposition =
+			PatternStorageCoreLifecycle.runRemovalEntry(true, () -> {
+				snapshot[0] = 0;
+				effects[0]++;
+				effects[1]++;
+				effects[2]++;
+				return PatternStorageCoreLifecycle.RemovalDisposition.RESTORED;
+			});
+
+		assertEquals(PatternStorageCoreLifecycle.RemovalDisposition.CALL_SUPER, disposition);
+		assertArrayEquals(original, snapshot);
+		assertEquals(0, effects[0], "entity spawn");
+		assertEquals(0, effects[1], "item spawn");
+		assertEquals(0, effects[2], "counterpart mutation");
+	}
+
+	@Test
+	void clientProjectionNeitherWritesNorConsumesAuthoritativeServerState() {
+		CompoundTag clientUpdate = new CompoundTag();
+		PatternStorageCoreBlockEntity.writeAuthoritativeProjection(clientUpdate, true,
+			tag -> tag.putByteArray("ServerSecret", new byte[] { 1, 2, 3 }));
+		assertFalse(clientUpdate.contains("ServerSecret"));
+
+		CompoundTag diskSave = new CompoundTag();
+		PatternStorageCoreBlockEntity.writeAuthoritativeProjection(diskSave, false,
+			tag -> tag.putByteArray("ServerSecret", new byte[] { 1, 2, 3 }));
+		assertArrayEquals(new byte[] { 1, 2, 3 }, diskSave.getByteArray("ServerSecret"));
+
+		byte[][] authoritative = { new byte[] { 8, 5, 3 } };
+		CompoundTag hostileClientUpdate = new CompoundTag();
+		hostileClientUpdate.putByteArray("ServerSecret", new byte[] { 0 });
+		PatternStorageCoreBlockEntity.readAuthoritativeProjection(hostileClientUpdate, true,
+			tag -> authoritative[0] = tag.getByteArray("ServerSecret"));
+		assertArrayEquals(new byte[] { 8, 5, 3 }, authoritative[0]);
+
+		PatternStorageCoreBlockEntity.readAuthoritativeProjection(diskSave, false,
+			tag -> authoritative[0] = tag.getByteArray("ServerSecret"));
+		assertArrayEquals(new byte[] { 1, 2, 3 }, authoritative[0]);
+	}
+
 	private enum FailurePoint { NONE, LOWER, UPPER, BLOCK_ENTITY }
 
 	private static final class FakeConversion
@@ -201,19 +265,37 @@ class PatternStorageCoreLifecycleTest {
 	private static final class FakeControlledRemoval
 		implements PatternStorageCoreLifecycle.ControlledRemovalOps {
 		private static final byte[] ORIGINAL_SNAPSHOT = { 2, 7, 1, 8 };
+		private final boolean outputReady;
 		private final boolean acceptEntity;
 		private final List<String> events = new ArrayList<>();
 		private byte[] snapshot = ORIGINAL_SNAPSHOT.clone();
 		private boolean pending;
+		private boolean outputPresent;
+		private int entityAttempts;
 
-		private FakeControlledRemoval(boolean acceptEntity) {
+		private FakeControlledRemoval(boolean outputReady, boolean acceptEntity) {
+			this.outputReady = outputReady;
 			this.acceptEntity = acceptEntity;
 		}
 
 		@Override
+		public boolean emitRequiredOutput() {
+			events.add(outputReady ? "output-emitted" : "output-rejected");
+			outputPresent = outputReady;
+			return outputReady;
+		}
+
+		@Override
 		public boolean tryReleaseEntity() {
+			entityAttempts++;
 			events.add(acceptEntity ? "entity-accepted" : "entity-rejected");
 			return acceptEntity;
+		}
+
+		@Override
+		public void rollbackPreparedOutput() {
+			events.add("rollback-output");
+			outputPresent = false;
 		}
 
 		@Override
@@ -224,8 +306,10 @@ class PatternStorageCoreLifecycleTest {
 
 		@Override
 		public void commitSuccessfulRelease() {
-			if (!events.equals(List.of("entity-accepted")))
-				throw new AssertionError("snapshot cleared before spawn confirmation");
+			if (!events.equals(List.of("output-emitted", "entity-accepted")))
+				throw new AssertionError("snapshot cleared before output and entity confirmation");
+			if (!outputPresent)
+				throw new AssertionError("required output missing at commit");
 			events.add("clear-and-replace");
 			snapshot = null;
 		}

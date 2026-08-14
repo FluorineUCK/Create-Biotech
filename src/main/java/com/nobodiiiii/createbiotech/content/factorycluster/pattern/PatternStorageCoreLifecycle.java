@@ -12,11 +12,11 @@ import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -47,14 +47,27 @@ final class PatternStorageCoreLifecycle {
 	}
 
 	interface ControlledRemovalOps {
+		boolean emitRequiredOutput();
 		boolean tryReleaseEntity();
+		void rollbackPreparedOutput();
 		void markPendingSafeRelease();
 		void commitSuccessfulRelease();
 	}
 
+	@FunctionalInterface
+	interface StationaryRemoval {
+		RemovalDisposition remove();
+	}
+
 	static RemovalDisposition onRemove(BlockState state, Level level, BlockPos pos,
 		BlockState newState, boolean isMoving, SpawnSink spawnSink) {
-		if (isMoving || level.isClientSide || state.is(newState.getBlock())
+		return runRemovalEntry(isMoving,
+			() -> onStationaryRemove(state, level, pos, newState, spawnSink));
+	}
+
+	private static RemovalDisposition onStationaryRemove(BlockState state, Level level, BlockPos pos,
+		BlockState newState, SpawnSink spawnSink) {
+		if (level.isClientSide || state.is(newState.getBlock())
 			|| !(state.getBlock() instanceof PatternStorageCoreBlock))
 			return RemovalDisposition.CALL_SUPER;
 
@@ -115,11 +128,22 @@ final class PatternStorageCoreLifecycle {
 		PatternStorageCoreBlockEntity lower = lower(level, anchor);
 		if (lower == null)
 			return false;
+		PlayerBreakOutput requiredOutput = playerBreakOutput(level, anchor, lower, player, tool);
 		Entity librarian = prepareSafeLibrarian(level, anchor, lower);
 		return runControlledRemoval(new ControlledRemovalOps() {
 			@Override
+			public boolean emitRequiredOutput() {
+				return requiredOutput != null && requiredOutput.emit(spawnSink);
+			}
+
+			@Override
 			public boolean tryReleaseEntity() {
 				return librarian != null && spawnSink.add(librarian);
+			}
+
+			@Override
+			public void rollbackPreparedOutput() {
+				requiredOutput.rollback();
 			}
 
 			@Override
@@ -133,9 +157,6 @@ final class PatternStorageCoreLifecycle {
 					lower.clearSnapshot();
 					removeCoreHalf(level, anchor.above());
 					removeCoreHalf(level, anchor);
-					spawnSink.add(new ItemEntity(level, anchor.getX() + 0.5,
-						anchor.getY() + 0.5, anchor.getZ() + 0.5,
-						new ItemStack(Items.LECTERN)));
 				});
 			}
 		});
@@ -153,9 +174,17 @@ final class PatternStorageCoreLifecycle {
 				lowerState.getValue(PatternStorageCoreBlock.FACING));
 		return runControlledRemoval(new ControlledRemovalOps() {
 			@Override
+			public boolean emitRequiredOutput() {
+				return true;
+			}
+
+			@Override
 			public boolean tryReleaseEntity() {
 				return librarian != null && spawnSink.add(librarian);
 			}
+
+			@Override
+			public void rollbackPreparedOutput() {}
 
 			@Override
 			public void markPendingSafeRelease() {
@@ -186,12 +215,64 @@ final class PatternStorageCoreLifecycle {
 	}
 
 	static boolean runControlledRemoval(ControlledRemovalOps operations) {
+		if (!operations.emitRequiredOutput()) {
+			operations.markPendingSafeRelease();
+			return false;
+		}
 		if (!operations.tryReleaseEntity()) {
+			operations.rollbackPreparedOutput();
 			operations.markPendingSafeRelease();
 			return false;
 		}
 		operations.commitSuccessfulRelease();
 		return true;
+	}
+
+	static RemovalDisposition runRemovalEntry(boolean isMoving, StationaryRemoval stationaryRemoval) {
+		return isMoving ? RemovalDisposition.CALL_SUPER : stationaryRemoval.remove();
+	}
+
+	private static @Nullable PlayerBreakOutput playerBreakOutput(Level level, BlockPos anchor,
+		PatternStorageCoreBlockEntity lower, @Nullable Player player, ItemStack tool) {
+		if (!(level instanceof ServerLevel serverLevel) || player == null)
+			return null;
+		if (player.isCreative())
+			return new PlayerBreakOutput(List.of());
+		BlockState lowerState = level.getBlockState(anchor);
+		if (!PatternStorageCoreBlock.isHalf(lowerState, DoubleBlockHalf.LOWER))
+			return null;
+		List<ItemEntity> drops = Block.getDrops(lowerState, serverLevel, anchor, lower, player, tool)
+			.stream()
+			.filter(stack -> !stack.isEmpty())
+			.map(stack -> new ItemEntity(level, anchor.getX() + 0.5, anchor.getY() + 0.5,
+				anchor.getZ() + 0.5, stack))
+			.toList();
+		return new PlayerBreakOutput(drops);
+	}
+
+	private static final class PlayerBreakOutput {
+		private final List<ItemEntity> drops;
+		private final List<ItemEntity> emitted = new ArrayList<>();
+
+		private PlayerBreakOutput(List<ItemEntity> drops) {
+			this.drops = drops;
+		}
+
+		private boolean emit(SpawnSink spawnSink) {
+			for (ItemEntity drop : drops) {
+				if (!spawnSink.add(drop)) {
+					rollback();
+					return false;
+				}
+				emitted.add(drop);
+			}
+			return true;
+		}
+
+		private void rollback() {
+			emitted.forEach(Entity::discard);
+			emitted.clear();
+		}
 	}
 
 	private static @Nullable Entity prepareSafeLibrarian(Level level, BlockPos anchor,

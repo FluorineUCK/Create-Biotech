@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.factorycluster.pattern;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -82,29 +83,46 @@ public class PatternStorageCoreBlockEntity extends SmartBlockEntity {
 	@Override
 	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		super.write(tag, registries, clientPacket);
-		if (!librarianSnapshotBox.isEmpty())
-			tag.put(LIBRARIAN_SNAPSHOT, librarianSnapshotBox.save(registries));
-		else
-			tag.remove(LIBRARIAN_SNAPSHOT);
 		tag.putBoolean(PENDING_SAFE_RELEASE, pendingSafeRelease);
-		if (structureSnapshot != null)
-			tag.put(STRUCTURE_SNAPSHOT, structureSnapshot.save());
-		else
-			tag.remove(STRUCTURE_SNAPSHOT);
-		tag.put(LIBRARY_INDEX, libraryIndex.save(registries));
+		writeAuthoritativeProjection(tag, clientPacket, authoritative -> {
+			if (!librarianSnapshotBox.isEmpty())
+				authoritative.put(LIBRARIAN_SNAPSHOT, librarianSnapshotBox.save(registries));
+			else
+				authoritative.remove(LIBRARIAN_SNAPSHOT);
+			if (structureSnapshot != null)
+				authoritative.put(STRUCTURE_SNAPSHOT, structureSnapshot.save());
+			else
+				authoritative.remove(STRUCTURE_SNAPSHOT);
+			authoritative.put(LIBRARY_INDEX, libraryIndex.save(registries));
+		});
 	}
 
 	@Override
 	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		super.read(tag, registries, clientPacket);
-		librarianSnapshotBox = tag.contains(LIBRARIAN_SNAPSHOT, Tag.TAG_COMPOUND)
-			? ItemStack.parseOptional(registries, tag.getCompound(LIBRARIAN_SNAPSHOT))
-			: ItemStack.EMPTY;
 		pendingSafeRelease = tag.getBoolean(PENDING_SAFE_RELEASE);
-		structureSnapshot = tag.contains(STRUCTURE_SNAPSHOT, Tag.TAG_COMPOUND)
-			? PatternStructureSnapshot.load(tag.getCompound(STRUCTURE_SNAPSHOT)).orElse(null) : null;
-		libraryIndex = tag.contains(LIBRARY_INDEX, Tag.TAG_COMPOUND)
-			? PatternLibraryIndex.load(tag.getCompound(LIBRARY_INDEX), registries).index()
-			: new PatternLibraryIndex();
+		readAuthoritativeProjection(tag, clientPacket, authoritative -> {
+			librarianSnapshotBox = authoritative.contains(LIBRARIAN_SNAPSHOT, Tag.TAG_COMPOUND)
+				? ItemStack.parseOptional(registries, authoritative.getCompound(LIBRARIAN_SNAPSHOT))
+				: ItemStack.EMPTY;
+			structureSnapshot = authoritative.contains(STRUCTURE_SNAPSHOT, Tag.TAG_COMPOUND)
+				? PatternStructureSnapshot.load(authoritative.getCompound(STRUCTURE_SNAPSHOT)).orElse(null)
+				: null;
+			libraryIndex = authoritative.contains(LIBRARY_INDEX, Tag.TAG_COMPOUND)
+				? PatternLibraryIndex.load(authoritative.getCompound(LIBRARY_INDEX), registries).index()
+				: new PatternLibraryIndex();
+		});
+	}
+
+	static void writeAuthoritativeProjection(CompoundTag tag, boolean clientPacket,
+		Consumer<CompoundTag> writer) {
+		if (!clientPacket)
+			writer.accept(tag);
+	}
+
+	static void readAuthoritativeProjection(CompoundTag tag, boolean clientPacket,
+		Consumer<CompoundTag> reader) {
+		if (!clientPacket)
+			reader.accept(tag);
 	}
 }
