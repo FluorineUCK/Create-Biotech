@@ -3,5 +3,17 @@
   "textures": {
     "particle": "minecraft:item/amethyst_shard",
     "layer0": "minecraft:item/amethyst_shard"
+  },
+  "display": {
+    "thirdperson_righthand": {
+      "rotation": [0, 180, 0],
+      "translation": [2, 2, 0],
+      "scale": [0.375, 0.375, 0.375]
+    },
+    "thirdperson_lefthand": {
+      "rotation": [0, 180, 0],
+      "translation": [2, 2, 0],
+      "scale": [0.375, 0.375, 0.375]
+    }
   }
 }

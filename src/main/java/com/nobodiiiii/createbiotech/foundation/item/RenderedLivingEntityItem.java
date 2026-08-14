@@ -57,6 +57,11 @@ public class RenderedLivingEntityItem<T extends LivingEntity> extends Item {
 		configureRenderedEntity(entity);
 	}
 
+	public void configureRenderedEntityForGeometryMeasurement(T entity, ItemStack stack,
+		ItemDisplayContext displayContext) {
+		configureRenderedEntity(entity, stack, displayContext);
+	}
+
 	public float getRenderedEntityYRotation(ItemStack stack, ItemDisplayContext displayContext) {
 		return 0.0f;
 	}

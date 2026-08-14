@@ -67,19 +67,38 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 		if (entity == null)
 			return;
 
-		item.configureRenderedEntity(entity, stack, transformType);
+		item.configureRenderedEntityForGeometryMeasurement(entity, stack, transformType);
 		Vector3f geometryCenter = measureGeometryCenter(entity);
+		item.configureRenderedEntity(entity, stack, transformType);
 		float scaleMultiplier = item.getRenderedEntityScaleMultiplier();
 		float yRotation = getBaseYRotation(transformType);
 		yRotation += item.getRenderedEntityYRotation(stack, transformType);
 
 		poseStack.pushPose();
+		renderBlockCenteredEntity(entity, geometryCenter, scaleMultiplier, yRotation, poseStack, buffer, packedLight);
+		poseStack.popPose();
+	}
+
+	/**
+	 * Renders arbitrary living-entity geometry through the same block-centered path
+	 * used by block-centered entity items.
+	 */
+	public static void renderBlockCenteredEntity(LivingEntity entity, float scaleMultiplier, PoseStack poseStack,
+		MultiBufferSource buffer, int packedLight) {
+		Vector3f geometryCenter = measureGeometryCenter(entity);
+		poseStack.pushPose();
+		renderBlockCenteredEntity(entity, geometryCenter, scaleMultiplier, DEFAULT_ENTITY_Y_ROTATION, poseStack, buffer,
+			packedLight);
+		poseStack.popPose();
+	}
+
+	private static void renderBlockCenteredEntity(LivingEntity entity, Vector3f geometryCenter, float scaleMultiplier,
+		float yRotation, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
 		poseStack.translate(BLOCK_CENTER.x, BLOCK_CENTER.y, BLOCK_CENTER.z);
 		poseStack.mulPose(Axis.YP.rotationDegrees(yRotation));
 		poseStack.scale(scaleMultiplier, scaleMultiplier, scaleMultiplier);
 		poseStack.translate(-geometryCenter.x, -geometryCenter.y, -geometryCenter.z);
-		renderEntity(entity, poseStack, buffer, packedLight);
-		poseStack.popPose();
+		renderRawEntity(entity, poseStack, buffer, packedLight);
 	}
 
 	private static float getBaseYRotation(ItemDisplayContext displayContext) {
@@ -94,7 +113,7 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 	private static Vector3f measureGeometryCenter(LivingEntity entity) {
 		GeometryBounds bounds = new GeometryBounds();
 		MultiBufferSource measuringBuffer = renderType -> new GeometryBoundsVertexConsumer(bounds);
-		renderEntity(entity, new PoseStack(), measuringBuffer, LightTexture.FULL_BRIGHT);
+		renderRawEntity(entity, new PoseStack(), measuringBuffer, LightTexture.FULL_BRIGHT);
 		if (bounds.hasVertices())
 			return bounds.center();
 
@@ -102,7 +121,7 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 		return new Vector3f(0, dimensions.height() / 2.0f, 0);
 	}
 
-	private static void renderEntity(LivingEntity entity, PoseStack poseStack, MultiBufferSource buffer,
+	private static void renderRawEntity(LivingEntity entity, PoseStack poseStack, MultiBufferSource buffer,
 		int packedLight) {
 		EntityRenderHelper.render(EntityRenderHelper.settings(entity)
 			.packedLight(packedLight)

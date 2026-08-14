@@ -31,7 +31,7 @@ import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 
 public class AllayCourierItem extends BlockCenteredRenderedLivingEntityItem<AllayCourierEntity> {
-	private static final float ITEM_RENDER_SCALE = 1.8f;
+	private static final float ITEM_RENDER_SCALE = 1.5f;
 	private static final int EMPTY_CARRIER_MAX_STACK_SIZE = 64;
 	private static final String CARGO_KEY = "Cargo";
 	private static final String HEADING_KEY = "Heading";
@@ -46,6 +46,12 @@ public class AllayCourierItem extends BlockCenteredRenderedLivingEntityItem<Alla
 	public void configureRenderedEntity(AllayCourierEntity courier, ItemStack stack,
 		ItemDisplayContext displayContext) {
 		configureRenderedCourier(courier, copyCargoPackage(stack), true);
+	}
+
+	@Override
+	public void configureRenderedEntityForGeometryMeasurement(AllayCourierEntity courier, ItemStack stack,
+		ItemDisplayContext displayContext) {
+		configureRenderedCourier(courier, ItemStack.EMPTY, true);
 	}
 
 	@Override
