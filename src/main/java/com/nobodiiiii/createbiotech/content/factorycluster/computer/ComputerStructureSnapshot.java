@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.factorycluster.computer;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -108,6 +109,12 @@ public final class ComputerStructureSnapshot {
 			BoundingBox bounds = new BoundingBox(boundsTag.getInt("MinX"), boundsTag.getInt("MinY"),
 				boundsTag.getInt("MinZ"), boundsTag.getInt("MaxX"), boundsTag.getInt("MaxY"),
 				boundsTag.getInt("MaxZ"));
+			Optional<long[]> expectedChunkLongs = expectedChunkLongs(bounds);
+			if (expectedChunkLongs.isEmpty()) return Optional.empty();
+			long[] chunkLongs = tag.getLongArray("ContainingChunks");
+			long[] expectedChunks = expectedChunkLongs.orElseThrow();
+			if (chunkLongs.length != expectedChunks.length || !Arrays.equals(chunkLongs, expectedChunks))
+				return Optional.empty();
 			ListTag nodeTags = tag.getList("Nodes", Tag.TAG_COMPOUND);
 			if (nodeTags.size() < 1 || nodeTags.size() > MAX_NODES) return Optional.empty();
 			List<ComputerStructureNode> nodes = new ArrayList<>(nodeTags.size());
@@ -118,13 +125,11 @@ public final class ComputerStructureSnapshot {
 				nodes.add(node.orElseThrow());
 			}
 			long[] casingLongs = tag.getLongArray("CasingPositions");
-			long[] chunkLongs = tag.getLongArray("ContainingChunks");
-			if (casingLongs.length > MAX_VOLUME || !strictlyIncreasing(casingLongs)
-				|| !strictlyIncreasing(chunkLongs)) return Optional.empty();
+			if (casingLongs.length > MAX_VOLUME || !strictlyIncreasing(casingLongs)) return Optional.empty();
 			Set<BlockPos> casing = new LinkedHashSet<>();
 			for (long value : casingLongs) casing.add(BlockPos.of(value).immutable());
 			Set<ChunkPos> chunks = new LinkedHashSet<>();
-			for (long value : chunkLongs) chunks.add(new ChunkPos(value));
+			for (long value : expectedChunks) chunks.add(new ChunkPos(value));
 			return Optional.of(new ComputerStructureSnapshot(bounds, nodes, casing, chunks));
 		} catch (IllegalArgumentException | ArithmeticException exception) {
 			return Optional.empty();
@@ -227,6 +232,28 @@ public final class ComputerStructureSnapshot {
 			for (int z = Math.floorDiv(minZ, 16); z <= Math.floorDiv(maxZ, 16); z++)
 				chunks.add(new ChunkPos(x, z));
 		return chunks;
+	}
+
+	private static Optional<long[]> expectedChunkLongs(BoundingBox bounds) {
+		long sizeX = (long) bounds.maxX() - bounds.minX() + 1;
+		long sizeY = (long) bounds.maxY() - bounds.minY() + 1;
+		long sizeZ = (long) bounds.maxZ() - bounds.minZ() + 1;
+		long volume = Math.multiplyExact(Math.multiplyExact(sizeX, sizeY), sizeZ);
+		if (sizeX < 3 || sizeY < 3 || sizeZ < 3 || volume > MAX_VOLUME) return Optional.empty();
+		int minChunkX = Math.floorDiv(bounds.minX(), 16);
+		int maxChunkX = Math.floorDiv(bounds.maxX(), 16);
+		int minChunkZ = Math.floorDiv(bounds.minZ(), 16);
+		int maxChunkZ = Math.floorDiv(bounds.maxZ(), 16);
+		long chunksX = (long) maxChunkX - minChunkX + 1;
+		long chunksZ = (long) maxChunkZ - minChunkZ + 1;
+		int chunkCount = Math.toIntExact(Math.multiplyExact(chunksX, chunksZ));
+		long[] expected = new long[chunkCount];
+		int next = 0;
+		for (int x = minChunkX; x <= maxChunkX; x++)
+			for (int z = minChunkZ; z <= maxChunkZ; z++)
+				expected[next++] = ChunkPos.asLong(x, z);
+		Arrays.sort(expected);
+		return Optional.of(expected);
 	}
 
 	private static boolean strictlyIncreasing(long[] values) {

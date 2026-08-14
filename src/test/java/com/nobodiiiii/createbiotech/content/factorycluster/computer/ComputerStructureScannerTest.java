@@ -24,8 +24,10 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
@@ -321,6 +323,17 @@ class ComputerStructureScannerTest {
 		CompoundTag duplicateChunk = tag.copy();
 		duplicateChunk.putLongArray("ContainingChunks", new long[] {chunks[0], chunks[0]});
 		assertTrue(ComputerStructureSnapshot.load(duplicateChunk).isEmpty());
+	}
+
+	@Test
+	void oversizedCanonicalChunkArrayIsRejectedWithinBoundsDerivedWorkBudget() {
+		CompoundTag tag = snapshot(box(-1, -1, -1, 1, 1, 1), 1, Set.of()).save();
+		long[] oversized = new long[1_000_000];
+		for (int i = 0; i < oversized.length; i++) oversized[i] = i;
+		tag.putLongArray("ContainingChunks", oversized);
+
+		assertTimeoutPreemptively(Duration.ofMillis(100),
+			() -> assertTrue(ComputerStructureSnapshot.load(tag).isEmpty()));
 	}
 
 	@Test
