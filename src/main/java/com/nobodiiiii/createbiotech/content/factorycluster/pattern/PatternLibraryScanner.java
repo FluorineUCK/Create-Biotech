@@ -61,29 +61,27 @@ public final class PatternLibraryScanner {
 		members.add(core);
 		discovered.add(core);
 		Bounds bounds = Bounds.of(core);
-		int dequeued = 0;
 
 		while (!pending.isEmpty()) {
 			BlockPos current = pending.removeFirst();
-			dequeued++;
 			List<Direction> directions = current.equals(core) ? CORE_DIRECTIONS : SHELF_DIRECTIONS;
 			for (Direction direction : directions) {
 				BlockPos candidate = current.relative(direction).immutable();
 				if (!inspected.add(candidate))
 					continue;
 				if (!view.isLoaded(candidate))
-					return result(StructureState.PARTIAL, members, ordinary, chiseled, bounds, dequeued);
+					return result(StructureState.PARTIAL, members, ordinary, chiseled, bounds);
 				MemberKind kind = view.memberAt(candidate);
 				if (kind == MemberKind.NONE)
 					continue;
 				if (!view.sameSpace(core, candidate))
-					return result(StructureState.SPACE_MISMATCH, members, ordinary, chiseled, bounds, dequeued);
+					return result(StructureState.SPACE_MISMATCH, members, ordinary, chiseled, bounds);
 				if (candidate.equals(core))
 					continue;
 				if (kind == MemberKind.CORE_UPPER)
 					continue;
 				if (kind == MemberKind.CORE_LOWER)
-					return result(StructureState.CORE_CONFLICT, members, ordinary, chiseled, bounds, dequeued);
+					return result(StructureState.CORE_CONFLICT, members, ordinary, chiseled, bounds);
 				if (!discovered.add(candidate))
 					continue;
 
@@ -96,19 +94,19 @@ public final class PatternLibraryScanner {
 					throw new IllegalStateException("Unhandled member kind " + kind);
 				bounds = bounds.include(candidate);
 				if (members.size() > maxMembers)
-					return result(StructureState.TOO_LARGE, members, ordinary, chiseled, bounds, dequeued);
+					return result(StructureState.TOO_LARGE, members, ordinary, chiseled, bounds);
 				if (bounds.anySpanExceeds(maxAxisSpan))
-					return result(StructureState.TOO_WIDE, members, ordinary, chiseled, bounds, dequeued);
+					return result(StructureState.TOO_WIDE, members, ordinary, chiseled, bounds);
 				pending.addLast(candidate);
 			}
 		}
-		return result(StructureState.VALID, members, ordinary, chiseled, bounds, dequeued);
+		return result(StructureState.VALID, members, ordinary, chiseled, bounds);
 	}
 
 	private static ScanResult result(StructureState state, List<BlockPos> members, List<BlockPos> ordinary,
-		List<BlockPos> chiseled, Bounds bounds, int dequeued) {
+		List<BlockPos> chiseled, Bounds bounds) {
 		return new ScanResult(state, new PatternStructureSnapshot(state, members, ordinary, chiseled,
-			bounds.min(), bounds.max(), dequeued));
+			bounds.min(), bounds.max(), 1 + ordinary.size()));
 	}
 
 	private record Bounds(BlockPos min, BlockPos max) {

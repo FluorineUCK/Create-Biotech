@@ -103,7 +103,8 @@ public final class PatternStructureSnapshot {
 	}
 
 	private void validate() {
-		if (members.isEmpty() || queueCount < 0 || min.getX() > max.getX() || min.getY() > max.getY()
+		if (members.isEmpty() || queueCount != 1 + ordinaryShelves.size()
+			|| min.getX() > max.getX() || min.getY() > max.getY()
 			|| min.getZ() > max.getZ() || new LinkedHashSet<>(members).size() != members.size()
 			|| new LinkedHashSet<>(ordinaryShelves).size() != ordinaryShelves.size()
 			|| new LinkedHashSet<>(chiseledShelves).size() != chiseledShelves.size())

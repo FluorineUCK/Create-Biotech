@@ -83,6 +83,29 @@ class PatternLibraryScannerTest {
 	}
 
 	@Test
+	void chiseledShelvesDoNotAddPatternReplyQueues() {
+		PatternStructureSnapshot snapshot = PatternLibraryScanner.scan(
+			connected(CORE, chiseledShelf(1, 0, 0)), CORE, 64, 16).snapshot();
+		assertQueueCountRoundTrip(snapshot, 1);
+	}
+
+	@Test
+	void mixedShelvesAddOnePatternReplyQueuePerOrdinaryShelf() {
+		PatternStructureSnapshot snapshot = PatternLibraryScanner.scan(
+			connected(CORE, shelf(1, 0, 0), chiseledShelf(0, 0, 1)), CORE, 64, 16).snapshot();
+		assertQueueCountRoundTrip(snapshot, 2);
+	}
+
+	@Test
+	void snapshotRejectsQueueCountInconsistentWithOrdinaryShelves() {
+		PatternStructureSnapshot snapshot = PatternLibraryScanner.scan(
+			connected(CORE, shelf(1, 0, 0), chiseledShelf(0, 0, 1)), CORE, 64, 16).snapshot();
+		CompoundTag inconsistent = snapshot.save();
+		inconsistent.putInt("QueueCount", 99);
+		assertTrue(PatternStructureSnapshot.load(inconsistent).isEmpty());
+	}
+
+	@Test
 	void snapshotIsImmutableAndRoundTripsExactNbt() {
 		FakeLibraryView view = connected(CORE, shelf(1, 0, 0), shelf(2, 0, 0), chiseledShelf(0, 0, 1));
 		PatternStructureSnapshot snapshot = PatternLibraryScanner.scan(view, CORE, 64, 16).snapshot();
@@ -140,6 +163,11 @@ class PatternLibraryScannerTest {
 	private static BlockPos chiseledShelf(int x, int y, int z) { return new ChiseledPos(x, y, z); }
 	private static BlockPos core(int x, int y, int z) { return new CorePos(x, y, z); }
 	private static BlockPos coreUpper(int x, int y, int z) { return new UpperPos(x, y, z); }
+
+	private static void assertQueueCountRoundTrip(PatternStructureSnapshot snapshot, int expected) {
+		assertEquals(expected, snapshot.queueCount());
+		assertEquals(expected, PatternStructureSnapshot.load(snapshot.save()).orElseThrow().queueCount());
+	}
 
 	private static final class CorePos extends BlockPos { private CorePos(int x, int y, int z) { super(x, y, z); } }
 	private static final class UpperPos extends BlockPos { private UpperPos(int x, int y, int z) { super(x, y, z); } }
