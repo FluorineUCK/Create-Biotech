@@ -179,6 +179,22 @@ class ComputerTopologyControllerTest {
 	}
 
 	@Test
+	void splitShellWithLiveOldCoordinatorRefusesInactiveReelectionByteIdentically() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.refresh(LOW);
+		fixture.snapshot = snapshot(List.of(profiledNode(HIGH, pos(2))));
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+
+		fixture.refresh(HIGH);
+
+		assertEquals(ComputerAvailabilityReason.IDENTITY_CONFLICT,
+			fixture.be(HIGH).availabilityReason());
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
+	}
+
+	@Test
 	void lowerUuidActiveHotAddIsPendingAndDoesNotChangeRecordCoordinatorFrozenOrderOrRangeBonus() {
 		Fixture fixture = activeFixture(profiled(MID, pos(0)), profiled(HIGH, pos(2)));
 		ClusterEpoch before = fixture.be(MID).epoch().orElseThrow();
@@ -360,6 +376,38 @@ class ComputerTopologyControllerTest {
 	}
 
 	@Test
+	void sameEpochIdDivergentReplicaEpochRefusesNormalCloseByteIdentically() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		installEpochMissingHigh(fixture, LOW);
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+
+		assertEquals(ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT,
+			ComputerTopologyController.closeIdleEpoch(fixture.be(LOW), fixture.epochId(),
+				ProbeQuiescence.ready(), fixture, LIMITS));
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
+	}
+
+	@Test
+	void detachedCallerRefusesNormalCloseBeforeQuiescenceAndWithoutMutation() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		ComputerBlockEntity detached = fixture.replaceLoadedObject(LOW);
+		CompoundTag detachedBefore = save(detached);
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+		ProbeQuiescence quiescence = ProbeQuiescence.ready();
+
+		assertEquals(ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT,
+			ComputerTopologyController.closeIdleEpoch(detached,
+				detached.epoch().orElseThrow().epochId(), quiescence, fixture, LIMITS));
+		assertEquals(List.of(), quiescence.events);
+		assertEquals(detachedBefore, save(detached));
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
+	}
+
+	@Test
 	void staleEpochCloseDoesNotProbeScanOrMutate() {
 		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
 		Map<UUID, CompoundTag> before = bytes(fixture);
@@ -502,6 +550,96 @@ class ComputerTopologyControllerTest {
 			assertEquals(Set.of(), computer.latchedEpochFaults());
 			assertNotEquals(oldEpoch, computer.epoch().orElseThrow().epochId());
 		}
+	}
+
+	@Test
+	void splitShellWithLiveFrozenComputerRefusesPermanentLossReformByteIdentically() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.latch(EpochFault.WIDTH);
+		fixture.snapshot = snapshot(List.of(profiledNode(LOW, pos(0))));
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+		ProbeReform control = ProbeReform.ready();
+
+		assertEquals(ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT,
+			ComputerTopologyController.stopAllAndReform(fixture.be(LOW), fixture.epochId(),
+				control, fixture, LIMITS));
+		assertEquals("stop", control.events.getFirst());
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
+	}
+
+	@Test
+	void sameEpochIdDivergentReplicaEpochRefusesReformByteIdentically() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		installEpochMissingHigh(fixture, LOW);
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+
+		assertEquals(ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT,
+			ComputerTopologyController.stopAllAndReform(fixture.be(LOW), fixture.epochId(),
+				ProbeReform.ready(), fixture, LIMITS));
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
+	}
+
+	@Test
+	void higherRevisionNonMinimumCallerCannotAuthorReform() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		ComputerBlockEntity high = fixture.be(HIGH);
+		ComputerStructureRecord record = high.currentStructureRecord().orElseThrow();
+		ComputerStructureRecord ahead = new ComputerStructureRecord(
+			record.computerStructureMemberId(), record.revision() + 1,
+			record.coordinatorId(), record.snapshot());
+		high.applyTopologyState(ahead, high.bindingState(), true,
+			high.epoch().orElseThrow(), high.latchedEpochFaults());
+		Map<UUID, CompoundTag> before = bytes(fixture);
+
+		assertEquals(ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT,
+			ComputerTopologyController.stopAllAndReform(high, fixture.epochId(),
+				ProbeReform.ready(), fixture, LIMITS));
+		assertEquals(before, bytes(fixture));
+	}
+
+	@Test
+	void equalRevisionDivergentNonMinimumCallerCannotAuthorReform() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		ComputerBlockEntity high = fixture.be(HIGH);
+		ComputerStructureRecord record = high.currentStructureRecord().orElseThrow();
+		Set<BlockPos> divergentCasing = new HashSet<>(record.snapshot().casingPositions());
+		divergentCasing.add(new BlockPos(1, 1, 1));
+		ComputerStructureSnapshot divergentSnapshot = new ComputerStructureSnapshot(
+			record.snapshot().bounds(), record.snapshot().nodes(), divergentCasing,
+			record.snapshot().containingChunks());
+		ComputerStructureRecord divergent = new ComputerStructureRecord(
+			record.computerStructureMemberId(), record.revision(),
+			record.coordinatorId(), divergentSnapshot);
+		high.applyTopologyState(divergent, high.bindingState(), true,
+			high.epoch().orElseThrow(), high.latchedEpochFaults());
+		Map<UUID, CompoundTag> before = bytes(fixture);
+
+		assertEquals(ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT,
+			ComputerTopologyController.stopAllAndReform(high, fixture.epochId(),
+				ProbeReform.ready(), fixture, LIMITS));
+		assertEquals(before, bytes(fixture));
+	}
+
+	@Test
+	void detachedCallerRefusesReformBeforeStopAndWithoutMutation() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		ComputerBlockEntity detached = fixture.replaceLoadedObject(LOW);
+		CompoundTag detachedBefore = save(detached);
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+		ProbeReform control = ProbeReform.ready();
+
+		assertEquals(ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT,
+			ComputerTopologyController.stopAllAndReform(detached,
+				detached.epoch().orElseThrow().epochId(), control, fixture, LIMITS));
+		assertEquals(List.of(), control.events);
+		assertEquals(detachedBefore, save(detached));
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
 	}
 
 	@Test
@@ -702,6 +840,23 @@ class ComputerTopologyControllerTest {
 		return result;
 	}
 
+	private static void assertResidentBytesEqual(Map<UUID, byte[]> expected,
+		Map<UUID, byte[]> actual) {
+		assertEquals(expected.keySet(), actual.keySet());
+		for (UUID id : expected.keySet()) assertArrayEquals(expected.get(id), actual.get(id));
+	}
+
+	private static void installEpochMissingHigh(Fixture fixture, UUID target) {
+		ComputerBlockEntity computer = fixture.be(target);
+		ClusterEpoch full = computer.epoch().orElseThrow();
+		EpochNode low = full.nodes().stream().filter(node -> node.computerId().equals(LOW))
+			.findFirst().orElseThrow();
+		ClusterEpoch divergent = new ClusterEpoch(full.epochId(), full.clusterId(),
+			full.computerStructureMemberId(), LOW, low.address(), full.bounds(), List.of(low));
+		computer.applyTopologyState(computer.currentStructureRecord().orElseThrow(),
+			computer.bindingState(), true, divergent, computer.latchedEpochFaults());
+	}
+
 	private static void installEmptyLoadingModList() {
 		try {
 			Class<?> type = Class.forName("net.neoforged.fml.loading.LoadingModList");
@@ -765,6 +920,15 @@ class ComputerTopologyControllerTest {
 				old.epoch().orElse(null), old.latchedEpochFaults());
 			remove(id);
 			put(moved);
+		}
+
+		private ComputerBlockEntity replaceLoadedObject(UUID id) {
+			ComputerBlockEntity detached = be(id);
+			ComputerBlockEntity replacement = new ComputerBlockEntity(BlockEntityType.FURNACE,
+				detached.getBlockPos(), Blocks.FURNACE.defaultBlockState());
+			replacement.read(save(detached), REGISTRIES, false);
+			put(replacement);
+			return detached;
 		}
 
 		private void refresh(UUID caller) {

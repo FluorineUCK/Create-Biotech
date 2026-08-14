@@ -168,6 +168,18 @@ final class ComputerTopologyController {
 		ComputerAvailabilityReason reason;
 		if (activeEpoch == null) {
 			desiredCoordinator = snapshot.nodes().getFirst().computerId();
+			if (authority != null && !authority.coordinatorId().equals(desiredCoordinator)) {
+				BlockPos seed = resolved.byId().get(desiredCoordinator).getBlockPos();
+				ProofFailure proof = proveInactiveReelectionDomain(seed, authority, snapshot,
+					resolved.world());
+				if (proof == ProofFailure.PARTIAL)
+					return Reconciliation.failure(ComputerAvailabilityReason.PARTIAL_UNLOADED);
+				if (proof == ProofFailure.SPACE)
+					return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
+				if (computerIdExistsInBounds(authority.coordinatorId(),
+					List.of(authority.snapshot().bounds(), snapshot.bounds()), resolved.world()))
+					return Reconciliation.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
+			}
 			reason = scan.state() == ComputerStructureScanner.State.VALID_NOT_READY
 				? ComputerAvailabilityReason.NOT_READY : ComputerAvailabilityReason.NONE;
 		} else {
@@ -389,6 +401,8 @@ final class ComputerTopologyController {
 		if (!callerState.persistenceAvailable() || record == null
 			|| callerState.computerId() == null)
 			return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
+		if (!exactLoadedCaller(caller, callerState, record, world))
+			return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
 		TransactionKey key = new TransactionKey(record.computerStructureMemberId(), expectedEpochId);
 		synchronized (ACTIVE_CLOSES) {
 			if (!ACTIVE_CLOSES.add(key))
@@ -419,12 +433,33 @@ final class ComputerTopologyController {
 				return ComputerBlockEntity.EpochCloseResult.SPACE_UNCERTAIN;
 			if (resolved.failure() != ResolveFailure.NONE)
 				return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
+			if (resolved.byId().get(callerState.computerId()) != caller)
+				return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
+			TransactionAuthority authority = closeAuthority(resolved, snapshot,
+				record.computerStructureMemberId(), expectedEpochId);
+			if (authority == null)
+				return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
+			ClusterEpoch authoritativeEpoch = authority.epoch();
+			ProofDomain proofDomain = captureProofDomain(caller.getBlockPos(),
+				List.of(record, authority.record()), authoritativeEpoch, snapshot, world);
+			if (proofDomain.failure() == ProofFailure.PARTIAL)
+				return ComputerBlockEntity.EpochCloseResult.PARTIAL_UNLOADED;
+			if (proofDomain.failure() == ProofFailure.SPACE)
+				return ComputerBlockEntity.EpochCloseResult.SPACE_UNCERTAIN;
+			List<ComputerBlockEntity.TopologyState> replicaStates = relevantReplicaStates(
+				proofDomain, record.computerStructureMemberId(), expectedEpochId,
+				snapshot.computerIds());
+			if (!transactionReplicasMatch(replicaStates, authoritativeEpoch,
+				authority.record()))
+				return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
 			Set<UUID> frozen = new LinkedHashSet<>();
-			for (EpochNode node : epoch.nodes()) {
+			for (EpochNode node : authoritativeEpoch.nodes()) {
 				frozen.add(node.computerId());
 				ComputerStructureNode current = snapshot.node(node.computerId()).orElse(null);
 				if (current == null || !current.address().equals(node.address()))
 					return ComputerBlockEntity.EpochCloseResult.FROZEN_MEMBER_MISSING;
+				if (proofComputerCount(proofDomain, node.computerId()) != 1)
+					return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
 				if (current.profile() == null || !current.profile().equals(node.profile()))
 					return ComputerBlockEntity.EpochCloseResult.PROFILE_NOT_READY;
 			}
@@ -432,12 +467,7 @@ final class ComputerTopologyController {
 				for (ComputerStructureNode node : snapshot.nodes())
 					if (node.profile() == null && frozen.contains(node.computerId()))
 						return ComputerBlockEntity.EpochCloseResult.PROFILE_NOT_READY;
-			ComputerStructureRecord authority = transactionAuthority(resolved, epoch,
-				record.computerStructureMemberId());
-			if (authority == null || !transactionBindingsMatch(resolved, epoch, authority))
-				return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
-
-			EnumSet<EpochFault> union = unionFaults(resolved, expectedEpochId);
+			EnumSet<EpochFault> union = unionFaults(replicaStates, authoritativeEpoch);
 			if (union.contains(EpochFault.WIDTH) || union.contains(EpochFault.DEPTH))
 				return ComputerBlockEntity.EpochCloseResult.REQUIRES_REFORM;
 			if (!quiescence.allRootsStopped())
@@ -447,13 +477,16 @@ final class ComputerTopologyController {
 					|| !quiescence.nodeMailboxEmpty(id))
 					return ComputerBlockEntity.EpochCloseResult.RUNTIME_NOT_QUIESCENT;
 
-			if (!revalidateResolved(caller.getBlockPos(), snapshot, resolved, world, limits,
-				expectedEpochId, union)) return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
+			if (!revalidateProofDomain(proofDomain, caller.getBlockPos(),
+				List.of(record, authority.record()), authoritativeEpoch, snapshot, world)
+				|| !revalidateResolved(caller.getBlockPos(), snapshot, resolved, caller,
+					world, limits, authoritativeEpoch, union))
+				return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
 			UUID coordinator = snapshot.nodes().getFirst().computerId();
-			ComputerStructureRecord updated = authority.coordinatorId().equals(coordinator)
-				&& authority.snapshot().equals(snapshot) ? authority
-				: new ComputerStructureRecord(authority.computerStructureMemberId(),
-					Math.addExact(authority.revision(), 1), coordinator, snapshot);
+			ComputerStructureRecord updated = authority.record().coordinatorId().equals(coordinator)
+				&& authority.record().snapshot().equals(snapshot) ? authority.record()
+				: new ComputerStructureRecord(authority.record().computerStructureMemberId(),
+					Math.addExact(authority.record().revision(), 1), coordinator, snapshot);
 			for (ComputerBlockEntity computer : resolved.computers()) {
 				ComputerBlockEntity.TopologyState state = computer.topologyState();
 				computer.stageTopologyState(updated, state.binding(), state.bindingValid(), null, Set.of());
@@ -484,6 +517,8 @@ final class ComputerTopologyController {
 		ComputerStructureRecord oldRecord = callerState.record();
 		if (!callerState.persistenceAvailable() || oldRecord == null
 			|| callerState.computerId() == null)
+			return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
+		if (!exactLoadedCaller(caller, callerState, oldRecord, world))
 			return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
 		TransactionKey key = new TransactionKey(oldRecord.computerStructureMemberId(), expectedEpochId);
 		synchronized (ACTIVE_REFORMS) {
@@ -517,42 +552,73 @@ final class ComputerTopologyController {
 				return ComputerBlockEntity.ReformResult.SPACE_UNCERTAIN;
 			if (resolved.failure() != ResolveFailure.NONE)
 				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
+			if (resolved.byId().get(callerState.computerId()) != caller)
+				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
 			if (snapshot.nodes().stream().anyMatch(node -> node.profile() == null))
 				return ComputerBlockEntity.ReformResult.PROFILE_NOT_READY;
+			UUID stagingOwnerId = snapshot.nodes().getFirst().computerId();
+			ComputerBlockEntity stagingOwner = resolved.byId().get(stagingOwnerId);
+			if (stagingOwner == null)
+				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
+			ComputerBlockEntity.TopologyState authorityState = stagingOwner.topologyState();
+			ComputerStructureRecord authorityRecord = authorityState.record();
+			ClusterEpoch authoritativeEpoch = authorityState.epoch();
+			if (!authorityState.persistenceAvailable() || !authorityState.bindingValid()
+				|| authorityState.binding() == null || authorityRecord == null
+				|| authoritativeEpoch == null
+				|| !expectedEpochId.equals(authoritativeEpoch.epochId())
+				|| !oldRecord.computerStructureMemberId()
+					.equals(authorityRecord.computerStructureMemberId()))
+				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
+			ProofDomain proofDomain = captureProofDomain(caller.getBlockPos(),
+				List.of(oldRecord, authorityRecord), authoritativeEpoch, snapshot, world);
+			if (proofDomain.failure() == ProofFailure.PARTIAL)
+				return ComputerBlockEntity.ReformResult.PARTIAL_UNLOADED;
+			if (proofDomain.failure() == ProofFailure.SPACE)
+				return ComputerBlockEntity.ReformResult.SPACE_UNCERTAIN;
+			List<ComputerBlockEntity.TopologyState> replicaStates = relevantReplicaStates(
+				proofDomain, oldRecord.computerStructureMemberId(), expectedEpochId,
+				snapshot.computerIds());
+			if (!transactionReplicasMatch(replicaStates, authoritativeEpoch, authorityRecord))
+				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
 			Set<UUID> current = snapshot.computerIds();
 			Set<UUID> relevant = new LinkedHashSet<>(current);
-			for (EpochNode node : oldEpoch.nodes()) {
+			for (EpochNode node : authoritativeEpoch.nodes()) {
 				ComputerStructureNode present = snapshot.node(node.computerId()).orElse(null);
 				if (present != null) {
+					if (proofComputerCount(proofDomain, node.computerId()) != 1)
+						return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
 					if (!present.address().equals(node.address()) || present.profile() == null
 						|| !present.profile().equals(node.profile()))
 						return ComputerBlockEntity.ReformResult.PROFILE_NOT_READY;
 					relevant.add(node.computerId());
-				}
+				} else if (proofComputerCount(proofDomain, node.computerId()) != 0)
+					return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
 			}
 			for (UUID id : relevant)
 				if (!control.nodeIdle(id) || !control.nodeRootFree(id)
 					|| !control.nodeMailboxEmpty(id))
 					return ComputerBlockEntity.ReformResult.RUNTIME_NOT_QUIESCENT;
-			if (!recordsCompatible(resolved.states(), oldRecord,
-				oldRecord.computerStructureMemberId())
-				|| !transactionBindingsMatch(resolved, oldEpoch, oldRecord))
-				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
-			if (!revalidateResolved(caller.getBlockPos(), snapshot, resolved, world, limits,
-				expectedEpochId, unionFaults(resolved, expectedEpochId)))
+			EnumSet<EpochFault> union = unionFaults(replicaStates, authoritativeEpoch);
+			if (!revalidateProofDomain(proofDomain, caller.getBlockPos(),
+				List.of(oldRecord, authorityRecord), authoritativeEpoch, snapshot, world)
+				|| !revalidateResolved(caller.getBlockPos(), snapshot, resolved, caller,
+					world, limits, authoritativeEpoch, union))
 				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
 			ClusterEpoch replacement;
 			try {
-				replacement = ClusterEpoch.freeze(oldEpoch.clusterId(),
-					oldRecord.computerStructureMemberId(), snapshot);
+				replacement = ClusterEpoch.freeze(authoritativeEpoch.clusterId(),
+					authorityRecord.computerStructureMemberId(), snapshot);
 			} catch (IllegalArgumentException invalid) {
 				return ComputerBlockEntity.ReformResult.STRUCTURE_INVALID;
 			}
 			ComputerStructureRecord updated = new ComputerStructureRecord(
-				oldRecord.computerStructureMemberId(), Math.addExact(oldRecord.revision(), 1),
+				authorityRecord.computerStructureMemberId(),
+				Math.addExact(authorityRecord.revision(), 1),
 				replacement.coordinatorId(), snapshot);
 			for (ComputerBlockEntity computer : resolved.computers())
-				computer.stageTopologyState(updated, callerState.binding(), true, replacement, Set.of());
+				computer.stageTopologyState(updated, authorityState.binding(), true,
+					replacement, Set.of());
 			for (ComputerBlockEntity computer : resolved.computers()) {
 				computer.setAvailabilityReason(ComputerAvailabilityReason.NONE);
 				computer.publishTopologyChange();
@@ -716,6 +782,131 @@ final class ComputerTopologyController {
 		return ProofFailure.NONE;
 	}
 
+	private static ProofFailure proveInactiveReelectionDomain(BlockPos seed,
+		ComputerStructureRecord record, ComputerStructureSnapshot current, WorldAccess world) {
+		Set<ChunkPos> chunks = new LinkedHashSet<>(record.snapshot().containingChunks());
+		chunks.addAll(current.containingChunks());
+		if (!chunksLoaded(chunks, world)) return ProofFailure.PARTIAL;
+		ProofFailure oldProof = proveBounds(seed, record.snapshot().bounds(), world);
+		if (oldProof != ProofFailure.NONE) return oldProof;
+		return proveBounds(seed, current.bounds(), world);
+	}
+
+	private static boolean computerIdExistsInBounds(UUID computerId,
+		List<BoundingBox> bounds, WorldAccess world) {
+		for (BlockPos pos : positions(bounds, List.of())) {
+			ComputerBlockEntity computer = world.loadedComputer(pos);
+			if (computer != null && computer.computerId().filter(computerId::equals).isPresent())
+				return true;
+		}
+		return false;
+	}
+
+	private static boolean exactLoadedCaller(ComputerBlockEntity caller,
+		ComputerBlockEntity.TopologyState state, ComputerStructureRecord record,
+		WorldAccess world) {
+		UUID computerId = state.computerId();
+		if (computerId == null) return false;
+		ComputerStructureNode persisted = record.snapshot().node(computerId).orElse(null);
+		if (persisted == null || !persisted.address().localPos().equals(caller.getBlockPos()))
+			return false;
+		BlockPos pos = caller.getBlockPos();
+		return world.isLoaded(pos) && world.sameSpace(pos, pos)
+			&& world.loadedComputer(pos) == caller
+			&& world.address(pos).equals(persisted.address())
+			&& caller.computerId().filter(computerId::equals).isPresent();
+	}
+
+	private static ProofDomain captureProofDomain(BlockPos seed,
+		List<ComputerStructureRecord> records, ClusterEpoch epoch,
+		ComputerStructureSnapshot current, WorldAccess world) {
+		Set<ChunkPos> chunks = new LinkedHashSet<>(current.containingChunks());
+		List<BoundingBox> bounds = new ArrayList<>();
+		for (ComputerStructureRecord record : records) {
+			chunks.addAll(record.snapshot().containingChunks());
+			bounds.add(record.snapshot().bounds());
+		}
+		addBoundsChunks(chunks, epoch.bounds());
+		bounds.add(epoch.bounds());
+		bounds.add(current.bounds());
+		if (!chunksLoaded(chunks, world)) return ProofDomain.failure(ProofFailure.PARTIAL);
+		for (BoundingBox box : bounds) {
+			ProofFailure proof = proveBounds(seed, box, world);
+			if (proof != ProofFailure.NONE) return ProofDomain.failure(proof);
+		}
+		List<SpaceAddress> addresses = epoch.nodes().stream().map(EpochNode::address).toList();
+		for (SpaceAddress address : addresses) {
+			BlockPos pos = address.localPos();
+			if (!world.isLoaded(pos)) return ProofDomain.failure(ProofFailure.PARTIAL);
+			if (!world.sameSpace(seed, pos)) return ProofDomain.failure(ProofFailure.SPACE);
+			SpaceAddress actual = world.address(pos);
+			if (!actual.dimension().equals(address.dimension())
+				|| !Objects.equals(actual.subLevelId(), address.subLevelId()))
+				return ProofDomain.failure(ProofFailure.SPACE);
+		}
+		List<ProofCell> cells = new ArrayList<>();
+		for (BlockPos pos : positions(bounds, addresses)) {
+			ComputerBlockEntity computer = world.loadedComputer(pos);
+			cells.add(new ProofCell(pos, computer,
+				computer == null ? null : computer.topologyState()));
+		}
+		return ProofDomain.success(cells);
+	}
+
+	private static List<BlockPos> positions(List<BoundingBox> bounds,
+		List<SpaceAddress> addresses) {
+		Set<BlockPos> positions = new LinkedHashSet<>();
+		for (BoundingBox box : bounds)
+			for (int x = box.minX(); x <= box.maxX(); x++)
+				for (int y = box.minY(); y <= box.maxY(); y++)
+					for (int z = box.minZ(); z <= box.maxZ(); z++)
+						positions.add(new BlockPos(x, y, z));
+		for (SpaceAddress address : addresses) positions.add(address.localPos().immutable());
+		return List.copyOf(positions);
+	}
+
+	private static List<ComputerBlockEntity.TopologyState> relevantReplicaStates(
+		ProofDomain domain, UUID structureId, UUID epochId, Set<UUID> currentIds) {
+		List<ComputerBlockEntity.TopologyState> result = new ArrayList<>();
+		for (ProofCell cell : domain.cells()) {
+			ComputerBlockEntity.TopologyState state = cell.state();
+			if (state == null) continue;
+			boolean structureReplica = state.record() != null && state.record()
+				.computerStructureMemberId().equals(structureId);
+			boolean epochReplica = state.epoch() != null
+				&& (state.epoch().epochId().equals(epochId)
+					|| state.epoch().computerStructureMemberId().equals(structureId));
+			boolean currentReplica = state.computerId() != null
+				&& currentIds.contains(state.computerId());
+			if (structureReplica || epochReplica || currentReplica) result.add(state);
+		}
+		return List.copyOf(result);
+	}
+
+	private static int proofComputerCount(ProofDomain domain, UUID computerId) {
+		int count = 0;
+		for (ProofCell cell : domain.cells())
+			if (cell.computer() != null
+				&& cell.computer().computerId().filter(computerId::equals).isPresent()) count++;
+		return count;
+	}
+
+	private static boolean revalidateProofDomain(ProofDomain original, BlockPos seed,
+		List<ComputerStructureRecord> records, ClusterEpoch epoch,
+		ComputerStructureSnapshot current, WorldAccess world) {
+		ProofDomain now = captureProofDomain(seed, records, epoch, current, world);
+		if (now.failure() != ProofFailure.NONE
+			|| now.cells().size() != original.cells().size()) return false;
+		for (int i = 0; i < original.cells().size(); i++) {
+			ProofCell before = original.cells().get(i);
+			ProofCell after = now.cells().get(i);
+			if (!before.pos().equals(after.pos()) || before.computer() != after.computer()) return false;
+			if (before.computer() != null && (before.state() == null
+				|| !before.computer().topologyMatches(before.state()))) return false;
+		}
+		return true;
+	}
+
 	private static ProofFailure proveBounds(BlockPos seed, BoundingBox bounds, WorldAccess world) {
 		for (int x = bounds.minX(); x <= bounds.maxX(); x++)
 			for (int y = bounds.minY(); y <= bounds.maxY(); y++)
@@ -773,24 +964,44 @@ final class ComputerTopologyController {
 		return union;
 	}
 
-	private static @Nullable ComputerStructureRecord transactionAuthority(
-		ResolvedSnapshot resolved, ClusterEpoch epoch, UUID structureId) {
-		ComputerBlockEntity coordinator = resolved.byId().get(epoch.coordinatorId());
-		if (coordinator == null) return null;
-		ComputerStructureRecord authority = coordinator.currentStructureRecord().orElse(null);
-		if (authority == null || !authority.computerStructureMemberId().equals(structureId)
-			|| !authority.coordinatorId().equals(epoch.coordinatorId())
-			|| !recordsCompatible(resolved.states(), authority, structureId)) return null;
-		return authority;
+	private static EnumSet<EpochFault> unionFaults(
+		List<ComputerBlockEntity.TopologyState> states, ClusterEpoch epoch) {
+		EnumSet<EpochFault> union = EnumSet.noneOf(EpochFault.class);
+		for (ComputerBlockEntity.TopologyState state : states)
+			if (epoch.equals(state.epoch())) union.addAll(state.faults());
+		return union;
 	}
 
-	private static boolean transactionBindingsMatch(ResolvedSnapshot resolved,
+	private static @Nullable TransactionAuthority closeAuthority(
+		ResolvedSnapshot resolved, ComputerStructureSnapshot snapshot, UUID structureId,
+		UUID expectedEpochId) {
+		ComputerBlockEntity minimum = resolved.byId().get(snapshot.nodes().getFirst().computerId());
+		if (minimum == null) return null;
+		ClusterEpoch epoch = minimum.epoch().orElse(null);
+		if (epoch == null || !epoch.epochId().equals(expectedEpochId)) return null;
+		ComputerBlockEntity coordinator = resolved.byId().get(epoch.coordinatorId());
+		if (coordinator == null) return null;
+		ComputerBlockEntity.TopologyState state = coordinator.topologyState();
+		ComputerStructureRecord record = state.record();
+		if (!state.persistenceAvailable() || !state.bindingValid() || state.binding() == null
+			|| record == null || !epoch.equals(state.epoch())
+			|| !record.computerStructureMemberId().equals(structureId)
+			|| !record.coordinatorId().equals(epoch.coordinatorId())
+			|| !coordinator.computerId().filter(epoch.coordinatorId()::equals).isPresent()) return null;
+		return new TransactionAuthority(record, epoch);
+	}
+
+	private static boolean transactionReplicasMatch(
+		List<ComputerBlockEntity.TopologyState> states,
 		ClusterEpoch epoch, ComputerStructureRecord authority) {
+		if (states.isEmpty()
+			|| !recordsCompatible(states, authority, authority.computerStructureMemberId()))
+			return false;
 		ClusterBinding binding = null;
-		for (ComputerBlockEntity.TopologyState state : resolved.states()) {
+		for (ComputerBlockEntity.TopologyState state : states) {
 			if (!state.persistenceAvailable() || !state.bindingValid() || state.binding() == null
 				|| !state.binding().clusterId().equals(epoch.clusterId())
-				|| state.epoch() == null || !state.epoch().epochId().equals(epoch.epochId())
+				|| !epoch.equals(state.epoch())
 				|| state.record() == null || !state.record().computerStructureMemberId()
 					.equals(authority.computerStructureMemberId())) return false;
 			if (binding == null) binding = state.binding();
@@ -807,8 +1018,9 @@ final class ComputerTopologyController {
 	}
 
 	private static boolean revalidateResolved(BlockPos seed, ComputerStructureSnapshot snapshot,
-		ResolvedSnapshot original, WorldAccess world, ComputerStructureScanner.Limits limits,
-		UUID expectedEpochId, Set<EpochFault> faultUnion) {
+		ResolvedSnapshot original, ComputerBlockEntity caller, WorldAccess world,
+		ComputerStructureScanner.Limits limits, ClusterEpoch expectedEpoch,
+		Set<EpochFault> faultUnion) {
 		ComputerStructureScanner.ScanResult rescanned = world.scan(seed, limits);
 		UUID structureId = original.states().stream()
 			.map(ComputerBlockEntity.TopologyState::record).filter(Objects::nonNull)
@@ -821,15 +1033,17 @@ final class ComputerTopologyController {
 		ResolvedSnapshot current = resolveSnapshot(seed, snapshot, world);
 		if (current.failure() != ResolveFailure.NONE
 			|| current.computers().size() != original.computers().size()) return false;
+		UUID callerId = caller.computerId().orElse(null);
+		if (callerId == null || current.byId().get(callerId) != caller) return false;
 		for (int i = 0; i < original.computers().size(); i++) {
 			ComputerBlockEntity before = original.computers().get(i);
 			ComputerBlockEntity now = current.computers().get(i);
 			if (before != now || !before.topologyMatches(original.states().get(i))) return false;
 			ClusterEpoch epoch = before.epoch().orElse(null);
-			if (epoch == null || !epoch.epochId().equals(expectedEpochId)) return false;
+			if (!expectedEpoch.equals(epoch)) return false;
 			if (!faultUnion.containsAll(before.latchedEpochFaults())) return false;
 		}
-		return unionFaults(current, expectedEpochId).equals(faultUnion);
+		return unionFaults(current, expectedEpoch.epochId()).equals(faultUnion);
 	}
 
 	private record Reconciliation(ComputerStructureRecord record, @Nullable ClusterBinding binding,
@@ -853,6 +1067,17 @@ final class ComputerTopologyController {
 			return new RecordSelection(record, true);
 		}
 		static RecordSelection invalid() { return new RecordSelection(null, false); }
+	}
+	private record TransactionAuthority(ComputerStructureRecord record, ClusterEpoch epoch) {}
+	private record ProofCell(BlockPos pos, @Nullable ComputerBlockEntity computer,
+		@Nullable ComputerBlockEntity.TopologyState state) {}
+	private record ProofDomain(ProofFailure failure, List<ProofCell> cells) {
+		static ProofDomain success(List<ProofCell> cells) {
+			return new ProofDomain(ProofFailure.NONE, List.copyOf(cells));
+		}
+		static ProofDomain failure(ProofFailure failure) {
+			return new ProofDomain(failure, List.of());
+		}
 	}
 
 	private enum ResolveFailure { NONE, PARTIAL, SPACE, IDENTITY }
