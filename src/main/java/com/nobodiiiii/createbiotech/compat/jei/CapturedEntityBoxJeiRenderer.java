@@ -1,7 +1,5 @@
 package com.nobodiiiii.createbiotech.compat.jei;
 
-import java.util.List;
-
 import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
@@ -25,7 +23,6 @@ public final class CapturedEntityBoxJeiRenderer {
 	private static final ThreadLocal<IRecipeSlotDrawable> CURRENT_SLOT = new ThreadLocal<>();
 	private static final ItemStack ENTITY_ITEM_TRANSFORM = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get());
 	private static final ItemStack LARGE_BOX_BADGE = new ItemStack(CBItems.LARGE_CARDBOARD_BOX.get());
-	private static final long BOX_CYCLE_TIME_MS = 1000L;
 	private static final float SQUID_ENTITY_FOOT_Y_OFFSET = 1.1f;
 	private static final float BADGE_SCALE = 0.55f;
 	private static final int BADGE_Z = 200;
@@ -93,14 +90,9 @@ public final class CapturedEntityBoxJeiRenderer {
 		if (slot == null)
 			return fallback;
 
-		List<ItemStack> boxes = slot.getItemStacks()
+		return slot.getDisplayedItemStack()
 			.filter(CapturedEntityBoxJeiRenderer::isCapturedEntityBox)
-			.toList();
-		if (boxes.isEmpty())
-			return fallback;
-
-		int index = (int) ((System.currentTimeMillis() / BOX_CYCLE_TIME_MS) % boxes.size());
-		return boxes.get(index);
+			.orElse(fallback);
 	}
 
 	private static boolean isCapturedEntityBox(ItemStack stack) {

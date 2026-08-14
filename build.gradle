@@ -104,6 +104,9 @@ dependencies {
     runtimeOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
 
     compileOnly("maven.modrinth:jade:${jade_version}")
+    compileOnly("maven.modrinth:r0v8vy1s:${alternate_current_version}") {
+        transitive = false
+    }
 
     compileOnly("io.github.llamalad7:mixinextras-common:${mixinextras_version}")
     annotationProcessor("io.github.llamalad7:mixinextras-common:${mixinextras_version}")

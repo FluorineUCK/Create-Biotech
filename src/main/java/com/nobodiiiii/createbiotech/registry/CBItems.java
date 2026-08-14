@@ -46,6 +46,7 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Rarity;
+import net.neoforged.neoforge.common.DeferredSpawnEggItem;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
@@ -113,6 +114,11 @@ public class CBItems {
 
 	public static final DeferredHolder<Item, Item> POWER_BELT_CONNECTOR = ITEMS.register("power_belt_connector",
 		() -> new PowerBeltConnectorItem(new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> DING_DONG_CHICKEN_SPAWN_EGG =
+		ITEMS.register("ding_dong_chicken_spawn_egg",
+			() -> new DeferredSpawnEggItem(CBEntityTypes.DING_DONG_CHICKEN, 0xA1A1A1, 0xD8A52A,
+				new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> SMART_SUPER_GLUE = ITEMS.register("smart_super_glue",
 		() -> new SmartSuperGlueItem(new Item.Properties().stacksTo(1).durability(99)));

@@ -6,6 +6,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CardboardBoxEntity;
+import com.nobodiiiii.createbiotech.content.dingdongchicken.DingDongChickenEntity;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonEntity;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonSeatEntity;
 import com.simibubi.create.content.logistics.box.PackageEntity;
@@ -69,6 +70,15 @@ public class CBEntityTypes {
 			.setShouldReceiveVelocityUpdates(true)
 			.build("allay_courier"));
 
+	public static final DeferredHolder<EntityType<?>, EntityType<DingDongChickenEntity>> DING_DONG_CHICKEN =
+		ENTITY_TYPES.register("ding_dong_chicken", () -> EntityType.Builder
+			.<DingDongChickenEntity>of(DingDongChickenEntity::new, MobCategory.CREATURE)
+			.sized(0.4F, 0.7F)
+			.setTrackingRange(10)
+			.setUpdateInterval(3)
+			.setShouldReceiveVelocityUpdates(true)
+			.build("ding_dong_chicken"));
+
 	private CBEntityTypes() {}
 
 	public static void register(IEventBus modEventBus) {
@@ -80,5 +90,6 @@ public class CBEntityTypes {
 		event.put(CARDBOARD_BOX.get(), PackageEntity.createPackageAttributes()
 			.build());
 		event.put(ALLAY_COURIER.get(), Allay.createAttributes().build());
+		event.put(DING_DONG_CHICKEN.get(), DingDongChickenEntity.createAttributes().build());
 	}
 }

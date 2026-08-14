@@ -11,6 +11,7 @@ import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerRenderer;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerVisual;
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetRenderer;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CardboardBoxEntityRenderer;
+import com.nobodiiiii.createbiotech.content.dingdongchicken.DingDongChickenRenderer;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.BlastProofChainDriveRenderer;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastChamberBlock;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastChamberRenderer;
@@ -177,6 +178,7 @@ public class CreateBiotechClient {
 		event.registerEntityRenderer(CBEntityTypes.CARDBOARD_BOX.get(), CardboardBoxEntityRenderer::new);
 		event.registerEntityRenderer(CBEntityTypes.ALLAY_COURIER.get(),
 			context -> new AllayCourierEntityRenderer(context));
+		event.registerEntityRenderer(CBEntityTypes.DING_DONG_CHICKEN.get(), DingDongChickenRenderer::new);
 	}
 
 	@SubscribeEvent

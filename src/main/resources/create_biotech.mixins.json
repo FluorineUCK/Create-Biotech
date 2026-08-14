@@ -47,11 +47,14 @@
     "WalkAnimationStateAccessor",
     "MixinSuperGlueSelectionHelper",
     "SawBlockEntityMixin",
+    "ServerLevelEntityRedstoneMixin",
     "ServerGamePacketListenerAccessor",
+    "SignalGetterEntityRedstoneMixin",
     "SmartBlockEntityLegacyRefreshMixin",
     "SpawnEggItemMixin",
     "StockKeeperRequestMenuAccessor",
-    "VillagerSlimeMimicTradesMixin"
+    "VillagerSlimeMimicTradesMixin",
+    "RedStoneWireEntityRedstoneMixin"
   ],
   "client": [
     "client.BasinRendererMixin",
