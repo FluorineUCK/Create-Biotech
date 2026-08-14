@@ -13,6 +13,7 @@ import com.nobodiiiii.createbiotech.content.buttercat.item.ButterFoodProperties;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterFoodItem;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterSequencedAssemblyItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CardboardBoxItem;
+import com.nobodiiiii.createbiotech.content.dingdongchicken.DingDongChickenItem;
 import com.nobodiiiii.createbiotech.content.experience.ExperienceClusterBlockItem;
 import com.nobodiiiii.createbiotech.content.experience.ExperienceConstants;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberItem;
@@ -119,6 +120,9 @@ public class CBItems {
 		ITEMS.register("ding_dong_chicken_spawn_egg",
 			() -> new DeferredSpawnEggItem(CBEntityTypes.DING_DONG_CHICKEN, 0xA1A1A1, 0xD8A52A,
 				new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> DING_DONG_CHICKEN = ITEMS.register("ding_dong_chicken",
+		() -> new DingDongChickenItem(new Item.Properties().stacksTo(4)));
 
 	public static final DeferredHolder<Item, Item> SMART_SUPER_GLUE = ITEMS.register("smart_super_glue",
 		() -> new SmartSuperGlueItem(new Item.Properties().stacksTo(1).durability(99)));

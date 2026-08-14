@@ -34,6 +34,7 @@ public class CBCreativeModeTabs {
 			.icon(() -> CBItems.SPIDER_ASSEMBLY_TABLE.get()
 				.getDefaultInstance())
 			.displayItems((parameters, output) -> {
+				output.accept(CBItems.DING_DONG_CHICKEN.get());
 				output.accept(CBItems.DING_DONG_CHICKEN_SPAWN_EGG.get());
 				output.accept(CBItems.CARDBOARD_BOX.get());
 				output.accept(CBItems.LARGE_CARDBOARD_BOX.get());
