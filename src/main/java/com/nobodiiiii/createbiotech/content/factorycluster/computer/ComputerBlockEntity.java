@@ -8,6 +8,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -45,6 +46,7 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class ComputerBlockEntity extends SmartBlockEntity {
+	private static final long TOPOLOGY_SCAN_INTERVAL_TICKS = 20;
 	private static final int VERSION = 1;
 	private static final String ROOT = "ComputerData";
 	private static final String CLIENT_ROOT = "ComputerClientState";
@@ -65,6 +67,9 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	private Set<EpochFault> faults = Set.of();
 	private boolean persistenceAvailable = true;
 	private boolean topologyDirty;
+	private long topologyVersion;
+	private long lastTopologyCheck = Long.MIN_VALUE;
+	private ComputerAvailabilityReason availabilityReason = ComputerAvailabilityReason.NOT_READY;
 	private ComputerDisplayState displayState = ComputerDisplayState.IDLE;
 	private ComputerClientState clientState = emptyClientState();
 	@Nullable private Tag opaqueComputerData;
@@ -80,7 +85,19 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	}
 
 	@Override public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
-	@Override public void tick() {}
+	@Override
+	public void tick() {
+		super.tick();
+		if (!(level instanceof ServerLevel serverLevel) || level.isClientSide) return;
+		long now = level.getGameTime();
+		if (!topologyDirty && lastTopologyCheck != Long.MIN_VALUE
+			&& now - lastTopologyCheck < TOPOLOGY_SCAN_INTERVAL_TICKS) return;
+		lastTopologyCheck = now;
+		topologyDirty = false;
+		ComputerTopologyController.refresh(this,
+			ComputerTopologyController.realWorld(serverLevel),
+			ComputerStructureScanner.Limits.fromConfig());
+	}
 
 	public Optional<UUID> computerId() { return Optional.ofNullable(computerId); }
 	public Optional<UUID> computerStructureMemberId() {
@@ -94,6 +111,70 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	Optional<ComputerStructureRecord> currentStructureRecord() { return Optional.ofNullable(structureRecord); }
 	public Optional<ClusterEpoch> epoch() { return Optional.ofNullable(epoch); }
 	public Set<EpochFault> latchedEpochFaults() { return Set.copyOf(faults); }
+	public ComputerAvailabilityReason availabilityReason() { return availabilityReason; }
+	public boolean structureOnline() {
+		return availabilityReason == ComputerAvailabilityReason.NONE
+			|| availabilityReason == ComputerAvailabilityReason.FROZEN_MEMBER_MISSING
+			|| availabilityReason == ComputerAvailabilityReason.AUTHORITY_OFFLINE;
+	}
+	public boolean coordinatorOnline() {
+		return availabilityReason == ComputerAvailabilityReason.NONE
+			|| availabilityReason == ComputerAvailabilityReason.FROZEN_MEMBER_MISSING;
+	}
+	public List<ComputerNodeView> currentNodes() {
+		return ComputerTopologyController.currentNodes(this);
+	}
+	public List<ComputerNodeView> frozenNodes() {
+		return ComputerTopologyController.frozenNodes(this);
+	}
+	public List<ComputerNodeView> pendingNodes() {
+		return ComputerTopologyController.pendingNodes(this);
+	}
+	public boolean requiresReform() {
+		return faults.contains(EpochFault.WIDTH) || faults.contains(EpochFault.DEPTH);
+	}
+	public ComputerClusterView clusterView() {
+		return new ComputerClusterView(availabilityReason, structureOnline(), coordinatorOnline(),
+			epoch != null, requiresReform(), currentNodes(), frozenNodes(), pendingNodes(), faults);
+	}
+
+	public EpochStartResult startEpoch(UUID clusterId) {
+		Objects.requireNonNull(clusterId, "clusterId");
+		if (!(level instanceof ServerLevel serverLevel)) return EpochStartResult.NOT_READY;
+		return ComputerTopologyController.startEpoch(this, clusterId,
+			ComputerTopologyController.realWorld(serverLevel),
+			ComputerStructureScanner.Limits.fromConfig());
+	}
+
+	public FaultLatchResult latchEpochFault(UUID expectedEpochId, EpochFault fault) {
+		Objects.requireNonNull(expectedEpochId, "expectedEpochId");
+		Objects.requireNonNull(fault, "fault");
+		if (!(level instanceof ServerLevel serverLevel)) return FaultLatchResult.IDENTITY_INVALID;
+		return ComputerTopologyController.latchEpochFault(this, expectedEpochId, fault,
+			ComputerTopologyController.realWorld(serverLevel));
+	}
+
+	public EpochCloseResult closeIdleEpoch(UUID expectedEpochId, EpochQuiescence quiescence) {
+		Objects.requireNonNull(expectedEpochId, "expectedEpochId");
+		Objects.requireNonNull(quiescence, "quiescence");
+		if (epoch == null) return EpochCloseResult.NO_EPOCH;
+		if (!epoch.epochId().equals(expectedEpochId)) return EpochCloseResult.EPOCH_MISMATCH;
+		if (!(level instanceof ServerLevel serverLevel)) return EpochCloseResult.PARTIAL_UNLOADED;
+		return ComputerTopologyController.closeIdleEpoch(this, expectedEpochId, quiescence,
+			ComputerTopologyController.realWorld(serverLevel),
+			ComputerStructureScanner.Limits.fromConfig());
+	}
+
+	public ReformResult stopAllAndReform(UUID expectedEpochId, EpochReformControl control) {
+		Objects.requireNonNull(expectedEpochId, "expectedEpochId");
+		Objects.requireNonNull(control, "control");
+		if (epoch == null) return ReformResult.NO_EPOCH;
+		if (!epoch.epochId().equals(expectedEpochId)) return ReformResult.EPOCH_MISMATCH;
+		if (!(level instanceof ServerLevel serverLevel)) return ReformResult.PARTIAL_UNLOADED;
+		return ComputerTopologyController.stopAllAndReform(this, expectedEpochId, control,
+			ComputerTopologyController.realWorld(serverLevel),
+			ComputerStructureScanner.Limits.fromConfig());
+	}
 	ClusterBinding bindingState() { return bindingState; }
 	boolean bindingStateValid() { return bindingStateValid; }
 	boolean persistenceAvailable() { return persistenceAvailable; }
@@ -118,6 +199,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		rawChildren.remove("Resident");
 		rawChildren.remove("Profile");
 		persistenceAvailable = validateCrossChildren();
+		topologyVersion++;
 		setChanged();
 	}
 
@@ -126,6 +208,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		installedProfile = null;
 		rawChildren.put("Resident", rawResident.copy());
 		persistenceAvailable = false;
+		topologyVersion++;
 		setChanged();
 	}
 
@@ -135,11 +218,19 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		rawChildren.remove("Resident");
 		rawChildren.remove("Profile");
 		persistenceAvailable = validateCrossChildren();
+		topologyVersion++;
 		setChanged();
 		sendData();
 	}
 
 	void applyTopologyState(@Nullable ComputerStructureRecord record,
+		@Nullable ClusterBinding binding, boolean bindingValid, @Nullable ClusterEpoch epoch,
+		Set<EpochFault> faults) {
+		stageTopologyState(record, binding, bindingValid, epoch, faults);
+		setChanged();
+	}
+
+	void stageTopologyState(@Nullable ComputerStructureRecord record,
 		@Nullable ClusterBinding binding, boolean bindingValid, @Nullable ClusterEpoch epoch,
 		Set<EpochFault> faults) {
 		this.structureRecord = record;
@@ -152,7 +243,60 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		missingChildren.removeAll(Set.of("Structure", "Binding", "Epoch", "Faults",
 			"BindingInvalid"));
 		persistenceAvailable = validateCrossChildren();
+		topologyVersion++;
+	}
+
+	void publishTopologyChange() {
 		setChanged();
+		sendData();
+	}
+
+	TopologyState topologyState() {
+		return new TopologyState(computerId, installedProfile, structureRecord, bindingState,
+			bindingStateValid, epoch, faults, persistenceAvailable, topologyVersion);
+	}
+
+	boolean topologyMatches(TopologyState expected) {
+		return Objects.equals(computerId, expected.computerId())
+			&& Objects.equals(installedProfile, expected.profile())
+			&& Objects.equals(structureRecord, expected.record())
+			&& Objects.equals(bindingState, expected.binding())
+			&& bindingStateValid == expected.bindingValid()
+			&& Objects.equals(epoch, expected.epoch())
+			&& faults.equals(expected.faults())
+			&& persistenceAvailable == expected.persistenceAvailable()
+			&& topologyVersion == expected.version();
+	}
+
+	void setAvailabilityReason(ComputerAvailabilityReason reason) {
+		availabilityReason = Objects.requireNonNull(reason, "reason");
+	}
+
+	record TopologyState(@Nullable UUID computerId, @Nullable ComputerProfile profile,
+		@Nullable ComputerStructureRecord record, @Nullable ClusterBinding binding,
+		boolean bindingValid, @Nullable ClusterEpoch epoch, Set<EpochFault> faults,
+		boolean persistenceAvailable, long version) {
+		TopologyState {
+			faults = Set.copyOf(faults);
+		}
+	}
+
+	public enum EpochStartResult {
+		STARTED, NOT_COORDINATOR, NOT_READY, BINDING_UNAVAILABLE, ALREADY_ACTIVE,
+		REQUIRES_REFORM
+	}
+	public enum FaultLatchResult {
+		LATCHED, ALREADY_LATCHED, NO_EPOCH, EPOCH_MISMATCH, IDENTITY_INVALID
+	}
+	public enum EpochCloseResult {
+		CLOSED, NO_EPOCH, EPOCH_MISMATCH, REQUIRES_REFORM, ROOTS_REMAIN,
+		RUNTIME_NOT_QUIESCENT, PARTIAL_UNLOADED, SPACE_UNCERTAIN, STRUCTURE_INVALID,
+		FROZEN_MEMBER_MISSING, IDENTITY_CONFLICT, PROFILE_NOT_READY
+	}
+	public enum ReformResult {
+		REFORMED, NO_EPOCH, EPOCH_MISMATCH, STOP_FAILED, ROOTS_REMAIN,
+		RUNTIME_NOT_QUIESCENT, PARTIAL_UNLOADED, SPACE_UNCERTAIN, STRUCTURE_INVALID,
+		IDENTITY_CONFLICT, PROFILE_NOT_READY
 	}
 
 	void setDisplayState(ComputerDisplayState displayState) {
@@ -188,6 +332,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		rawChildren.remove("Profile");
 		topologyDirty = true;
 		persistenceAvailable = validateCrossChildren();
+		topologyVersion++;
 		setChanged();
 		sendData();
 		operations.clearCapturedEntity(held, this);
@@ -422,6 +567,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		opaqueComputerData = null;
 		rawChildren.clear();
 		missingChildren.clear();
+		topologyVersion++;
 	}
 
 	private boolean validateCrossChildren() {
