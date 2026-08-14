@@ -24,5 +24,11 @@
     "sounds": [
       "create_biotech:sonic_dog_cannon/voice_pack/sonic_dog_cannon_voice_pack_fire_partial"
     ]
+  },
+  "ding_dong_chicken.voice_pack": {
+    "subtitle": "subtitles.create_biotech.ding_dong_chicken.voice_pack",
+    "sounds": [
+      "create_biotech:ding_dong_chicken/ding_dong_chicken_voice_pack"
+    ]
   }
 }

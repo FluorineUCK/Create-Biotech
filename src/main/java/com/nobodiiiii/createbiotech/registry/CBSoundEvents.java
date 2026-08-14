@@ -23,6 +23,8 @@ public final class CBSoundEvents {
 		register("sonic_dog_cannon.voice_pack.fire_full");
 	public static final DeferredHolder<SoundEvent, SoundEvent> SONIC_DOG_CANNON_VOICE_PACK_FIRE_PARTIAL =
 		register("sonic_dog_cannon.voice_pack.fire_partial");
+	public static final DeferredHolder<SoundEvent, SoundEvent> DING_DONG_CHICKEN_VOICE_PACK =
+		register("ding_dong_chicken.voice_pack");
 
 	private CBSoundEvents() {}
 

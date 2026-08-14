@@ -555,5 +555,6 @@
   "create_biotech.ponder.allay_port_scene_1.text_9": "悦灵快递员运输没有距离限制，甚至可以跨越维度",
   "create_biotech.ponder.allay_port_scene_1.text_10": "但是需要确保涉及的站点位于被加载的区块中",
   "create_biotech.ponder.tag.ponderer_exported": "The Ponderer...",
-  "create_biotech.ponder.tag.ponderer_exported.description": "This mod\u0027s Ponder scenes were created and exported with The Ponderer. Learn more: https://modrinth.com/mod/the-ponderer"
+  "create_biotech.ponder.tag.ponderer_exported.description": "This mod\u0027s Ponder scenes were created and exported with The Ponderer. Learn more: https://modrinth.com/mod/the-ponderer",
+  "subtitles.create_biotech.ding_dong_chicken.voice_pack": "Ding-Dong Chicken speaks"
 }

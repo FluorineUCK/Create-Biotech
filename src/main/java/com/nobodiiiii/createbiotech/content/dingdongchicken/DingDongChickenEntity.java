@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.dingdongchicken;
 import javax.annotation.Nullable;
 
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
+import com.nobodiiiii.createbiotech.registry.CBSoundEvents;
 import com.simibubi.create.AllSoundEvents;
 
 import net.minecraft.nbt.CompoundTag;
@@ -10,6 +11,8 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.AgeableMob;
@@ -17,7 +20,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Chicken;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.Blocks;
 
 public class DingDongChickenEntity extends Chicken {
 
@@ -28,6 +33,8 @@ public class DingDongChickenEntity extends Chicken {
 		SynchedEntityData.defineId(DingDongChickenEntity.class, EntityDataSerializers.BOOLEAN);
 	private static final EntityDataAccessor<Integer> DING_SEQUENCE =
 		SynchedEntityData.defineId(DingDongChickenEntity.class, EntityDataSerializers.INT);
+	private static final EntityDataAccessor<Boolean> HAS_VOICE_PACK =
+		SynchedEntityData.defineId(DingDongChickenEntity.class, EntityDataSerializers.BOOLEAN);
 
 	private int poweredTicks;
 	private int clientBellAnimationTicks;
@@ -43,6 +50,7 @@ public class DingDongChickenEntity extends Chicken {
 		super.defineSynchedData(builder);
 		builder.define(POWERED, false);
 		builder.define(DING_SEQUENCE, 0);
+		builder.define(HAS_VOICE_PACK, false);
 	}
 
 	@Override
@@ -69,11 +77,27 @@ public class DingDongChickenEntity extends Chicken {
 
 	@Override
 	public InteractionResult mobInteract(Player player, InteractionHand hand) {
+		ItemStack heldItem = player.getItemInHand(hand);
+		if (heldItem.is(Blocks.NOTE_BLOCK.asItem()) && !hasVoicePack()) {
+			level().playSound(player, getX(), getY(), getZ(), SoundEvents.NOTE_BLOCK_PLING.value(),
+				SoundSource.NEUTRAL, 1.0F, 1.0F);
+			if (!level().isClientSide) {
+				entityData.set(HAS_VOICE_PACK, true);
+				if (!player.hasInfiniteMaterials())
+					heldItem.shrink(1);
+			}
+			return InteractionResult.sidedSuccess(level().isClientSide);
+		}
+
 		InteractionResult original = super.mobInteract(player, hand);
 		if (original.consumesAction())
 			return original;
 
-		AllSoundEvents.DESK_BELL_USE.play(level(), player, blockPosition());
+		if (hasVoicePack())
+			level().playSound(player, getX(), getY(), getZ(), CBSoundEvents.DING_DONG_CHICKEN_VOICE_PACK.get(),
+				SoundSource.NEUTRAL, 1.0F, 1.0F);
+		else
+			AllSoundEvents.DESK_BELL_USE.play(level(), player, blockPosition());
 		if (!level().isClientSide)
 			activate();
 		return InteractionResult.sidedSuccess(level().isClientSide);
@@ -88,6 +112,17 @@ public class DingDongChickenEntity extends Chicken {
 
 	public boolean isPowered() {
 		return entityData.get(POWERED);
+	}
+
+	public boolean hasVoicePack() {
+		return entityData.get(HAS_VOICE_PACK);
+	}
+
+	@Override
+	public float getPickRadius() {
+		// The bell rises above the chicken's collision box. Extend only selection so the
+		// visible bell can be clicked without making the chicken physically taller.
+		return 0.3F * getAgeScale() * getScale();
 	}
 
 	public float getBellAnimation(float partialTick) {
@@ -124,6 +159,7 @@ public class DingDongChickenEntity extends Chicken {
 	public void addAdditionalSaveData(CompoundTag tag) {
 		super.addAdditionalSaveData(tag);
 		tag.putInt("DingDongPowerTicks", poweredTicks);
+		tag.putBoolean("DingDongVoicePack", hasVoicePack());
 	}
 
 	@Override
@@ -131,6 +167,7 @@ public class DingDongChickenEntity extends Chicken {
 		super.readAdditionalSaveData(tag);
 		poweredTicks = Math.max(0, tag.getInt("DingDongPowerTicks"));
 		entityData.set(POWERED, poweredTicks > 0);
+		entityData.set(HAS_VOICE_PACK, tag.getBoolean("DingDongVoicePack"));
 	}
 
 	@Nullable

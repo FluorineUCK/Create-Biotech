@@ -191,6 +191,9 @@ public class CreateBiotechClient {
 		java.util.function.Consumer<net.minecraft.resources.ResourceLocation> register = location ->
 			event.register(new ModelResourceLocation(location, ModelResourceLocation.STANDALONE_VARIANT));
 		register.accept(CreateBiotech.asResource("block/universal_joint_endpoint_slime_overlay"));
+		register.accept(DingDongChickenRenderer.BELL_BASE_MODEL.modelLocation());
+		register.accept(DingDongChickenRenderer.BELL_MODEL.modelLocation());
+		register.accept(DingDongChickenRenderer.BELL_PLUNGER_MODEL.modelLocation());
 		register.accept(AutomaticFishReleaseMachineRenderer.BLADE_CLAMP_MODEL_LOCATION);
 		register.accept(HalfShaftVisual.MODEL.modelLocation());
 		register.accept(CreateBiotech.asResource("block/blast_chamber_display/panel"));
