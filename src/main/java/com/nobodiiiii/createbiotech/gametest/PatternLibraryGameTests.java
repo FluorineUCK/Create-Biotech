@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.gametest;
 
+import java.io.IOException;
+import java.io.InputStream;
 import java.util.List;
 import java.util.Objects;
 import java.util.UUID;
@@ -36,6 +38,10 @@ import net.minecraft.core.GlobalPos;
 import net.minecraft.gametest.framework.GameTest;
 import net.minecraft.gametest.framework.GameTestHelper;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
+import net.minecraft.nbt.NbtAccounter;
+import net.minecraft.nbt.NbtIo;
+import net.minecraft.nbt.Tag;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -216,6 +222,7 @@ public final class PatternLibraryGameTests {
 	@GameTest(templateNamespace = "minecraft", template = "empty", timeoutTicks = 60)
 	public static void seventeenPositionAxisIsTooWide(GameTestHelper helper) {
 		ServerLevel level = helper.getLevel();
+		assertEmptyTemplateFixture(helper);
 		BlockPos lower = helper.absolutePos(new BlockPos(1, 2, 2));
 		level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
 		placeCore(level, lower, null);
@@ -363,21 +370,32 @@ public final class PatternLibraryGameTests {
 		level.setBlock(lower.above(), Blocks.AIR.defaultBlockState(), Block.UPDATE_ALL);
 
 		helper.runAfterDelay(ASSERTION_DELAY, () -> {
-			List<Villager> matching = entities(level, Villager.class, around(lower, 6)).stream()
-				.filter(villager -> villager.getUUID().equals(sourceUuid)).toList();
-			List<ItemEntity> recovery = entities(level, ItemEntity.class, around(lower, 6)).stream()
+			List<Villager> allVillagers = entities(level, Villager.class, around(lower, 6));
+			List<ItemEntity> allItems = entities(level, ItemEntity.class, around(lower, 6));
+			List<ItemEntity> recovery = allItems.stream()
 				.filter(item -> CapturedEntityBoxHelper.hasCapturedEntity(item.getItem())).toList();
-			helper.assertValueEqual(entities(level, CardboardBoxEntity.class,
-				around(lower, 6)).size(), 0,
-				"Upper delegation must not leave a second custom dropped-box entity");
-			helper.assertValueEqual(matching.size() + recovery.size(), 1,
+			List<CardboardBoxEntity> customBoxes = entities(level, CardboardBoxEntity.class,
+				around(lower, 6));
+			helper.assertValueEqual(customBoxes.size(), 0,
+				"Upper delegation must not leave a custom dropped-box entity");
+			helper.assertValueEqual(allVillagers.size() + allItems.size(), 1,
 				"Upper removal must delegate one lower transaction with one conserved snapshot");
-			helper.assertFalse(!matching.isEmpty() && !recovery.isEmpty(),
-				"Upper delegation must never emit both a librarian and a recovery box");
-			if (!matching.isEmpty())
-				assertHealth(helper, matching.getFirst(), CAPTURED_HEALTH,
+			if (!allVillagers.isEmpty()) {
+				helper.assertValueEqual(allVillagers.size(), 1,
+					"Direct release must emit exactly one Villager total");
+				helper.assertValueEqual(allItems.size(), 0,
+					"Direct release must not emit any ItemEntity");
+				helper.assertValueEqual(allVillagers.getFirst().getUUID(), sourceUuid,
+					"The only released Villager must retain the original UUID");
+				assertHealth(helper, allVillagers.getFirst(), CAPTURED_HEALTH,
 					"Delegated direct release must retain captured health");
-			if (!recovery.isEmpty()) {
+			} else {
+				helper.assertValueEqual(allVillagers.size(), 0,
+					"Recovery must not also emit a Villager");
+				helper.assertValueEqual(allItems.size(), 1,
+					"Recovery must emit exactly one ItemEntity total");
+				helper.assertValueEqual(recovery.size(), 1,
+					"The only ItemEntity must be the filled recovery box");
 				Entity nested = CapturedEntityBoxHelper.createCapturedEntityPreservingUuid(
 					recovery.getFirst().getItem(), level);
 				helper.assertTrue(nested instanceof Villager,
@@ -460,24 +478,37 @@ public final class PatternLibraryGameTests {
 					ClusterBindingService.BindingAccess.READY,
 					"The core must reconcile as a READY replica");
 				assertCommittedIndex(helper, server, clusterId);
+				PatternQuery queued = new PatternQuery(UUID.randomUUID(), coordinator.memberId(),
+					logisticsId, new StackKey(new ItemStack(Items.GOLD_INGOT)), 23, 0);
+				helper.assertTrue(core.enqueueQuery(queued),
+					"A READY core must accept the query used by the offline advancement fixture");
+				CompoundTag queuedIndex = serializedIndex(core, level);
+				helper.assertValueEqual(queuedIndex.getList("Queries", Tag.TAG_COMPOUND).size(), 1,
+					"The offline advancement fixture must begin with one queued query");
 
 				ClusterMemberIndex.unregister(server, coordinator);
 				helper.assertValueEqual(ClusterBindingService.bindingAccess(server, core),
 					ClusterBindingService.BindingAccess.AUTHORITY_OFFLINE,
 					"Removing the committed coordinator must close the access gate");
-				core.tick();
-				CompoundTag before = core.saveWithoutMetadata(level.registryAccess());
 				PatternQuery denied = new PatternQuery(UUID.randomUUID(), coordinator.memberId(),
 					logisticsId, new StackKey(new ItemStack(Items.IRON_INGOT)), 17, 0);
 				helper.assertFalse(core.enqueueQuery(denied),
 					"An offline authority must reject enqueue at the server gate");
 				core.tick();
-				CompoundTag after = core.saveWithoutMetadata(level.registryAccess());
-				helper.assertValueEqual(after, before,
-					"Rejected enqueue and advancement must not mutate queue or cursor state");
-				helper.succeed();
-			} finally {
+				helper.assertValueEqual(serializedIndex(core, level), queuedIndex,
+					"A public offline tick must not advance the queued query or cursor");
+				helper.runAfterDelay(1, () -> {
+					try {
+						helper.assertValueEqual(serializedIndex(core, level), queuedIndex,
+							"A natural offline server tick must leave the queued query and cursor byte-identical");
+						helper.succeed();
+					} finally {
+						Create.LOGISTICS.linkRemoved(logisticsId, realLink);
+					}
+				});
+			} catch (RuntimeException | Error failure) {
 				Create.LOGISTICS.linkRemoved(logisticsId, realLink);
+				throw failure;
 			}
 		});
 	}
@@ -493,6 +524,38 @@ public final class PatternLibraryGameTests {
 		if (!CapturedEntityBoxHelper.captureEntity(box, villager))
 			throw new IllegalStateException("Could not capture GameTest librarian");
 		return box;
+	}
+
+	private static void assertEmptyTemplateFixture(GameTestHelper helper) {
+		try (InputStream stream = PatternLibraryGameTests.class
+			.getResourceAsStream("/data/minecraft/structure/empty.nbt")) {
+			helper.assertTrue(stream != null, "minecraft:empty must be present on the runtime classpath");
+			CompoundTag root = NbtIo.readCompressed(Objects.requireNonNull(stream),
+				NbtAccounter.unlimitedHeap());
+			ListTag size = root.getList("size", Tag.TAG_INT);
+			helper.assertValueEqual(size.size(), 3, "Template size must contain three axes");
+			helper.assertTrue(size.getInt(0) >= 18,
+				"Template X size must contain relative coordinate x=17");
+			helper.assertTrue(size.getInt(1) >= 8 && size.getInt(2) >= 8,
+				"Template Y/Z size must contain every fixture");
+			helper.assertValueEqual(root.getList("palette", Tag.TAG_COMPOUND).size(), 0,
+				"Empty template must not define a block palette");
+			helper.assertValueEqual(root.getList("blocks", Tag.TAG_COMPOUND).size(), 0,
+				"Empty template must not place blocks");
+			helper.assertValueEqual(root.getList("entities", Tag.TAG_COMPOUND).size(), 0,
+				"Empty template must not place entities");
+			helper.forEveryBlockInStructure(pos -> helper.assertTrue(
+				helper.getLevel().getBlockState(pos).isAir(),
+				"Empty template placed content at " + pos.toShortString()));
+		} catch (IOException exception) {
+			helper.fail("Could not decode minecraft:empty: " + exception.getMessage());
+		}
+	}
+
+	private static CompoundTag serializedIndex(PatternStorageCoreBlockEntity core,
+		ServerLevel level) {
+		return core.saveWithoutMetadata(level.registryAccess())
+			.getCompound("ServerState").getCompound("PatternIndex").copy();
 	}
 
 	private static Villager loadedLibrarian(ItemStack snapshot, ServerLevel level) {
