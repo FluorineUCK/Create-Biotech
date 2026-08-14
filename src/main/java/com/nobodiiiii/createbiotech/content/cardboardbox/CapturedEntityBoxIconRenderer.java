@@ -37,7 +37,8 @@ public final class CapturedEntityBoxIconRenderer {
 	private static final float LARGE_BOX_HEIGHT = 1.0f;
 	private static final float FACE_OFFSET = 1.0f / 128.0f;
 	private static final float MAX_FLATTENED_DEPTH_OFFSET = 1.0f / 512.0f;
-	private static final float ICON_SCALE = 0.6f;
+	private static final float ICON_FRAME_FILL = 0.6f;
+	private static final float MAX_AUTO_RENDER_SCALE = 2.0f;
 	private static final float ITEM_PLANE_TO_FACE_Y_ROT = itemPlaneToFaceYRot(ICON_FACE);
 	private static final ItemStack ENTITY_ITEM_TRANSFORM = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get());
 
@@ -81,8 +82,7 @@ public final class CapturedEntityBoxIconRenderer {
 					.pose());
 
 				applyEntityItemTransform(iconPoseStack, face);
-				float renderScale =
-					BlockCenteredRenderedLivingEntityItemRenderer.getVertexBasedAutoScale(capturedEntity, 1.0f);
+				float renderScale = getProjectedAutoScale(capturedEntity, iconPoseStack, boxToRender, face, packedLight);
 				FaceAlignment alignment =
 					measureGeometryAlignment(capturedEntity, renderScale, iconPoseStack, boxToRender, face, packedLight);
 				MultiBufferSource clippedBuffer =
@@ -93,14 +93,25 @@ public final class CapturedEntityBoxIconRenderer {
 			});
 	}
 
+	private static float getProjectedAutoScale(LivingEntity entity, PoseStack poseStack, Matrix4f boxToRender,
+		FaceBounds face, int packedLight) {
+		GeometryBounds bounds = measureProjectedBounds(entity, 1.0f, poseStack, boxToRender, packedLight);
+		if (!bounds.hasVertices())
+			return 1.0f;
+
+		float projectedWidth = bounds.sizeZ();
+		float projectedHeight = bounds.sizeY();
+		if (projectedWidth <= 1.0e-6f || projectedHeight <= 1.0e-6f)
+			return 1.0f;
+
+		float widthScale = face.width() * ICON_FRAME_FILL / projectedWidth;
+		float heightScale = face.height() * ICON_FRAME_FILL / projectedHeight;
+		return Math.min(Math.min(widthScale, heightScale), MAX_AUTO_RENDER_SCALE);
+	}
+
 	private static FaceAlignment measureGeometryAlignment(LivingEntity entity, float renderScale,
 		PoseStack poseStack, Matrix4f boxToRender, FaceBounds face, int packedLight) {
-		GeometryBounds bounds = new GeometryBounds();
-		Matrix4f renderToBox = new Matrix4f(boxToRender).invert();
-		MultiBufferSource measuringBuffer = renderType -> new GeometryBoundsVertexConsumer(renderToBox, bounds);
-
-		BlockCenteredRenderedLivingEntityItemRenderer.renderBlockCenteredEntity(entity, renderScale, poseStack,
-			measuringBuffer, packedLight);
+		GeometryBounds bounds = measureProjectedBounds(entity, renderScale, poseStack, boxToRender, packedLight);
 		if (!bounds.hasVertices())
 			return FaceAlignment.none();
 
@@ -110,6 +121,16 @@ public final class CapturedEntityBoxIconRenderer {
 			bounds.minX() + xAlignment, bounds.maxX() + xAlignment);
 	}
 
+	private static GeometryBounds measureProjectedBounds(LivingEntity entity, float renderScale, PoseStack poseStack,
+		Matrix4f boxToRender, int packedLight) {
+		GeometryBounds bounds = new GeometryBounds();
+		Matrix4f renderToBox = new Matrix4f(boxToRender).invert();
+		MultiBufferSource measuringBuffer = renderType -> new GeometryBoundsVertexConsumer(renderToBox, bounds);
+		BlockCenteredRenderedLivingEntityItemRenderer.renderBlockCenteredEntity(entity, renderScale, poseStack,
+			measuringBuffer, packedLight);
+		return bounds;
+	}
+
 	private static void applyEntityItemTransform(PoseStack poseStack, FaceBounds face) {
 		Minecraft minecraft = Minecraft.getInstance();
 		BakedModel model = minecraft.getItemRenderer()
@@ -117,7 +138,7 @@ public final class CapturedEntityBoxIconRenderer {
 
 		poseStack.translate(face.x + FACE_OFFSET, face.centerY(), face.centerZ());
 		poseStack.mulPose(Axis.YP.rotationDegrees(ITEM_PLANE_TO_FACE_Y_ROT));
-		float scale = face.itemScale() * ICON_SCALE;
+		float scale = face.itemScale();
 		poseStack.scale(scale, scale, scale);
 		ClientHooks.handleCameraTransforms(poseStack, model, ItemDisplayContext.GUI, false);
 		poseStack.translate(-0.5f, -0.5f, -0.5f);
@@ -242,6 +263,14 @@ public final class CapturedEntityBoxIconRenderer {
 
 		private float centerZ() {
 			return (minZ + maxZ) / 2.0f;
+		}
+
+		private float sizeY() {
+			return maxY - minY;
+		}
+
+		private float sizeZ() {
+			return maxZ - minZ;
 		}
 	}
 
