@@ -12,7 +12,6 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.foundation.render.BlockEntityModelElement;
 import com.nobodiiiii.createbiotech.foundation.render.BlockCenteredRenderedLivingEntityItemRenderer;
-import com.nobodiiiii.createbiotech.foundation.render.RenderedLivingEntityItemRenderer;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.client.Minecraft;
@@ -82,7 +81,8 @@ public final class CapturedEntityBoxIconRenderer {
 					.pose());
 
 				applyEntityItemTransform(iconPoseStack, face);
-				float renderScale = RenderedLivingEntityItemRenderer.getEntityRenderScale(capturedEntity, 1.0f);
+				float renderScale =
+					BlockCenteredRenderedLivingEntityItemRenderer.getVertexBasedAutoScale(capturedEntity, 1.0f);
 				FaceAlignment alignment =
 					measureGeometryAlignment(capturedEntity, renderScale, iconPoseStack, boxToRender, face, packedLight);
 				MultiBufferSource clippedBuffer =

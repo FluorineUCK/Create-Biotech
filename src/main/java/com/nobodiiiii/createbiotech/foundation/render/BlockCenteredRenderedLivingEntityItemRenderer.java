@@ -29,6 +29,9 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 	extends BlockEntityWithoutLevelRenderer {
 
 	private static final Vector3f BLOCK_CENTER = new Vector3f(0.5f, 0.5f, 0.5f);
+	private static final float MIN_AUTO_SCALE_DIMENSION = 0.75f;
+	private static final float BASE_AUTO_RENDER_SCALE = 1.75f;
+	private static final float MAX_AUTO_RENDER_SCALE = 2.0f;
 	private static final float DEFAULT_ENTITY_Y_ROTATION = 90.0f;
 	private static final float FIXED_ENTITY_Y_ROTATION = 180.0f;
 
@@ -92,6 +95,20 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 		poseStack.popPose();
 	}
 
+	/**
+	 * Calculates automatic scaling exclusively from the entity's rendered vertices.
+	 * Entities that emit no vertices keep the supplied multiplier instead of falling
+	 * back to their collision dimensions.
+	 */
+	public static float getVertexBasedAutoScale(LivingEntity entity, float scaleMultiplier) {
+		GeometryBounds bounds = measureGeometryBounds(entity);
+		if (!bounds.hasVertices())
+			return scaleMultiplier;
+
+		float largestDimension = Math.max(bounds.largestDimension(), MIN_AUTO_SCALE_DIMENSION);
+		return Math.min(BASE_AUTO_RENDER_SCALE / largestDimension, MAX_AUTO_RENDER_SCALE) * scaleMultiplier;
+	}
+
 	private static void renderBlockCenteredEntity(LivingEntity entity, Vector3f geometryCenter, float scaleMultiplier,
 		float yRotation, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
 		poseStack.translate(BLOCK_CENTER.x, BLOCK_CENTER.y, BLOCK_CENTER.z);
@@ -111,14 +128,19 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 	}
 
 	private static Vector3f measureGeometryCenter(LivingEntity entity) {
-		GeometryBounds bounds = new GeometryBounds();
-		MultiBufferSource measuringBuffer = renderType -> new GeometryBoundsVertexConsumer(bounds);
-		renderRawEntity(entity, new PoseStack(), measuringBuffer, LightTexture.FULL_BRIGHT);
+		GeometryBounds bounds = measureGeometryBounds(entity);
 		if (bounds.hasVertices())
 			return bounds.center();
 
 		EntityDimensions dimensions = entity.getDimensions(entity.getPose());
 		return new Vector3f(0, dimensions.height() / 2.0f, 0);
+	}
+
+	private static GeometryBounds measureGeometryBounds(LivingEntity entity) {
+		GeometryBounds bounds = new GeometryBounds();
+		MultiBufferSource measuringBuffer = renderType -> new GeometryBoundsVertexConsumer(bounds);
+		renderRawEntity(entity, new PoseStack(), measuringBuffer, LightTexture.FULL_BRIGHT);
+		return bounds;
 	}
 
 	private static void renderRawEntity(LivingEntity entity, PoseStack poseStack, MultiBufferSource buffer,
@@ -188,6 +210,10 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 
 		private Vector3f center() {
 			return new Vector3f((minX + maxX) / 2.0f, (minY + maxY) / 2.0f, (minZ + maxZ) / 2.0f);
+		}
+
+		private float largestDimension() {
+			return Math.max(Math.max(maxX - minX, maxY - minY), maxZ - minZ);
 		}
 	}
 
