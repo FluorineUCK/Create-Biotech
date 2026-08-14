@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.dingdongchicken;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.simibubi.create.AllBlocks;
+import com.simibubi.create.AllPartialModels;
 import com.simibubi.create.content.redstone.deskBell.DeskBellBlock;
 
 import net.createmod.catnip.render.CachedBuffers;
@@ -63,23 +64,54 @@ public class DingDongChickenRenderer
 			poseStack.mulPose(Axis.YP.rotationDegrees(netHeadYaw));
 			poseStack.mulPose(Axis.XP.rotationDegrees(headPitch));
 
-			float animation = entity.getBellAnimation(partialTick);
-			if (animation > 0) {
-				float phase = (1 - animation) * Mth.PI * 8;
-				poseStack.mulPose(Axis.ZP.rotationDegrees(Mth.sin(phase) * animation * 5));
-			}
-
-			// Half-size Create desk bell, standing upright on the chicken's neck.
+			// Full-size Create desk bell, standing upright on the chicken's neck.
 			poseStack.mulPose(Axis.XP.rotationDegrees(180));
-			poseStack.scale(0.5F, 0.5F, 0.5F);
 			poseStack.translate(-0.5F, 0, -0.5F);
+			float animation = entity.getBellAnimation(partialTick);
+			boolean animated = entity.isPowered() || animation > 0;
 			BlockState bellState = AllBlocks.DESK_BELL.getDefaultState()
-				.setValue(DeskBellBlock.POWERED, entity.isPowered());
+				.setValue(DeskBellBlock.POWERED, animated);
+			int overlay = LivingEntityRenderer.getOverlayCoords(entity, 0);
+
+			// Create's powered block model intentionally contains only the stationary base. The
+			// plunger and bell are rendered as independent partials below.
 			CachedBuffers.block(bellState)
 				.light(packedLight)
-				.overlay(LivingEntityRenderer.getOverlayCoords(entity, 0))
+				.overlay(overlay)
 				.renderInto(poseStack, buffer.getBuffer(RenderType.solid()));
+
+			if (animated)
+				renderAnimatedBell(poseStack, buffer, packedLight, overlay, bellState, animation,
+					entity.getId() * 0.7548777F);
 			poseStack.popPose();
+		}
+
+		private static void renderAnimatedBell(PoseStack poseStack, MultiBufferSource buffer,
+			int packedLight, int overlay, BlockState bellState, float animation,
+			float animationOffset) {
+			float plungerOffset = (float) (1 - 4
+				* Math.pow(Math.max(animation - 0.5F, 0) - 0.5F, 2));
+			float swingStrength = (float) Math.pow(animation, 1.25F);
+
+			CachedBuffers.partial(AllPartialModels.DESK_BELL_PLUNGER, bellState)
+				.translate(0, plungerOffset * -0.75F / 16F, 0)
+				.light(packedLight)
+				.overlay(overlay)
+				.renderInto(poseStack, buffer.getBuffer(RenderType.solid()));
+
+			CachedBuffers.partial(AllPartialModels.DESK_BELL_BELL, bellState)
+				.center()
+				.translate(0, -1F / 16F, 0)
+				.rotateXDegrees(swingStrength * 8
+					* Mth.sin(animation * Mth.PI * 4 + animationOffset))
+				.rotateZDegrees(swingStrength * 8
+					* Mth.cos(animation * Mth.PI * 4 + animationOffset))
+				.translate(0, 1F / 16F, 0)
+				.scale(0.995F)
+				.uncenter()
+				.light(packedLight)
+				.overlay(overlay)
+				.renderInto(poseStack, buffer.getBuffer(RenderType.solid()));
 		}
 	}
 }

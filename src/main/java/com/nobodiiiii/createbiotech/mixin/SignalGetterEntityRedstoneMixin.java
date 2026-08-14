@@ -30,6 +30,24 @@ public interface SignalGetterEntityRedstoneMixin {
 		return diodesOnly ? original : addEntitySignal(original, pos);
 	}
 
+	@ModifyReturnValue(method = "getDirectSignalTo", at = @At("RETURN"))
+	private int createBiotech$powerOccupiedBlockDirectly(int original, BlockPos pos) {
+		return addEntitySignal(original, pos);
+	}
+
+	@ModifyReturnValue(method = "getBestNeighborSignal", at = @At("RETURN"))
+	private int createBiotech$powerOccupiedBlock(int original, BlockPos pos) {
+		return addEntitySignal(original, pos);
+	}
+
+	@ModifyReturnValue(method = "hasNeighborSignal", at = @At("RETURN"))
+	private boolean createBiotech$powerOccupiedBlock(boolean original, BlockPos pos) {
+		if (original || !((Object) this instanceof EntityRedstoneLevelAccess access))
+			return original;
+		EntityRedstoneIndex index = access.createBiotech$getEntityRedstoneIndex();
+		return index.hasAnySources() && index.isSource(pos);
+	}
+
 	private int addEntitySignal(int original, BlockPos pos) {
 		if (original >= 15 || !((Object) this instanceof EntityRedstoneLevelAccess access))
 			return original;

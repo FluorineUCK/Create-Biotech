@@ -82,10 +82,19 @@ public final class EntityRedstoneIndex {
 
 	public void notifySourceChanged(ServerLevel level, long packedPos) {
 		BlockPos pos = BlockPos.of(packedPos);
+		// A virtual source may share its cell with a real block. That block must be invited to
+		// re-evaluate its own powered state as well as the six ordinary neighboring consumers.
+		level.neighborChanged(pos, Blocks.REDSTONE_BLOCK, pos);
 		level.updateNeighborsAt(pos, Blocks.REDSTONE_BLOCK);
-		// The entity also supplies direct power. Notify weak-change consumers on the far side of
-		// adjacent conductors without taking over Minecraft's neighbor-update ordering.
 		level.updateNeighbourForOutputSignal(pos, Blocks.REDSTONE_BLOCK);
+
+		// Direct power can strongly power an adjacent conductor. Notify the consumers around each
+		// of those six cells too, so both activation and removal propagate symmetrically.
+		for (Direction direction : DIRECTIONS) {
+			BlockPos receiverPos = pos.relative(direction);
+			level.updateNeighborsAt(receiverPos, Blocks.REDSTONE_BLOCK);
+			level.updateNeighbourForOutputSignal(receiverPos, Blocks.REDSTONE_BLOCK);
+		}
 	}
 
 	/**
@@ -99,6 +108,8 @@ public final class EntityRedstoneIndex {
 		long packedWirePos = wirePos.asLong();
 		if (!twoHopCandidateReferences.containsKey(packedWirePos))
 			return 0;
+		if (isSource(packedWirePos))
+			return 15;
 		if (directReceiverReferences.containsKey(packedWirePos))
 			return 15;
 
