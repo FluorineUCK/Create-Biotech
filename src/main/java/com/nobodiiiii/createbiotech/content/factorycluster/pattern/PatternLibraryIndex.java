@@ -276,6 +276,8 @@ public final class PatternLibraryIndex {
 	int cachedPageCount() { return cache.size(); }
 	List<PatternQuery> activeQueries() { return List.copyOf(activeQueries); }
 	int activeQueryCount() { return activeQueries.size(); }
+	int readyReplyCount() { return readyReplies.size(); }
+	List<PatternPageError> pageErrors() { return cache.values().stream().filter(page -> page.kind() == CacheKind.INVALID).map(CachedPage::error).toList(); }
 	List<WorkLane> lastLaneTrace() { return lastTickStats.lanes(); }
 	int lastFingerprintUnits() { return lastTickStats.fingerprintUnits(); }
 	int lastQueryUnits() { return lastTickStats.queryUnits(); }

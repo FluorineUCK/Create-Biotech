@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.client;
 import java.util.function.Predicate;
 
 import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineRenderer;
+import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternStorageCoreRenderer;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberRenderer;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpRenderer;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineRenderer;
@@ -134,6 +135,7 @@ public class CreateBiotechClient {
 	public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.AUTOMATIC_FISH_RELEASE_MACHINE.get(),
 			AutomaticFishReleaseMachineRenderer::new);
+		event.registerBlockEntityRenderer(CBBlockEntityTypes.PATTERN_STORAGE_CORE.get(), PatternStorageCoreRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get(),
 			EvokerEnchantingChamberRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.EXPERIENCE_PUMP.get(), ExperiencePumpRenderer::new);
