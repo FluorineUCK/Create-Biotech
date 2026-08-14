@@ -323,19 +323,23 @@ final class ComputerTopologyController {
 		}
 		if (publish && elected != null) {
 			elected.publishCoordinatorMember(resolved.computers(), record.snapshot().computerIds());
-			ClusterBindingService.BindingAccess access =
-				resolved.world().bindingAccess(elected.coordinatorMember);
-			boolean coherent = elected.coordinatorMember.updateBindingAccess(access);
-			if (binding != null && (access != ClusterBindingService.BindingAccess.READY
-				|| !coherent)) {
-				ComputerAvailabilityReason unavailable = access
-					== ClusterBindingService.BindingAccess.CONFLICT
-					|| access == ClusterBindingService.BindingAccess.READY && !coherent
-						? ComputerAvailabilityReason.IDENTITY_CONFLICT
-						: ComputerAvailabilityReason.AUTHORITY_OFFLINE;
-				setReason(resolved.computers(), unavailable);
-			}
+			updateFoundationAccess(resolved, elected, binding);
 		}
+	}
+
+	private static void updateFoundationAccess(ResolvedSnapshot resolved,
+		ComputerBlockEntity elected, @Nullable ClusterBinding binding) {
+		ClusterBindingService.BindingAccess access =
+			resolved.world().bindingAccess(elected.coordinatorMember);
+		boolean coherent = elected.coordinatorMember.updateBindingAccess(access);
+		if (binding == null || access == ClusterBindingService.BindingAccess.READY && coherent)
+			return;
+		ComputerAvailabilityReason unavailable = access
+			== ClusterBindingService.BindingAccess.CONFLICT
+			|| access == ClusterBindingService.BindingAccess.READY && !coherent
+				? ComputerAvailabilityReason.IDENTITY_CONFLICT
+				: ComputerAvailabilityReason.AUTHORITY_OFFLINE;
+		setReason(resolved.computers(), unavailable);
 	}
 
 	static ComputerBlockEntity.EpochStartResult startEpoch(ComputerBlockEntity caller,
@@ -384,6 +388,26 @@ final class ComputerTopologyController {
 				|| !caller.coordinatorMember.updateBindingAccess(access))
 				return ComputerBlockEntity.EpochStartResult.BINDING_UNAVAILABLE;
 		}
+		ComputerBlockEntity.TopologyState authoritativeState = caller.topologyState();
+		ClusterBinding authoritativeBinding = authoritativeState.binding();
+		if (!authoritativeState.persistenceAvailable()
+			|| authoritativeState.computerId() == null
+			|| !authoritativeState.computerId().equals(record.coordinatorId())
+			|| !Objects.equals(authoritativeState.record(), record)
+			|| !authoritativeState.bindingValid() || authoritativeBinding == null
+			|| !authoritativeBinding.clusterId().equals(clusterId)
+			|| authoritativeState.epoch() != null || !authoritativeState.faults().isEmpty())
+			return ComputerBlockEntity.EpochStartResult.NOT_READY;
+		List<ComputerBlockEntity.TopologyState> finalStates = resolved.computers().stream()
+			.map(ComputerBlockEntity::topologyState).toList();
+		for (ComputerBlockEntity.TopologyState state : finalStates) {
+			if (!state.persistenceAvailable() || state.record() == null
+				|| !state.record().computerStructureMemberId()
+					.equals(record.computerStructureMemberId())
+				|| !state.bindingValid() || !Objects.equals(state.binding(), authoritativeBinding)
+				|| state.epoch() != null || !state.faults().isEmpty())
+				return ComputerBlockEntity.EpochStartResult.NOT_READY;
+		}
 		ClusterEpoch epoch;
 		try {
 			epoch = ClusterEpoch.freeze(clusterId, record.computerStructureMemberId(), scan.snapshot());
@@ -391,10 +415,10 @@ final class ComputerTopologyController {
 			return ComputerBlockEntity.EpochStartResult.NOT_READY;
 		}
 		for (int i = 0; i < resolved.computers().size(); i++)
-			if (!resolved.computers().get(i).topologyMatches(resolved.states().get(i)))
+			if (!resolved.computers().get(i).topologyMatches(finalStates.get(i)))
 				return ComputerBlockEntity.EpochStartResult.NOT_READY;
 		for (ComputerBlockEntity computer : resolved.computers())
-			computer.stageTopologyState(record, callerState.binding(), true, epoch, Set.of());
+			computer.stageTopologyState(record, authoritativeBinding, true, epoch, Set.of());
 		for (ComputerBlockEntity computer : resolved.computers()) {
 			computer.setAvailabilityReason(ComputerAvailabilityReason.NONE);
 			computer.publishTopologyChange();
@@ -566,8 +590,10 @@ final class ComputerTopologyController {
 				computer.setAvailabilityReason(reason);
 				computer.publishTopologyChange();
 			}
-			if (publish && elected != null)
+			if (publish && elected != null) {
 				elected.publishCoordinatorMember(resolved.computers(), snapshot.computerIds());
+				updateFoundationAccess(resolved, elected, elected.bindingState());
+			}
 			return ComputerBlockEntity.EpochCloseResult.CLOSED;
 		} finally {
 			synchronized (ACTIVE_CLOSES) { ACTIVE_CLOSES.remove(key); }

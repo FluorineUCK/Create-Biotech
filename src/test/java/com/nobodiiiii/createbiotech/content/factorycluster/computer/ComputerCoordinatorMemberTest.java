@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -165,12 +166,27 @@ public class ComputerCoordinatorMemberTest {
 					offline.be(LOW).coordinatorMember.memberId())),
 			ClusterBindingPreparation.ACTIVE);
 
-		List<LogisticsBinding> oversized = new ArrayList<>();
-		for (int i = 0; i <= ClusterBinding.MAX_BINDINGS; i++)
-			oversized.add(new LogisticsBinding(uuid(1000 + i), "n" + i));
-		assertThrows(IllegalArgumentException.class, () -> new ClusterBinding(uuid(300), 1,
+	}
+
+	@Test
+	void adapterAcceptsExactMaximumAndBindingValueRejectsMaximumPlusOne() {
+		Fixture fixture = readyBoundFixture();
+		ComputerCoordinatorMember adapter = fixture.be(LOW).coordinatorMember;
+		List<LogisticsBinding> maximum = new ArrayList<>();
+		for (int i = 0; i < ClusterBinding.MAX_BINDINGS; i++)
+			maximum.add(new LogisticsBinding(uuid(1000 + i), "n" + i));
+		ClusterBinding exactMaximum = new ClusterBinding(adapter.bindingState().clusterId(),
+			adapter.bindingState().revision() + 1,
 			new ClusterAuthority(ClusterMemberType.COMPUTER_COORDINATOR, adapter.memberId()),
-			oversized));
+			maximum);
+
+		assertEquals(ClusterBindingPreparation.READY,
+			adapter.prepareClusterBinding(exactMaximum));
+
+		List<LogisticsBinding> maximumPlusOne = new ArrayList<>(maximum);
+		maximumPlusOne.add(new LogisticsBinding(uuid(2000), "overflow"));
+		assertThrows(IllegalArgumentException.class, () -> new ClusterBinding(uuid(300), 1,
+			exactMaximum.authority(), maximumPlusOne));
 	}
 
 	@Test
@@ -328,6 +344,81 @@ public class ComputerCoordinatorMemberTest {
 		assertEquals(ComputerBlockEntity.EpochStartResult.STARTED,
 			ComputerTopologyController.startEpoch(ready.be(LOW),
 				ready.be(LOW).bindingState().clusterId(), ready, LIMITS));
+	}
+
+	@Test
+	void startEpochRecapturesAfterReadyAccessMutatesOwnerAndPropagatesLowerReplica() {
+		Fixture fixture = readyBoundFixture();
+		ComputerCoordinatorMember adapter = fixture.be(LOW).coordinatorMember;
+		ClusterBinding revisionTwo = binding(adapter, 2, adapter.bindingState().authority());
+		fixture.bindingAccessEffect = member -> {
+			assertSame(adapter, member);
+			ComputerBlockEntity owner = fixture.be(LOW);
+			owner.stagePreparedBinding(revisionTwo);
+			owner.publishPreparedBinding();
+			return ClusterBindingService.BindingAccess.READY;
+		};
+
+		assertEquals(ComputerBlockEntity.EpochStartResult.STARTED,
+			ComputerTopologyController.startEpoch(fixture.be(LOW), revisionTwo.clusterId(),
+				fixture, LIMITS));
+		fixture.computers.values().forEach(computer -> {
+			assertSame(revisionTwo, computer.bindingState());
+			assertTrue(computer.epoch().isPresent());
+		});
+	}
+
+	@Test
+	void normalClosePublishesPendingLowerCoordinatorReadyForImmediateBindingTransaction() {
+		Fixture fixture = readyBoundFixture(profiled(HIGH, pos(2)));
+		ClusterBinding initial = fixture.be(HIGH).bindingState();
+		assertEquals(ComputerBlockEntity.EpochStartResult.STARTED,
+			ComputerTopologyController.startEpoch(fixture.be(HIGH), initial.clusterId(),
+				fixture, LIMITS));
+		fixture.put(computer(LOW, pos(0), PROFILE));
+		fixture.snapshot = snapshot(List.of(profiledNode(LOW, pos(0)),
+			profiledNode(HIGH, pos(2))));
+		fixture.refresh(LOW);
+		int accessCallsBeforeClose = fixture.bindingAccessCalls;
+
+		assertEquals(ComputerBlockEntity.EpochCloseResult.CLOSED,
+			ComputerTopologyController.closeIdleEpoch(fixture.be(LOW),
+				fixture.be(HIGH).epoch().orElseThrow().epochId(), new ReadyQuiescence(),
+				fixture, LIMITS));
+
+		ComputerCoordinatorMember elected = fixture.be(LOW).publishedCoordinatorMember()
+			.orElseThrow();
+		assertEquals(accessCallsBeforeClose + 1, fixture.bindingAccessCalls);
+		assertTrue(elected.canRebind());
+		ClusterBinding next = binding(elected, initial.revision() + 1,
+			new ClusterAuthority(ClusterMemberType.COMPUTER_COORDINATOR, elected.memberId()));
+		assertEquals(ClusterBindingPreparation.READY,
+			elected.prepareClusterBinding(next));
+		elected.commitClusterBinding(next);
+		fixture.computers.values().forEach(computer -> assertSame(next, computer.bindingState()));
+	}
+
+	@Test
+	void normalCloseRecordsAuthorityOfflineWhenNewCoordinatorAccessIsNotReady() {
+		Fixture fixture = readyBoundFixture(profiled(HIGH, pos(2)));
+		ClusterBinding initial = fixture.be(HIGH).bindingState();
+		assertEquals(ComputerBlockEntity.EpochStartResult.STARTED,
+			ComputerTopologyController.startEpoch(fixture.be(HIGH), initial.clusterId(),
+				fixture, LIMITS));
+		fixture.put(computer(LOW, pos(0), PROFILE));
+		fixture.snapshot = snapshot(List.of(profiledNode(LOW, pos(0)),
+			profiledNode(HIGH, pos(2))));
+		fixture.refresh(LOW);
+		fixture.bindingAccess = ClusterBindingService.BindingAccess.AUTHORITY_OFFLINE;
+
+		assertEquals(ComputerBlockEntity.EpochCloseResult.CLOSED,
+			ComputerTopologyController.closeIdleEpoch(fixture.be(LOW),
+				fixture.be(HIGH).epoch().orElseThrow().epochId(), new ReadyQuiescence(),
+				fixture, LIMITS));
+
+		assertEquals(ComputerAvailabilityReason.AUTHORITY_OFFLINE,
+			fixture.be(LOW).availabilityReason());
+		assertFalse(fixture.be(LOW).coordinatorMember.canRebind());
 	}
 
 	private static void assertPreparationDoesNotMutate(Fixture fixture,
@@ -491,6 +582,9 @@ public class ComputerCoordinatorMemberTest {
 		private ComputerStructureScanner.State scanState;
 		private ClusterBindingService.BindingAccess bindingAccess =
 			ClusterBindingService.BindingAccess.CONFLICT;
+		private Function<ComputerCoordinatorMember,
+			ClusterBindingService.BindingAccess> bindingAccessEffect;
+		private int bindingAccessCalls;
 		private int probes;
 
 		private Fixture(NodeSpec... specs) {
@@ -553,7 +647,11 @@ public class ComputerCoordinatorMemberTest {
 		@Override public SpaceAddress address(BlockPos pos) { return ComputerCoordinatorMemberTest.address(pos); }
 		@Override public UUID newStructureMemberId() { return uuid(600); }
 		@Override public ClusterBindingService.BindingAccess bindingAccess(
-			ComputerCoordinatorMember member) { return bindingAccess; }
+			ComputerCoordinatorMember member) {
+			bindingAccessCalls++;
+			return bindingAccessEffect == null ? bindingAccess
+				: bindingAccessEffect.apply(member);
+		}
 		@Override public boolean enforceFoundationPublication() { return true; }
 	}
 
