@@ -476,6 +476,78 @@ public final class ComputerClusterGameTests {
 		});
 	}
 
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 80)
+	public static void forcedDestroyBlockDoubleFailureKeepsOccupiedComputerAndNoLoot(
+		GameTestHelper helper) {
+		assertEmptyTemplateFixture(helper);
+		ServerLevel level = helper.getLevel();
+		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
+		ComputerBlockEntity computer = placeComputer(level, pos, LOW_ID);
+		CapturedResident captured = capturedResident(level, NodeKind.LIBRARIAN, 4);
+		useBox(headlessPlayer(level, pos), level, pos, captured.box());
+		CompoundTag before = serverTag(computer, level);
+		DoubleFailureListener listener = new DoubleFailureListener(level, captured.uuid());
+		NeoForge.EVENT_BUS.register(listener);
+		try {
+			level.destroyBlock(pos, true);
+			assertOccupiedUnchanged(helper, level, pos, before);
+			level.destroyBlock(pos, true);
+			assertOccupiedUnchanged(helper, level, pos, before);
+			helper.assertValueEqual(listener.rejectedResidents, 2,
+				"Each forced destroy must reach exactly one resident release attempt");
+			helper.assertValueEqual(listener.rejectedRecoveries, 2,
+				"Each forced destroy must reach exactly one recovery attempt");
+		} finally {
+			NeoForge.EVENT_BUS.unregister(listener);
+		}
+		helper.runAfterDelay(3, () -> {
+			assertOccupiedUnchanged(helper, level, pos, before);
+			helper.assertValueEqual(countWorldItem(level, pos, 5, CBItems.COMPUTER.get()), 0L,
+				"Repeated destroyBlock(pos,true) rollback must never emit an empty Computer");
+			helper.assertValueEqual(filledRecoveryItems(level, pos, 5).size(), 0,
+				"Repeated forced rollback must leave no recovery output");
+			helper.succeed();
+		});
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 100)
+	public static void actualExplosionDoubleFailureKeepsOccupiedComputerAndNoLoot(
+		GameTestHelper helper) {
+		assertEmptyTemplateFixture(helper);
+		ServerLevel level = helper.getLevel();
+		BlockPos pos = helper.absolutePos(new BlockPos(4, 3, 4));
+		ComputerBlockEntity computer = placeComputer(level, pos, LOW_ID);
+		CapturedResident captured = capturedResident(level, NodeKind.LIBRARIAN, 4);
+		useBox(headlessPlayer(level, pos), level, pos, captured.box());
+		CompoundTag before = serverTag(computer, level);
+		DoubleFailureListener listener = new DoubleFailureListener(level, captured.uuid());
+		NeoForge.EVENT_BUS.register(listener);
+		try {
+			for (int attempt = 0; attempt < 2; attempt++) {
+				level.explode(null, pos.getX() + 0.5, pos.getY() + 0.5, pos.getZ() + 0.5,
+					4.0F, Level.ExplosionInteraction.TNT);
+				assertOccupiedUnchanged(helper, level, pos, before);
+			}
+			helper.assertValueEqual(listener.rejectedResidents, 2,
+				"Each actual explosion must reach exactly one resident release attempt");
+			helper.assertValueEqual(listener.rejectedRecoveries, 2,
+				"Each actual explosion must reach exactly one recovery attempt");
+		} finally {
+			NeoForge.EVENT_BUS.unregister(listener);
+		}
+		helper.runAfterDelay(3, () -> {
+			assertOccupiedUnchanged(helper, level, pos, before);
+			helper.assertValueEqual(countWorldItem(level, pos, 5, CBItems.COMPUTER.get()), 0L,
+				"Repeated explosion rollback must never emit an empty Computer");
+			helper.assertValueEqual(filledRecoveryItems(level, pos, 5).size(), 0,
+				"Repeated explosion rollback must leave no recovery output");
+			helper.assertValueEqual(entities(level, Entity.class, pos, 5).stream()
+				.filter(entity -> entity.getUUID().equals(captured.uuid())).count(), 0L,
+				"Repeated explosion rollback must leave no released resident");
+			helper.succeed();
+		});
+	}
+
 	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 140)
 	public static void realPanelPatternComputerBindingAndAuthorityReload(GameTestHelper helper) {
 		assertEmptyTemplateFixture(helper);

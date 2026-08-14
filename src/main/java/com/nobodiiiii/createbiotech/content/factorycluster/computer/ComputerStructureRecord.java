@@ -32,6 +32,15 @@ public record ComputerStructureRecord(UUID computerStructureMemberId, long revis
 		return tag;
 	}
 
+	public Optional<ComputerStructureRecord> revise(UUID coordinator,
+		ComputerStructureSnapshot revisedSnapshot) {
+		Objects.requireNonNull(coordinator, "coordinator");
+		Objects.requireNonNull(revisedSnapshot, "revisedSnapshot");
+		if (revision == Long.MAX_VALUE) return Optional.empty();
+		return Optional.of(new ComputerStructureRecord(computerStructureMemberId, revision + 1,
+			coordinator, revisedSnapshot));
+	}
+
 	public static Optional<ComputerStructureRecord> load(CompoundTag tag) {
 		if (tag == null || !tag.getAllKeys().equals(KEYS)
 			|| !has(tag, "Version", Tag.TAG_INT) || tag.getInt("Version") != VERSION

@@ -49,7 +49,6 @@ import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
 
 public class ComputerBlockEntity extends SmartBlockEntity {
-	private static final long TOPOLOGY_SCAN_INTERVAL_TICKS = 20;
 	private static final int VERSION = 1;
 	private static final String ROOT = "ComputerData";
 	private static final String CLIENT_ROOT = "ComputerClientState";
@@ -72,7 +71,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	private boolean persistenceAvailable = true;
 	private boolean topologyDirty;
 	private long topologyVersion;
-	private long lastTopologyCheck = Long.MIN_VALUE;
+	@Nullable private ComputerScanLease scanLease;
 	private ComputerAvailabilityReason availabilityReason = ComputerAvailabilityReason.NOT_READY;
 	private ComputerDisplayState displayState = ComputerDisplayState.IDLE;
 	private ComputerClientState clientState = emptyClientState();
@@ -94,6 +93,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	@Override public void addBehaviours(List<BlockEntityBehaviour> behaviours) {}
 	@Override
 	public void invalidate() {
+		detachScanLease();
 		invalidateCoordinatorPublication();
 		super.invalidate();
 	}
@@ -101,14 +101,31 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	public void tick() {
 		super.tick();
 		if (!(level instanceof ServerLevel serverLevel) || level.isClientSide) return;
-		long now = level.getGameTime();
-		if (!topologyDirty && lastTopologyCheck != Long.MIN_VALUE
-			&& now - lastTopologyCheck < TOPOLOGY_SCAN_INTERVAL_TICKS) return;
-		lastTopologyCheck = now;
-		topologyDirty = false;
-		ComputerTopologyController.refresh(this,
+		scheduledTopologyTick(level.getGameTime(),
 			ComputerTopologyController.realWorld(serverLevel),
 			ComputerStructureScanner.Limits.fromConfig());
+	}
+
+	void scheduledTopologyTick(long now, ComputerTopologyController.WorldAccess world,
+		ComputerStructureScanner.Limits limits) {
+		ComputerScanLease.tick(this, now, world, limits);
+	}
+
+	void markTopologyDirty() {
+		topologyDirty = true;
+		if (scanLease != null) scanLease.markDirty();
+	}
+
+	@Nullable ComputerScanLease scanLease() { return scanLease; }
+	void attachScanLease(ComputerScanLease lease) { scanLease = lease; }
+	void clearScanLease(ComputerScanLease lease) {
+		if (scanLease == lease) scanLease = null;
+	}
+	void consumeTopologyDirty() { topologyDirty = false; }
+	private void detachScanLease() {
+		ComputerScanLease lease = scanLease;
+		if (lease != null) lease.detach(this);
+		scanLease = null;
 	}
 
 	public Optional<UUID> computerId() { return Optional.ofNullable(computerId); }
@@ -379,12 +396,12 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 	public enum EpochCloseResult {
 		CLOSED, NO_EPOCH, EPOCH_MISMATCH, REQUIRES_REFORM, ROOTS_REMAIN,
 		RUNTIME_NOT_QUIESCENT, PARTIAL_UNLOADED, SPACE_UNCERTAIN, STRUCTURE_INVALID,
-		FROZEN_MEMBER_MISSING, IDENTITY_CONFLICT, PROFILE_NOT_READY
+		FROZEN_MEMBER_MISSING, IDENTITY_CONFLICT, PROFILE_NOT_READY, PERSISTENCE_INVALID
 	}
 	public enum ReformResult {
 		REFORMED, NO_EPOCH, EPOCH_MISMATCH, STOP_FAILED, ROOTS_REMAIN,
 		RUNTIME_NOT_QUIESCENT, PARTIAL_UNLOADED, SPACE_UNCERTAIN, STRUCTURE_INVALID,
-		IDENTITY_CONFLICT, PROFILE_NOT_READY
+		IDENTITY_CONFLICT, PROFILE_NOT_READY, PERSISTENCE_INVALID
 	}
 
 	void setDisplayState(ComputerDisplayState displayState) {
@@ -419,7 +436,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 		installedProfile = candidate.profile();
 		rawChildren.remove("Resident");
 		rawChildren.remove("Profile");
-		topologyDirty = true;
+		markTopologyDirty();
 		persistenceAvailable = validateCrossChildren();
 		topologyVersion++;
 		setChanged();
@@ -565,6 +582,7 @@ public class ComputerBlockEntity extends SmartBlockEntity {
 			ComputerClientState.load(compound).ifPresent(decoded -> clientState = decoded);
 			return;
 		}
+		detachScanLease();
 		invalidateCoordinatorPublication();
 		super.read(tag, registries, false);
 		resetForServerRead();

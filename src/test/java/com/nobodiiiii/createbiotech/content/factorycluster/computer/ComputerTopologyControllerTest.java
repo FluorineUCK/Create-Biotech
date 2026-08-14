@@ -41,6 +41,8 @@ class ComputerTopologyControllerTest {
 	private static final RegistryAccess REGISTRIES = RegistryAccess.EMPTY;
 	private static final ComputerStructureScanner.Limits LIMITS =
 		new ComputerStructureScanner.Limits(3, 4, 64, 16);
+	private static final ComputerStructureScanner.Limits MAX_LIMITS =
+		new ComputerStructureScanner.Limits(3, 16, 4096, 256);
 	private static final UUID LOW = uuid(1);
 	private static final UUID MID = uuid(2);
 	private static final UUID HIGH = uuid(3);
@@ -373,6 +375,204 @@ class ComputerTopologyControllerTest {
 
 		assertEquals(ComputerAvailabilityReason.NONE, fixture.be(LOW).availabilityReason());
 		assertEquals(first, fixture.be(HIGH).currentStructureRecord().orElseThrow());
+	}
+
+	@Test
+	void stableMaximumCohortUsesOneProductionScheduledScanPerCycle() {
+		Fixture fixture = maximumFixture(256);
+		UUID owner = fixture.snapshot.nodes().getFirst().computerId();
+		ComputerTopologyController.refresh(fixture.be(owner), fixture, MAX_LIMITS);
+		fixture.resetProbes();
+
+		List<ComputerBlockEntity> reverse = new ArrayList<>(fixture.computers.values());
+		java.util.Collections.reverse(reverse);
+		for (ComputerBlockEntity computer : reverse)
+			computer.scheduledTopologyTick(40, fixture, MAX_LIMITS);
+
+		assertEquals(1, fixture.scanCalls);
+	}
+
+	@Test
+	void freshNonMinimumProductionScheduledTickDiscoversAndAttachesWholeCohortWithinTwoScans() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+
+		fixture.be(HIGH).scheduledTopologyTick(0, fixture, LIMITS);
+		fixture.be(LOW).scheduledTopologyTick(0, fixture, LIMITS);
+
+		assertTrue(fixture.scanCalls <= 2, "fresh non-owner discovery must be structure-constant");
+		assertTrue(fixture.computers.values().stream()
+			.allMatch(computer -> computer.currentStructureRecord().isPresent()));
+		fixture.resetProbes();
+		fixture.be(HIGH).scheduledTopologyTick(1, fixture, LIMITS);
+		fixture.be(LOW).scheduledTopologyTick(1, fixture, LIMITS);
+		assertEquals(0, fixture.scanCalls);
+	}
+
+	@Test
+	void nonOwnerDirtyProductionScheduledTickWakesLeaseOwnerOnly() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.be(HIGH).scheduledTopologyTick(0, fixture, LIMITS);
+		fixture.resetProbes();
+
+		fixture.be(HIGH).markTopologyDirty();
+		fixture.be(HIGH).scheduledTopologyTick(1, fixture, LIMITS);
+		assertEquals(0, fixture.scanCalls);
+		fixture.be(LOW).scheduledTopologyTick(1, fixture, LIMITS);
+
+		assertEquals(1, fixture.scanCalls);
+	}
+
+	@Test
+	void reloadedMemberRebuildsProductionLeaseFromPersistedSnapshotWithoutExtraScan() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.be(LOW).scheduledTopologyTick(0, fixture, LIMITS);
+		fixture.resetProbes();
+		fixture.replaceLoadedObject(HIGH);
+
+		fixture.be(HIGH).scheduledTopologyTick(1, fixture, LIMITS);
+
+		assertEquals(0, fixture.scanCalls);
+		fixture.be(LOW).scheduledTopologyTick(20, fixture, LIMITS);
+		assertEquals(1, fixture.scanCalls);
+	}
+
+	@Test
+	void knownLeaseWithUnloadedChunkFansPartialWithoutFullScan() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.be(LOW).scheduledTopologyTick(0, fixture, LIMITS);
+		fixture.resetProbes();
+		fixture.unloadedChunks.addAll(fixture.snapshot.containingChunks());
+
+		fixture.be(LOW).scheduledTopologyTick(20, fixture, LIMITS);
+
+		assertEquals(0, fixture.scanCalls);
+		assertTrue(fixture.computers.values().stream().allMatch(computer ->
+			computer.availabilityReason() == ComputerAvailabilityReason.PARTIAL_UNLOADED));
+	}
+
+	@Test
+	void inactiveSplitDetachesExcludedMembersAndEachProductionLeaseRediscovers() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.be(LOW).scheduledTopologyTick(0, fixture, LIMITS);
+		UUID structureId = fixture.be(LOW).computerStructureMemberId().orElseThrow();
+		ComputerStructureSnapshot lowSide = snapshotAt(0, List.of(profiledNode(LOW, pos(0))));
+		ComputerStructureSnapshot highSide = snapshotAt(2, List.of(profiledNode(HIGH, pos(2))));
+		fixture.scanSnapshotsBySeed.put(pos(0), lowSide);
+		fixture.scanSnapshotsBySeed.put(pos(2), highSide);
+		fixture.resetProbes();
+
+		fixture.be(LOW).scheduledTopologyTick(20, fixture, LIMITS);
+		fixture.be(HIGH).scheduledTopologyTick(20, fixture, LIMITS);
+
+		assertEquals(2, fixture.scanCalls);
+		assertEquals(lowSide, fixture.be(LOW).currentStructureSnapshot().orElseThrow());
+		assertEquals(ComputerAvailabilityReason.IDENTITY_CONFLICT,
+			fixture.be(HIGH).availabilityReason());
+		assertEquals(structureId, fixture.be(HIGH).computerStructureMemberId().orElseThrow());
+		fixture.be(HIGH).scheduledTopologyTick(21, fixture, LIMITS);
+		assertEquals(2, fixture.scanCalls);
+	}
+
+	@Test
+	void inactiveOwnerRemovalTransfersProductionProbeToRemainingMinimum() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.be(LOW).scheduledTopologyTick(0, fixture, LIMITS);
+		UUID structureId = fixture.be(LOW).computerStructureMemberId().orElseThrow();
+		ComputerBlockEntity removed = fixture.be(LOW);
+		fixture.remove(LOW);
+		removed.invalidate();
+		fixture.snapshot = snapshotAt(2, List.of(profiledNode(HIGH, pos(2))));
+		fixture.resetProbes();
+
+		fixture.be(HIGH).scheduledTopologyTick(1, fixture, LIMITS);
+
+		assertEquals(1, fixture.scanCalls);
+		assertEquals(HIGH, fixture.be(HIGH).currentStructureRecord().orElseThrow().coordinatorId());
+		assertEquals(structureId, fixture.be(HIGH).computerStructureMemberId().orElseThrow());
+	}
+
+	@Test
+	void activeOwnerRemovalKeepsFrozenEpochAndReportsCoordinatorMissingThroughLease() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.be(LOW).scheduledTopologyTick(0, fixture, LIMITS);
+		CompoundTag frozen = fixture.be(HIGH).epoch().orElseThrow().save();
+		ComputerBlockEntity removed = fixture.be(LOW);
+		fixture.remove(LOW);
+		removed.invalidate();
+		fixture.snapshot = snapshotAt(2, List.of(profiledNode(HIGH, pos(2))));
+		fixture.resetProbes();
+
+		fixture.be(HIGH).scheduledTopologyTick(1, fixture, LIMITS);
+
+		assertEquals(1, fixture.scanCalls);
+		assertEquals(ComputerAvailabilityReason.COORDINATOR_MISSING,
+			fixture.be(HIGH).availabilityReason());
+		assertEquals(frozen, fixture.be(HIGH).epoch().orElseThrow().save());
+	}
+
+	@Test
+	void sableAddressOrSpaceMismatchUsesDiscoveryInsteadOfPersistedLease() {
+		Fixture addressMismatch = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		addressMismatch.refresh(LOW);
+		addressMismatch.resetProbes();
+		addressMismatch.addressOverrides.put(pos(2), address(pos(2).above()));
+		addressMismatch.be(HIGH).scheduledTopologyTick(0, addressMismatch, LIMITS);
+		assertEquals(1, addressMismatch.scanCalls);
+
+		Fixture spaceMismatch = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		spaceMismatch.refresh(LOW);
+		spaceMismatch.resetProbes();
+		spaceMismatch.wrongSpacePositions.add(pos(2));
+		spaceMismatch.be(HIGH).scheduledTopologyTick(0, spaceMismatch, LIMITS);
+		assertEquals(1, spaceMismatch.scanCalls);
+	}
+
+	@Test
+	void maxRevisionChangedReconcileMarksPersistenceInvalidWithoutRewritingRecords() {
+		Fixture fixture = fixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		fixture.refresh(LOW);
+		installMaximumRevision(fixture);
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+		fixture.snapshot = withAdditionalInteriorCasing(fixture.snapshot);
+
+		fixture.refresh(LOW);
+
+		assertEquals(ComputerAvailabilityReason.PERSISTENCE_INVALID,
+			fixture.be(LOW).availabilityReason());
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
+	}
+
+	@Test
+	void maxRevisionChangedCloseReturnsPersistenceInvalidWithoutStaging() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		installMaximumRevision(fixture);
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+		fixture.snapshot = withAdditionalInteriorCasing(fixture.snapshot);
+
+		assertEquals(ComputerBlockEntity.EpochCloseResult.PERSISTENCE_INVALID,
+			ComputerTopologyController.closeIdleEpoch(fixture.be(LOW), fixture.epochId(),
+				ProbeQuiescence.ready(), fixture, LIMITS));
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
+	}
+
+	@Test
+	void maxRevisionReformRefusesBeforeStoppingRuntime() {
+		Fixture fixture = activeFixture(profiled(LOW, pos(0)), profiled(HIGH, pos(2)));
+		installMaximumRevision(fixture);
+		Map<UUID, CompoundTag> before = bytes(fixture);
+		Map<UUID, byte[]> residentsBefore = residentBytes(fixture);
+		ProbeReform control = ProbeReform.ready();
+
+		assertEquals(ComputerBlockEntity.ReformResult.PERSISTENCE_INVALID,
+			ComputerTopologyController.stopAllAndReform(fixture.be(LOW), fixture.epochId(),
+				control, fixture, LIMITS));
+		assertEquals(List.of(), control.events);
+		assertEquals(before, bytes(fixture));
+		assertResidentBytesEqual(residentsBefore, residentBytes(fixture));
 	}
 
 	@Test
@@ -840,6 +1040,52 @@ class ComputerTopologyControllerTest {
 		return new ComputerStructureSnapshot(bounds, sorted, casing, chunks);
 	}
 
+	private static Fixture maximumFixture(int count) {
+		List<NodeSpec> specs = new ArrayList<>();
+		for (int i = 0; i < count; i++) {
+			int x = 1 + i % 14;
+			int y = 1 + i / 14 % 14;
+			int z = 1 + i / (14 * 14);
+			specs.add(profiled(new UUID(1, i + 1L), new BlockPos(x, y, z)));
+		}
+		Fixture fixture = fixture(specs.getFirst());
+		for (int i = 1; i < specs.size(); i++) {
+			NodeSpec spec = specs.get(i);
+			fixture.put(computer(spec.id(), spec.pos(), spec.profile()));
+		}
+		BoundingBox bounds = new BoundingBox(0, 0, 0, 15, 15, 15);
+		Set<BlockPos> casing = new HashSet<>();
+		for (int x = 0; x <= 15; x++)
+			for (int y = 0; y <= 15; y++)
+				for (int z = 0; z <= 15; z++)
+					if (x == 0 || x == 15 || y == 0 || y == 15 || z == 0 || z == 15)
+						casing.add(new BlockPos(x, y, z));
+		List<ComputerStructureNode> nodes = specs.stream()
+			.map(spec -> new ComputerStructureNode(spec.id(), address(spec.pos()), spec.profile()))
+			.toList();
+		fixture.snapshot = new ComputerStructureSnapshot(bounds, nodes, casing,
+			Set.of(new ChunkPos(0, 0)));
+		return fixture;
+	}
+
+	private static ComputerStructureSnapshot withAdditionalInteriorCasing(
+		ComputerStructureSnapshot snapshot) {
+		Set<BlockPos> casing = new HashSet<>(snapshot.casingPositions());
+		casing.add(new BlockPos(1, 1, 1));
+		return new ComputerStructureSnapshot(snapshot.bounds(), snapshot.nodes(), casing,
+			snapshot.containingChunks());
+	}
+
+	private static void installMaximumRevision(Fixture fixture) {
+		for (ComputerBlockEntity computer : fixture.computers.values()) {
+			ComputerStructureRecord record = computer.currentStructureRecord().orElseThrow();
+			computer.applyTopologyState(new ComputerStructureRecord(
+				record.computerStructureMemberId(), Long.MAX_VALUE, record.coordinatorId(),
+				record.snapshot()), computer.bindingState(), computer.bindingStateValid(),
+				computer.epoch().orElse(null), computer.latchedEpochFaults());
+		}
+	}
+
 	private static BlockPos pos(int x) { return new BlockPos(x, 0, 0); }
 	private static SpaceAddress address(BlockPos pos) {
 		return new SpaceAddress(Level.OVERWORLD, null, pos);
@@ -902,6 +1148,8 @@ class ComputerTopologyControllerTest {
 		private final Set<BlockPos> unloadedPositions = new HashSet<>();
 		private final Set<BlockPos> wrongSpacePositions = new HashSet<>();
 		private final Set<ChunkPos> unloadedChunks = new HashSet<>();
+		private final Map<BlockPos, ComputerStructureSnapshot> scanSnapshotsBySeed = new HashMap<>();
+		private final Map<BlockPos, SpaceAddress> addressOverrides = new HashMap<>();
 		private final UUID generatedMemberId = uuid(600);
 		private ComputerStructureSnapshot snapshot;
 		private ComputerStructureSnapshot revalidationSnapshot;
@@ -983,7 +1231,7 @@ class ComputerTopologyControllerTest {
 			ComputerStructureScanner.Limits limits) {
 			scanCalls++;
 			ComputerStructureSnapshot current = scanCalls == 2 && revalidationSnapshot != null
-				? revalidationSnapshot : snapshot;
+				? revalidationSnapshot : scanSnapshotsBySeed.getOrDefault(seed, snapshot);
 			return new ComputerStructureScanner.ScanResult(scanState,
 				(scanState == ComputerStructureScanner.State.VALID
 					|| scanState == ComputerStructureScanner.State.VALID_NOT_READY) ? current : null,
@@ -1015,7 +1263,7 @@ class ComputerTopologyControllerTest {
 		}
 
 		@Override public SpaceAddress address(BlockPos pos) {
-			return ComputerTopologyControllerTest.address(pos);
+			return addressOverrides.getOrDefault(pos, ComputerTopologyControllerTest.address(pos));
 		}
 		@Override public UUID newStructureMemberId() { return generatedMemberId; }
 	}

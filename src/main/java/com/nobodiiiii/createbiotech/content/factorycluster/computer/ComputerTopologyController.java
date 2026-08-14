@@ -59,52 +59,74 @@ final class ComputerTopologyController {
 		return new RealWorldAccess(level);
 	}
 
-	static void refresh(ComputerBlockEntity owner, WorldAccess world,
+	static RefreshOutcome refresh(ComputerBlockEntity owner, WorldAccess world,
 		ComputerStructureScanner.Limits limits) {
 		Objects.requireNonNull(owner, "owner");
 		Objects.requireNonNull(world, "world");
 		Objects.requireNonNull(limits, "limits");
 		if (!owner.persistenceAvailable() || owner.computerId().isEmpty()) {
 			fail(owner, ComputerAvailabilityReason.IDENTITY_CONFLICT);
-			return;
+			return RefreshOutcome.failure(ComputerAvailabilityReason.IDENTITY_CONFLICT);
 		}
 		ComputerStructureRecord known = owner.currentStructureRecord().orElse(null);
 		if (known != null && !chunksLoaded(known.snapshot().containingChunks(), world)) {
 			fail(owner, ComputerAvailabilityReason.PARTIAL_UNLOADED);
-			return;
+			return RefreshOutcome.failure(ComputerAvailabilityReason.PARTIAL_UNLOADED);
 		}
 
 		ComputerStructureScanner.ScanResult result = world.scan(owner.getBlockPos(), limits);
 		if (result.state() != ComputerStructureScanner.State.VALID
 			&& result.state() != ComputerStructureScanner.State.VALID_NOT_READY) {
-			fail(owner, reasonFor(result.state()));
-			return;
+			ComputerAvailabilityReason reason = reasonFor(result.state());
+			fail(owner, reason);
+			return RefreshOutcome.failure(reason);
 		}
 		ComputerStructureSnapshot snapshot = result.snapshot();
 		if (snapshot == null) {
 			fail(owner, ComputerAvailabilityReason.STRUCTURE_INVALID);
-			return;
+			return RefreshOutcome.failure(ComputerAvailabilityReason.STRUCTURE_INVALID);
 		}
 		ResolvedSnapshot resolved = resolveSnapshot(owner.getBlockPos(), snapshot, world);
 		if (resolved.failure() != ResolveFailure.NONE) {
-			fail(owner, resolved.failure() == ResolveFailure.PARTIAL
+			ComputerAvailabilityReason reason = resolved.failure() == ResolveFailure.PARTIAL
 				? ComputerAvailabilityReason.PARTIAL_UNLOADED
 				: resolved.failure() == ResolveFailure.IDENTITY
 					? ComputerAvailabilityReason.IDENTITY_CONFLICT
-					: ComputerAvailabilityReason.STRUCTURE_INVALID);
-			return;
+					: ComputerAvailabilityReason.STRUCTURE_INVALID;
+			fail(owner, reason);
+			return new RefreshOutcome(resolved.computers(), snapshot, reason, false);
 		}
 		UUID provisional = snapshot.nodes().getFirst().computerId();
 		if (!owner.computerId().orElseThrow().equals(provisional)
-			|| resolved.byId().get(provisional) != owner) return;
+			|| resolved.byId().get(provisional) != owner)
+			return new RefreshOutcome(resolved.computers(), snapshot, null, false);
 
 		Reconciliation reconciliation = reconcile(result, resolved);
 		if (reconciliation.failureReason() != null) {
 			setReasonAndWithdraw(resolved.computers(), reconciliation.failureReason());
-			return;
+			return new RefreshOutcome(resolved.computers(), snapshot,
+					reconciliation.failureReason(), false);
 		}
 		commit(resolved, reconciliation.record(), reconciliation.binding(),
 			reconciliation.epoch(), reconciliation.faults(), reconciliation.reason());
+		return new RefreshOutcome(resolved.computers(), snapshot, reconciliation.reason(), true);
+	}
+
+	record RefreshOutcome(List<ComputerBlockEntity> members,
+		@Nullable ComputerStructureSnapshot snapshot,
+		@Nullable ComputerAvailabilityReason reason, boolean committed) {
+		RefreshOutcome {
+			members = List.copyOf(members);
+		}
+
+		static RefreshOutcome failure(ComputerAvailabilityReason reason) {
+			return new RefreshOutcome(List.of(), null, reason, false);
+		}
+	}
+
+	static void fanAvailability(List<ComputerBlockEntity> members,
+		ComputerAvailabilityReason reason) {
+		setReasonAndWithdraw(members, reason);
 	}
 
 	private static Reconciliation reconcile(ComputerStructureScanner.ScanResult scan,
@@ -252,8 +274,12 @@ final class ComputerTopologyController {
 			if (base.computerStructureMemberId().equals(structureId)
 				&& base.coordinatorId().equals(desiredCoordinator)
 				&& base.snapshot().equals(snapshot)) desired = base;
-			else desired = new ComputerStructureRecord(structureId,
-				Math.addExact(base.revision(), 1), desiredCoordinator, snapshot);
+			else {
+				Optional<ComputerStructureRecord> revised = base.revise(desiredCoordinator, snapshot);
+				if (revised.isEmpty())
+					return Reconciliation.failure(ComputerAvailabilityReason.PERSISTENCE_INVALID);
+				desired = revised.orElseThrow();
+			}
 		}
 		return new Reconciliation(desired, binding, desiredEpoch, Set.copyOf(union), reason, null);
 	}
@@ -570,10 +596,15 @@ final class ComputerTopologyController {
 					world, limits, authoritativeEpoch, union))
 				return ComputerBlockEntity.EpochCloseResult.IDENTITY_CONFLICT;
 			UUID coordinator = snapshot.nodes().getFirst().computerId();
-			ComputerStructureRecord updated = authority.record().coordinatorId().equals(coordinator)
-				&& authority.record().snapshot().equals(snapshot) ? authority.record()
-				: new ComputerStructureRecord(authority.record().computerStructureMemberId(),
-					Math.addExact(authority.record().revision(), 1), coordinator, snapshot);
+			ComputerStructureRecord updated;
+			if (authority.record().coordinatorId().equals(coordinator)
+				&& authority.record().snapshot().equals(snapshot)) updated = authority.record();
+			else {
+				Optional<ComputerStructureRecord> revised = authority.record().revise(coordinator, snapshot);
+				if (revised.isEmpty())
+					return ComputerBlockEntity.EpochCloseResult.PERSISTENCE_INVALID;
+				updated = revised.orElseThrow();
+			}
 			ComputerAvailabilityReason reason = scan.state()
 				== ComputerStructureScanner.State.VALID_NOT_READY
 					? ComputerAvailabilityReason.NOT_READY : ComputerAvailabilityReason.NONE;
@@ -622,8 +653,6 @@ final class ComputerTopologyController {
 				return ComputerBlockEntity.ReformResult.RUNTIME_NOT_QUIESCENT;
 		}
 		try {
-			if (!control.stopAllAndClear()) return ComputerBlockEntity.ReformResult.STOP_FAILED;
-			if (!control.allRootsStopped()) return ComputerBlockEntity.ReformResult.ROOTS_REMAIN;
 			ProofFailure proof = proveOldDomain(caller.getBlockPos(), oldRecord, oldEpoch, world);
 			if (proof == ProofFailure.PARTIAL)
 				return ComputerBlockEntity.ReformResult.PARTIAL_UNLOADED;
@@ -666,6 +695,10 @@ final class ComputerTopologyController {
 				|| !oldRecord.computerStructureMemberId()
 					.equals(authorityRecord.computerStructureMemberId()))
 				return ComputerBlockEntity.ReformResult.IDENTITY_CONFLICT;
+			if (authorityRecord.revision() == Long.MAX_VALUE)
+				return ComputerBlockEntity.ReformResult.PERSISTENCE_INVALID;
+			if (!control.stopAllAndClear()) return ComputerBlockEntity.ReformResult.STOP_FAILED;
+			if (!control.allRootsStopped()) return ComputerBlockEntity.ReformResult.ROOTS_REMAIN;
 			ProofDomain proofDomain = captureProofDomain(caller.getBlockPos(),
 				List.of(oldRecord, authorityRecord), authoritativeEpoch, snapshot, world);
 			if (proofDomain.failure() == ProofFailure.PARTIAL)
@@ -708,10 +741,11 @@ final class ComputerTopologyController {
 			} catch (IllegalArgumentException invalid) {
 				return ComputerBlockEntity.ReformResult.STRUCTURE_INVALID;
 			}
-			ComputerStructureRecord updated = new ComputerStructureRecord(
-				authorityRecord.computerStructureMemberId(),
-				Math.addExact(authorityRecord.revision(), 1),
+			Optional<ComputerStructureRecord> revised = authorityRecord.revise(
 				replacement.coordinatorId(), snapshot);
+			if (revised.isEmpty())
+				return ComputerBlockEntity.ReformResult.PERSISTENCE_INVALID;
+			ComputerStructureRecord updated = revised.orElseThrow();
 			ComputerBlockEntity previous = resolved.byId().get(authorityRecord.coordinatorId());
 			if (previous != null && previous.isCoordinatorMemberPublished()
 				&& previous != stagingOwner) previous.withdrawCoordinatorMember();

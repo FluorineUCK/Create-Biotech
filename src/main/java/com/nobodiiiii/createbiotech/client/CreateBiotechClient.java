@@ -406,7 +406,7 @@ public class CreateBiotechClient {
 			model -> new CTModel(model, new EncasedCTBehaviour(CBSpriteShifts.ASURINE_CASING)));
 		customBlockModels.register(CreateBiotech.asResource("biotech_casing"),
 			model -> new CTModel(model, new EncasedCTBehaviour(CBSpriteShifts.BIOTECH_CASING)));
-		customBlockModels.register(CreateBiotech.asResource("computer"),
+		customBlockModels.register(CreateBiotech.asResource("computer_casing"),
 			model -> new CTModel(model, new EncasedCTBehaviour(CBSpriteShifts.BIOTECH_CASING)));
 		customBlockModels.register(CreateBiotech.asResource("explosion_proof_casing"),
 			model -> new CTModel(model, new CasingConnectedHorizontalCTBehaviour(

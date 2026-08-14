@@ -1,7 +1,9 @@
 package com.nobodiiiii.createbiotech.content.factorycluster.computer;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -9,7 +11,9 @@ import java.util.UUID;
 import com.nobodiiiii.createbiotech.content.factorycluster.SpaceAddress;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 
 public final class ComputerStructureLocator {
 	private ComputerStructureLocator() {}
@@ -34,7 +38,8 @@ public final class ComputerStructureLocator {
 		Objects.requireNonNull(limits, "limits");
 		BlockPos clicked = casingPos.immutable();
 		int radius = limits.maxSize() - 1;
-		List<Candidate> matches = new ArrayList<>();
+		Map<StructureKey, Candidate> unique = new LinkedHashMap<>();
+		boolean identityConflict = false;
 		for (int x = clicked.getX() - radius; x <= clicked.getX() + radius; x++)
 			for (int y = clicked.getY() - radius; y <= clicked.getY() + radius; y++)
 				for (int z = clicked.getZ() - radius; z <= clicked.getZ() + radius; z++) {
@@ -46,19 +51,32 @@ public final class ComputerStructureLocator {
 					ComputerStructureRecord stored = computer.currentStructureRecord().orElse(null);
 					UUID computerId = computer.computerId().orElse(null);
 					if (stored == null || computerId == null || !computer.persistenceAvailable()) continue;
-					ComputerStructureScanner.ScanResult scan = world.scan(pos, limits);
-					if ((scan.state() != ComputerStructureScanner.State.VALID
-						&& scan.state() != ComputerStructureScanner.State.VALID_NOT_READY)
-						|| scan.snapshot() == null
-						|| !stored.computerStructureMemberId().equals(scan.observedStructureMemberId())
-						|| !stored.snapshot().equals(scan.snapshot())
-						|| !scan.snapshot().casingPositions().contains(clicked)) continue;
 					SpaceAddress seedAddress = world.address(pos);
 					Candidate candidate = new Candidate(computer, computerId, seedAddress,
-						stored.computerStructureMemberId(), stored.coordinatorId(), scan.snapshot());
-					if (matches.stream().noneMatch(existing -> existing.sameStructure(candidate)))
-						matches.add(candidate);
+						stored.computerStructureMemberId(), stored.coordinatorId(), stored.snapshot());
+					StructureKey key = candidate.structureKey();
+					Candidate existing = unique.get(key);
+					if (existing != null && (!existing.snapshot().equals(candidate.snapshot())
+						|| !existing.coordinatorId().equals(candidate.coordinatorId()))) {
+						identityConflict = true;
+						continue;
+					}
+					if (existing == null || candidate.seedId().compareTo(existing.seedId()) < 0)
+						unique.put(key, candidate);
 				}
+		if (identityConflict) return Optional.empty();
+		List<Candidate> matches = new ArrayList<>();
+		for (Candidate candidate : unique.values()) {
+			ComputerStructureScanner.ScanResult scan = world.scan(
+				candidate.seedAddress().localPos(), limits);
+			if ((scan.state() != ComputerStructureScanner.State.VALID
+				&& scan.state() != ComputerStructureScanner.State.VALID_NOT_READY)
+				|| scan.snapshot() == null
+				|| !candidate.structureId().equals(scan.observedStructureMemberId())
+				|| !candidate.snapshot().equals(scan.snapshot())
+				|| !scan.snapshot().casingPositions().contains(clicked)) continue;
+			matches.add(candidate);
+		}
 		if (matches.size() != 1) return Optional.empty();
 		Candidate candidate = matches.getFirst();
 		ComputerStructureNode coordinatorNode = candidate.snapshot()
@@ -96,19 +114,11 @@ public final class ComputerStructureLocator {
 
 	private record Candidate(ComputerBlockEntity seed, UUID seedId, SpaceAddress seedAddress,
 		UUID structureId, UUID coordinatorId, ComputerStructureSnapshot snapshot) {
-		boolean sameStructure(Candidate other) {
-			return structureId.equals(other.structureId)
-				&& seedAddress.dimension().equals(other.seedAddress.dimension())
-				&& Objects.equals(seedAddress.subLevelId(), other.seedAddress.subLevelId())
-				&& sameBounds(snapshot, other.snapshot);
+		StructureKey structureKey() {
+			return new StructureKey(structureId, seedAddress.dimension(), seedAddress.subLevelId());
 		}
 	}
 
-	private static boolean sameBounds(ComputerStructureSnapshot first,
-		ComputerStructureSnapshot second) {
-		var a = first.bounds();
-		var b = second.bounds();
-		return a.minX() == b.minX() && a.minY() == b.minY() && a.minZ() == b.minZ()
-			&& a.maxX() == b.maxX() && a.maxY() == b.maxY() && a.maxZ() == b.maxZ();
-	}
+	private record StructureKey(UUID structureId, ResourceKey<Level> dimension,
+		UUID subLevelId) {}
 }

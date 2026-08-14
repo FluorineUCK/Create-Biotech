@@ -150,6 +150,36 @@ final class ComputerResidentLifecycle {
 		});
 	}
 
+	static boolean releaseBeforeExternalDestruction(Level level, BlockPos pos, BlockState oldState,
+		ComputerBlockEntity oldComputer, ControlledRemoval destruction) {
+		return runGuardedControlledBreak(level, pos, () -> {
+			if (!oldComputer.hasResidentSource()) return destruction.remove();
+			RemovalInput input = removalInput(level, pos, oldComputer);
+			WorldSpawnOps spawns = new WorldSpawnOps(level, pos, null);
+			WorldRestoreOps restore = WorldRestoreOps.forForced(level, pos, oldState,
+				Blocks.AIR.defaultBlockState(), oldComputer, input.fullServerNbt());
+			ReleaseResult release = attemptResidentOrRecovery(input, spawns);
+			if (!release.confirmed()) {
+				restore.restore(input.fullServerNbt());
+				return false;
+			}
+			restore.clearSource();
+			if (!destruction.remove() || !restore.commitFinalRemoval()) {
+				release.rollback(spawns);
+				restore.restore(input.fullServerNbt());
+				return false;
+			}
+			release.commit();
+			return true;
+		});
+	}
+
+	static boolean suppressUnguardedOccupiedDrop(ComputerBlockEntity computer) {
+		if (!computer.hasResidentSource()) return false;
+		Level level = computer.getLevel();
+		return level == null || !isRemovalActive(level, computer.getBlockPos());
+	}
+
 	private static RemovalInput removalInput(Level level, BlockPos pos,
 		ComputerBlockEntity computer) {
 		CompoundTag full = computer.saveWithoutMetadata(level.registryAccess());
