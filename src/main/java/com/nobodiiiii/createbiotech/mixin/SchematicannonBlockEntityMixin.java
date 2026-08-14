@@ -10,6 +10,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainPlacement;
+import com.nobodiiiii.createbiotech.foundation.block.CBBeltChainData;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementBlock;
 import com.nobodiiiii.createbiotech.foundation.block.CBBeltPlacementSegment;
 import com.simibubi.create.content.kinetics.belt.BeltPart;
