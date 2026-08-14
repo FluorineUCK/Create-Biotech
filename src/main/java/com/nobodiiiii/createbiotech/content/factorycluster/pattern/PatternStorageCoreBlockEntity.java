@@ -6,6 +6,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -36,6 +37,7 @@ import net.minecraft.core.RegistryAccess;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
@@ -67,6 +69,7 @@ public class PatternStorageCoreBlockEntity extends SmartBlockEntity implements C
 	private static final String STRUCTURE_SNAPSHOT = "StructureSnapshot";
 	private static final String STRUCTURE_STATE = "StructureState";
 	private static final String LIBRARY_INDEX = "PatternIndex";
+	private static final String PAGE_TOPOLOGIES = "PageTopologies";
 
 	private UUID libraryId = UUID.randomUUID();
 	@Nullable private ClusterBinding bindingState;
@@ -81,6 +84,7 @@ public class PatternStorageCoreBlockEntity extends SmartBlockEntity implements C
 	private int queueCount = 1;
 	private int efficiencyBonus;
 	private Map<BlockPos, Integer> pageTopologies = Map.of();
+	private boolean topologyRefreshPending;
 	private long lastStructureCheck = Long.MIN_VALUE;
 	private final ReplyDispatchAllowance replyDispatchAllowance = new ReplyDispatchAllowance();
 	private PatternCoreClientState clientState = defaultClientState();
@@ -118,6 +122,10 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			return;
 		if (lastStructureCheck == Long.MIN_VALUE || level.getGameTime() - lastStructureCheck >= 20)
 			refreshStructure();
+		if (topologyRefreshPending
+			&& structureState == PatternLibraryScanner.StructureState.VALID
+			&& authorityAccessReady())
+			refreshStructure();
 		if (structureState == PatternLibraryScanner.StructureState.PARTIAL)
 			return;
 		Predicate<BlockPos> loaded = pos -> CBMultiBlockLifecycle.isLoaded(level, pos);
@@ -144,13 +152,18 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		lastStructureCheck = level.getGameTime();
 		PatternLibraryScanner.ScanResult result = PatternLibraryScanner.scan(new ScannerView(level), worldPosition,
 			CBConfigs.SERVER.factoryCluster.libraryMaxMembers.get(), CBConfigs.SERVER.factoryCluster.libraryMaxSpan.get());
-		if (result.state() == PatternLibraryScanner.StructureState.PARTIAL) {
+		if (result.state() != PatternLibraryScanner.StructureState.VALID
+			|| result.snapshot() == null) {
 			applyStructureScan(result);
 			return;
 		}
-		PatternStructureSnapshot snapshot = result.snapshot();
-		ShelfInspection inspection = result.state() == PatternLibraryScanner.StructureState.VALID
-			&& snapshot != null ? inspectShelves(snapshot) : ShelfInspection.EMPTY;
+		ShelfInspection inspection = inspectShelves(result.snapshot());
+		if (!authorityAccessReady() && !pageTopologies.equals(inspection.topologies())) {
+			topologyRefreshPending = true;
+			applyStructureScan(result, null, inspection.efficiencyBonus());
+			return;
+		}
+		topologyRefreshPending = false;
 		applyStructureScan(result, inspection.topologies(), inspection.efficiencyBonus());
 	}
 
@@ -174,7 +187,8 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			boolean structureChanged = !Objects.equals(structureSnapshot, next);
 			if (structureChanged)
 				structureSnapshot = next;
-			if (currentTopologies != null) {
+			if (result.state() == PatternLibraryScanner.StructureState.VALID
+				&& currentTopologies != null) {
 				Map<BlockPos, Integer> immutableTopologies = Map.copyOf(currentTopologies);
 				boolean topologyChanged = !pageTopologies.equals(immutableTopologies);
 				boolean stalePageOrder = immutableTopologies.isEmpty()
@@ -436,10 +450,16 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	}
 
 	boolean queryAccessReady() {
+		return structureState == PatternLibraryScanner.StructureState.VALID
+			&& authorityAccessReady();
+	}
+
+	private boolean authorityAccessReady() {
 		MinecraftServer server = server();
 		return server != null && bindingState != null && bindingStateValid
 			&& !ClusterMemberIndex.conflicts(server, bindingState.clusterId()).blocksNewTasks()
-			&& queryOperationAllowed(structureState, ClusterBindingService.bindingAccess(server, this));
+			&& ClusterBindingService.bindingAccess(server, this)
+				== ClusterBindingService.BindingAccess.READY;
 	}
 
 	@Override public UUID memberId() { return libraryId; }
@@ -510,6 +530,7 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 		server.putBoolean(PENDING_SAFE_RELEASE, pendingSafeRelease);
 		server.putString(STRUCTURE_STATE, structureState.name());
 		if (structureSnapshot != null) server.put(STRUCTURE_SNAPSHOT, structureSnapshot.save());
+		server.put(PAGE_TOPOLOGIES, savePageTopologies(pageTopologies));
 		server.put(LIBRARY_INDEX, libraryIndex.save(registries));
 		pattern.put(SERVER_STATE, server);
 		tag.put(PATTERN_LIBRARY, pattern);
@@ -566,6 +587,10 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 				corruption = true;
 			}
 		}
+		Optional<Map<BlockPos, Integer>> loadedTopologies = loadPageTopologies(
+			(ListTag) server.get(PAGE_TOPOLOGIES));
+		if (loadedTopologies.isEmpty())
+			corruption = true;
 		PatternLibraryIndex.LoadResult loadedIndex = PatternLibraryIndex.load(
 			server.getCompound(LIBRARY_INDEX), registries);
 		corruption |= loadedIndex.hadCorruption();
@@ -577,6 +602,8 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			server.getString(STRUCTURE_STATE));
 		if (replaceStructureSnapshot)
 			structureSnapshot = nextStructureSnapshot;
+		loadedTopologies.ifPresent(topologies -> pageTopologies = topologies);
+		topologyRefreshPending = false;
 		libraryIndex = loadedIndex.index();
 		queueCount = structureSnapshot == null ? 1 : structureSnapshot.queueCount();
 		if (corruption)
@@ -596,7 +623,7 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 
 	private static boolean validServerStateEnvelope(CompoundTag server) {
 		Set<String> expected = new HashSet<>(Set.of(PENDING_SAFE_RELEASE, STRUCTURE_STATE,
-			LIBRARY_INDEX));
+			PAGE_TOPOLOGIES, LIBRARY_INDEX));
 		if (server.contains(LIBRARIAN_SNAPSHOT))
 			expected.add(LIBRARIAN_SNAPSHOT);
 		if (server.contains(STRUCTURE_SNAPSHOT))
@@ -605,11 +632,13 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			|| !hasType(server, PENDING_SAFE_RELEASE, Tag.TAG_BYTE)
 			|| !booleanValue(server, PENDING_SAFE_RELEASE)
 			|| !hasType(server, STRUCTURE_STATE, Tag.TAG_STRING)
+			|| !hasType(server, PAGE_TOPOLOGIES, Tag.TAG_LIST)
 			|| !hasType(server, LIBRARY_INDEX, Tag.TAG_COMPOUND)
 			|| (server.contains(LIBRARIAN_SNAPSHOT)
 				&& !hasType(server, LIBRARIAN_SNAPSHOT, Tag.TAG_COMPOUND))
 			|| (server.contains(STRUCTURE_SNAPSHOT)
-				&& !hasType(server, STRUCTURE_SNAPSHOT, Tag.TAG_COMPOUND)))
+				&& !hasType(server, STRUCTURE_SNAPSHOT, Tag.TAG_COMPOUND))
+			|| !isCompoundList((ListTag) server.get(PAGE_TOPOLOGIES)))
 			return false;
 		try {
 			PatternLibraryScanner.StructureState.valueOf(server.getString(STRUCTURE_STATE));
@@ -622,6 +651,39 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	private static boolean hasType(CompoundTag tag, String key, int type) {
 		Tag value = tag.get(key);
 		return value != null && value.getId() == type;
+	}
+
+	private static ListTag savePageTopologies(Map<BlockPos, Integer> topologies) {
+		ListTag saved = new ListTag();
+		topologies.entrySet().stream()
+			.sorted(java.util.Comparator.comparingLong(entry -> entry.getKey().asLong()))
+			.forEach(entry -> {
+				CompoundTag child = new CompoundTag();
+				child.putLong("Pos", entry.getKey().asLong());
+				child.putInt("WritableSlots", entry.getValue());
+				saved.add(child);
+			});
+		return saved;
+	}
+
+	private static Optional<Map<BlockPos, Integer>> loadPageTopologies(ListTag saved) {
+		Map<BlockPos, Integer> loaded = new LinkedHashMap<>();
+		for (Tag value : saved) {
+			if (!(value instanceof CompoundTag child)
+				|| !child.getAllKeys().equals(Set.of("Pos", "WritableSlots"))
+				|| !hasType(child, "Pos", Tag.TAG_LONG)
+				|| !hasType(child, "WritableSlots", Tag.TAG_INT))
+				return Optional.empty();
+			int slots = child.getInt("WritableSlots");
+			BlockPos pos = BlockPos.of(child.getLong("Pos")).immutable();
+			if (slots < 0 || slots > 0x3f || loaded.put(pos, slots) != null)
+				return Optional.empty();
+		}
+		return Optional.of(Map.copyOf(loaded));
+	}
+
+	private static boolean isCompoundList(ListTag list) {
+		return list.isEmpty() || list.getElementType() == Tag.TAG_COMPOUND;
 	}
 
 	private static boolean booleanValue(CompoundTag tag, String key) {

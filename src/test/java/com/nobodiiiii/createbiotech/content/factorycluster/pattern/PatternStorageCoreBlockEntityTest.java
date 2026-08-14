@@ -274,6 +274,74 @@ class PatternStorageCoreBlockEntityTest {
 	}
 
 	@Test
+	void realScannerConflictThenSameValidStructureRetainsQueriesRepliesAndGeneration() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		Map<BlockPos, PatternLibraryScanner.MemberKind> members = new java.util.LinkedHashMap<>();
+		members.put(BlockPos.ZERO, PatternLibraryScanner.MemberKind.CORE_LOWER);
+		members.put(shelf, PatternLibraryScanner.MemberKind.CHISELED_BOOKSHELF);
+		PatternLibraryScanner.ScanResult valid = PatternLibraryScanner.scan(
+			scannerView(members), BlockPos.ZERO, 64, 16);
+		ReadyCore core = coreWithRetainedWork(valid, shelf);
+		CompoundTag retained = core.libraryIndex().save(REGISTRIES);
+		members.put(new BlockPos(-1, 0, 0), PatternLibraryScanner.MemberKind.CORE_LOWER);
+		PatternLibraryScanner.ScanResult conflict = PatternLibraryScanner.scan(
+			scannerView(members), BlockPos.ZERO, 64, 16);
+
+		core.applyStructureScan(conflict, Map.of(), 0);
+
+		assertEquals(PatternLibraryScanner.StructureState.CORE_CONFLICT,
+			core.structureState());
+		assertEquals(retained, core.libraryIndex().save(REGISTRIES));
+		members.remove(new BlockPos(-1, 0, 0));
+		PatternLibraryScanner.ScanResult sameValid = PatternLibraryScanner.scan(
+			scannerView(members), BlockPos.ZERO, 64, 16);
+		core.applyStructureScan(sameValid, Map.of(shelf, 0), 0);
+		assertEquals(PatternLibraryScanner.StructureState.VALID, core.structureState());
+		assertEquals(retained, core.libraryIndex().save(REGISTRIES));
+	}
+
+	@Test
+	void everyNonValidScannerStateFreezesRetainedIndexState() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		for (PatternLibraryScanner.StructureState state : PatternLibraryScanner.StructureState.values()) {
+			if (state == PatternLibraryScanner.StructureState.VALID)
+				continue;
+			ReadyCore core = coreWithRetainedWork(valid, shelf);
+			CompoundTag retained = core.libraryIndex().save(REGISTRIES);
+
+			core.applyStructureScan(new PatternLibraryScanner.ScanResult(state, null),
+				Map.of(), 0);
+
+			assertEquals(retained, core.libraryIndex().save(REGISTRIES), state.name());
+		}
+	}
+
+	@Test
+	void persistedTopologyPreventsFirstEquivalentValidRefreshFromRestartingLoadedWork() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		ReadyCore source = coreWithRetainedWork(valid, shelf);
+		CompoundTag saved = source.saveWithFullMetadata(REGISTRIES);
+
+		assertTrue(serverState(saved).contains("PageTopologies", Tag.TAG_LIST),
+			"Writable-slot topology must be part of authoritative server persistence");
+		PatternStorageCoreBlockEntity restored = core();
+		restored.loadWithComponents(saved, REGISTRIES);
+		CompoundTag retained = restored.libraryIndex().save(REGISTRIES);
+		assertEquals(1, restored.libraryIndex().activeQueryCount());
+		assertEquals(1, restored.libraryIndex().readyReplyCount());
+
+		restored.applyStructureScan(valid, Map.of(shelf, 0), 0);
+
+		assertEquals(retained, restored.libraryIndex().save(REGISTRIES));
+		assertEquals(1, restored.libraryIndex().activeQueryCount());
+		assertEquals(1, restored.libraryIndex().readyReplyCount());
+	}
+
+	@Test
 	void repeatedIdenticalStructureScanDoesNotResyncSteadyState() {
 		bootstrap();
 		SyncTrackingCore core = new SyncTrackingCore();
@@ -545,7 +613,8 @@ class PatternStorageCoreBlockEntityTest {
 		assertEquals(Set.of("LibraryId", "BindingState", "BindingStateInvalid", "ServerState"),
 			patternData(saved).getAllKeys());
 		assertEquals(Set.of("LibrarianSnapshotBox", "PendingSafeRelease", "StructureState",
-			"StructureSnapshot", "PatternIndex"), serverState(saved).getAllKeys());
+			"StructureSnapshot", "PageTopologies", "PatternIndex"),
+			serverState(saved).getAllKeys());
 		assertFalse(saved.contains("ClientState"));
 
 		PatternStorageCoreBlockEntity restored = core();
@@ -646,6 +715,27 @@ class PatternStorageCoreBlockEntityTest {
 		core.libraryIndex().enqueue(query(Items.GOLD_INGOT));
 		core.libraryIndex().tickQueries(1);
 		return core;
+	}
+
+	private static ReadyCore coreWithRetainedWork(PatternLibraryScanner.ScanResult valid,
+		BlockPos shelf) {
+		ReadyCore core = new ReadyCore();
+		core.applyStructureScan(valid, Map.of(shelf, 0), 0);
+		core.libraryIndex().enqueue(query(Items.IRON_INGOT));
+		core.libraryIndex().tickQueries(1);
+		core.libraryIndex().enqueue(query(Items.GOLD_INGOT));
+		return core;
+	}
+
+	private static PatternLibraryScanner.View scannerView(
+		Map<BlockPos, PatternLibraryScanner.MemberKind> members) {
+		return new PatternLibraryScanner.View() {
+			@Override public boolean isLoaded(BlockPos pos) { return true; }
+			@Override public boolean sameSpace(BlockPos first, BlockPos second) { return true; }
+			@Override public PatternLibraryScanner.MemberKind memberAt(BlockPos pos) {
+				return members.getOrDefault(pos, PatternLibraryScanner.MemberKind.NONE);
+			}
+		};
 	}
 
 	private static CompoundTag authoritativeSnapshot(PatternStorageCoreBlockEntity core) {

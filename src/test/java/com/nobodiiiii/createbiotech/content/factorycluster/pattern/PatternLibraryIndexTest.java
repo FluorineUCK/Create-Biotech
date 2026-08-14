@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.content.factorycluster.pattern;
 
+import static org.junit.jupiter.api.Assertions.assertAll;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -85,6 +86,46 @@ class PatternLibraryIndexTest {
 		assertEquals(pageCount, pages.readCount());
 		assertEquals(pageCount, recordMaintenance);
 		assertEquals(pageCount, index.indexedPatternCount());
+	}
+
+	@Test
+	void changedPageBatchHasLinearInvalidationAndConstantRestartMaintenance() {
+		int changedPages = 32;
+		FakePages pages = new FakePages();
+		for (int ordinal = 0; ordinal < changedPages; ordinal++)
+			pages.put(pageForOrdinal(ordinal), validJson(Items.IRON_INGOT));
+		PatternLibraryIndex index = fullyIndex(pages);
+		for (int ordinal = 0; ordinal < 128; ordinal++) {
+			index.enqueue(queryFor(Items.IRON_INGOT));
+			index.tickQueries(1);
+		}
+		for (int ordinal = 0; ordinal < 128; ordinal++)
+			index.enqueue(queryFor(Items.DIAMOND));
+		index.beginNextFingerprintSweep();
+		pages.keys().forEach(key -> pages.change(key, validJson(Items.GOLD_INGOT)));
+		long generation = index.generation();
+
+		index.tick(pages, parser, changedPages * 2);
+
+		int invalidationUnits = index.lastInvalidationMaintenanceUnits();
+		int transitionUnits = index.lastGenerationTransitionUnits();
+		int queryVisits = index.lastRestartQueryVisits();
+		int replyVisits = index.lastRestartReplyVisits();
+		assertAll(
+			() -> assertEquals(changedPages, index.lastFingerprintUnits()),
+			() -> assertEquals(changedPages, index.lastInvalidatedKeys().size()),
+			() -> assertEquals(generation + 1, index.generation()),
+			() -> assertEquals(changedPages, invalidationUnits),
+			() -> assertEquals(1, transitionUnits),
+			() -> assertEquals(0, queryVisits),
+			() -> assertEquals(0, replyVisits),
+			() -> assertEquals(changedPages + 1,
+				invalidationUnits + transitionUnits + queryVisits + replyVisits),
+			() -> assertEquals(0, index.readyReplyCount()),
+			() -> assertEquals(128, index.activeQueryCount()),
+			() -> assertEquals(index.generation(),
+				index.activeQueries().getFirst().passGeneration()),
+			() -> assertEquals(0, index.activeQueries().getFirst().cursor()));
 	}
 
 	@Test
@@ -346,11 +387,82 @@ class PatternLibraryIndexTest {
 		index.tickQueries(2);
 
 		assertTrue(index.drainReplies(UUID.randomUUID(), 99).isEmpty());
-		assertEquals(second.queryId(), index.drainReplies(second.requesterComputerId(), 99)
-			.getFirst().queryId());
-		assertEquals(1, index.readyReplyCount());
+		assertTrue(index.drainReplies(second.requesterComputerId(), 99).isEmpty(),
+			"An out-of-turn requester must not steal or bypass the scheduled requester");
+		assertEquals(2, index.readyReplyCount());
 		assertEquals(first.queryId(), index.drainReplies(first.requesterComputerId(), 99)
 			.getFirst().queryId());
+		assertEquals(1, index.readyReplyCount());
+		assertEquals(second.queryId(), index.drainReplies(second.requesterComputerId(), 99)
+			.getFirst().queryId());
+	}
+
+	@Test
+	void fixedRequesterCallOrderCannotStarveContinuouslyBackloggedRequesters() {
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		UUID first = UUID.randomUUID();
+		UUID second = UUID.randomUUID();
+		UUID third = UUID.randomUUID();
+		List<UUID> requesters = List.of(first, second, third);
+		for (int round = 0; round < 12; round++) {
+			requesters.forEach(requester -> index.enqueue(queryFor(requester, Items.DIAMOND)));
+			index.tickQueries(requesters.size());
+		}
+		ReplyDispatchAllowance allowance = new ReplyDispatchAllowance();
+		Map<UUID, Integer> received = new LinkedHashMap<>();
+		requesters.forEach(requester -> received.put(requester, 0));
+
+		for (long tick = 0; tick < 12; tick++) {
+			int dispatched = 0;
+			for (UUID requester : requesters) {
+				int available = allowance.available(tick, 1, 99);
+				List<PatternReply> replies = index.drainReplies(requester, available);
+				assertTrue(replies.stream().allMatch(reply ->
+					reply.requesterComputerId().equals(requester)));
+				allowance.consume(replies.size());
+				dispatched += replies.size();
+				received.compute(requester, (ignored, count) -> count + replies.size());
+			}
+			assertEquals(1, dispatched, "Per-core tick allowance must remain global");
+		}
+
+		assertEquals(Map.of(first, 4, second, 4, third, 4), received);
+	}
+
+	@Test
+	void fairRequesterCursorRoundTripsAndSurvivesFixedCallerOrder() {
+		PatternLibraryIndex index = new PatternLibraryIndex();
+		UUID first = UUID.randomUUID();
+		UUID second = UUID.randomUUID();
+		UUID third = UUID.randomUUID();
+		for (int round = 0; round < 2; round++) {
+			index.enqueue(queryFor(first, Items.DIAMOND));
+			index.enqueue(queryFor(second, Items.DIAMOND));
+			index.enqueue(queryFor(third, Items.DIAMOND));
+		}
+		index.tickQueries(6);
+		ReplyDispatchAllowance firstTick = new ReplyDispatchAllowance();
+		List<PatternReply> firstReply = index.drainReplies(first,
+			firstTick.available(40, 1, 99));
+		firstTick.consume(firstReply.size());
+		assertEquals(1, firstReply.size());
+		CompoundTag saved = index.save(REGISTRIES);
+
+		PatternLibraryIndex.LoadResult loaded = PatternLibraryIndex.load(saved, REGISTRIES);
+		assertFalse(loaded.hadCorruption());
+		assertEquals(saved, loaded.index().save(REGISTRIES));
+		ReplyDispatchAllowance secondTick = new ReplyDispatchAllowance();
+		List<PatternReply> repeatedFirst = loaded.index().drainReplies(first,
+			secondTick.available(41, 1, 99));
+		secondTick.consume(repeatedFirst.size());
+		List<PatternReply> secondReply = loaded.index().drainReplies(second,
+			secondTick.available(41, 1, 99));
+		secondTick.consume(secondReply.size());
+
+		assertTrue(repeatedFirst.isEmpty());
+		assertEquals(1, secondReply.size());
+		assertEquals(second, secondReply.getFirst().requesterComputerId());
+		assertEquals(0, secondTick.available(41, 1, 99));
 	}
 
 	@Test
@@ -602,6 +714,11 @@ class PatternLibraryIndexTest {
 
 	private static PatternQuery queryFor(Item item) {
 		return new PatternQuery(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID(),
+			new StackKey(new ItemStack(item)), Long.MAX_VALUE, 73);
+	}
+
+	private static PatternQuery queryFor(UUID requesterComputerId, Item item) {
+		return new PatternQuery(UUID.randomUUID(), requesterComputerId, UUID.randomUUID(),
 			new StackKey(new ItemStack(item)), Long.MAX_VALUE, 73);
 	}
 

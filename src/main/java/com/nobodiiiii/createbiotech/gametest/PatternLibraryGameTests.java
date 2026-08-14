@@ -24,9 +24,12 @@ import com.nobodiiiii.createbiotech.content.factorycluster.SpaceAddress;
 import com.nobodiiiii.createbiotech.content.factorycluster.panel.FactoryPanelBlockEntity;
 import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternLibraryScanner;
 import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternQuery;
+import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternReply;
+import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternReplyStatus;
 import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternStorageCoreBlock;
 import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternStorageCoreBlockEntity;
 import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternStructureSnapshot;
+import com.nobodiiiii.createbiotech.content.factorycluster.pattern.PatternValueCodecs;
 import com.nobodiiiii.createbiotech.content.factorycluster.pattern.StackKey;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBItems;
@@ -60,6 +63,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LecternBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChiseledBookShelfBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
 import net.minecraft.world.phys.AABB;
@@ -446,6 +450,129 @@ public final class PatternLibraryGameTests {
 				"A real block-entity reload must retain the exact librarian snapshot");
 			assertCoreHalves(helper, level, lower);
 			helper.succeed();
+		});
+	}
+
+	@GameTest(templateNamespace = "create_biotech", template = "empty", timeoutTicks = 120)
+	public static void reloadAndRealConflictRetainTopologyQueriesRepliesAndCursors(
+		GameTestHelper helper) {
+		ServerLevel level = helper.getLevel();
+		MinecraftServer server = level.getServer();
+		BlockPos lower = helper.absolutePos(new BlockPos(4, 2, 4));
+		BlockPos shelfPos = lower.east();
+		BlockPos conflicting = lower.west();
+		level.setBlock(lower.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		level.setBlock(conflicting.below(), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+		placeCore(level, lower, null);
+		level.setBlock(shelfPos, Blocks.CHISELED_BOOKSHELF.defaultBlockState(), Block.UPDATE_ALL);
+		if (!(level.getBlockEntity(shelfPos) instanceof ChiseledBookShelfBlockEntity shelf))
+			throw new IllegalStateException("Chiseled shelf fixture did not create its block entity");
+		shelf.setItem(0, new ItemStack(Items.WRITABLE_BOOK));
+		shelf.setChanged();
+
+		helper.runAfterDelay(ASSERTION_DELAY, () -> {
+			PatternStorageCoreBlockEntity original = core(level, lower);
+			helper.assertValueEqual(original.structureState(),
+				PatternLibraryScanner.StructureState.VALID,
+				"Writable chiseled-shelf fixture must form a valid library");
+			ClusterMemberIndex.register(server, original);
+			TestCoordinator coordinator = new TestCoordinator(server,
+				SpaceAddress.capture(level, lower.south(2)));
+			ClusterMemberIndex.register(server, coordinator);
+			UUID logisticsId = UUID.randomUUID();
+			ClusterBinding binding = new ClusterBinding(UUID.randomUUID(), 1,
+				new ClusterAuthority(ClusterMemberType.COMPUTER_COORDINATOR,
+					coordinator.memberId()),
+				List.of(new LogisticsBinding(logisticsId, "reload-retention")));
+			original.commitClusterBinding(binding);
+			coordinator.commitClusterBinding(binding);
+			original.tick();
+			ClusterMemberIndex.unregister(server, coordinator);
+			helper.assertValueEqual(ClusterBindingService.bindingAccess(server, original),
+				ClusterBindingService.BindingAccess.AUTHORITY_OFFLINE,
+				"Reload fixture must freeze natural index service behind an offline authority");
+
+			CompoundTag seeded = original.saveWithoutMetadata(level.registryAccess());
+			CompoundTag seededIndex = seeded.getCompound("PatternLibrary")
+				.getCompound("ServerState").getCompound("PatternIndex");
+			long generation = seededIndex.getLong("Generation");
+			PatternQuery active = new PatternQuery(UUID.randomUUID(), coordinator.memberId(),
+				logisticsId, new StackKey(new ItemStack(Items.DIAMOND)), generation, 0);
+			PatternReply ready = new PatternReply(UUID.randomUUID(), coordinator.memberId(),
+				logisticsId, generation, PatternReplyStatus.NOT_FOUND, null);
+			seededIndex.getList("Queries", Tag.TAG_COMPOUND).add(
+				PatternValueCodecs.saveQuery(active, level.registryAccess()));
+			seededIndex.getList("Replies", Tag.TAG_COMPOUND).add(
+				PatternValueCodecs.saveReply(ready, level.registryAccess()));
+			original.loadWithComponents(seeded, level.registryAccess());
+			CompoundTag fullMetadata = original.saveWithFullMetadata(level.registryAccess());
+			CompoundTag retainedIndex = serializedIndex(original, level);
+			helper.assertValueEqual(retainedIndex.getList("PageOrder", Tag.TAG_COMPOUND).size(),
+				100, "One writable slot must persist exactly one hundred logical pages");
+			helper.assertValueEqual(retainedIndex.getList("Queries", Tag.TAG_COMPOUND).size(),
+				1, "Reload fixture must contain one active query");
+			helper.assertValueEqual(retainedIndex.getList("Replies", Tag.TAG_COMPOUND).size(),
+				1, "Reload fixture must contain one ready reply");
+
+			ClusterMemberIndex.unregister(server, original);
+			level.removeBlockEntity(lower);
+			BlockEntity loaded = BlockEntity.loadStatic(lower, level.getBlockState(lower),
+				fullMetadata, level.registryAccess());
+			helper.assertTrue(loaded instanceof PatternStorageCoreBlockEntity,
+				"Full metadata must recreate the registered pattern core");
+			level.setBlockEntity(Objects.requireNonNull(loaded));
+
+			helper.runAfterDelay(1, () -> {
+				PatternStorageCoreBlockEntity reloaded = core(level, lower);
+				ClusterMemberIndex.register(server, reloaded);
+				helper.assertTrue(serializedIndex(reloaded, level).equals(retainedIndex),
+					"First natural refresh after reload must not restart queries or drop replies");
+				placeCore(level, conflicting, null);
+
+				helper.runAfterDelay(22, () -> {
+					PatternStorageCoreBlockEntity conflicted = core(level, lower);
+					helper.assertValueEqual(conflicted.structureState(),
+						PatternLibraryScanner.StructureState.CORE_CONFLICT,
+						"A real adjacent lower core must enter CORE_CONFLICT");
+					helper.assertTrue(serializedIndex(conflicted, level).equals(retainedIndex),
+						"CORE_CONFLICT must retain index, queries, replies, and cursors byte-for-byte");
+					level.removeBlock(conflicting, false);
+					level.removeBlock(conflicting.above(), false);
+
+					helper.runAfterDelay(22, () -> {
+						PatternStorageCoreBlockEntity resumed = core(level, lower);
+						helper.assertValueEqual(resumed.structureState(),
+							PatternLibraryScanner.StructureState.VALID,
+							"Removing the conflicting core must restore the same valid topology");
+						helper.assertTrue(serializedIndex(resumed, level).equals(retainedIndex),
+							"Returning to the same valid topology must not restart retained work");
+						ClusterMemberIndex.register(server, coordinator);
+						helper.assertValueEqual(ClusterBindingService.bindingAccess(server, resumed),
+							ClusterBindingService.BindingAccess.READY,
+							"Restoring the persisted authority must reopen index service");
+
+						helper.runAfterDelay(1, () -> {
+							try {
+								CompoundTag advanced = serializedIndex(resumed, level);
+								helper.assertTrue(advanced.getInt("FingerprintCursor")
+									> retainedIndex.getInt("FingerprintCursor"),
+									"The retained fingerprint cursor must resume after authority returns");
+								helper.assertValueEqual(advanced.getLong("Generation"), generation,
+									"Resuming unchanged topology must retain the generation");
+								helper.assertValueEqual(advanced.getList("Queries", Tag.TAG_COMPOUND),
+									retainedIndex.getList("Queries", Tag.TAG_COMPOUND),
+									"Incomplete scanning must retain the active query exactly");
+								helper.assertValueEqual(advanced.getList("Replies", Tag.TAG_COMPOUND),
+									retainedIndex.getList("Replies", Tag.TAG_COMPOUND),
+									"Resuming scanning must retain the ready reply exactly");
+								helper.succeed();
+							} finally {
+								ClusterMemberIndex.unregister(server, coordinator);
+							}
+						});
+					});
+				});
+			});
 		});
 	}
 

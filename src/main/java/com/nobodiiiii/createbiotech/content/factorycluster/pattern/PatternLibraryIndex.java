@@ -33,6 +33,7 @@ public final class PatternLibraryIndex {
 	private static final String COMPLETE = "Complete";
 	private static final String QUERIES = "Queries";
 	private static final String REPLIES = "Replies";
+	private static final String REPLY_REQUESTER_CURSOR = "ReplyRequesterCursor";
 	private static final Comparator<PatternPageKey> PAGE_COMPARATOR = Comparator
 		.comparing((PatternPageKey key) -> key.shelf().dimension().location().toString())
 		.thenComparing(key -> key.shelf().subLevelId(), Comparator.nullsFirst(Comparator.comparing(UUID::toString)))
@@ -52,12 +53,17 @@ public final class PatternLibraryIndex {
 	private final NavigableMap<PatternPageKey, PatternPageError> errors =
 		new TreeMap<>(PAGE_COMPARATOR);
 	private final ArrayDeque<PatternQuery> activeQueries = new ArrayDeque<>();
-	private final ArrayDeque<PatternReply> readyReplies = new ArrayDeque<>();
+	private ArrayDeque<PatternReply> readyReplies = new ArrayDeque<>();
+	@Nullable private UUID nextReplyRequester;
 	private WorkLane nextLane = WorkLane.FINGERPRINT;
 	private TickStats lastTickStats = new TickStats(0, 0, List.of());
-	private Set<PatternPageKey> lastInvalidatedKeys = Set.of();
+	private final LinkedHashSet<PatternPageKey> invalidatedKeys = new LinkedHashSet<>();
 	private int reparsedPageCount;
 	private int lastRecordMaintenanceUnits;
+	private int lastInvalidationMaintenanceUnits;
+	private int lastGenerationTransitionUnits;
+	private int lastRestartQueryVisits;
+	private int lastRestartReplyVisits;
 	private int lastLoadMembershipChecks;
 	private int lastLoadRecordVisits;
 
@@ -71,7 +77,7 @@ public final class PatternLibraryIndex {
 		Set<PatternPageKey> retained = new HashSet<>(pageOrder);
 		cache.keySet().retainAll(retained);
 		errors.keySet().retainAll(retained);
-		atomicRestart();
+		restartGeneration();
 	}
 
 	public void enqueue(PatternQuery query) {
@@ -83,6 +89,7 @@ public final class PatternLibraryIndex {
 		List<PatternReply> replies = new ArrayList<>(count);
 		for (int i = 0; i < count; i++)
 			replies.add(readyReplies.removeFirst());
+		normalizeReplyRequesterCursor();
 		return List.copyOf(replies);
 	}
 
@@ -91,6 +98,10 @@ public final class PatternLibraryIndex {
 		int count = Math.max(0, maxReplies);
 		if (count == 0 || readyReplies.isEmpty())
 			return List.of();
+		UUID scheduledRequester = scheduledReplyRequester();
+		if (!requesterComputerId.equals(scheduledRequester))
+			return List.of();
+		UUID successor = successorRequester(scheduledRequester);
 		List<PatternReply> replies = new ArrayList<>(Math.min(count, readyReplies.size()));
 		Iterator<PatternReply> iterator = readyReplies.iterator();
 		while (iterator.hasNext() && replies.size() < count) {
@@ -100,6 +111,8 @@ public final class PatternLibraryIndex {
 			replies.add(reply);
 			iterator.remove();
 		}
+		if (!replies.isEmpty())
+			nextReplyRequester = nextPendingRequester(successor, scheduledRequester);
 		return List.copyOf(replies);
 	}
 
@@ -115,9 +128,10 @@ public final class PatternLibraryIndex {
 			beginNextFingerprintSweep();
 
 		List<WorkLane> lanes = new ArrayList<>(totalBudget);
+		boolean restartRequired = false;
 		while (lanes.size() < totalBudget) {
 			boolean fingerprintEligible = fingerprintEligible();
-			boolean queryEligible = queryEligible();
+			boolean queryEligible = !restartRequired && queryEligible();
 			if (!fingerprintEligible && !queryEligible)
 				break;
 
@@ -129,11 +143,13 @@ public final class PatternLibraryIndex {
 				lane = fingerprintEligible ? WorkLane.FINGERPRINT : WorkLane.QUERY;
 			}
 			if (lane == WorkLane.FINGERPRINT)
-				fingerprintUnit(pages, parser);
+				restartRequired |= fingerprintUnit(pages, parser);
 			else
 				queryUnit();
 			lanes.add(lane);
 		}
+		if (restartRequired)
+			restartGeneration();
 		finishDiagnostics(lanes);
 	}
 
@@ -152,10 +168,13 @@ public final class PatternLibraryIndex {
 		Objects.requireNonNull(parser, "parser");
 		beginDiagnostics();
 		List<WorkLane> lanes = new ArrayList<>(Math.max(0, units));
+		boolean restartRequired = false;
 		while (lanes.size() < Math.max(0, units) && fingerprintEligible()) {
-			fingerprintUnit(pages, parser);
+			restartRequired |= fingerprintUnit(pages, parser);
 			lanes.add(WorkLane.FINGERPRINT);
 		}
+		if (restartRequired)
+			restartGeneration();
 		finishDiagnostics(lanes);
 	}
 
@@ -183,11 +202,14 @@ public final class PatternLibraryIndex {
 		root.putBoolean(COMPLETE, indexPassComplete);
 
 		ListTag queryTag = new ListTag();
-		activeQueries.forEach(query -> queryTag.add(PatternValueCodecs.saveQuery(query, registries)));
+		activeQueries.forEach(query -> queryTag.add(PatternValueCodecs.saveQuery(
+			currentGeneration(query), registries)));
 		root.put(QUERIES, queryTag);
 		ListTag replyTag = new ListTag();
 		readyReplies.forEach(reply -> replyTag.add(PatternValueCodecs.saveReply(reply, registries)));
 		root.put(REPLIES, replyTag);
+		if (nextReplyRequester != null)
+			root.putUUID(REPLY_REQUESTER_CURSOR, nextReplyRequester);
 		return root;
 	}
 
@@ -200,6 +222,8 @@ public final class PatternLibraryIndex {
 			PatternLibraryIndex index = new PatternLibraryIndex();
 			Corruption corruption = new Corruption();
 			boolean restart = false;
+			UUID loadedReplyRequester = root.hasUUID(REPLY_REQUESTER_CURSOR)
+				? root.getUUID(REPLY_REQUESTER_CURSOR) : null;
 
 			List<PatternPageKey> loadedOrder = new ArrayList<>();
 			for (Tag value : (ListTag) root.get(PAGE_ORDER)) {
@@ -285,9 +309,20 @@ public final class PatternLibraryIndex {
 				}
 				index.readyReplies.addLast(snapshotReply(reply.orElseThrow()));
 			}
+			if (index.readyReplies.isEmpty()) {
+				if (loadedReplyRequester != null)
+					corruption.found = true;
+			} else if (loadedReplyRequester == null) {
+				index.nextReplyRequester = index.readyReplies.getFirst().requesterComputerId();
+			} else if (index.hasPendingReply(loadedReplyRequester)) {
+				index.nextReplyRequester = loadedReplyRequester;
+			} else {
+				index.nextReplyRequester = index.readyReplies.getFirst().requesterComputerId();
+				corruption.found = true;
+			}
 
 			if (restart)
-				index.atomicRestart();
+				index.restartGeneration();
 			return new LoadResult(index, corruption.found);
 		} catch (RuntimeException exception) {
 			return new LoadResult(new PatternLibraryIndex(), true);
@@ -306,19 +341,25 @@ public final class PatternLibraryIndex {
 	int fingerprintCursor() { return fingerprintCursor; }
 	boolean cached(PatternPageKey key) { return cache.containsKey(key); }
 	int cachedPageCount() { return cache.size(); }
-	List<PatternQuery> activeQueries() { return List.copyOf(activeQueries); }
+	List<PatternQuery> activeQueries() {
+		return activeQueries.stream().map(this::currentGeneration).toList();
+	}
 	int activeQueryCount() { return activeQueries.size(); }
 	int readyReplyCount() { return readyReplies.size(); }
 	List<PatternPageError> pageErrors() { return errors.values().stream().limit(PatternLibrarySummary.MAX_ERRORS).toList(); }
 	int indexedPatternCount() { return indexPassComplete ? records.size() : recordBuilder.size(); }
 	int lastRecordMaintenanceUnits() { return lastRecordMaintenanceUnits; }
+	int lastInvalidationMaintenanceUnits() { return lastInvalidationMaintenanceUnits; }
+	int lastGenerationTransitionUnits() { return lastGenerationTransitionUnits; }
+	int lastRestartQueryVisits() { return lastRestartQueryVisits; }
+	int lastRestartReplyVisits() { return lastRestartReplyVisits; }
 	int lastLoadMembershipChecks() { return lastLoadMembershipChecks; }
 	int lastLoadRecordVisits() { return lastLoadRecordVisits; }
 	List<WorkLane> lastLaneTrace() { return lastTickStats.lanes(); }
 	int lastFingerprintUnits() { return lastTickStats.fingerprintUnits(); }
 	int lastQueryUnits() { return lastTickStats.queryUnits(); }
 	int lastTotalUnits() { return lastTickStats.totalUnits(); }
-	Set<PatternPageKey> lastInvalidatedKeys() { return lastInvalidatedKeys; }
+	Set<PatternPageKey> lastInvalidatedKeys() { return Set.copyOf(invalidatedKeys); }
 	int reparsedPageCount() { return reparsedPageCount; }
 
 	PatternLibrarySummary summary(PatternLibraryScanner.StructureState reason, int capacity) {
@@ -337,24 +378,25 @@ public final class PatternLibraryIndex {
 		return indexPassComplete && !activeQueries.isEmpty();
 	}
 
-	private void fingerprintUnit(PageReader pages, PatternJsonParser parser) {
+	private boolean fingerprintUnit(PageReader pages, PatternJsonParser parser) {
 		PatternPageKey key = pageOrder.get(fingerprintCursor);
 		CachedPage previous = cache.get(key);
 		String raw = Objects.requireNonNullElse(pages.read(key), "");
 		PageInspection inspection = parser.inspect(key, raw, previous == null ? null : previous.fingerprint());
 		if (inspection.changedResult().isEmpty()) {
 			completeFingerprintUnit(key);
-			return;
+			return false;
 		}
 
 		reparsedPageCount++;
 		putCachedPage(key, cachedPage(inspection.changedResult().orElseThrow()));
-		if (previous == null) {
-			completeFingerprintUnit(key);
-		} else {
-			lastInvalidatedKeys = addInvalidated(lastInvalidatedKeys, key);
-			atomicRestart();
+		boolean restartRequired = previous != null;
+		if (restartRequired) {
+			invalidatedKeys.add(key);
+			lastInvalidationMaintenanceUnits++;
 		}
+		completeFingerprintUnit(key);
+		return restartRequired;
 	}
 
 	private void completeFingerprintUnit(PatternPageKey key) {
@@ -377,7 +419,7 @@ public final class PatternLibraryIndex {
 		if (query.passGeneration() != generation)
 			query = query.restart(generation);
 		if (query.cursor() == records.size()) {
-			readyReplies.addLast(new PatternReply(query.queryId(), query.requesterComputerId(),
+			addReadyReply(new PatternReply(query.queryId(), query.requesterComputerId(),
 				query.logisticsId(), generation,
 				PatternReplyStatus.NOT_FOUND, null));
 			return;
@@ -386,11 +428,11 @@ public final class PatternLibraryIndex {
 		PatternRecord candidate = records.get(query.cursor());
 		int nextCursor = query.cursor() + 1;
 		if (candidate.mainOutput().stack().equals(query.requestedOutput())) {
-			readyReplies.addLast(new PatternReply(query.queryId(), query.requesterComputerId(),
+			addReadyReply(new PatternReply(query.queryId(), query.requesterComputerId(),
 				query.logisticsId(), generation,
 				PatternReplyStatus.MATCH, snapshotRecord(candidate)));
 		} else if (nextCursor == records.size()) {
-			readyReplies.addLast(new PatternReply(query.queryId(), query.requesterComputerId(),
+			addReadyReply(new PatternReply(query.queryId(), query.requesterComputerId(),
 				query.logisticsId(), generation,
 				PatternReplyStatus.NOT_FOUND, null));
 		} else {
@@ -399,18 +441,66 @@ public final class PatternLibraryIndex {
 		}
 	}
 
-	private void atomicRestart() {
+	private void restartGeneration() {
+		lastGenerationTransitionUnits++;
 		generation++;
 		fingerprintCursor = 0;
 		indexPassComplete = pageOrder.isEmpty();
 		records = List.of();
 		recordBuilder = new ArrayList<>();
-		readyReplies.removeIf(reply -> reply.generation() < generation);
-		if (!activeQueries.isEmpty()) {
-			List<PatternQuery> restarted = activeQueries.stream().map(query -> query.restart(generation)).toList();
-			activeQueries.clear();
-			activeQueries.addAll(restarted);
+		readyReplies = new ArrayDeque<>();
+		nextReplyRequester = null;
+	}
+
+	private PatternQuery currentGeneration(PatternQuery query) {
+		return query.passGeneration() == generation ? query : query.restart(generation);
+	}
+
+	private void addReadyReply(PatternReply reply) {
+		readyReplies.addLast(reply);
+		if (nextReplyRequester == null)
+			nextReplyRequester = reply.requesterComputerId();
+	}
+
+	private UUID scheduledReplyRequester() {
+		normalizeReplyRequesterCursor();
+		return Objects.requireNonNull(nextReplyRequester, "ready reply requester");
+	}
+
+	private void normalizeReplyRequesterCursor() {
+		if (readyReplies.isEmpty()) {
+			nextReplyRequester = null;
+			return;
 		}
+		if (nextReplyRequester == null || !hasPendingReply(nextReplyRequester))
+			nextReplyRequester = readyReplies.getFirst().requesterComputerId();
+	}
+
+	private boolean hasPendingReply(UUID requester) {
+		return readyReplies.stream().anyMatch(reply ->
+			reply.requesterComputerId().equals(requester));
+	}
+
+	@Nullable
+	private UUID successorRequester(UUID current) {
+		List<UUID> requesters = new ArrayList<>(new LinkedHashSet<>(readyReplies.stream()
+			.map(PatternReply::requesterComputerId).toList()));
+		if (requesters.isEmpty())
+			return null;
+		int currentIndex = requesters.indexOf(current);
+		return currentIndex < 0 ? requesters.getFirst()
+			: requesters.get((currentIndex + 1) % requesters.size());
+	}
+
+	@Nullable
+	private UUID nextPendingRequester(@Nullable UUID preferred, UUID justServed) {
+		if (readyReplies.isEmpty())
+			return null;
+		if (preferred != null && hasPendingReply(preferred))
+			return preferred;
+		if (hasPendingReply(justServed))
+			return justServed;
+		return readyReplies.getFirst().requesterComputerId();
 	}
 
 	private void putCachedPage(PatternPageKey key, CachedPage page) {
@@ -441,9 +531,13 @@ public final class PatternLibraryIndex {
 
 	private void beginDiagnostics() {
 		lastTickStats = new TickStats(0, 0, List.of());
-		lastInvalidatedKeys = Set.of();
+		invalidatedKeys.clear();
 		reparsedPageCount = 0;
 		lastRecordMaintenanceUnits = 0;
+		lastInvalidationMaintenanceUnits = 0;
+		lastGenerationTransitionUnits = 0;
+		lastRestartQueryVisits = 0;
+		lastRestartReplyVisits = 0;
 	}
 
 	private void finishDiagnostics(List<WorkLane> lanes) {
@@ -453,12 +547,6 @@ public final class PatternLibraryIndex {
 
 	private static WorkLane opposite(WorkLane lane) {
 		return lane == WorkLane.FINGERPRINT ? WorkLane.QUERY : WorkLane.FINGERPRINT;
-	}
-
-	private static Set<PatternPageKey> addInvalidated(Set<PatternPageKey> current, PatternPageKey key) {
-		LinkedHashSet<PatternPageKey> changed = new LinkedHashSet<>(current);
-		changed.add(key);
-		return Set.copyOf(changed);
 	}
 
 	private static CachedPage cachedPage(ParseResult result) {
@@ -534,11 +622,16 @@ public final class PatternLibraryIndex {
 	}
 
 	private static boolean validRoot(CompoundTag root) {
-		return hasExactKeys(root, PAGE_ORDER, CACHE, FINGERPRINT_CURSOR, GENERATION, COMPLETE, QUERIES, REPLIES)
+		Set<String> expected = new HashSet<>(Set.of(PAGE_ORDER, CACHE, FINGERPRINT_CURSOR,
+			GENERATION, COMPLETE, QUERIES, REPLIES));
+		if (root.contains(REPLY_REQUESTER_CURSOR))
+			expected.add(REPLY_REQUESTER_CURSOR);
+		return root.getAllKeys().equals(expected)
 			&& hasType(root, PAGE_ORDER, Tag.TAG_LIST) && hasType(root, CACHE, Tag.TAG_LIST)
 			&& hasType(root, FINGERPRINT_CURSOR, Tag.TAG_INT) && hasType(root, GENERATION, Tag.TAG_LONG)
 			&& hasType(root, COMPLETE, Tag.TAG_BYTE) && hasType(root, QUERIES, Tag.TAG_LIST)
 			&& hasType(root, REPLIES, Tag.TAG_LIST)
+			&& (!root.contains(REPLY_REQUESTER_CURSOR) || root.hasUUID(REPLY_REQUESTER_CURSOR))
 			&& (root.getByte(COMPLETE) == 0 || root.getByte(COMPLETE) == 1)
 			&& isCompoundList((ListTag) root.get(PAGE_ORDER)) && isCompoundList((ListTag) root.get(CACHE))
 			&& isCompoundList((ListTag) root.get(QUERIES)) && isCompoundList((ListTag) root.get(REPLIES));
