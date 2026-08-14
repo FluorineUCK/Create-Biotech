@@ -387,6 +387,9 @@ class PatternStorageCoreBlockEntityTest {
 		serverState(priorNested).remove("PageTopologies");
 		assertEquals(Set.of("LibrarianSnapshotBox", "PendingSafeRelease", "StructureState",
 			"StructureSnapshot", "PatternIndex"), serverState(priorNested).getAllKeys());
+		assertEquals(Set.of("PageOrder", "Cache", "FingerprintCursor", "Generation",
+			"Complete", "Queries", "Replies"), priorIndex.getAllKeys(),
+			"The compatibility fixture must have the exact b72 PatternIndex root shape");
 		assertEquals(1, priorIndex.getList("Queries", Tag.TAG_COMPOUND).size());
 		assertTrue(priorIndex.getList("Queries", Tag.TAG_COMPOUND).getCompound(0)
 			.contains("Cursor", Tag.TAG_INT));
@@ -412,6 +415,96 @@ class PatternStorageCoreBlockEntityTest {
 		assertFalse(topologyRefreshPending(restored));
 		assertTrue(restored.queryAccessReady());
 		assertEquals(retained, restored.libraryIndex().save(REGISTRIES));
+	}
+
+	@Test
+	void currentEnvelopeMissingTopologyButContainingRequesterCursorIsRejectedAtomically() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		ReadyCore source = coreWithRetainedWork(valid, shelf);
+		CompoundTag malformedCurrent = source.saveWithFullMetadata(REGISTRIES);
+		CompoundTag malformedIndex = serverState(malformedCurrent).getCompound("PatternIndex");
+		assertTrue(malformedIndex.hasUUID("ReplyRequesterCursor"),
+			"The malformed-current fixture needs an unambiguous current-only index key");
+		serverState(malformedCurrent).remove("PageTopologies");
+		PatternStorageCoreBlockEntity target = seededCore();
+		CompoundTag before = authoritativeSnapshot(target);
+
+		target.loadWithComponents(malformedCurrent, REGISTRIES);
+
+		assertEquals(before, authoritativeSnapshot(target),
+			"A damaged current envelope must not be mistaken for b72 or partially committed");
+	}
+
+	@Test
+	void priorNestedCompatibilityRequiresExactB72PatternIndexTypesBeforeCommit() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		ReadyCore source = coreWithRetainedWork(valid, shelf);
+		CompoundTag malformedPrior = source.saveWithFullMetadata(REGISTRIES);
+		CompoundTag malformedIndex = serverState(malformedPrior).getCompound("PatternIndex");
+		malformedIndex.remove("ReplyRequesterCursor");
+		malformedIndex.putString("FingerprintCursor", "wrong-type");
+		serverState(malformedPrior).remove("PageTopologies");
+		PatternStorageCoreBlockEntity target = seededCore();
+		CompoundTag before = authoritativeSnapshot(target);
+
+		target.loadWithComponents(malformedPrior, REGISTRIES);
+
+		assertEquals(before, authoritativeSnapshot(target),
+			"A prior-shaped envelope with non-b72 index types must be rejected atomically");
+	}
+
+	@Test
+	void zeroMaskCurrentTopologyFromAnotherRootDimensionRemainsPending() {
+		CompoundTag saved = zeroMaskCurrentState();
+		ReadyCore restored = new ReadyCore(new SpaceAddress(Level.NETHER, null, BlockPos.ZERO));
+
+		restored.loadWithComponents(saved, REGISTRIES);
+
+		assertTrue(topologyRefreshPending(restored));
+		assertFalse(restored.queryAccessReady());
+	}
+
+	@Test
+	void zeroMaskCurrentTopologyFromAnotherSubLevelRemainsPending() {
+		CompoundTag saved = zeroMaskCurrentState();
+		ReadyCore restored = new ReadyCore(new SpaceAddress(Level.OVERWORLD, UUID.randomUUID(),
+			BlockPos.ZERO));
+
+		restored.loadWithComponents(saved, REGISTRIES);
+
+		assertTrue(topologyRefreshPending(restored));
+		assertFalse(restored.queryAccessReady());
+	}
+
+	@Test
+	void ordinarySpaceZeroMaskCurrentRoundTripWaitsForLoadedReconstructionWithoutRestart() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		CompoundTag saved = zeroMaskCurrentState();
+		CompoundTag retainedIndex = serverState(saved).getCompound("PatternIndex").copy();
+		assertEquals(0, serverState(saved).getList("PageTopologies", Tag.TAG_COMPOUND)
+			.getCompound(0).getInt("WritableSlots"));
+		assertTrue(retainedIndex.getList("PageOrder", Tag.TAG_COMPOUND).isEmpty());
+		ReadyCore restored = new ReadyCore(new SpaceAddress(Level.OVERWORLD, null, BlockPos.ZERO));
+
+		restored.loadWithComponents(saved, REGISTRIES);
+
+		assertTrue(topologyRefreshPending(restored),
+			"Zero-page persistence has no spatial witness and must wait for a loaded scan");
+		assertFalse(restored.queryAccessReady());
+		assertEquals(retainedIndex, restored.libraryIndex().save(REGISTRIES));
+
+		restored.applyStructureScan(valid, Map.of(shelf, 0), 0);
+
+		assertFalse(topologyRefreshPending(restored));
+		assertTrue(restored.queryAccessReady());
+		assertEquals(retainedIndex, restored.libraryIndex().save(REGISTRIES),
+			"Matching zero-page reconstruction must not restart queries or drop replies");
 	}
 
 	@Test
@@ -955,6 +1048,18 @@ class PatternStorageCoreBlockEntityTest {
 		return core;
 	}
 
+	private static CompoundTag zeroMaskCurrentState() {
+		BlockPos shelf = new BlockPos(1, 0, 0);
+		PatternLibraryScanner.ScanResult valid = new PatternLibraryScanner.ScanResult(
+			PatternLibraryScanner.StructureState.VALID, snapshotWithChiseledShelf());
+		ReadyCore source = new ReadyCore(new SpaceAddress(Level.OVERWORLD, null, BlockPos.ZERO));
+		source.applyStructureScan(valid, Map.of(shelf, 0), 0);
+		source.libraryIndex().enqueue(query(Items.IRON_INGOT));
+		source.libraryIndex().tickQueries(1);
+		source.libraryIndex().enqueue(query(Items.GOLD_INGOT));
+		return source.saveWithFullMetadata(REGISTRIES);
+	}
+
 	private static PatternLibraryScanner.View scannerView(
 		Map<BlockPos, PatternLibraryScanner.MemberKind> members) {
 		return new PatternLibraryScanner.View() {
@@ -1161,9 +1266,15 @@ class PatternStorageCoreBlockEntityTest {
 
 	private static final class ReadyCore extends PatternStorageCoreBlockEntity {
 		private boolean shelfEntitiesReadable = true;
+		private final SpaceAddress currentSpace;
 
 		private ReadyCore() {
+			this(new SpaceAddress(Level.OVERWORLD, SPACE, BlockPos.ZERO));
+		}
+
+		private ReadyCore(SpaceAddress currentSpace) {
 			super(BlockEntityType.FURNACE, BlockPos.ZERO, Blocks.FURNACE.defaultBlockState());
+			this.currentSpace = currentSpace;
 			bootstrap();
 		}
 
@@ -1180,7 +1291,7 @@ class PatternStorageCoreBlockEntityTest {
 
 		@Override
 		SpaceAddress currentLibrarySpace() {
-			return new SpaceAddress(Level.OVERWORLD, SPACE, BlockPos.ZERO);
+			return currentSpace;
 		}
 	}
 

@@ -723,6 +723,9 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 			return Optional.empty();
 		try {
 			PatternLibraryScanner.StructureState.valueOf(server.getString(STRUCTURE_STATE));
+			if (!hasTopologies && !PatternLibraryIndex.hasPriorNestedRootShape(
+				server.getCompound(LIBRARY_INDEX)))
+				return Optional.empty();
 			return Optional.of(hasTopologies ? ServerStateSchema.CURRENT
 				: ServerStateSchema.PRIOR_NESTED);
 		} catch (IllegalArgumentException invalidState) {
@@ -814,7 +817,10 @@ PatternStorageCoreBlockEntity(BlockEntityType<?> type, BlockPos pos, BlockState 
 	static boolean persistedTopologyMatches(PatternStructureSnapshot snapshot,
 		Map<BlockPos, Integer> topologies, List<PatternPageKey> pageOrder,
 		int memberLimit, @Nullable SpaceAddress currentSpace) {
+		// Page keys are the persisted spatial witness. With no writable pages, only a
+		// loaded scan can establish that the local-only snapshot belongs to this space.
 		if (currentSpace == null
+			|| pageOrder.isEmpty()
 			|| !snapshot.members().getFirst().equals(currentSpace.localPos())
 			|| !persistedTopologyMatches(snapshot, topologies, pageOrder, memberLimit))
 			return false;

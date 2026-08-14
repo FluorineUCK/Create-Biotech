@@ -647,6 +647,16 @@ public final class PatternLibraryIndex {
 	}
 
 	private static boolean validRoot(CompoundTag root) {
+		return validRoot(root, true);
+	}
+
+	static boolean hasPriorNestedRootShape(CompoundTag root) {
+		return validRoot(root, false);
+	}
+
+	private static boolean validRoot(CompoundTag root, boolean allowRequesterCursor) {
+		if (!allowRequesterCursor && root.contains(REPLY_REQUESTER_CURSOR))
+			return false;
 		Set<String> expected = new HashSet<>(Set.of(PAGE_ORDER, CACHE, FINGERPRINT_CURSOR,
 			GENERATION, COMPLETE, QUERIES, REPLIES));
 		if (root.contains(REPLY_REQUESTER_CURSOR))
