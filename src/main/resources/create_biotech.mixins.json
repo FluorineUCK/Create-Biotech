@@ -62,6 +62,7 @@
     "client.ClientLevelMixin",
     "client.CreeperAccessor",
     "client.CreeperRendererMixin",
+    "client.DeltaTrackerTimerMixin",
     "client.FlapStuffsMixin",
     "client.FluidTankRendererMixin",
     "client.FunnelRendererMixin",

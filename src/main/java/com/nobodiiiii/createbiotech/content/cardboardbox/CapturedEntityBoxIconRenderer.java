@@ -110,9 +110,14 @@ public final class CapturedEntityBoxIconRenderer {
 				MultiBufferSource clippedBuffer =
 					renderType -> new FaceClippingVertexConsumer(iconBuffer.getBuffer(renderType), boxToRender, face,
 						projection.alignment());
-				BlockCenteredRenderedLivingEntityItemRenderer.renderBlockCenteredEntity(prepared.entity(),
-					prepared.geometry().geometryCenter(), projection.renderScale(), iconPoseStack, clippedBuffer,
-					packedLight);
+				CapturedEntityRenderTime.push();
+				try {
+					BlockCenteredRenderedLivingEntityItemRenderer.renderBlockCenteredEntity(prepared.entity(),
+						prepared.geometry().geometryCenter(), projection.renderScale(), iconPoseStack, clippedBuffer,
+						packedLight);
+				} finally {
+					CapturedEntityRenderTime.pop();
+				}
 			});
 	}
 
@@ -141,8 +146,13 @@ public final class CapturedEntityBoxIconRenderer {
 	static GeometryProfile prepareGeometry(LivingEntity entity) {
 		GEOMETRY_COLLECTOR.reset();
 		MultiBufferSource measuringBuffer = renderType -> GEOMETRY_COLLECTOR;
-		BlockCenteredRenderedLivingEntityItemRenderer.renderRawEntityForGeometry(entity, measuringBuffer,
-			LightTexture.FULL_BRIGHT);
+		CapturedEntityRenderTime.push();
+		try {
+			BlockCenteredRenderedLivingEntityItemRenderer.renderRawEntityForGeometry(entity, measuringBuffer,
+				LightTexture.FULL_BRIGHT);
+		} finally {
+			CapturedEntityRenderTime.pop();
+		}
 
 		if (!GEOMETRY_COLLECTOR.hasVertices())
 			GEOMETRY_COLLECTOR.includeEntityDimensions(entity.getDimensions(entity.getPose()));
