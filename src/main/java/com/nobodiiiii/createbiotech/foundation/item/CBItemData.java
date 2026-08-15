@@ -19,6 +19,25 @@ public final class CBItemData {
 		return data == null ? null : data.copyTag();
 	}
 
+	/**
+	 * Returns the immutable component instance stored on the stack. Callers must not
+	 * mutate {@link CustomData#getUnsafe()} or any tag reachable through it.
+	 */
+	@Nullable
+	public static CustomData getReadOnlyComponent(ItemStack stack) {
+		return stack.get(DataComponents.CUSTOM_DATA);
+	}
+
+	/**
+	 * Returns a zero-copy view of the stack's custom data. This is intentionally
+	 * read-only; use {@link #edit(ItemStack, Consumer)} for writes.
+	 */
+	@Nullable
+	public static CompoundTag getReadOnly(ItemStack stack) {
+		CustomData data = getReadOnlyComponent(stack);
+		return data == null ? null : data.getUnsafe();
+	}
+
 	public static CompoundTag getOrEmpty(ItemStack stack) {
 		return stack.getOrDefault(DataComponents.CUSTOM_DATA, CustomData.EMPTY).copyTag();
 	}

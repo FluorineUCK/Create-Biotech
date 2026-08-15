@@ -25,12 +25,13 @@ public class CapturedEntityBoxItemRenderer extends CustomRenderedItemModelRender
 	@Override
 	protected void render(ItemStack stack, CustomRenderedItemModel model, PartialItemModelRenderer renderer,
 		ItemDisplayContext transformType, PoseStack poseStack, MultiBufferSource buffer, int light, int overlay) {
-		renderer.render(getBoxModel(stack, model.getOriginalModel(), transformType), light);
-		CapturedEntityBoxIconRenderer.renderOnItem(stack, poseStack, buffer, light);
+		boolean captured = CapturedEntityBoxHelper.hasCapturedEntity(stack);
+		renderer.render(getBoxModel(stack, model.getOriginalModel(), transformType, captured), light);
+		CapturedEntityBoxIconRenderer.renderOnItem(stack, captured, transformType, poseStack, buffer, light);
 	}
 
-	private BakedModel getBoxModel(ItemStack stack, BakedModel fallback, ItemDisplayContext transformType) {
-		boolean captured = CapturedEntityBoxHelper.hasCapturedEntity(stack);
+	private BakedModel getBoxModel(ItemStack stack, BakedModel fallback, ItemDisplayContext transformType,
+		boolean captured) {
 		if (transformType == ItemDisplayContext.FIXED)
 			return getModel(captured ? getCapturedModelLocation(stack) : CardboardBoxPartials.getLogisticsModelLocation(stack),
 				fallback);

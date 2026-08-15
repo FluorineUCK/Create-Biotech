@@ -31,13 +31,13 @@ public class CardboardBoxEntityRenderer extends EntityRenderer<CardboardBoxEntit
 	public void render(CardboardBoxEntity entity, float yaw, float partialTicks, PoseStack poseStack,
 		MultiBufferSource buffer, int light) {
 		ItemStack stack = entity.getBox();
-		PackageRenderer.renderBox(entity, yaw, poseStack, buffer, light, getModel(stack));
-		CapturedEntityBoxIconRenderer.renderOnEntity(stack, yaw, poseStack, buffer, light);
+		boolean captured = CapturedEntityBoxHelper.hasCapturedEntity(stack);
+		PackageRenderer.renderBox(entity, yaw, poseStack, buffer, light, getModel(stack, captured));
+		CapturedEntityBoxIconRenderer.renderOnEntity(stack, captured, yaw, poseStack, buffer, light);
 		super.render(entity, yaw, partialTicks, poseStack, buffer, light);
 	}
 
-	private PartialModel getModel(ItemStack stack) {
-		boolean captured = CapturedEntityBoxHelper.hasCapturedEntity(stack);
+	private PartialModel getModel(ItemStack stack, boolean captured) {
 		if (stack.is(CBItems.LARGE_CARDBOARD_BOX.get()))
 			return captured ? LARGE_CARDBOARD_BOX_CAPTURED : LARGE_CARDBOARD_BOX;
 		return captured ? SMALL_CARDBOARD_BOX_CAPTURED : SMALL_CARDBOARD_BOX;

@@ -92,10 +92,35 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 	public static void renderBlockCenteredEntity(LivingEntity entity, float scaleMultiplier, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight) {
 		Vector3f geometryCenter = measureGeometryCenter(entity);
+		renderBlockCenteredEntity(entity, geometryCenter, scaleMultiplier, poseStack, buffer, packedLight);
+	}
+
+	/**
+	 * Renders with a previously measured geometry center. This overload performs no
+	 * measurement pass and is intended for callers with a geometry cache.
+	 */
+	public static void renderBlockCenteredEntity(LivingEntity entity, Vector3f geometryCenter, float scaleMultiplier,
+		PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
 		poseStack.pushPose();
 		renderBlockCenteredEntity(entity, geometryCenter, scaleMultiplier, DEFAULT_ENTITY_Y_ROTATION, poseStack, buffer,
 			packedLight);
 		poseStack.popPose();
+	}
+
+	/**
+	 * Applies the default block-centered transform without rendering. Geometry
+	 * preparation uses this to project vertices captured in a single raw pass.
+	 */
+	public static void applyDefaultBlockCenteredTransform(PoseStack poseStack, Vector3f geometryCenter,
+		float scaleMultiplier) {
+		applyBlockCenteredTransform(poseStack, geometryCenter, scaleMultiplier, DEFAULT_ENTITY_Y_ROTATION);
+	}
+
+	/**
+	 * Emits one uncentered entity render into a measuring buffer.
+	 */
+	public static void renderRawEntityForGeometry(LivingEntity entity, MultiBufferSource buffer, int packedLight) {
+		renderRawEntity(entity, new PoseStack(), buffer, packedLight);
 	}
 
 	/**
@@ -145,11 +170,16 @@ public class BlockCenteredRenderedLivingEntityItemRenderer<T extends LivingEntit
 
 	private static void renderBlockCenteredEntity(LivingEntity entity, Vector3f geometryCenter, float scaleMultiplier,
 		float yRotation, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+		applyBlockCenteredTransform(poseStack, geometryCenter, scaleMultiplier, yRotation);
+		renderRawEntity(entity, poseStack, buffer, packedLight);
+	}
+
+	private static void applyBlockCenteredTransform(PoseStack poseStack, Vector3f geometryCenter,
+		float scaleMultiplier, float yRotation) {
 		poseStack.translate(BLOCK_CENTER.x, BLOCK_CENTER.y, BLOCK_CENTER.z);
 		poseStack.mulPose(Axis.YP.rotationDegrees(yRotation));
 		poseStack.scale(scaleMultiplier, scaleMultiplier, scaleMultiplier);
 		poseStack.translate(-geometryCenter.x, -geometryCenter.y, -geometryCenter.z);
-		renderRawEntity(entity, poseStack, buffer, packedLight);
 	}
 
 	private static float getBaseYRotation(ItemDisplayContext displayContext) {

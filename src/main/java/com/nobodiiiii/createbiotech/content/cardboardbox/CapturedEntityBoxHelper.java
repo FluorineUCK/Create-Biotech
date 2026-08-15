@@ -29,6 +29,7 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.SpawnEggItem;
+import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.item.context.UseOnContext;
@@ -171,8 +172,8 @@ public class CapturedEntityBoxHelper {
 		if (entity == null)
 			return false;
 
-		CompoundTag stackTag = CBItemData.getOrEmpty(stack);
-		if (stackTag.isEmpty())
+		CompoundTag stackTag = CBItemData.getReadOnly(stack);
+		if (stackTag == null || stackTag.isEmpty())
 			return false;
 
 		BlockPos clickedPos = context.getClickedPos();
@@ -218,11 +219,15 @@ public class CapturedEntityBoxHelper {
 	}
 
 	public static Entity createCapturedEntity(ItemStack stack, Level level) {
-		CompoundTag entityData = getCapturedEntityData(stack);
-		if (entityData == null)
+		CapturedEntityRenderData renderData = getCapturedEntityRenderData(stack);
+		if (renderData == null)
 			return null;
+		return createCapturedEntity(renderData, level);
+	}
 
-		CompoundTag entityDataForLoad = entityData.copy();
+	static Entity createCapturedEntity(CapturedEntityRenderData renderData, Level level) {
+		CompoundTag entityDataForLoad = renderData.entityData
+			.copy();
 		if (level instanceof ServerLevel serverLevel
 			&& hasUuidCollision(serverLevel.getServer(), entityDataForLoad))
 			reseedEntityTree(entityDataForLoad);
@@ -231,10 +236,9 @@ public class CapturedEntityBoxHelper {
 		if (entity == null)
 			return null;
 
-		CompoundTag stackTag = CBItemData.getOrEmpty(stack);
 		if (entity instanceof LivingEntity living
-			&& stackTag.contains(CAPTURED_ENTITY_HEALTH_TAG, Tag.TAG_ANY_NUMERIC))
-			living.setHealth(Math.min(living.getMaxHealth(), stackTag.getFloat(CAPTURED_ENTITY_HEALTH_TAG)));
+			&& renderData.hasCapturedHealth())
+			living.setHealth(Math.min(living.getMaxHealth(), renderData.capturedHealth()));
 
 		return entity;
 	}
@@ -274,7 +278,81 @@ public class CapturedEntityBoxHelper {
 	}
 
 	public static boolean hasCapturedEntity(ItemStack stack) {
-		return CBItemData.getOrEmpty(stack).contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND);
+		CompoundTag tag = CBItemData.getReadOnly(stack);
+		return tag != null && tag.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND);
+	}
+
+	/**
+	 * Builds the small immutable descriptor used by the client render caches without
+	 * copying NBT. The component and nested tag exposed by this record are read-only.
+	 */
+	static CapturedEntityRenderData getCapturedEntityRenderData(ItemStack stack) {
+		CustomData component = CBItemData.getReadOnlyComponent(stack);
+		if (component == null)
+			return null;
+
+		CompoundTag root = component.getUnsafe();
+		if (!root.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND))
+			return null;
+
+		CompoundTag entityData = root.getCompound(CAPTURED_ENTITY_TAG);
+		if (!entityData.contains("id", Tag.TAG_STRING))
+			return null;
+
+		String entityId = entityData.getString("id");
+		if (entityId.isEmpty())
+			return null;
+
+		boolean hasHealth = root.contains(CAPTURED_ENTITY_HEALTH_TAG, Tag.TAG_ANY_NUMERIC);
+		boolean prototype = entityData.size() == 1 && !hasHealth && hasOnlyPrototypeRootData(root);
+		return new CapturedEntityRenderData(component, entityData, entityId, prototype,
+			hasHealth, hasHealth ? root.getFloat(CAPTURED_ENTITY_HEALTH_TAG) : 0.0f);
+	}
+
+	private static boolean hasOnlyPrototypeRootData(CompoundTag root) {
+		for (String key : root.getAllKeys())
+			if (!CAPTURED_ENTITY_TAG.equals(key) && !CAPTURED_ENTITY_DESC_ID_TAG.equals(key))
+				return false;
+		return true;
+	}
+
+	static final class CapturedEntityRenderData {
+		private final CustomData component;
+		private final CompoundTag entityData;
+		private final String entityId;
+		private final boolean prototype;
+		private final boolean hasCapturedHealth;
+		private final float capturedHealth;
+
+		private CapturedEntityRenderData(CustomData component, CompoundTag entityData, String entityId,
+			boolean prototype, boolean hasCapturedHealth, float capturedHealth) {
+			this.component = component;
+			this.entityData = entityData;
+			this.entityId = entityId;
+			this.prototype = prototype;
+			this.hasCapturedHealth = hasCapturedHealth;
+			this.capturedHealth = capturedHealth;
+		}
+
+		CustomData component() {
+			return component;
+		}
+
+		String entityId() {
+			return entityId;
+		}
+
+		boolean prototype() {
+			return prototype;
+		}
+
+		boolean hasCapturedHealth() {
+			return hasCapturedHealth;
+		}
+
+		float capturedHealth() {
+			return capturedHealth;
+		}
 	}
 
 	public static ItemStackHandler applyVirtualSelfFallbackContents(ItemStack box, ItemStackHandler contents) {
@@ -299,7 +377,9 @@ public class CapturedEntityBoxHelper {
 	}
 
 	private static CompoundTag getCapturedEntityData(ItemStack stack) {
-		CompoundTag tag = CBItemData.getOrEmpty(stack);
+		CompoundTag tag = CBItemData.getReadOnly(stack);
+		if (tag == null)
+			return null;
 		if (!tag.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND))
 			return null;
 		return tag.getCompound(CAPTURED_ENTITY_TAG);
@@ -375,7 +455,9 @@ public class CapturedEntityBoxHelper {
 	}
 
 	private static void collectCapturedEntityEntry(ItemStack stack, List<TooltipEntry> entries) {
-		CompoundTag tag = CBItemData.getOrEmpty(stack);
+		CompoundTag tag = CBItemData.getReadOnly(stack);
+		if (tag == null)
+			return;
 		if (!tag.contains(CAPTURED_ENTITY_DESC_ID_TAG, Tag.TAG_STRING))
 			return;
 
