@@ -13,7 +13,6 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlockEntity;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterSquidVisual;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -65,40 +64,35 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 	@Override
 	public void draw(GuiGraphics graphics, int xOffset, int yOffset) {
 		PoseStack matrixStack = graphics.pose();
-		matrixStack.pushPose();
-		matrixStack.translate(xOffset, yOffset, 100);
+		scene(graphics, xOffset, yOffset, () -> {
+			int scale = SCENE_SCALE;
 
-		matrixStack.mulPose(Axis.XP.rotationDegrees(-15.5f));
-		matrixStack.mulPose(Axis.YP.rotationDegrees(22.5f));
-		int scale = SCENE_SCALE;
+			blockElement(CBBlocks.SQUID_PRINTER.get()
+				.defaultBlockState())
+				.scale(scale)
+				.render(graphics);
 
-		blockElement(CBBlocks.SQUID_PRINTER.get()
-			.defaultBlockState())
-			.scale(scale)
-			.render(graphics);
+			SquidJeiRenderer.renderOpenInScene(graphics, 0.5d, SQUID_ATTACHMENT_Y, 0.5d, scale);
 
-		SquidJeiRenderer.renderOpenInScene(graphics, 0.5d, SQUID_ATTACHMENT_Y, 0.5d, scale);
+			blockElement(AllBlocks.DEPOT.getDefaultState())
+				.atLocal(0, 2, 0)
+				.scale(scale)
+				.render(graphics);
 
-		blockElement(AllBlocks.DEPOT.getDefaultState())
-			.atLocal(0, 2, 0)
-			.scale(scale)
-			.render(graphics);
+			DEFAULT_LIGHTING.applyLighting();
+			matrixStack.pushPose();
+			UIRenderHelper.flipForGuiRender(matrixStack);
+			matrixStack.scale(16, 16, 16);
+			float from = 3f / 16f;
+			float to = 17f / 16f;
+			FluidStack fluidStack = fluids.get(0);
+			NeoForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, from, from, from, to, to, to,
+				graphics.bufferSource(), matrixStack, LightTexture.FULL_BRIGHT, false, true);
+			matrixStack.popPose();
 
-		DEFAULT_LIGHTING.applyLighting();
-		matrixStack.pushPose();
-		UIRenderHelper.flipForGuiRender(matrixStack);
-		matrixStack.scale(16, 16, 16);
-		float from = 3f / 16f;
-		float to = 17f / 16f;
-		FluidStack fluidStack = fluids.get(0);
-		NeoForgeCatnipServices.FLUID_RENDERER.renderFluidBox(fluidStack, from, from, from, to, to, to,
-			graphics.bufferSource(), matrixStack, LightTexture.FULL_BRIGHT, false, true);
-		matrixStack.popPose();
-
-		renderInkParticles(graphics);
-		Lighting.setupFor3DItems();
-
-		matrixStack.popPose();
+			renderInkParticles(graphics);
+			Lighting.setupFor3DItems();
+		});
 	}
 
 	private void renderInkParticles(GuiGraphics graphics) {

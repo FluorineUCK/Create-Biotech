@@ -4,7 +4,8 @@ import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
-import com.nobodiiiii.createbiotech.foundation.render.BlockCenteredRenderedLivingEntityItemRenderer;
+import com.nobodiiiii.createbiotech.foundation.render.CachedRenderEntity;
+import com.nobodiiiii.createbiotech.foundation.render.GuiEntityItemElement;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
@@ -13,7 +14,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 
@@ -25,12 +25,10 @@ public final class CapturedEntityBoxJeiRenderer {
 	private static final float BADGE_SCALE = 0.55f;
 	private static final int BADGE_Z = 200;
 
-	@Nullable
-	private static ItemStack cachedStack;
-	@Nullable
-	private static Level cachedLevel;
-	@Nullable
-	private static Entity cachedEntity;
+	private static final CachedRenderEntity<LivingEntity, ItemStack> CAPTURED_ENTITY =
+		CachedRenderEntity.<LivingEntity, ItemStack>keyed(CapturedEntityBoxJeiRenderer::createCapturedEntity)
+			.keyEquality(ItemStack::isSameItemSameComponents)
+			.keyCopier(ItemStack::copy);
 
 	private CapturedEntityBoxJeiRenderer() {}
 
@@ -46,7 +44,7 @@ public final class CapturedEntityBoxJeiRenderer {
 
 	public static boolean renderCapturedEntityBox(GuiGraphics graphics, ItemStack stack, int x, int y) {
 		if (!CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get()) {
-			clearCache();
+			CAPTURED_ENTITY.clear();
 			return false;
 		}
 		if (!(stack.getItem() instanceof CapturedEntityBoxItem) || !CapturedEntityBoxHelper.hasCapturedEntity(stack))
@@ -57,7 +55,7 @@ public final class CapturedEntityBoxJeiRenderer {
 			return true;
 		}
 
-		LivingEntity entity = getOrCreateEntity(stack);
+		LivingEntity entity = CAPTURED_ENTITY.get(Minecraft.getInstance().level, stack);
 		if (entity == null)
 			return false;
 
@@ -66,15 +64,11 @@ public final class CapturedEntityBoxJeiRenderer {
 		return true;
 	}
 
-	private static void clearCache() {
-		cachedStack = null;
-		cachedLevel = null;
-		cachedEntity = null;
-	}
-
 	private static void renderEntity(GuiGraphics graphics, LivingEntity entity, int x, int y) {
-		BlockCenteredRenderedLivingEntityItemRenderer.renderAutoScaledGuiEntityItem(graphics, ENTITY_ITEM_TRANSFORM,
-			entity, 1.0f, x, y);
+		GuiEntityItemElement.of(entity)
+			.blockCentered()
+			.autoScale(1.0f)
+			.renderInGuiSlot(graphics, ENTITY_ITEM_TRANSFORM, x, y);
 	}
 
 	private static void renderBadge(GuiGraphics graphics, int x, int y) {
@@ -101,30 +95,8 @@ public final class CapturedEntityBoxJeiRenderer {
 	}
 
 	@Nullable
-	private static LivingEntity getOrCreateEntity(ItemStack stack) {
-		Level level = Minecraft.getInstance().level;
-		if (level == null)
-			return null;
-		if (cachedEntity instanceof LivingEntity livingEntity && cachedLevel == level && cachedStack != null
-			&& ItemStack.isSameItemSameComponents(cachedStack, stack))
-			return livingEntity;
-
+	private static LivingEntity createCapturedEntity(Level level, ItemStack stack) {
 		Entity entity = CapturedEntityBoxHelper.createCapturedEntity(stack, level);
-		if (!(entity instanceof LivingEntity livingEntity))
-			return null;
-
-		if (livingEntity instanceof Mob mob)
-			mob.setNoAi(true);
-		livingEntity.setSilent(true);
-		livingEntity.setOnGround(true);
-		livingEntity.tickCount = 0;
-		livingEntity.hurtTime = 0;
-		livingEntity.deathTime = 0;
-		livingEntity.hurtMarked = false;
-
-		cachedLevel = level;
-		cachedStack = stack.copy();
-		cachedEntity = livingEntity;
-		return livingEntity;
+		return entity instanceof LivingEntity livingEntity ? livingEntity : null;
 	}
 }

@@ -10,18 +10,17 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.foundation.render.BlockEntityModelElement;
-import com.nobodiiiii.createbiotech.foundation.render.BlockCenteredRenderedLivingEntityItemRenderer;
+import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
+import com.nobodiiiii.createbiotech.foundation.render.GuiEntityItemElement;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.Direction;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
@@ -43,8 +42,8 @@ public final class CapturedEntityBoxIconRenderer {
 	private static final int MAX_CAPTURED_VERTICES = 262_144;
 	private static final float ITEM_PLANE_TO_FACE_Y_ROT = itemPlaneToFaceYRot(ICON_FACE);
 	private static final ItemStack ENTITY_ITEM_TRANSFORM = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get());
-	private static final GeometryVertexCollector GEOMETRY_COLLECTOR =
-		new GeometryVertexCollector(MAX_CAPTURED_VERTICES);
+	private static final EntityGeometry.Collector GEOMETRY_COLLECTOR =
+		EntityGeometry.Collector.caching(MAX_CAPTURED_VERTICES);
 	private static final Vector3f FACE_CENTER_SCRATCH = new Vector3f();
 	private static final Vector3f FACE_NORMAL_SCRATCH = new Vector3f();
 
@@ -129,11 +128,9 @@ public final class CapturedEntityBoxIconRenderer {
 
 	static GeometryProfile prepareGeometry(LivingEntity entity) {
 		GEOMETRY_COLLECTOR.reset();
-		MultiBufferSource measuringBuffer = renderType -> GEOMETRY_COLLECTOR;
 		CapturedEntityRenderTime.push();
 		try {
-			BlockCenteredRenderedLivingEntityItemRenderer.renderRawEntityForGeometry(entity, measuringBuffer,
-				LightTexture.FULL_BRIGHT);
+			EntityGeometry.measureInto(entity, GEOMETRY_COLLECTOR);
 		} finally {
 			CapturedEntityRenderTime.pop();
 		}
@@ -167,8 +164,12 @@ public final class CapturedEntityBoxIconRenderer {
 		applyEntityItemTransform(poseStack, face);
 		CapturedEntityRenderTime.push();
 		try {
-			BlockCenteredRenderedLivingEntityItemRenderer.renderBlockCenteredEntity(entity, geometry.geometryCenter(),
-				projection.renderScale(), poseStack, clippingSource, BakedCapturedEntityIcon.LIGHT_SENTINEL);
+			GuiEntityItemElement.of(entity)
+				.blockCentered()
+				.geometryCenter(geometry.geometryCenter())
+				.fixedScale(projection.renderScale())
+				.packedLight(BakedCapturedEntityIcon.LIGHT_SENTINEL)
+				.render(poseStack, clippingSource);
 		} finally {
 			CapturedEntityRenderTime.pop();
 		}
@@ -177,7 +178,7 @@ public final class CapturedEntityBoxIconRenderer {
 	}
 
 	private static FaceProjection projectGeometry(Vector3f geometryCenter, FaceBounds face) {
-		GeometryBounds unitBounds = projectBounds(geometryCenter, face, 1.0f);
+		EntityGeometry.Bounds unitBounds = projectBounds(geometryCenter, face, 1.0f);
 		if (!unitBounds.hasVertices())
 			return new FaceProjection(1.0f, FaceAlignment.none());
 
@@ -190,7 +191,7 @@ public final class CapturedEntityBoxIconRenderer {
 			renderScale = Math.min(Math.min(widthScale, heightScale), MAX_AUTO_RENDER_SCALE);
 		}
 
-		GeometryBounds finalBounds = projectBounds(geometryCenter, face, renderScale);
+		EntityGeometry.Bounds finalBounds = projectBounds(geometryCenter, face, renderScale);
 		if (!finalBounds.hasVertices())
 			return new FaceProjection(renderScale, FaceAlignment.none());
 
@@ -201,11 +202,10 @@ public final class CapturedEntityBoxIconRenderer {
 		return new FaceProjection(renderScale, alignment);
 	}
 
-	private static GeometryBounds projectBounds(Vector3f geometryCenter, FaceBounds face, float renderScale) {
+	private static EntityGeometry.Bounds projectBounds(Vector3f geometryCenter, FaceBounds face, float renderScale) {
 		PoseStack poseStack = new PoseStack();
 		applyEntityItemTransform(poseStack, face);
-		BlockCenteredRenderedLivingEntityItemRenderer.applyDefaultBlockCenteredTransform(poseStack, geometryCenter,
-			renderScale);
+		GuiEntityItemElement.applyBlockCenteredTransform(poseStack, geometryCenter, renderScale);
 		return GEOMETRY_COLLECTOR.transformBounds(poseStack.last()
 			.pose());
 	}
@@ -288,180 +288,6 @@ public final class CapturedEntityBoxIconRenderer {
 				return 0.0f;
 			float normalizedDepth = Mth.clamp(((float) localX - minX) / depth, 0.0f, 1.0f);
 			return normalizedDepth * MAX_FLATTENED_DEPTH_OFFSET;
-		}
-	}
-
-	private static class GeometryBounds {
-		private float minX = Float.POSITIVE_INFINITY;
-		private float minY = Float.POSITIVE_INFINITY;
-		private float minZ = Float.POSITIVE_INFINITY;
-		private float maxX = Float.NEGATIVE_INFINITY;
-		private float maxY = Float.NEGATIVE_INFINITY;
-		private float maxZ = Float.NEGATIVE_INFINITY;
-
-		private void include(Vector3f vertex) {
-			include(vertex.x(), vertex.y(), vertex.z());
-		}
-
-		private void include(float x, float y, float z) {
-			minX = Math.min(minX, x);
-			minY = Math.min(minY, y);
-			minZ = Math.min(minZ, z);
-			maxX = Math.max(maxX, x);
-			maxY = Math.max(maxY, y);
-			maxZ = Math.max(maxZ, z);
-		}
-
-		private boolean hasVertices() {
-			return minX != Float.POSITIVE_INFINITY;
-		}
-
-		private float centerX() {
-			return (minX + maxX) / 2.0f;
-		}
-
-		private Vector3f center() {
-			return new Vector3f(centerX(), centerY(), centerZ());
-		}
-
-		private float minX() {
-			return minX;
-		}
-
-		private float maxX() {
-			return maxX;
-		}
-
-		private float centerY() {
-			return (minY + maxY) / 2.0f;
-		}
-
-		private float centerZ() {
-			return (minZ + maxZ) / 2.0f;
-		}
-
-		private float sizeY() {
-			return maxY - minY;
-		}
-
-		private float sizeZ() {
-			return maxZ - minZ;
-		}
-	}
-
-	private static class GeometryVertexCollector implements VertexConsumer {
-		private static final int INITIAL_FLOAT_CAPACITY = 4_096 * 3;
-
-		private final int maxVertices;
-		private final GeometryBounds bounds = new GeometryBounds();
-		private float[] vertices = new float[INITIAL_FLOAT_CAPACITY];
-		private int floatCount;
-		private boolean truncated;
-
-		private GeometryVertexCollector(int maxVertices) {
-			this.maxVertices = maxVertices;
-		}
-
-		private void reset() {
-			bounds.minX = Float.POSITIVE_INFINITY;
-			bounds.minY = Float.POSITIVE_INFINITY;
-			bounds.minZ = Float.POSITIVE_INFINITY;
-			bounds.maxX = Float.NEGATIVE_INFINITY;
-			bounds.maxY = Float.NEGATIVE_INFINITY;
-			bounds.maxZ = Float.NEGATIVE_INFINITY;
-			floatCount = 0;
-			truncated = false;
-		}
-
-		private boolean hasVertices() {
-			return bounds.hasVertices();
-		}
-
-		private GeometryBounds bounds() {
-			return bounds;
-		}
-
-		private void includeEntityDimensions(EntityDimensions dimensions) {
-			float halfWidth = dimensions.width() / 2.0f;
-			float height = dimensions.height();
-			for (float x : new float[] {-halfWidth, halfWidth})
-				for (float y : new float[] {0.0f, height})
-					for (float z : new float[] {-halfWidth, halfWidth})
-						store(x, y, z);
-		}
-
-		private GeometryBounds transformBounds(Matrix4f transform) {
-			GeometryBounds transformed = new GeometryBounds();
-			Vector3f scratch = new Vector3f();
-			if (truncated) {
-				for (float x : new float[] {bounds.minX, bounds.maxX})
-					for (float y : new float[] {bounds.minY, bounds.maxY})
-						for (float z : new float[] {bounds.minZ, bounds.maxZ}) {
-							transform.transformPosition(x, y, z, scratch);
-							transformed.include(scratch);
-						}
-				return transformed;
-			}
-
-			for (int i = 0; i < floatCount; i += 3) {
-				transform.transformPosition(vertices[i], vertices[i + 1], vertices[i + 2], scratch);
-				transformed.include(scratch);
-			}
-			return transformed;
-		}
-
-		private void store(float x, float y, float z) {
-			if (!Float.isFinite(x) || !Float.isFinite(y) || !Float.isFinite(z))
-				return;
-			bounds.include(x, y, z);
-			if (floatCount / 3 >= maxVertices) {
-				truncated = true;
-				return;
-			}
-			ensureCapacity(floatCount + 3);
-			vertices[floatCount++] = x;
-			vertices[floatCount++] = y;
-			vertices[floatCount++] = z;
-		}
-
-		private void ensureCapacity(int required) {
-			if (required <= vertices.length)
-				return;
-			int capacity = Math.min(maxVertices * 3, Math.max(required, vertices.length * 2));
-			float[] expanded = new float[capacity];
-			System.arraycopy(vertices, 0, expanded, 0, floatCount);
-			vertices = expanded;
-		}
-
-		@Override
-		public VertexConsumer addVertex(float x, float y, float z) {
-			store(x, y, z);
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv(float u, float v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv1(int u, int v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv2(int u, int v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setNormal(float x, float y, float z) {
-			return this;
 		}
 	}
 

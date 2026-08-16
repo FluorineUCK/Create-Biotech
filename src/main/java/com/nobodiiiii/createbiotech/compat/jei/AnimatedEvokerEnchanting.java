@@ -13,7 +13,6 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
-import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlock;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlockEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -42,7 +41,6 @@ import org.joml.Quaternionf;
 public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 
 	private static final float RENDER_SCALE = 20f;
-	private static final int RENDER_Z = 100;
 	private static final double RENDER_Y_OFFSET_BLOCKS = 2.0d;
 	private static final int PREVIEW_STORED_FLUID = 1;
 	private static final int PREVIEW_FLUID_TOTAL = 1;
@@ -74,20 +72,15 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 
 		updatePreviewState(blockEntity);
 
-		var poseStack = graphics.pose();
-		poseStack.pushPose();
-		poseStack.translate(xOffset, yOffset, RENDER_Z);
-		poseStack.mulPose(Axis.XP.rotationDegrees(-15.5f));
-		poseStack.mulPose(Axis.YP.rotationDegrees(22.5f));
+		scene(graphics, xOffset, yOffset, () -> {
+			GuiGameElement.of(blockEntity)
+				.lighting(DEFAULT_LIGHTING)
+				.atLocal(0.0d, RENDER_Y_OFFSET_BLOCKS, 0.0d)
+				.scale(RENDER_SCALE)
+				.render(graphics);
 
-		GuiGameElement.of(blockEntity)
-			.lighting(DEFAULT_LIGHTING)
-			.atLocal(0.0d, RENDER_Y_OFFSET_BLOCKS, 0.0d)
-			.scale(RENDER_SCALE)
-			.render(graphics);
-
-		renderStraightEnchantParticles(graphics, level, blockEntity);
-		poseStack.popPose();
+			renderStraightEnchantParticles(graphics, level, blockEntity);
+		});
 	}
 
 	private void updatePreviewState(EvokerEnchantingChamberBlockEntity blockEntity) {
