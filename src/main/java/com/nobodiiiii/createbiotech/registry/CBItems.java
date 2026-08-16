@@ -37,6 +37,7 @@ import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterItem;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointItem;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessTerminalItem;
 import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineItem;
+import com.nobodiiiii.createbiotech.foundation.item.BlockCenteredRenderedLivingEntityItem;
 import com.yision.allay.block.allayport.AllayPortItem;
 import com.yision.allay.item.allaycourier.AllayCourierItem;
 import com.yision.allay.item.allaycourier.IncompleteAllayCourierItem;
@@ -47,6 +48,7 @@ import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Rarity;
+import net.minecraft.world.entity.EntityType;
 import net.neoforged.neoforge.common.DeferredSpawnEggItem;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -123,6 +125,10 @@ public class CBItems {
 
 	public static final DeferredHolder<Item, Item> DING_DONG_CHICKEN = ITEMS.register("ding_dong_chicken",
 		() -> new DingDongChickenItem(new Item.Properties().stacksTo(4)));
+
+	/** Internal JEI representation of a vanilla chicken; intentionally absent from creative tabs. */
+	public static final DeferredHolder<Item, Item> CHICKEN = ITEMS.register("chicken",
+		() -> new BlockCenteredRenderedLivingEntityItem<>(new Item.Properties(), EntityType.CHICKEN, 1.5f));
 
 	public static final DeferredHolder<Item, Item> SMART_SUPER_GLUE = ITEMS.register("smart_super_glue",
 		() -> new SmartSuperGlueItem(new Item.Properties().stacksTo(1).durability(99)));

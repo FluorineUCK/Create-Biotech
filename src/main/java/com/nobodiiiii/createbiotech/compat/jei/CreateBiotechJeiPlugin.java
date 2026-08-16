@@ -41,6 +41,7 @@ public class CreateBiotechJeiPlugin implements IModPlugin {
 	@Override
 	public void registerCategories(IRecipeCategoryRegistration registration) {
 		registration.addRecipeCategories(new SlimeTransformationJeiCategory());
+		registration.addRecipeCategories(new BiologicalItemApplicationJeiCategory());
 		registration.addRecipeCategories(new CreeperBlastChamberHighPressureJeiCategory());
 		registration.addRecipeCategories(new SquidPrinterJeiCategory());
 		registration.addRecipeCategories(new EvokerEnchantingChamberJeiCategory());
@@ -61,6 +62,8 @@ public class CreateBiotechJeiPlugin implements IModPlugin {
 		registration.addRecipes(SlimeTransformationJeiCategory.TYPE, List.of(
 			SlimeTransformationJeiRecipe.beltToSlimeBelt(),
 			SlimeTransformationJeiRecipe.beltToMagmaBelt()));
+		registration.addRecipes(BiologicalItemApplicationJeiCategory.TYPE,
+			BiologicalItemApplicationJeiRecipe.createRecipes());
 		registration.addRecipes(CreeperBlastChamberHighPressureJeiCategory.TYPE,
 			creeperBlastChamberHighPressureRecipes());
 		registration.addRecipes(SquidPrinterJeiCategory.TYPE, SquidPrinterJeiRecipes.create());

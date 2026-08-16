@@ -2,16 +2,22 @@
   "type": "minecraft:crafting_shaped",
   "category": "misc",
   "pattern": [
-    " I ",
-    "IMI",
-    " I "
+    " P ",
+    "IBI",
+    " S "
   ],
   "key": {
+    "B": {
+      "item": "minecraft:blackstone"
+    },
     "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "P": {
       "tag": "c:plates/iron"
     },
-    "M": {
-      "item": "minecraft:magma_block"
+    "S": {
+      "item": "create:brass_sheet"
     }
   },
   "result": {
