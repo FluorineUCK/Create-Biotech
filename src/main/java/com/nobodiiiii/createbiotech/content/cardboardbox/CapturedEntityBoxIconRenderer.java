@@ -16,6 +16,7 @@ import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.core.Direction;
@@ -97,28 +98,10 @@ public final class CapturedEntityBoxIconRenderer {
 				if (renderData == null)
 					return;
 
-				CapturedEntityRenderManager.PreparedIcon prepared =
-					CapturedEntityRenderManager.getOrSchedule(renderData, priority);
-				if (prepared == null)
-					return;
-
-				FaceProjection projection = prepared.geometry()
-					.forFace(face.large());
-				Matrix4f boxToRender = new Matrix4f(iconPoseStack.last()
-					.pose());
-
-				applyEntityItemTransform(iconPoseStack, face);
-				MultiBufferSource clippedBuffer =
-					renderType -> new FaceClippingVertexConsumer(iconBuffer.getBuffer(renderType), boxToRender, face,
-						projection.alignment());
-				CapturedEntityRenderTime.push();
-				try {
-					BlockCenteredRenderedLivingEntityItemRenderer.renderBlockCenteredEntity(prepared.entity(),
-						prepared.geometry().geometryCenter(), projection.renderScale(), iconPoseStack, clippedBuffer,
-						packedLight);
-				} finally {
-					CapturedEntityRenderTime.pop();
-				}
+				BakedCapturedEntityIcon icon =
+					CapturedEntityRenderManager.getOrSchedule(renderData, face.large(), priority);
+				if (icon != null)
+					icon.render(iconPoseStack, iconBuffer, packedLight);
 			});
 	}
 
@@ -160,11 +143,37 @@ public final class CapturedEntityBoxIconRenderer {
 
 		Vector3f geometryCenter = GEOMETRY_COLLECTOR.bounds()
 			.center();
-		FaceProjection small = projectGeometry(geometryCenter,
-			new FaceBounds(SMALL_BOX_MAX, 0.0f, SMALL_BOX_HEIGHT, SMALL_BOX_MIN, SMALL_BOX_MAX, false));
-		FaceProjection large = projectGeometry(geometryCenter,
-			new FaceBounds(LARGE_BOX_MAX, 0.0f, LARGE_BOX_HEIGHT, LARGE_BOX_MIN, LARGE_BOX_MAX, true));
+		FaceProjection small = projectGeometry(geometryCenter, FaceBounds.SMALL);
+		FaceProjection large = projectGeometry(geometryCenter, FaceBounds.LARGE);
 		return new GeometryProfile(geometryCenter, small, large);
+	}
+
+	/**
+	 * Runs the live entity-render-and-clip pipeline once in box-local space and
+	 * captures the emitted stream as a replayable mesh. The identity
+	 * box-to-render matrix makes the clipper's output coordinates box-local, so
+	 * replaying them under any later pose reproduces exactly what the live path
+	 * would have drawn that frame.
+	 */
+	static BakedCapturedEntityIcon bakeIcon(LivingEntity entity, GeometryProfile geometry, boolean largeBox) {
+		FaceBounds face = FaceBounds.forFace(largeBox);
+		FaceProjection projection = geometry.forFace(largeBox);
+		BakedCapturedEntityIcon.Builder builder = BakedCapturedEntityIcon.builder();
+		Matrix4f identityBoxToRender = new Matrix4f();
+		MultiBufferSource clippingSource = renderType -> new FaceClippingVertexConsumer(builder.target(renderType),
+			identityBoxToRender, face, projection.alignment());
+
+		PoseStack poseStack = new PoseStack();
+		applyEntityItemTransform(poseStack, face);
+		CapturedEntityRenderTime.push();
+		try {
+			BlockCenteredRenderedLivingEntityItemRenderer.renderBlockCenteredEntity(entity, geometry.geometryCenter(),
+				projection.renderScale(), poseStack, clippingSource, BakedCapturedEntityIcon.LIGHT_SENTINEL);
+		} finally {
+			CapturedEntityRenderTime.pop();
+		}
+		return builder.build(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType())
+			.toString());
 	}
 
 	private static FaceProjection projectGeometry(Vector3f geometryCenter, FaceBounds face) {
@@ -225,10 +234,17 @@ public final class CapturedEntityBoxIconRenderer {
 	}
 
 	private record FaceBounds(float x, float minY, float maxY, float minZ, float maxZ, boolean large) {
+		private static final FaceBounds SMALL =
+			new FaceBounds(SMALL_BOX_MAX, 0.0f, SMALL_BOX_HEIGHT, SMALL_BOX_MIN, SMALL_BOX_MAX, false);
+		private static final FaceBounds LARGE =
+			new FaceBounds(LARGE_BOX_MAX, 0.0f, LARGE_BOX_HEIGHT, LARGE_BOX_MIN, LARGE_BOX_MAX, true);
+
 		private static FaceBounds of(ItemStack stack) {
-			if (stack.is(CBItems.LARGE_CARDBOARD_BOX.get()))
-				return new FaceBounds(LARGE_BOX_MAX, 0.0f, LARGE_BOX_HEIGHT, LARGE_BOX_MIN, LARGE_BOX_MAX, true);
-			return new FaceBounds(SMALL_BOX_MAX, 0.0f, SMALL_BOX_HEIGHT, SMALL_BOX_MIN, SMALL_BOX_MAX, false);
+			return stack.is(CBItems.LARGE_CARDBOARD_BOX.get()) ? LARGE : SMALL;
+		}
+
+		private static FaceBounds forFace(boolean large) {
+			return large ? LARGE : SMALL;
 		}
 
 		private float width() {

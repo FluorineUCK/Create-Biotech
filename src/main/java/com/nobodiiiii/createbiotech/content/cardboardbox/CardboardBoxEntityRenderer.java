@@ -7,6 +7,7 @@ import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.content.logistics.box.PackageRenderer;
 
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
+import net.minecraft.client.Camera;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
@@ -22,6 +23,9 @@ public class CardboardBoxEntityRenderer extends EntityRenderer<CardboardBoxEntit
 		PartialModel.of(CreateBiotech.asResource("item/large_cardboard_box"));
 	private static final PartialModel LARGE_CARDBOARD_BOX_CAPTURED =
 		PartialModel.of(CreateBiotech.asResource("item/large_cardboard_box_captured"));
+	// The icon is under 0.6 blocks tall; past this distance it covers a few
+	// pixels at most, so only the box model is drawn.
+	private static final double MAX_ICON_DISTANCE_SQUARED = 32.0d * 32.0d;
 
 	public CardboardBoxEntityRenderer(EntityRendererProvider.Context context) {
 		super(context);
@@ -36,9 +40,14 @@ public class CardboardBoxEntityRenderer extends EntityRenderer<CardboardBoxEntit
 		boolean renderCapturedEntity = captured && CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get();
 		PackageRenderer.renderBox(entity, yaw, poseStack, buffer, light,
 			getModel(stack, captured, renderCapturedEntity));
-		if (renderCapturedEntity)
+		if (renderCapturedEntity && isIconWithinDistance(entity))
 			CapturedEntityBoxIconRenderer.renderOnEntity(stack, true, yaw, poseStack, buffer, light);
 		super.render(entity, yaw, partialTicks, poseStack, buffer, light);
+	}
+
+	private boolean isIconWithinDistance(CardboardBoxEntity entity) {
+		Camera camera = entityRenderDispatcher.camera;
+		return camera == null || entity.distanceToSqr(camera.getPosition()) <= MAX_ICON_DISTANCE_SQUARED;
 	}
 
 	private PartialModel getModel(ItemStack stack, boolean captured, boolean renderCapturedEntity) {

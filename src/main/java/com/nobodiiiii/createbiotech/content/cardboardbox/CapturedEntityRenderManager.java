@@ -1,11 +1,8 @@
 package com.nobodiiiii.createbiotech.content.cardboardbox;
 
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Set;
 
 import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
@@ -13,18 +10,12 @@ import org.slf4j.Logger;
 import com.mojang.logging.LogUtils;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
-import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
-import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemDisplayContext;
-import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
@@ -36,35 +27,37 @@ import net.neoforged.neoforge.client.event.RenderFrameEvent;
 
 /**
  * Render-thread-only cache and cooperative scheduler for captured entity icons.
- * Entity construction and renderer traversal deliberately stay on the render
- * thread; "asynchronous" here means delayed, deduplicated work with a per-frame
- * budget rather than unsafe background rendering.
+ * <p>
+ * Icons are prepared on demand, once per captured entity and box face: the
+ * entity is constructed, its geometry measured, and the clipped face icon baked
+ * into a {@link BakedCapturedEntityIcon}. Per-frame rendering only replays
+ * baked meshes; entity construction, measurement, and baking stay on the render
+ * thread behind a per-frame budget. Prototype icons (spawn-egg style boxes with
+ * no per-instance NBT) are level-independent and survive dimension changes;
+ * everything level-bound is dropped when the level goes away.
  */
 @EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public final class CapturedEntityRenderManager {
 	private static final Logger LOGGER = LogUtils.getLogger();
 
-	private static final int ENTITY_CACHE_CAPACITY = 256;
-	private static final int GEOMETRY_CACHE_CAPACITY = 1_024;
+	private static final int ENTITY_CACHE_CAPACITY = 64;
+	private static final int ICON_CACHE_CAPACITY = 1_024;
 	private static final int FAILURE_CACHE_CAPACITY = 256;
-	private static final int PENDING_CAPACITY = 2_048;
-	private static final long ENTITY_IDLE_FRAMES = 60L * 60L;
-	private static final long GEOMETRY_IDLE_FRAMES = 10L * 60L * 60L;
-	private static final long FAILURE_RETRY_FRAMES = 30L * 60L;
-	private static final long VISIBLE_REQUEST_IDLE_FRAMES = 120L;
-	private static final long BACKGROUND_REQUEST_IDLE_FRAMES = 10L * 60L * 60L;
-	private static final long BACKGROUND_INTERVAL_FRAMES = 4L;
+	private static final int PENDING_CAPACITY = 512;
+	private static final long ENTITY_IDLE_NANOS = 60L * 1_000_000_000L;
+	private static final long ICON_IDLE_NANOS = 10L * 60L * 1_000_000_000L;
+	private static final long FAILURE_RETRY_NANOS = 30L * 1_000_000_000L;
+	private static final long REQUEST_IDLE_NANOS = 2L * 1_000_000_000L;
+	private static final long PRUNE_INTERVAL_NANOS = 1_000_000_000L;
 	private static final long TARGET_FRAME_NANOS = 18_500_000L;
 	private static final long MIN_PREPARATION_BUDGET_NANOS = 250_000L;
 	private static final long GAME_PREPARATION_BUDGET_NANOS = 750_000L;
 	private static final long SCREEN_PREPARATION_BUDGET_NANOS = 1_500_000L;
-	private static final long CATALOG_BUDGET_NANOS = 200_000L;
-	private static final int MAX_CATALOG_ITEMS_PER_FRAME = 256;
 
 	private static final BoundedLruMap<RenderKey, CacheEntry<LivingEntity>> ENTITY_CACHE =
 		new BoundedLruMap<>(ENTITY_CACHE_CAPACITY);
-	private static final BoundedLruMap<RenderKey, CacheEntry<CapturedEntityBoxIconRenderer.GeometryProfile>>
-		GEOMETRY_CACHE = new BoundedLruMap<>(GEOMETRY_CACHE_CAPACITY);
+	private static final BoundedLruMap<RenderKey, CacheEntry<IconAssets>> ICON_CACHE =
+		new BoundedLruMap<>(ICON_CACHE_CAPACITY);
 	private static final BoundedLruMap<RenderKey, Long> FAILURE_CACHE =
 		new BoundedLruMap<>(FAILURE_CACHE_CAPACITY);
 	private static final BoundedLruMap<RenderKey, PendingRequest> PENDING =
@@ -72,21 +65,16 @@ public final class CapturedEntityRenderManager {
 
 	@Nullable
 	private static Level activeLevel;
-	private static long frame;
 	private static long lastFrameNanos;
+	private static long lastPruneNanos;
 	private static double averageFrameNanos = 16_666_667.0d;
-	private static boolean prewarmQueued;
-	@Nullable
-	private static Iterator<Item> prewarmItems;
-	@Nullable
-	private static Set<EntityType<?>> prewarmEntityTypes;
 
 	private CapturedEntityRenderManager() {
 	}
 
 	@Nullable
-	static PreparedIcon getOrSchedule(CapturedEntityBoxHelper.CapturedEntityRenderData renderData,
-		RequestPriority priority) {
+	static BakedCapturedEntityIcon getOrSchedule(CapturedEntityBoxHelper.CapturedEntityRenderData renderData,
+		boolean largeFace, RequestPriority priority) {
 		if (!CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get())
 			return null;
 
@@ -96,20 +84,23 @@ public final class CapturedEntityRenderManager {
 			return null;
 
 		ensureLevel(level);
+		long now = System.nanoTime();
 		RenderKey key = RenderKey.of(renderData);
-		Long retryAt = FAILURE_CACHE.get(key);
-		if (retryAt != null) {
-			if (frame < retryAt)
+		Long retryAtNanos = FAILURE_CACHE.get(key);
+		if (retryAtNanos != null) {
+			if (now < retryAtNanos)
 				return null;
 			FAILURE_CACHE.remove(key);
 		}
 
-		LivingEntity entity = getCached(ENTITY_CACHE, key);
-		CapturedEntityBoxIconRenderer.GeometryProfile geometry = getCached(GEOMETRY_CACHE, key);
-		if (entity != null && geometry != null)
-			return new PreparedIcon(entity, geometry);
+		IconAssets assets = getCached(ICON_CACHE, key, now);
+		if (assets != null) {
+			BakedCapturedEntityIcon icon = assets.forFace(largeFace);
+			if (icon != null)
+				return icon;
+		}
 
-		enqueue(key, renderData, priority);
+		enqueue(key, renderData, largeFace, priority, now);
 		return null;
 	}
 
@@ -120,35 +111,33 @@ public final class CapturedEntityRenderManager {
 	@SubscribeEvent
 	public static void onRenderFrame(RenderFrameEvent.Post event) {
 		if (!CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get()) {
-			if (activeLevel != null || prewarmQueued || !ENTITY_CACHE.isEmpty() || !GEOMETRY_CACHE.isEmpty()
-				|| !FAILURE_CACHE.isEmpty() || !PENDING.isEmpty())
+			if (activeLevel != null || !ENTITY_CACHE.isEmpty() || !ICON_CACHE.isEmpty() || !FAILURE_CACHE.isEmpty()
+				|| !PENDING.isEmpty())
 				clearAll();
 			return;
 		}
 
 		Minecraft minecraft = Minecraft.getInstance();
-		long now = System.nanoTime();
-		updateFrameTiming(now);
-		frame++;
-
 		Level level = minecraft.level;
 		if (level == null || minecraft.player == null) {
 			if (activeLevel != null)
-				clearAll();
+				clearLevelBound();
 			return;
 		}
 
 		ensureLevel(level);
-		if (!prewarmQueued)
-			beginCreativePrewarm();
-		advanceCreativePrewarmCatalog();
-		pruneExpiredEntries();
-		processPending(minecraft, level, System.nanoTime());
+		long now = System.nanoTime();
+		updateFrameTiming(now);
+		if (now - lastPruneNanos >= PRUNE_INTERVAL_NANOS) {
+			lastPruneNanos = now;
+			pruneExpiredEntries(now);
+		}
+		processPending(minecraft, now);
 	}
 
 	@SubscribeEvent
 	public static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
-		clearAll();
+		clearLevelBound();
 	}
 
 	private static void updateFrameTiming(long now) {
@@ -162,69 +151,31 @@ public final class CapturedEntityRenderManager {
 	private static void ensureLevel(Level level) {
 		if (activeLevel == level)
 			return;
-		clearAll();
+		clearLevelBound();
 		activeLevel = level;
 	}
 
-	private static void beginCreativePrewarm() {
-		prewarmQueued = true;
-		prewarmItems = BuiltInRegistries.ITEM.iterator();
-		prewarmEntityTypes = Collections.newSetFromMap(new IdentityHashMap<>());
-	}
-
-	private static void advanceCreativePrewarmCatalog() {
-		if (prewarmItems == null || prewarmEntityTypes == null)
-			return;
-
-		long start = System.nanoTime();
-		int inspected = 0;
-		while (prewarmItems.hasNext() && inspected++ < MAX_CATALOG_ITEMS_PER_FRAME
-			&& System.nanoTime() - start < CATALOG_BUDGET_NANOS) {
-			Item item = prewarmItems.next();
-			if (!(item instanceof SpawnEggItem spawnEgg))
-				continue;
-
-			EntityType<?> entityType = spawnEgg.getType(item.getDefaultInstance());
-			if (entityType == null || !prewarmEntityTypes.add(entityType))
-				continue;
-
-			ItemStack prototype = CapturedEntityBoxHelper.createFilledBox(CBItems.LARGE_CARDBOARD_BOX.get(), entityType);
-			CapturedEntityBoxHelper.CapturedEntityRenderData renderData =
-				CapturedEntityBoxHelper.getCapturedEntityRenderData(prototype);
-			if (renderData != null)
-				enqueue(RenderKey.of(renderData), renderData, RequestPriority.BACKGROUND);
-		}
-
-		if (!prewarmItems.hasNext()) {
-			prewarmItems = null;
-			prewarmEntityTypes = null;
-		}
-	}
-
 	private static void enqueue(RenderKey key, CapturedEntityBoxHelper.CapturedEntityRenderData renderData,
-		RequestPriority priority) {
+		boolean largeFace, RequestPriority priority, long now) {
 		PendingRequest current = PENDING.get(key);
 		if (current == null) {
-			PENDING.put(key, new PendingRequest(renderData, priority, frame));
+			PENDING.put(key, new PendingRequest(renderData, largeFace, priority, now));
 			return;
 		}
 
-		current.lastRequestedFrame = frame;
+		current.lastRequestedNanos = now;
+		current.requestFace(largeFace);
 		if (priority.weight > current.priority.weight)
 			current.priority = priority;
 	}
 
-	private static void processPending(Minecraft minecraft, Level level, long startNanos) {
+	private static void processPending(Minecraft minecraft, long startNanos) {
 		if (PENDING.isEmpty())
 			return;
 
-		PendingSelection selection = selectPending();
-		if (selection == null)
+		Level level = activeLevel;
+		if (level == null)
 			return;
-		if (selection.request.priority == RequestPriority.BACKGROUND) {
-			if (frame % BACKGROUND_INTERVAL_FRAMES != 0L || averageFrameNanos > TARGET_FRAME_NANOS)
-				return;
-		}
 
 		long configuredBudget = minecraft.screen == null
 			? GAME_PREPARATION_BUDGET_NANOS : SCREEN_PREPARATION_BUDGET_NANOS;
@@ -234,21 +185,20 @@ public final class CapturedEntityRenderManager {
 		int maxTasks = minecraft.screen == null ? 1 : 2;
 		int completed = 0;
 
+		PendingSelection selection = selectPending(startNanos);
 		while (selection != null && completed < maxTasks) {
 			PENDING.remove(selection.key);
-			prepare(selection.key, selection.request.renderData, level);
+			prepare(selection.key, selection.request, level);
 			completed++;
 			if (System.nanoTime() - startNanos >= budget)
 				break;
 
-			selection = selectPending();
-			if (selection != null && selection.request.priority == RequestPriority.BACKGROUND)
-				break;
+			selection = selectPending(startNanos);
 		}
 	}
 
 	@Nullable
-	private static PendingSelection selectPending() {
+	private static PendingSelection selectPending(long now) {
 		RenderKey selectedKey = null;
 		PendingRequest selected = null;
 		Iterator<Map.Entry<RenderKey, PendingRequest>> iterator = PENDING.entrySet()
@@ -256,16 +206,14 @@ public final class CapturedEntityRenderManager {
 		while (iterator.hasNext()) {
 			Map.Entry<RenderKey, PendingRequest> entry = iterator.next();
 			PendingRequest request = entry.getValue();
-			long maxIdle = request.priority == RequestPriority.BACKGROUND
-				? BACKGROUND_REQUEST_IDLE_FRAMES : VISIBLE_REQUEST_IDLE_FRAMES;
-			if (frame - request.lastRequestedFrame > maxIdle) {
+			if (now - request.lastRequestedNanos > REQUEST_IDLE_NANOS) {
 				iterator.remove();
 				continue;
 			}
 
 			if (selected == null || request.priority.weight > selected.priority.weight
 				|| request.priority == selected.priority
-					&& request.lastRequestedFrame > selected.lastRequestedFrame) {
+					&& request.lastRequestedNanos > selected.lastRequestedNanos) {
 				selectedKey = entry.getKey();
 				selected = request;
 			}
@@ -273,27 +221,32 @@ public final class CapturedEntityRenderManager {
 		return selected == null ? null : new PendingSelection(selectedKey, selected);
 	}
 
-	private static void prepare(RenderKey key, CapturedEntityBoxHelper.CapturedEntityRenderData renderData,
-		Level level) {
+	private static void prepare(RenderKey key, PendingRequest request, Level level) {
 		try {
-			LivingEntity entity = getCached(ENTITY_CACHE, key);
+			long now = System.nanoTime();
+			LivingEntity entity = getCached(ENTITY_CACHE, key, now);
 			if (entity == null) {
-				Entity loaded = CapturedEntityBoxHelper.createCapturedEntity(renderData, level);
+				Entity loaded = CapturedEntityBoxHelper.createCapturedEntity(request.renderData, level);
 				if (!(loaded instanceof LivingEntity living))
-					throw new IllegalStateException("Captured entity is not a living entity: " + renderData.entityId());
+					throw new IllegalStateException(
+						"Captured entity is not a living entity: " + request.renderData.entityId());
 				stabilize(living);
 				entity = living;
 			}
 
-			CapturedEntityBoxIconRenderer.GeometryProfile geometry = getCached(GEOMETRY_CACHE, key);
-			if (geometry == null)
-				geometry = CapturedEntityBoxIconRenderer.prepareGeometry(entity);
+			IconAssets assets = getCached(ICON_CACHE, key, now);
+			if (assets == null)
+				assets = new IconAssets(CapturedEntityBoxIconRenderer.prepareGeometry(entity));
+			if (request.smallFaceRequested && assets.small == null)
+				assets.small = CapturedEntityBoxIconRenderer.bakeIcon(entity, assets.profile, false);
+			if (request.largeFaceRequested && assets.large == null)
+				assets.large = CapturedEntityBoxIconRenderer.bakeIcon(entity, assets.profile, true);
 
-			ENTITY_CACHE.put(key, new CacheEntry<>(entity, frame));
-			GEOMETRY_CACHE.put(key, new CacheEntry<>(geometry, frame));
+			ENTITY_CACHE.put(key, new CacheEntry<>(entity, now));
+			ICON_CACHE.put(key, new CacheEntry<>(assets, now));
 		} catch (RuntimeException exception) {
-			FAILURE_CACHE.put(key, frame + FAILURE_RETRY_FRAMES);
-			LOGGER.warn("Unable to prepare captured entity icon for {}", renderData.entityId(), exception);
+			FAILURE_CACHE.put(key, System.nanoTime() + FAILURE_RETRY_NANOS);
+			LOGGER.warn("Unable to prepare captured entity icon for {}", request.renderData.entityId(), exception);
 		}
 	}
 
@@ -318,45 +271,65 @@ public final class CapturedEntityRenderManager {
 	}
 
 	@Nullable
-	private static <T> T getCached(BoundedLruMap<RenderKey, CacheEntry<T>> cache, RenderKey key) {
+	private static <T> T getCached(BoundedLruMap<RenderKey, CacheEntry<T>> cache, RenderKey key, long now) {
 		CacheEntry<T> entry = cache.get(key);
 		if (entry == null)
 			return null;
-		entry.lastAccessFrame = frame;
+		entry.lastAccessNanos = now;
 		return entry.value;
 	}
 
-	private static void pruneExpiredEntries() {
-		if (frame % 60L != 0L)
-			return;
-		pruneCache(ENTITY_CACHE, ENTITY_IDLE_FRAMES);
-		pruneCache(GEOMETRY_CACHE, GEOMETRY_IDLE_FRAMES);
+	private static void pruneExpiredEntries(long now) {
+		pruneCache(ENTITY_CACHE, ENTITY_IDLE_NANOS, now);
+		pruneCache(ICON_CACHE, ICON_IDLE_NANOS, now);
 		FAILURE_CACHE.entrySet()
-			.removeIf(entry -> frame >= entry.getValue());
+			.removeIf(entry -> now >= entry.getValue());
 	}
 
-	private static <T> void pruneCache(BoundedLruMap<RenderKey, CacheEntry<T>> cache, long maxIdleFrames) {
+	private static <T> void pruneCache(BoundedLruMap<RenderKey, CacheEntry<T>> cache, long maxIdleNanos, long now) {
 		cache.entrySet()
-			.removeIf(entry -> frame - entry.getValue().lastAccessFrame > maxIdleFrames);
+			.removeIf(entry -> now - entry.getValue().lastAccessNanos > maxIdleNanos);
+	}
+
+	/**
+	 * Drops everything tied to the active level: live entities (which pin their
+	 * client level), pending requests and failures (whose render data may
+	 * reference stacks from that level), and icons keyed by component identity.
+	 * Prototype icons carry no level references and are kept.
+	 */
+	private static void clearLevelBound() {
+		ENTITY_CACHE.clear();
+		FAILURE_CACHE.clear();
+		PENDING.clear();
+		ICON_CACHE.entrySet()
+			.removeIf(entry -> entry.getKey() instanceof ComponentIdentityKey);
+		activeLevel = null;
+		lastFrameNanos = 0L;
 	}
 
 	private static void clearAll() {
-		ENTITY_CACHE.clear();
-		GEOMETRY_CACHE.clear();
-		FAILURE_CACHE.clear();
-		PENDING.clear();
-		activeLevel = null;
-		prewarmQueued = false;
-		prewarmItems = null;
-		prewarmEntityTypes = null;
+		clearLevelBound();
+		ICON_CACHE.clear();
 	}
 
-	static record PreparedIcon(LivingEntity entity,
-		CapturedEntityBoxIconRenderer.GeometryProfile geometry) {
+	private static final class IconAssets {
+		private final CapturedEntityBoxIconRenderer.GeometryProfile profile;
+		@Nullable
+		private BakedCapturedEntityIcon small;
+		@Nullable
+		private BakedCapturedEntityIcon large;
+
+		private IconAssets(CapturedEntityBoxIconRenderer.GeometryProfile profile) {
+			this.profile = profile;
+		}
+
+		@Nullable
+		private BakedCapturedEntityIcon forFace(boolean largeFace) {
+			return largeFace ? large : small;
+		}
 	}
 
 	enum RequestPriority {
-		BACKGROUND(0),
 		WORLD(1),
 		GUI(2),
 		HELD(3);
@@ -409,13 +382,23 @@ public final class CapturedEntityRenderManager {
 	private static final class PendingRequest {
 		private final CapturedEntityBoxHelper.CapturedEntityRenderData renderData;
 		private RequestPriority priority;
-		private long lastRequestedFrame;
+		private long lastRequestedNanos;
+		private boolean smallFaceRequested;
+		private boolean largeFaceRequested;
 
-		private PendingRequest(CapturedEntityBoxHelper.CapturedEntityRenderData renderData, RequestPriority priority,
-			long frame) {
+		private PendingRequest(CapturedEntityBoxHelper.CapturedEntityRenderData renderData, boolean largeFace,
+			RequestPriority priority, long now) {
 			this.renderData = renderData;
 			this.priority = priority;
-			lastRequestedFrame = frame;
+			lastRequestedNanos = now;
+			requestFace(largeFace);
+		}
+
+		private void requestFace(boolean largeFace) {
+			if (largeFace)
+				largeFaceRequested = true;
+			else
+				smallFaceRequested = true;
 		}
 	}
 
@@ -424,11 +407,11 @@ public final class CapturedEntityRenderManager {
 
 	private static final class CacheEntry<T> {
 		private final T value;
-		private long lastAccessFrame;
+		private long lastAccessNanos;
 
-		private CacheEntry(T value, long lastAccessFrame) {
+		private CacheEntry(T value, long lastAccessNanos) {
 			this.value = value;
-			this.lastAccessFrame = lastAccessFrame;
+			this.lastAccessNanos = lastAccessNanos;
 		}
 	}
 
