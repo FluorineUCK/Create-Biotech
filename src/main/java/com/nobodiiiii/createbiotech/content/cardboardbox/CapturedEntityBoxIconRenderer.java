@@ -11,6 +11,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.foundation.render.BlockEntityModelElement;
 import com.nobodiiiii.createbiotech.foundation.render.BlockCenteredRenderedLivingEntityItemRenderer;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.client.Minecraft;
@@ -78,7 +79,7 @@ public final class CapturedEntityBoxIconRenderer {
 	private static void render(ItemStack stack, boolean captured,
 		PoseStack poseStack, MultiBufferSource buffer, int light, float yaw,
 		CapturedEntityRenderManager.RequestPriority priority, boolean orthographicView) {
-		if (!captured)
+		if (!captured || !CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get())
 			return;
 
 		FaceBounds face = FaceBounds.of(stack);

@@ -66,6 +66,7 @@ public class CBConfigs {
 		public final ModConfigSpec.BooleanValue enableShulkerTeleporterCameraOffset;
 		public final ModConfigSpec.BooleanValue enableShulkerTeleporterPlayerClipping;
 		public final ModConfigSpec.BooleanValue renderExperienceAsFluid;
+		public final ModConfigSpec.BooleanValue renderCapturedEntitiesOnBoxes;
 		public final ClientCreeperBlastChamber creeperBlastChamber;
 		public final ClientUniversalJoint universalJoint;
 		public final BeltParticles beltParticles;
@@ -76,6 +77,9 @@ public class CBConfigs {
 			renderExperienceAsFluid = builder
 				.comment("Render experience in Create fluid tanks as a conventional fluid instead of experience orbs.")
 				.define("renderExperienceAsFluid", false);
+			renderCapturedEntitiesOnBoxes = builder
+				.comment("Render captured creatures on cardboard box fronts. Disable to use the packager-style face and skip entity icon caches.")
+				.define("renderCapturedEntitiesOnBoxes", true);
 			creeperBlastChamber = new ClientCreeperBlastChamber(builder);
 			universalJoint = new ClientUniversalJoint(builder);
 			beltParticles = new BeltParticles(builder);

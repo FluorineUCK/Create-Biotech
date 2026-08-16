@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.cardboardbox;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.content.logistics.box.PackageRenderer;
 
@@ -32,12 +33,18 @@ public class CardboardBoxEntityRenderer extends EntityRenderer<CardboardBoxEntit
 		MultiBufferSource buffer, int light) {
 		ItemStack stack = entity.getBox();
 		boolean captured = CapturedEntityBoxHelper.hasCapturedEntity(stack);
-		PackageRenderer.renderBox(entity, yaw, poseStack, buffer, light, getModel(stack, captured));
-		CapturedEntityBoxIconRenderer.renderOnEntity(stack, captured, yaw, poseStack, buffer, light);
+		boolean renderCapturedEntity = captured && CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get();
+		PackageRenderer.renderBox(entity, yaw, poseStack, buffer, light,
+			getModel(stack, captured, renderCapturedEntity));
+		if (renderCapturedEntity)
+			CapturedEntityBoxIconRenderer.renderOnEntity(stack, true, yaw, poseStack, buffer, light);
 		super.render(entity, yaw, partialTicks, poseStack, buffer, light);
 	}
 
-	private PartialModel getModel(ItemStack stack, boolean captured) {
+	private PartialModel getModel(ItemStack stack, boolean captured, boolean renderCapturedEntity) {
+		if (captured && !renderCapturedEntity)
+			return stack.is(CBItems.LARGE_CARDBOARD_BOX.get())
+				? CardboardBoxPartials.LARGE_BOX_LOGISTICS : CardboardBoxPartials.SMALL_BOX_LOGISTICS;
 		if (stack.is(CBItems.LARGE_CARDBOARD_BOX.get()))
 			return captured ? LARGE_CARDBOARD_BOX_CAPTURED : LARGE_CARDBOARD_BOX;
 		return captured ? SMALL_CARDBOARD_BOX_CAPTURED : SMALL_CARDBOARD_BOX;

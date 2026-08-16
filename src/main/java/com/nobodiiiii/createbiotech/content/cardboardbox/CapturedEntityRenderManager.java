@@ -12,6 +12,7 @@ import org.slf4j.Logger;
 
 import com.mojang.logging.LogUtils;
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import net.minecraft.client.Minecraft;
@@ -86,6 +87,9 @@ public final class CapturedEntityRenderManager {
 	@Nullable
 	static PreparedIcon getOrSchedule(CapturedEntityBoxHelper.CapturedEntityRenderData renderData,
 		RequestPriority priority) {
+		if (!CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get())
+			return null;
+
 		Minecraft minecraft = Minecraft.getInstance();
 		Level level = minecraft.level;
 		if (level == null)
@@ -115,6 +119,13 @@ public final class CapturedEntityRenderManager {
 
 	@SubscribeEvent
 	public static void onRenderFrame(RenderFrameEvent.Post event) {
+		if (!CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get()) {
+			if (activeLevel != null || prewarmQueued || !ENTITY_CACHE.isEmpty() || !GEOMETRY_CACHE.isEmpty()
+				|| !FAILURE_CACHE.isEmpty() || !PENDING.isEmpty())
+				clearAll();
+			return;
+		}
+
 		Minecraft minecraft = Minecraft.getInstance();
 		long now = System.nanoTime();
 		updateFrameTiming(now);

@@ -5,6 +5,7 @@ import org.jetbrains.annotations.Nullable;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.foundation.render.BlockCenteredRenderedLivingEntityItemRenderer;
+import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 
 import mezz.jei.api.gui.ingredient.IRecipeSlotDrawable;
@@ -44,6 +45,10 @@ public final class CapturedEntityBoxJeiRenderer {
 	}
 
 	public static boolean renderCapturedEntityBox(GuiGraphics graphics, ItemStack stack, int x, int y) {
+		if (!CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get()) {
+			clearCache();
+			return false;
+		}
 		if (!(stack.getItem() instanceof CapturedEntityBoxItem) || !CapturedEntityBoxHelper.hasCapturedEntity(stack))
 			return false;
 		if (CURRENT_SLOT_HOVERED.get()) {
@@ -59,6 +64,12 @@ public final class CapturedEntityBoxJeiRenderer {
 		renderEntity(graphics, entity, x, y);
 		renderBadge(graphics, x, y);
 		return true;
+	}
+
+	private static void clearCache() {
+		cachedStack = null;
+		cachedLevel = null;
+		cachedEntity = null;
 	}
 
 	private static void renderEntity(GuiGraphics graphics, LivingEntity entity, int x, int y) {
