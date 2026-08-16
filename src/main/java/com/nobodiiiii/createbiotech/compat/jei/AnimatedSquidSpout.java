@@ -13,8 +13,8 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.MeshData;
 import com.mojang.blaze3d.vertex.Tesselator;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlock;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlockEntity;
-import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterSquidVisual;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.simibubi.create.AllBlocks;
 
@@ -32,13 +32,18 @@ import net.minecraft.client.renderer.LightTexture;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.particles.ParticleTypes;
 import net.neoforged.neoforge.fluids.FluidStack;
 import org.joml.Quaternionf;
 
 public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 	private static final int SCENE_SCALE = 20;
-	private static final double SQUID_ATTACHMENT_Y = SquidPrinterSquidVisual.HEAD_TOP_Y - 2.0d;
+	/**
+	 * The scene camera looks at the block's south side, so the preview is posed
+	 * facing south to put the printer's — and the squid's — front toward the viewer.
+	 */
+	private static final Direction PREVIEW_FACING = Direction.SOUTH;
 	private static final BlockPos PARTICLE_ORIGIN = BlockPos.ZERO;
 	private static final double JEI_INK_RANGE_SCALE = 0.5d;
 	private static final float JEI_INK_SIZE_SCALE = 0.5f;
@@ -68,11 +73,12 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 			int scale = SCENE_SCALE;
 
 			blockElement(CBBlocks.SQUID_PRINTER.get()
-				.defaultBlockState())
+				.defaultBlockState()
+				.setValue(SquidPrinterBlock.FACING, PREVIEW_FACING))
 				.scale(scale)
 				.render(graphics);
 
-			SquidJeiRenderer.renderOpenInScene(graphics, 0.5d, SQUID_ATTACHMENT_Y, 0.5d, scale);
+			SquidJeiRenderer.renderOpenInScene(graphics, PREVIEW_FACING, scale);
 
 			blockElement(AllBlocks.DEPOT.getDefaultState())
 				.atLocal(0, 2, 0)
@@ -90,6 +96,9 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 				graphics.bufferSource(), matrixStack, LightTexture.FULL_BRIGHT, false, true);
 			matrixStack.popPose();
 
+			// The ink particles below draw in immediate mode, so the batched fluid box
+			// has to land first or it would paint over them.
+			graphics.flush();
 			renderInkParticles(graphics);
 			Lighting.setupFor3DItems();
 		});

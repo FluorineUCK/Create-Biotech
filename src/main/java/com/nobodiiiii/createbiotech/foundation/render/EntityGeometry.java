@@ -36,7 +36,7 @@ public final class EntityGeometry {
 	 * Measures the entity in its unoriented render pose. Discards vertices as it
 	 * goes; use {@link Collector#caching} when the positions must be replayed.
 	 */
-	public static Bounds measureBounds(LivingEntity entity) {
+	private static Bounds measureBounds(LivingEntity entity) {
 		Collector collector = Collector.boundsOnly();
 		measureInto(entity, collector);
 		return collector.bounds();
@@ -56,25 +56,25 @@ public final class EntityGeometry {
 	}
 
 	/**
-	 * Largest drawn dimension, clamped to {@link #MIN_AUTO_SCALE_DIMENSION} and
-	 * falling back to the collision box when nothing is drawn.
-	 */
-	public static float largestDimension(LivingEntity entity) {
-		Bounds bounds = measureBounds(entity);
-		if (bounds.hasVertices())
-			return Math.max(bounds.largestDimension(), MIN_AUTO_SCALE_DIMENSION);
-
-		EntityDimensions dimensions = entity.getDimensions(entity.getPose());
-		return Math.max(Math.max(dimensions.width(), dimensions.height()), MIN_AUTO_SCALE_DIMENSION);
-	}
-
-	/**
 	 * Runs one unoriented render pass into the given collector, in the entity's
 	 * own coordinate space.
 	 */
 	public static void measureInto(LivingEntity entity, Collector collector) {
 		MultiBufferSource measuringBuffer = renderType -> collector;
 		EntityRenderHelper.renderUnoriented(entity, new PoseStack(), measuringBuffer, LightTexture.FULL_BRIGHT);
+	}
+
+	/**
+	 * Resets {@code collector} and measures {@code entity} into it, substituting the
+	 * collision box for entities that draw nothing so downstream centering and
+	 * scaling still have something to work with.
+	 */
+	public static Collector measureWithFallback(LivingEntity entity, Collector collector) {
+		collector.reset();
+		measureInto(entity, collector);
+		if (!collector.hasVertices())
+			collector.includeEntityDimensions(entity.getDimensions(entity.getPose()));
+		return collector;
 	}
 
 	/**

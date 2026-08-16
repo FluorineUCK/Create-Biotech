@@ -71,12 +71,29 @@ public final class GuiEntityItemElement {
 	private static final float GUI_RENDER_Z = 150.0f;
 	private static final int GUI_SLOT_SIZE = 16;
 
+	/**
+	 * Cap on retained measurement vertices. Past this the projection falls back to
+	 * the corners of the accumulated box, which is close enough for scaling a model
+	 * that large.
+	 */
+	private static final int MAX_MEASURED_VERTICES = 262_144;
+
+	/**
+	 * Shared across elements because a measurement is only ever read by the element
+	 * that took it, within a single synchronous render call. Retaining the vertices
+	 * lets one render pass answer both "where is the entity centered" and "how big
+	 * does it land on screen", instead of one pass per question.
+	 */
+	private static final EntityGeometry.Collector MEASUREMENT_SCRATCH =
+		EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
+
 	private final LivingEntity entity;
 	private Anchor anchor = Anchor.BLOCK_CENTERED;
 	private float scaleMultiplier = 1.0f;
 	private boolean autoScale;
 	private double footYOffset;
 	private int packedLight = LightTexture.FULL_BRIGHT;
+	private boolean measured;
 	@Nullable
 	private Float yRotation;
 	@Nullable
@@ -244,9 +261,22 @@ public final class GuiEntityItemElement {
 		return anchor == Anchor.FOOT_ANCHORED ? FOOT_ANCHORED_Y_ROTATION : BLOCK_CENTERED_Y_ROTATION;
 	}
 
+	/**
+	 * Measures the entity once per element, retaining the raw vertices so both the
+	 * geometry center and the projected size come out of a single render pass.
+	 */
+	private EntityGeometry.Collector rawGeometry() {
+		if (!measured) {
+			EntityGeometry.measureWithFallback(entity, MEASUREMENT_SCRATCH);
+			measured = true;
+		}
+		return MEASUREMENT_SCRATCH;
+	}
+
 	private Vector3f resolveGeometryCenter() {
 		if (geometryCenter == null)
-			geometryCenter = EntityGeometry.measureCenter(entity);
+			geometryCenter = rawGeometry().bounds()
+				.center();
 		return geometryCenter;
 	}
 
@@ -255,8 +285,9 @@ public final class GuiEntityItemElement {
 	 * viewed from arbitrary angles, so there is no single projection to fit to.
 	 */
 	private float footAnchoredAutoScale() {
-		return Math.min(FOOT_ANCHORED_TARGET_SIZE / EntityGeometry.largestDimension(entity),
-			FOOT_ANCHORED_MAX_SCALE) * scaleMultiplier;
+		float largest = Math.max(rawGeometry().bounds()
+			.largestDimension(), EntityGeometry.MIN_AUTO_SCALE_DIMENSION);
+		return Math.min(FOOT_ANCHORED_TARGET_SIZE / largest, FOOT_ANCHORED_MAX_SCALE) * scaleMultiplier;
 	}
 
 	/**
@@ -268,14 +299,15 @@ public final class GuiEntityItemElement {
 	 * than its bounding box suggests.
 	 */
 	private float blockCenteredProjectedScale(PoseStack poseStack, Vector3f center) {
-		EntityGeometry.Collector collector = EntityGeometry.Collector.boundsOnly();
+		EntityGeometry.Collector collector = rawGeometry();
+
 		poseStack.pushPose();
 		applyBlockCenteredTransform(poseStack, center, 1.0f, resolveYRotation());
-		MultiBufferSource measuringBuffer = renderType -> collector;
-		EntityRenderHelper.renderUnoriented(entity, poseStack, measuringBuffer, LightTexture.FULL_BRIGHT);
+		Matrix4f entityToScreen = new Matrix4f(poseStack.last()
+			.pose());
 		poseStack.popPose();
 
-		EntityGeometry.Bounds bounds = collector.bounds();
+		EntityGeometry.Bounds bounds = collector.transformBounds(entityToScreen);
 		if (!bounds.hasVertices())
 			return scaleMultiplier;
 
