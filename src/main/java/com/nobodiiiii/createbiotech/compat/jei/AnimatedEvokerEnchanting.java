@@ -2,41 +2,24 @@ package com.nobodiiiii.createbiotech.compat.jei;
 
 import org.jetbrains.annotations.Nullable;
 
-import java.util.ArrayList;
-import java.util.Iterator;
-import java.util.List;
 
-import com.mojang.blaze3d.platform.GlStateManager;
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.BufferUploader;
-import com.mojang.blaze3d.vertex.MeshData;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlock;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlockEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
 
 import net.createmod.catnip.animation.AnimationTickHolder;
-import net.createmod.catnip.gui.UIRenderHelper;
 import net.createmod.catnip.gui.element.GuiGameElement;
 import net.createmod.catnip.platform.CatnipClientServices;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.Camera;
 import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.particle.Particle;
-import net.minecraft.client.particle.ParticleRenderType;
 import net.minecraft.client.gui.GuiGraphics;
-import net.minecraft.client.renderer.LightTexture;
-import net.minecraft.client.renderer.texture.TextureAtlas;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
-import org.joml.Quaternionf;
 
 public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 
@@ -53,9 +36,7 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 	private EvokerEnchantingChamberBlockEntity cachedBlockEntity;
 	@Nullable
 	private ClientLevel cachedLevel;
-	private final List<Particle> activeParticles = new ArrayList<>();
-	private long lastParticleTick = Long.MIN_VALUE;
-	private final PreviewCamera jeiParticleCamera = new PreviewCamera();
+	private final JeiSceneParticles enchantParticles = new JeiSceneParticles();
 
 	public AnimatedEvokerEnchanting withItems(ItemStack input, ItemStack output) {
 		inputCopy = input.copy();
@@ -119,74 +100,21 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 	private void renderStraightEnchantParticles(GuiGraphics graphics, ClientLevel level,
 		EvokerEnchantingChamberBlockEntity blockEntity) {
 		syncStraightEnchantParticles(level, blockEntity);
-		if (activeParticles.isEmpty())
+		enchantParticles.render(graphics, RENDER_SCALE, 0.0d, RENDER_Y_OFFSET_BLOCKS, 0.0d);
+	}
+
+	/**
+	 * Emits exactly what {@link EvokerEnchantingChamberBlockEntity} emits in the
+	 * world while a spell is being cast.
+	 */
+	private void syncStraightEnchantParticles(ClientLevel level, EvokerEnchantingChamberBlockEntity blockEntity) {
+		if (!enchantParticles.advanceOnce(level) || !blockEntity.isCastingSpell())
 			return;
 
-		Camera camera = setupJeiParticleCamera(level);
-		graphics.pose().pushPose();
-		graphics.pose().scale(RENDER_SCALE, RENDER_SCALE, RENDER_SCALE);
-		graphics.pose().translate(0.0d, RENDER_Y_OFFSET_BLOCKS, 0.0d);
-		UIRenderHelper.flipForGuiRender(graphics.pose());
-
-		ParticleRenderType renderType = ParticleRenderType.PARTICLE_SHEET_OPAQUE;
-		LightTexture lightTexture = Minecraft.getInstance().gameRenderer.lightTexture();
-		lightTexture.turnOnLightLayer();
-		RenderSystem.setShaderTexture(0, TextureAtlas.LOCATION_PARTICLES);
-		RenderSystem.disableCull();
-		RenderSystem.enableDepthTest();
-		RenderSystem.enableBlend();
-		RenderSystem.blendFunc(GlStateManager.SourceFactor.SRC_ALPHA, GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA);
-		RenderSystem.depthMask(true);
-
-		try {
-			BufferBuilder builder = renderType.begin(Tesselator.getInstance(),
-				Minecraft.getInstance().getTextureManager());
-			VertexConsumer transformed = new PoseStackVertexConsumer(builder, graphics.pose().last().pose());
-			float partialTicks = AnimationTickHolder.getPartialTicks();
-			for (Particle particle : activeParticles)
-				particle.render(transformed, camera, partialTicks);
-			MeshData mesh = builder.build();
-			if (mesh != null)
-				BufferUploader.drawWithShader(mesh);
-		} finally {
-			RenderSystem.enableCull();
-			RenderSystem.disableBlend();
-			lightTexture.turnOffLightLayer();
-		}
-
-		graphics.pose().popPose();
-	}
-
-	private Camera setupJeiParticleCamera(ClientLevel level) {
-		Quaternionf inverseSceneRotation = new Quaternionf()
-			.rotateY((float) Math.toRadians(-22.5f))
-			.rotateX((float) Math.toRadians(15.5f));
-		jeiParticleCamera.configure(0.0d, 0.0d, 0.0d, inverseSceneRotation);
-		return jeiParticleCamera;
-	}
-
-	private void syncStraightEnchantParticles(ClientLevel level, EvokerEnchantingChamberBlockEntity blockEntity) {
-		long currentTick = level.getGameTime();
-		if (currentTick != lastParticleTick) {
-			lastParticleTick = currentTick;
-			Iterator<Particle> iterator = activeParticles.iterator();
-			while (iterator.hasNext()) {
-				Particle particle = iterator.next();
-				particle.tick();
-				if (!particle.isAlive())
-					iterator.remove();
-			}
-
-			if (blockEntity.isCastingSpell()) {
-				EvokerEnchantingChamberBlockEntity.forEachStraightEnchantParticle(level, blockEntity.getBlockPos(),
-					blockEntity.getBlockState(), (x, y, z, dx, dy, dz) -> {
-						Particle particle = CatnipClientServices.CLIENT_HOOKS.createParticleFromData(
-							CBParticleTypes.STRAIGHT_ENCHANT.get(), level, x, y, z, dx, dy, dz);
-						if (particle != null)
-							activeParticles.add(particle);
-					});
-			}
-		}
+		EvokerEnchantingChamberBlockEntity.forEachStraightEnchantParticle(level, blockEntity.getBlockPos(),
+			blockEntity.getBlockState(), (x, y, z, dx, dy, dz) -> enchantParticles.add(
+				CatnipClientServices.CLIENT_HOOKS.createParticleFromData(CBParticleTypes.STRAIGHT_ENCHANT.get(),
+					level, x, y, z, dx, dy, dz)));
 	}
 
 	private static BlockState createRenderState() {
@@ -194,65 +122,5 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 			.defaultBlockState()
 			.setValue(EvokerEnchantingChamberBlock.FACING, Direction.SOUTH)
 			.setValue(EvokerEnchantingChamberBlock.HALF, DoubleBlockHalf.LOWER);
-	}
-
-	private static class PoseStackVertexConsumer implements VertexConsumer {
-		private final VertexConsumer delegate;
-		private final org.joml.Matrix4f pose;
-
-		private PoseStackVertexConsumer(VertexConsumer delegate, org.joml.Matrix4f pose) {
-			this.delegate = delegate;
-			this.pose = new org.joml.Matrix4f(pose);
-		}
-
-		@Override
-		public VertexConsumer addVertex(float x, float y, float z) {
-			delegate.addVertex(pose, x, y, z);
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
-			delegate.setColor(red, green, blue, alpha);
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv(float u, float v) {
-			delegate.setUv(u, v);
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv1(int u, int v) {
-			delegate.setUv1(u, v);
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv2(int u, int v) {
-			delegate.setUv2(u, v);
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setNormal(float x, float y, float z) {
-			delegate.setNormal(x, y, z);
-			return this;
-		}
-	}
-
-	private static class PreviewCamera extends Camera {
-		private Quaternionf rotation = new Quaternionf();
-
-		private void configure(double x, double y, double z, Quaternionf rotation) {
-			super.setPosition(x, y, z);
-			this.rotation = new Quaternionf(rotation);
-		}
-
-		@Override
-		public Quaternionf rotation() {
-			return new Quaternionf(rotation);
-		}
 	}
 }
