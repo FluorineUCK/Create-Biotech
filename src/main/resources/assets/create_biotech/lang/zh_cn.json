@@ -15,7 +15,7 @@
   "item.create_biotech.sonic_dog_cannon.tooltip.condition1": "蓄力右击时",
   "item.create_biotech.sonic_dog_cannon.tooltip.behaviour1": "释放_大狗音波_，造成范围_眩晕_",
   "item.create_biotech.sonic_dog_cannon.tooltip.behaviour_backtank": "使用罐中_气压_来_抵消_大狗音波炮的_耐久_损耗",
-  "item.create_biotech.sonic_dog_cannon.tooltip.condition2": "副手手持扳手时右击",
+  "item.create_biotech.sonic_dog_cannon.tooltip.condition2": "副手手持扳手潜行右击时",
   "item.create_biotech.sonic_dog_cannon.tooltip.behaviour2": "_卸下_最后一个加装的_改装_",
   "effect.create_biotech.stun": "眩晕",
   "enchantment.create_biotech.sonic_boom": "音爆",
