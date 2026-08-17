@@ -34,16 +34,12 @@ public class CBCreativeModeTabs {
 			.icon(() -> CBItems.SPIDER_ASSEMBLY_TABLE.get()
 				.getDefaultInstance())
 			.displayItems((parameters, output) -> {
-				output.accept(CBItems.DING_DONG_CHICKEN.get());
-				output.accept(CBItems.DING_DONG_CHICKEN_SPAWN_EGG.get());
 				output.accept(CBItems.CARDBOARD_BOX.get());
 				output.accept(CBItems.LARGE_CARDBOARD_BOX.get());
 				output.accept(CBItems.SMART_SUPER_GLUE.get());
 				output.accept(CBItems.WIRELESS_TERMINAL.get());
 				output.accept(CBItems.SONIC_DOG_CANNON.get());
-				output.accept(CBItems.EMPTY_MAGMA_CUBE_BURNER.get());
-				output.accept(CBItems.MAGMA_CUBE_BURNER.get());
-				output.accept(CBItems.AUTOMATIC_FISH_RELEASE_MACHINE.get());
+				output.accept(CBItems.DING_DONG_CHICKEN.get());
 				output.accept(CBItems.BIO_PACKAGER.get());
 				output.accept(CBItems.SHULKER_PACKAGER.get());
 				output.accept(CBItems.SHULKER_TELEPORTER.get());
@@ -59,6 +55,9 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.SLIME_CLUTCH.get());
 				output.accept(CBItems.BONE_RATCHET.get());
 				output.accept(CBItems.SPIDER_ASSEMBLY_TABLE.get());
+				output.accept(CBItems.EMPTY_MAGMA_CUBE_BURNER.get());
+				output.accept(CBItems.MAGMA_CUBE_BURNER.get());
+				output.accept(CBItems.AUTOMATIC_FISH_RELEASE_MACHINE.get());
 				output.accept(CBItems.CUTE_CAT_ON_SHAFT.get(), TabVisibility.SEARCH_TAB_ONLY);
 				output.accept(CBItems.BUTTER_CAT_ENGINE.get());
 				output.accept(CBItems.FIXED_CARROT_FISHING_ROD.get());
@@ -102,6 +101,7 @@ public class CBCreativeModeTabs {
 				output.accept(CBFluids.TELEPORTATION_BUCKET.get());
 				output.accept(CBFluids.LIQUID_LIVING_SLIME_BUCKET.get());
 				output.accept(CBFluids.CREAM_BUCKET.get());
+				output.accept(CBItems.DING_DONG_CHICKEN_SPAWN_EGG.get());
 			})
 			.build());
 
