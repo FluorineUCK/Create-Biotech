@@ -43,12 +43,6 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.BIO_PACKAGER.get());
 				output.accept(CBItems.SHULKER_PACKAGER.get());
 				output.accept(CBItems.SHULKER_TELEPORTER.get());
-				output.accept(CBItems.GIANT_FROG.get());
-				output.accept(CBItems.FROG_STOMACH_WALL.get(), TabVisibility.SEARCH_TAB_ONLY);
-				output.accept(CBItems.FROG_STOMACH_MUCOSA.get());
-				output.accept(CBItems.FROG_STOMACH_SECRETION.get());
-				output.accept(CBItems.FROG_DIGESTIVE_TRACT.get(), TabVisibility.SEARCH_TAB_ONLY);
-				output.accept(CBItems.FROG_DIGESTIVE_TRACT_WALL.get(), TabVisibility.SEARCH_TAB_ONLY);
 				output.accept(CBItems.ALLAY_PORT.get());
 				output.accept(CBItems.ALLAY_COURIER.get());
 				output.accept(CBItems.UNIVERSAL_JOINT.get());
@@ -102,6 +96,12 @@ public class CBCreativeModeTabs {
 				output.accept(CBFluids.LIQUID_LIVING_SLIME_BUCKET.get());
 				output.accept(CBFluids.CREAM_BUCKET.get());
 				output.accept(CBItems.DING_DONG_CHICKEN_SPAWN_EGG.get());
+				output.accept(CBItems.GIANT_FROG.get());
+				output.accept(CBItems.FROG_STOMACH_WALL.get(), TabVisibility.SEARCH_TAB_ONLY);
+				output.accept(CBItems.FROG_STOMACH_MUCOSA.get());
+				output.accept(CBItems.FROG_STOMACH_SECRETION.get());
+				output.accept(CBItems.FROG_DIGESTIVE_TRACT.get(), TabVisibility.SEARCH_TAB_ONLY);
+				output.accept(CBItems.FROG_DIGESTIVE_TRACT_WALL.get(), TabVisibility.SEARCH_TAB_ONLY);
 			})
 			.build());
 
@@ -128,6 +128,9 @@ public class CBCreativeModeTabs {
 	}
 
 	private static void acceptLargeCardboardBoxes(ItemDisplayParameters parameters, Output output) {
+		output.accept(CBItems.CARDBOARD_BOX.get());
+		output.accept(CBItems.LARGE_CARDBOARD_BOX.get());
+
 		Set<EntityType<?>> addedEntityTypes = new HashSet<>();
 		for (Item item : BuiltInRegistries.ITEM) {
 			if (!(item instanceof SpawnEggItem spawnEggItem) || !item.isEnabled(parameters.enabledFeatures()))
