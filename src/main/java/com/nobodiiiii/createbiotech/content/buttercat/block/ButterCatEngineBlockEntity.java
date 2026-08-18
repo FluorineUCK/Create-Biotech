@@ -4,16 +4,16 @@ import net.minecraft.core.HolderLookup;
 
 import com.simibubi.create.content.kinetics.base.GeneratingKineticBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
+import com.nobodiiiii.createbiotech.content.buttercat.ButterCatVariants;
+import com.nobodiiiii.createbiotech.content.itemapplication.ManualApplicationStateCarrier;
 import com.nobodiiiii.createbiotech.foundation.advancement.CBAdvancements;
 import com.nobodiiiii.createbiotech.foundation.utility.SubLevelCompat;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import net.minecraft.core.BlockPos;
-import net.minecraft.core.registries.Registries;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceKey;
-import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.animal.CatVariant;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
@@ -24,10 +24,11 @@ import java.util.List;
 import static com.simibubi.create.content.kinetics.base.HorizontalKineticBlock.HORIZONTAL_FACING;
 
 
-public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
+public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity
+    implements ManualApplicationStateCarrier {
     private static final int OVERFLOW_BUTTER_COUNT = 1;
 
-    protected ResourceKey<CatVariant> catVariant = CatVariant.TABBY;
+    protected ResourceKey<CatVariant> catVariant = ButterCatVariants.DEFAULT;
     protected boolean infinite =false;
     protected int butterCount = 0;
     protected int overflowCount = 0;
@@ -68,6 +69,21 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
 
     public ResourceKey<CatVariant> getCatVariant() {
         return catVariant;
+    }
+
+    public void setCatVariant(ResourceKey<CatVariant> variant) {
+        if (variant == null || catVariant.equals(variant))
+            return;
+        catVariant = variant;
+        notifyUpdate();
+    }
+
+    // The cat survives its block being swapped for another butter cat block, such as a cute cat
+    // on a shaft becoming an engine once bread is applied to it.
+    @Override
+    public void restoreManualApplicationState(CompoundTag previousData) {
+        if (previousData != null)
+            setCatVariant(ButterCatVariants.read(previousData));
     }
 
     public boolean hasBread(){
@@ -168,7 +184,7 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
         compound.putInt("butterCount",butterCount);
         compound.putInt("overflowCount",overflowCount);
 
-        compound.putString("catVariant",catVariant.location().toString());
+        ButterCatVariants.write(compound, catVariant);
     }
     @Override
     protected void read(CompoundTag compound, HolderLookup.Provider registries, boolean clientPacket) {
@@ -180,8 +196,9 @@ public class  ButterCatEngineBlockEntity  extends GeneratingKineticBlockEntity {
         if(compound.contains("butterCount")) butterCount = compound.getInt("butterCount");
         if(compound.contains("overflowCount")) overflowCount = compound.getInt("overflowCount");
 
-        if (compound.contains("catVariant"))
-            catVariant = ResourceKey.create(Registries.CAT_VARIANT, ResourceLocation.parse(compound.getString("catVariant")));
+        ResourceKey<CatVariant> storedVariant = ButterCatVariants.read(compound);
+        if (storedVariant != null)
+            catVariant = storedVariant;
 
         normalizeStoredButter();
 

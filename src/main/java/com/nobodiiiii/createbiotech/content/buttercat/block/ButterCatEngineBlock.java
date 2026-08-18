@@ -6,6 +6,7 @@ import java.util.List;
 import com.simibubi.create.AllBlocks;
 import com.simibubi.create.content.kinetics.base.HorizontalKineticBlock;
 import com.simibubi.create.foundation.block.IBE;
+import com.nobodiiiii.createbiotech.content.buttercat.ButterCatVariants;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ButterCatIngredients;
 import com.nobodiiiii.createbiotech.content.buttercat.event.ClientEffect;
 import com.nobodiiiii.createbiotech.foundation.block.CBWrenchHelper;
@@ -17,13 +18,16 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Cat;
+import net.minecraft.world.entity.animal.CatVariant;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -172,6 +176,19 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
     }
 
     @Override
+    public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
+        super.setPlacedBy(level, pos, state, placer, stack);
+        if (level.isClientSide)
+            return;
+
+        // The cat arrives either boxed up, on its way onto a shaft, or as a block that was
+        // picked up with its breed remembered.
+        ResourceKey<CatVariant> variant = ButterCatVariants.ofPlacementItem(stack);
+        if (variant != null)
+            withBlockEntityDo(level, pos, be -> be.setCatVariant(variant));
+    }
+
+    @Override
     public Direction.Axis getRotationAxis(BlockState state) {
         return state.getValue(HORIZONTAL_FACING).getAxis();
     }
@@ -203,15 +220,19 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
     @SuppressWarnings("deprecation")
     public List<ItemStack> getDrops(BlockState state, LootParams.Builder builder) {
         ItemStack tool = builder.getOptionalParameter(LootContextParams.TOOL);
-        if (preservesWholeBlock(tool, builder.getLevel()))
-            return super.getDrops(state, builder);
+        BlockEntity blockEntity = builder.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
+        if (preservesWholeBlock(tool, builder.getLevel())) {
+            List<ItemStack> wholeBlockDrops = super.getDrops(state, builder);
+            if (blockEntity instanceof ButterCatEngineBlockEntity be)
+                wholeBlockDrops.forEach(drop -> ButterCatVariants.saveToBlockItem(drop, be.getCatVariant()));
+            return wholeBlockDrops;
+        }
 
         List<ItemStack> drops = new ArrayList<>();
         drops.add(AllBlocks.SHAFT.asStack());
         if (hasBread(state))
             drops.add(new ItemStack(Items.BREAD));
 
-        BlockEntity blockEntity = builder.getOptionalParameter(LootContextParams.BLOCK_ENTITY);
         if (blockEntity instanceof ButterCatEngineBlockEntity be)
             spawnCat(builder, be);
 

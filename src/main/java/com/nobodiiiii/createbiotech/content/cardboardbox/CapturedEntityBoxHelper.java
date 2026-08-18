@@ -209,13 +209,21 @@ public class CapturedEntityBoxHelper {
 	}
 
 	public static boolean containsEntityType(ItemStack stack, EntityType<?> entityType) {
+		return getCapturedEntityData(stack, entityType) != null;
+	}
+
+	/**
+	 * Zero-copy view of the entity NBT held by the box, or null when the box is empty or holds
+	 * a different entity type. Callers must not mutate the returned tag.
+	 */
+	public static CompoundTag getCapturedEntityData(ItemStack stack, EntityType<?> entityType) {
 		CompoundTag entityData = getCapturedEntityData(stack);
 		if (entityData == null)
-			return false;
+			return null;
 
 		ResourceLocation entityId = BuiltInRegistries.ENTITY_TYPE.getKey(entityType);
 		return entityId != null && entityId.toString()
-			.equals(entityData.getString("id"));
+			.equals(entityData.getString("id")) ? entityData : null;
 	}
 
 	public static Entity createCapturedEntity(ItemStack stack, Level level) {

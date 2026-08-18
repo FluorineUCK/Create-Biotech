@@ -11,6 +11,7 @@ import com.simibubi.create.foundation.utility.BlockHelper;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -28,6 +29,7 @@ import net.minecraft.world.item.crafting.RecipeType;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.block.state.properties.DirectionProperty;
@@ -229,17 +231,27 @@ public class ManualItemApplicationOrientationHandler {
 	private static boolean applyRecipeInWorld(Level level, BlockPos pos, BlockState oldState,
 		BlockState transformedBlock, ManualApplicationRecipe recipe, Player player, InteractionHand hand,
 		ItemStack heldItem) {
+		CompoundTag carriedData = captureCarriedState(level, pos);
 		level.playSound(null, pos, SoundEvents.COPPER_BREAK, SoundSource.PLAYERS, 1, 1.45f);
 		level.destroyBlock(pos, false);
 		if (!level.setBlock(pos, transformedBlock, Block.UPDATE_ALL))
 			return false;
 
+		if (level.getBlockEntity(pos) instanceof ManualApplicationStateCarrier carrier)
+			carrier.restoreManualApplicationState(carriedData);
 		transformedBlock.getBlock()
 			.setPlacedBy(level, pos, transformedBlock, player, heldItem);
 		recipe.rollResults(level.random)
 			.forEach(stack -> Block.popResource(level, pos, stack));
 		consumeHeldItem(recipe, player, hand, heldItem);
 		return true;
+	}
+
+	private static CompoundTag captureCarriedState(Level level, BlockPos pos) {
+		BlockEntity blockEntity = level.getBlockEntity(pos);
+		if (!(blockEntity instanceof ManualApplicationStateCarrier))
+			return null;
+		return blockEntity.saveWithoutMetadata(level.registryAccess());
 	}
 
 	private static void consumeHeldItem(ManualApplicationRecipe recipe, Player player, InteractionHand hand,
