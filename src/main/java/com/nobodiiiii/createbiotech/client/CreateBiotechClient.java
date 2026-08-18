@@ -366,9 +366,6 @@ public class CreateBiotechClient {
 			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.HALF_SHAFT.get())
 				.factory(HalfShaftVisual::new)
 				.apply();
-			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.BUTTER_CAT_ENGINE.get())
-				.factory(ButterCatEngineVisual::new)
-				.apply();
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.BIO_PACKAGER.get(), RenderType.cutoutMipped());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.SHULKER_PACKAGER.get(), RenderType.cutoutMipped());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.SHULKER_TELEPORTER.get(), RenderType.cutoutMipped());
