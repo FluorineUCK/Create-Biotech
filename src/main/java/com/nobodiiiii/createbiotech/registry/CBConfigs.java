@@ -8,17 +8,26 @@ import java.util.List;
 import java.util.EnumMap;
 
 import com.nobodiiiii.createbiotech.foundation.feature.CBFeature;
+import com.nobodiiiii.createbiotech.CreateBiotech;
 
 import org.apache.commons.lang3.tuple.Pair;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
+import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.neoforge.common.ModConfigSpec;
 import net.neoforged.fml.ModContainer;
+import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.fml.config.ModConfig;
+import net.neoforged.fml.event.config.ModConfigEvent;
 
 
+@EventBusSubscriber(modid = CreateBiotech.MOD_ID)
 public class CBConfigs {
+	private static final int SHULKER_PACKAGER_OLD_DEFAULT_RANGE = 5;
+	private static final int SHULKER_PACKAGER_DEFAULT_RANGE = 8;
+	private static final int SHULKER_PACKAGER_CONFIG_VERSION = 1;
+
 	public static final Client CLIENT;
 	public static final ModConfigSpec CLIENT_SPEC;
 	public static final Common COMMON;
@@ -49,6 +58,32 @@ public class CBConfigs {
 		modContainer.registerConfig(ModConfig.Type.CLIENT, CLIENT_SPEC);
 		modContainer.registerConfig(ModConfig.Type.COMMON, COMMON_SPEC);
 		modContainer.registerConfig(ModConfig.Type.SERVER, SERVER_SPEC);
+	}
+
+	@SubscribeEvent
+	public static void onConfigLoad(ModConfigEvent.Loading event) {
+		migrateShulkerPackagerConfig(event.getConfig());
+	}
+
+	@SubscribeEvent
+	public static void onConfigReload(ModConfigEvent.Reloading event) {
+		migrateShulkerPackagerConfig(event.getConfig());
+	}
+
+	private static void migrateShulkerPackagerConfig(ModConfig config) {
+		if (config.getSpec() != SERVER_SPEC)
+			return;
+
+		ShulkerPackager shulkerPackager = SERVER.shulkerPackager;
+		if (shulkerPackager.configVersion.get() >= SHULKER_PACKAGER_CONFIG_VERSION)
+			return;
+
+		// Only migrate servers that still have the old default. Preserve explicit custom values.
+		if (shulkerPackager.connectionRange.get() == SHULKER_PACKAGER_OLD_DEFAULT_RANGE)
+			shulkerPackager.connectionRange.set(SHULKER_PACKAGER_DEFAULT_RANGE);
+
+		shulkerPackager.configVersion.set(SHULKER_PACKAGER_CONFIG_VERSION);
+		SERVER_SPEC.save();
 	}
 
 	public enum EntityListMode {
@@ -819,12 +854,18 @@ public class CBConfigs {
 
 	public static class ShulkerPackager {
 		public final ModConfigSpec.IntValue transferDelay;
+		public final ModConfigSpec.IntValue configVersion;
 		public final ModConfigSpec.IntValue connectionRange;
 
 		ShulkerPackager(ModConfigSpec.Builder builder) {
 			builder.push("shulkerPackager");
 			transferDelay = builder.defineInRange("transferDelay", 8, 1, Integer.MAX_VALUE);
-			connectionRange = builder.defineInRange("connectionRange", 5, 0, 64);
+			configVersion = builder
+				.comment("Internal migration marker. Do not edit.")
+				.defineInRange("configVersion", 0, 0, SHULKER_PACKAGER_CONFIG_VERSION);
+			connectionRange = builder
+				.comment("Half-size of the axis-aligned output cube. The default 8 creates a 17x17x17 cube.")
+				.defineInRange("connectionRange", SHULKER_PACKAGER_DEFAULT_RANGE, 0, 64);
 			builder.pop();
 		}
 	}

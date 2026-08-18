@@ -13,7 +13,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Registry;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.phys.Vec3;
 
 import java.util.UUID;
 
@@ -60,10 +59,8 @@ public class ShulkerPackagerArmInteractions {
 		if (!isSelectable(level.getBlockState(target)))
 			return false;
 
-		Vec3 anchorCenter = Vec3.atCenterOf(anchor);
-		Vec3 targetCenter = Vec3.atCenterOf(target);
 		int range = CBConfigs.SERVER.shulkerPackager.connectionRange.get();
-		return SubLevelCompat.distanceSquared(level, anchorCenter, targetCenter) < (double) range * range;
+		return ShulkerPackagerRange.isWithinCube(level, anchor, target, range);
 	}
 
 	public static class ShulkerPackagerType extends ArmInteractionPointType {
