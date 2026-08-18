@@ -8,8 +8,8 @@ import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerPlace
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonFirePacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonGearAnimationPacket;
-import com.yision.allay.block.allayport.AllayPortFlapPacket;
-import com.yision.allay.logistics.courier.hud.AllayCourierHudPacket;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortFlapPacket;
+import com.nobodiiiii.createbiotech.content.allay.logistics.courier.hud.AllayCourierHudPacket;
 
 import net.minecraft.client.player.LocalPlayer;
 import net.neoforged.api.distmarker.Dist;

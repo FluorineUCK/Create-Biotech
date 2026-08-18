@@ -32,7 +32,7 @@ import com.nobodiiiii.createbiotech.content.universaljoint.HalfShaftBlockEntity;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointBlockEntity;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.BlastProofChainDriveBlockEntity;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastChamberBlockEntity;
-import com.yision.allay.block.allayport.AllayPortBlockEntity;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortBlockEntity;
 
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.BlockEntityType;

@@ -4,7 +4,7 @@ import java.util.function.Supplier;
 
 import com.mojang.serialization.Codec;
 import com.nobodiiiii.createbiotech.CreateBiotech;
-import com.yision.allay.item.allaycourier.AllayCourierCargo;
+import com.nobodiiiii.createbiotech.content.allay.item.allaycourier.AllayCourierCargo;
 
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;

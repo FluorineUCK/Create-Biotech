@@ -12,9 +12,9 @@ import com.simibubi.create.content.logistics.box.PackageStyles;
 import com.simibubi.create.content.logistics.packager.PackagerBlockEntity;
 import com.simibubi.create.foundation.ponder.CreateSceneBuilder;
 import com.simibubi.create.infrastructure.ponder.scenes.highLogistics.PonderHilo;
-import com.yision.allay.block.allayport.AllayPortBlockEntity;
-import com.yision.allay.entity.courier.AllayCourierEntity;
-import com.yision.allay.registry.AllEntityTypes;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortBlockEntity;
+import com.nobodiiiii.createbiotech.content.allay.entity.courier.AllayCourierEntity;
+import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 import net.createmod.ponder.api.element.ElementLink;
 import net.createmod.ponder.api.element.EntityElement;
 import net.createmod.ponder.api.registration.PonderSceneRegistrationHelper;
@@ -151,7 +151,7 @@ public final class GeneratedAllayPort_ffe8c4c2 {
             senderAnimationPort, AllayPortBlockEntity.class, be -> be.flap(false));
         ElementLink<EntityElement> courierLink = scene.world().createEntity(level -> {
             AllayCourierEntity courier =
-                new AllayCourierEntity(AllEntityTypes.ALLAY_COURIER.get(), level);
+                new AllayCourierEntity(CBEntityTypes.ALLAY_COURIER.get(), level);
             courier.setPackage(box);
             courier.setPhase(AllayCourierEntity.Phase.CRUISE);
             courier.setMission(AllayCourierEntity.Mission.byId(mission));

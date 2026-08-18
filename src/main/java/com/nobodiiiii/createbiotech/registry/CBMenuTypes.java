@@ -6,8 +6,8 @@ import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.shulkerteleporter.ShulkerTeleporterMenu;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableMenu;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessStockKeeperRequestMenu;
-import com.yision.allay.block.allayport.AllayPortMenu;
-import com.yision.allay.item.allaycourier.AllayCourierMenu;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortMenu;
+import com.nobodiiiii.createbiotech.content.allay.item.allaycourier.AllayCourierMenu;
 
 import net.minecraft.world.inventory.MenuType;
 import net.neoforged.neoforge.common.extensions.IMenuTypeExtension;

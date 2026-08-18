@@ -41,7 +41,7 @@ import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTa
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableCogBlock;
 import com.nobodiiiii.createbiotech.content.universaljoint.HalfShaftBlock;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointBlock;
-import com.yision.allay.block.allayport.AllayPortBlock;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortBlock;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.BlastProofChainDriveBlock;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastChamberBlock;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.ExplosionProofCasingBlock;

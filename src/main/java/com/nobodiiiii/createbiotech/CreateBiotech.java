@@ -41,8 +41,8 @@ import com.simibubi.create.api.behaviour.movement.MovementBehaviour;
 import com.simibubi.create.api.behaviour.interaction.MovingInteractionBehaviour;
 import com.simibubi.create.api.boiler.BoilerHeater;
 import com.simibubi.create.api.stress.BlockStressValues;
-import com.yision.allay.block.allayport.AllayPortTargetRegistry;
-import com.yision.allay.logistics.courier.AllayCourierTaskManager;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortTargetRegistry;
+import com.nobodiiiii.createbiotech.content.allay.logistics.courier.AllayCourierTaskManager;
 
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.DyeColor;

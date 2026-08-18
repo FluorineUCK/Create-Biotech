@@ -38,9 +38,9 @@ import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointItem;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessTerminalItem;
 import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineItem;
 import com.nobodiiiii.createbiotech.foundation.item.BlockCenteredRenderedLivingEntityItem;
-import com.yision.allay.block.allayport.AllayPortItem;
-import com.yision.allay.item.allaycourier.AllayCourierItem;
-import com.yision.allay.item.allaycourier.IncompleteAllayCourierItem;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortItem;
+import com.nobodiiiii.createbiotech.content.allay.item.allaycourier.AllayCourierItem;
+import com.nobodiiiii.createbiotech.content.allay.item.allaycourier.IncompleteAllayCourierItem;
 
 import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.BlockItem;

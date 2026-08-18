@@ -21,10 +21,10 @@ import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueSelectionPac
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonChargeSoundPacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonFirePacket;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonGearAnimationPacket;
-import com.yision.allay.block.allayport.AllayPortConfigurationPacket;
-import com.yision.allay.block.allayport.AllayPortFlapPacket;
-import com.yision.allay.logistics.courier.hud.AllayCourierHudPacket;
-import com.yision.allay.network.allay.AllayCourierConfirmPacket;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortConfigurationPacket;
+import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortFlapPacket;
+import com.nobodiiiii.createbiotech.content.allay.logistics.courier.hud.AllayCourierHudPacket;
+import com.nobodiiiii.createbiotech.content.allay.network.allay.AllayCourierConfirmPacket;
 
 import net.createmod.catnip.annotations.ClientOnly;
 import net.createmod.catnip.net.base.BasePacketPayload.PacketTypeProvider;

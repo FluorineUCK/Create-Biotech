@@ -10,7 +10,7 @@ import com.nobodiiiii.createbiotech.content.dingdongchicken.DingDongChickenEntit
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonEntity;
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonSeatEntity;
 import com.simibubi.create.content.logistics.box.PackageEntity;
-import com.yision.allay.entity.courier.AllayCourierEntity;
+import com.nobodiiiii.createbiotech.content.allay.entity.courier.AllayCourierEntity;
 
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;

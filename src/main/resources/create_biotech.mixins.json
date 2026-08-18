@@ -41,6 +41,7 @@
     "NetherPortalBlockMixin",
     "PortalForcerMixin",
     "MobAccessor",
+    "PackagerBlockEntityMixin",
     "PackageItemCardboardBoxMixin",
     "PressingBehaviourSoundMixin",
     "PowerBeltWalkAnimationMixin",
