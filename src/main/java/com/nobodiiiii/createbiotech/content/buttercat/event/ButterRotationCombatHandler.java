@@ -2,7 +2,6 @@ package com.nobodiiiii.createbiotech.content.buttercat.event;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.buttercat.ButterRotation;
-import com.nobodiiiii.createbiotech.content.buttercat.ButterRotationAccess;
 import com.nobodiiiii.createbiotech.registry.CBMobEffects;
 
 import net.minecraft.world.damagesource.DamageSource;
@@ -61,14 +60,14 @@ public class ButterRotationCombatHandler {
 	public static void onButterRotationRemoved(MobEffectEvent.Remove event) {
 		if (!event.getEntity().level().isClientSide
 			&& event.getEffect().is(CBMobEffects.BUTTER_ROTATION.getKey()))
-			((ButterRotationAccess) event.getEntity()).createBiotech$setButterRotationAmplifier(-1);
+			ButterRotation.clearRotationState(event.getEntity());
 	}
 
 	@SubscribeEvent(priority = EventPriority.LOWEST)
 	public static void onButterRotationExpired(MobEffectEvent.Expired event) {
 		if (!event.getEntity().level().isClientSide
 			&& event.getEffectInstance().getEffect().is(CBMobEffects.BUTTER_ROTATION.getKey()))
-			((ButterRotationAccess) event.getEntity()).createBiotech$setButterRotationAmplifier(-1);
+			ButterRotation.clearRotationState(event.getEntity());
 	}
 
 	private static boolean isMeleeDamage(DamageSource source) {

@@ -26,11 +26,19 @@ public abstract class LivingEntitySlimeMimicMixin implements SlimeMimicAccess, B
 	@Unique
 	private static final EntityDataAccessor<Integer> CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER =
 		SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.INT);
+	@Unique
+	private static final EntityDataAccessor<Float> CREATE_BIOTECH$BUTTER_ROTATION_PHASE =
+		SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.FLOAT);
+	@Unique
+	private static final EntityDataAccessor<Long> CREATE_BIOTECH$BUTTER_ROTATION_PHASE_START_TICK =
+		SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.LONG);
 
 	@Inject(method = "defineSynchedData", at = @At("TAIL"))
 	private void createBiotech$defineData(SynchedEntityData.Builder builder, CallbackInfo ci) {
 		builder.define(CREATE_BIOTECH$SLIME_MIMIC, false);
 		builder.define(CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER, -1);
+		builder.define(CREATE_BIOTECH$BUTTER_ROTATION_PHASE, 0.0F);
+		builder.define(CREATE_BIOTECH$BUTTER_ROTATION_PHASE_START_TICK, -1L);
 	}
 
 	@Inject(method = "addAdditionalSaveData", at = @At("TAIL"))
@@ -65,5 +73,29 @@ public abstract class LivingEntitySlimeMimicMixin implements SlimeMimicAccess, B
 		LivingEntity entity = (LivingEntity) (Object) this;
 		if (entity.getEntityData().get(CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER) != amplifier)
 			entity.getEntityData().set(CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER, amplifier);
+	}
+
+	@Override
+	public float createBiotech$getButterRotationPhase() {
+		return ((LivingEntity) (Object) this).getEntityData().get(CREATE_BIOTECH$BUTTER_ROTATION_PHASE);
+	}
+
+	@Override
+	public void createBiotech$setButterRotationPhase(float phase) {
+		LivingEntity entity = (LivingEntity) (Object) this;
+		if (Float.compare(entity.getEntityData().get(CREATE_BIOTECH$BUTTER_ROTATION_PHASE), phase) != 0)
+			entity.getEntityData().set(CREATE_BIOTECH$BUTTER_ROTATION_PHASE, phase);
+	}
+
+	@Override
+	public long createBiotech$getButterRotationPhaseStartTick() {
+		return ((LivingEntity) (Object) this).getEntityData().get(CREATE_BIOTECH$BUTTER_ROTATION_PHASE_START_TICK);
+	}
+
+	@Override
+	public void createBiotech$setButterRotationPhaseStartTick(long gameTime) {
+		LivingEntity entity = (LivingEntity) (Object) this;
+		if (entity.getEntityData().get(CREATE_BIOTECH$BUTTER_ROTATION_PHASE_START_TICK) != gameTime)
+			entity.getEntityData().set(CREATE_BIOTECH$BUTTER_ROTATION_PHASE_START_TICK, gameTime);
 	}
 }

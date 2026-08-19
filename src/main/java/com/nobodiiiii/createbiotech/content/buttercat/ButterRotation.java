@@ -20,14 +20,12 @@ public final class ButterRotation {
 		return entity.getEffect(CBMobEffects.BUTTER_ROTATION.getDelegate());
 	}
 
-	/**
-	 * Non-player entities use a world-time phase so rendering, projectiles and
-	 * melee all derive the same angle without per-entity ticking state.
-	 */
 	public static float getVisualRotationDegrees(LivingEntity entity, float partialTick) {
 		if (entity instanceof Player)
 			return 0.0F;
-		int amplifier = ((ButterRotationAccess) entity).createBiotech$getButterRotationAmplifier();
+
+		ButterRotationAccess access = (ButterRotationAccess) entity;
+		int amplifier = access.createBiotech$getButterRotationAmplifier();
 		if (amplifier < 0) {
 			MobEffectInstance effect = getEffect(entity);
 			if (effect == null)
@@ -35,9 +33,39 @@ public final class ButterRotation {
 			amplifier = effect.getAmplifier();
 		}
 
-		double elapsedTicks = entity.level().getGameTime() + partialTick;
-		double degrees = elapsedTicks * getTickAngleSpeed(amplifier);
-		return (float) (degrees % 360.0D);
+		long phaseStartTick = access.createBiotech$getButterRotationPhaseStartTick();
+		if (phaseStartTick < 0L)
+			return 0.0F;
+
+		double elapsedTicks = Math.max(0.0D,
+			entity.level().getGameTime() + partialTick - phaseStartTick);
+		double degrees = access.createBiotech$getButterRotationPhase()
+			+ elapsedTicks * getTickAngleSpeed(amplifier);
+		return Mth.wrapDegrees((float) degrees);
+	}
+
+	public static void updateAmplifier(LivingEntity entity, int amplifier) {
+		ButterRotationAccess access = (ButterRotationAccess) entity;
+		int previousAmplifier = access.createBiotech$getButterRotationAmplifier();
+		if (previousAmplifier == amplifier)
+			return;
+
+		if (entity instanceof Player) {
+			access.createBiotech$setButterRotationAmplifier(amplifier);
+			return;
+		}
+
+		float phase = previousAmplifier < 0 ? 0.0F : getVisualRotationDegrees(entity, 0.0F);
+		access.createBiotech$setButterRotationPhase(phase);
+		access.createBiotech$setButterRotationPhaseStartTick(entity.level().getGameTime());
+		access.createBiotech$setButterRotationAmplifier(amplifier);
+	}
+
+	public static void clearRotationState(LivingEntity entity) {
+		ButterRotationAccess access = (ButterRotationAccess) entity;
+		access.createBiotech$setButterRotationAmplifier(-1);
+		access.createBiotech$setButterRotationPhase(0.0F);
+		access.createBiotech$setButterRotationPhaseStartTick(-1L);
 	}
 
 	public static float getTickAngleSpeed(int amplifier) {
