@@ -83,6 +83,7 @@ public class ManualItemApplicationOrientationHandler {
 
 		event.setCanceled(true);
 		if (level.isClientSide()) {
+			predictConversion(level, pos, transformedBlock, player, heldItem);
 			event.setCancellationResult(InteractionResult.SUCCESS);
 			return;
 		}
@@ -237,14 +238,35 @@ public class ManualItemApplicationOrientationHandler {
 		if (!level.setBlock(pos, transformedBlock, Block.UPDATE_ALL))
 			return false;
 
-		if (level.getBlockEntity(pos) instanceof ManualApplicationStateCarrier carrier)
-			carrier.restoreManualApplicationState(carriedData);
+		restoreCarriedState(level, pos, carriedData);
 		transformedBlock.getBlock()
 			.setPlacedBy(level, pos, transformedBlock, player, heldItem);
 		recipe.rollResults(level.random)
 			.forEach(stack -> Block.popResource(level, pos, stack));
 		consumeHeldItem(recipe, player, hand, heldItem);
 		return true;
+	}
+
+	/**
+	 * Repeats the block swap on the client that asked for it. The server answers with a block
+	 * update and the block entity data in two separate packets, which the client can end up
+	 * applying in two different frames - long enough to show one frame of a block entity that
+	 * still holds its defaults.
+	 */
+	private static void predictConversion(Level level, BlockPos pos, BlockState transformedBlock, Player player,
+		ItemStack heldItem) {
+		CompoundTag carriedData = captureCarriedState(level, pos);
+		if (!level.setBlock(pos, transformedBlock, Block.UPDATE_ALL))
+			return;
+
+		restoreCarriedState(level, pos, carriedData);
+		transformedBlock.getBlock()
+			.setPlacedBy(level, pos, transformedBlock, player, heldItem);
+	}
+
+	private static void restoreCarriedState(Level level, BlockPos pos, CompoundTag carriedData) {
+		if (level.getBlockEntity(pos) instanceof ManualApplicationStateCarrier carrier)
+			carrier.restoreManualApplicationState(carriedData);
 	}
 
 	private static CompoundTag captureCarriedState(Level level, BlockPos pos) {

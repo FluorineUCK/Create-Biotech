@@ -11,6 +11,8 @@ import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.Automati
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetBlock;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerBlock;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineBlock;
+import com.nobodiiiii.createbiotech.content.buttercat.block.ButterBlock;
+import com.nobodiiiii.createbiotech.content.buttercat.block.SuperButterBlock;
 import com.nobodiiiii.createbiotech.content.bufferpad.BufferPadBlock;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlock;
 import com.nobodiiiii.createbiotech.content.experience.BuddingExperienceBlock;
@@ -345,6 +347,14 @@ public class CBBlocks {
 				.noOcclusion()
 				.mapColor(MapColor.METAL)
 				.forceSolidOff()));
+
+	public static final DeferredHolder<Block, ButterBlock> BUTTER_BLOCK =
+		BLOCKS.register("butter_block",
+			() -> new ButterBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)));
+
+	public static final DeferredHolder<Block, SuperButterBlock> SUPER_BUTTER_BLOCK =
+		BLOCKS.register("super_butter_block",
+			() -> new SuperButterBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)));
 
 	private static Block.Properties blastProofGlassProperties() {
 		return CBSharedProperties.withExplosionProofResistance(CBSharedProperties.vanillaGlass());

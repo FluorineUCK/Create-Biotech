@@ -5,8 +5,8 @@
 This repository contains material adapted from or derived from:
 
 - Repository: `SylviaX-390/createbuttercat`
-- Branch used for integration: `1.20.1-forge`
-- Reference copy in this repository: `ref/createbuttercat/`
+- Branches used for integration: `1.20.1-forge`, `1.21.1-neoforge`
+- Current 1.21.1 reference copy in this repository: `ref/1.21.1/createbuttercat/`
 
 The adapted portions may include code, assets, data files, localization, recipes, and related resources. Later edits to those adapted portions remain subject to the upstream MIT notice requirement.
 

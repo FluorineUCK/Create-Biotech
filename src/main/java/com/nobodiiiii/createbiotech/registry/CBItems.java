@@ -282,6 +282,12 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> BUTTER_CAT_ENGINE = ITEMS.register("butter_cat_engine",
 		() -> new ButterCatBlockItem(CBBlocks.BUTTER_CAT_ENGINE.get(), new Item.Properties()));
 
+	public static final DeferredHolder<Item, Item> BUTTER_BLOCK = ITEMS.register("butter_block",
+		() -> new BlockItem(CBBlocks.BUTTER_BLOCK.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> SUPER_BUTTER_BLOCK = ITEMS.register("super_butter_block",
+		() -> new BlockItem(CBBlocks.SUPER_BUTTER_BLOCK.get(), new Item.Properties().rarity(Rarity.EPIC)));
+
 	public static final DeferredHolder<Item, ConfigurableButterFoodItem> BUTTER = ITEMS.register("butter",
 		() -> new ConfigurableButterFoodItem(
 			new Item.Properties().food(ButterFoodProperties.createDefault(ButterFoodProperties.Variant.BUTTER)),

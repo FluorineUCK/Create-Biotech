@@ -16,6 +16,7 @@ import com.nobodiiiii.createbiotech.data.CBDataGenerators;
 import com.nobodiiiii.createbiotech.foundation.block.CBMultiBlockLifecycle;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.nobodiiiii.createbiotech.registry.CBArmInteractionPointTypes;
+import com.nobodiiiii.createbiotech.registry.CBAttachmentTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBCapabilities;
@@ -60,6 +61,7 @@ public class CreateBiotech {
 
 	public CreateBiotech(IEventBus modEventBus, ModContainer modContainer) {
 		CBConfigs.register(modContainer);
+		CBAttachmentTypes.register(modEventBus);
 		CBBlocks.register(modEventBus);
 		CBDataComponents.register(modEventBus);
 		CBItems.register(modEventBus);
