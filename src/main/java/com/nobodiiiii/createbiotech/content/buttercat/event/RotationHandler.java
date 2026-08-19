@@ -1,53 +1,33 @@
 package com.nobodiiiii.createbiotech.content.buttercat.event;
 
-import com.nobodiiiii.createbiotech.content.buttercat.mob_effect.ButterRotationEffect;
+import com.nobodiiiii.createbiotech.content.buttercat.ButterRotation;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBMobEffects;
 
 import net.minecraft.client.Minecraft;
-import net.minecraft.util.Mth;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.player.Player;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 
 
 @EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public class RotationHandler {
-    static float acceleration = 0;
-    static int amplifier = -1;
     @SubscribeEvent
     public static void onClientTick(ClientTickEvent.Post event) {
         Player player = Minecraft.getInstance().player;
-        if (player == null ) return;
+        if (player == null)
+            return;
         MobEffectInstance effect = player.getEffect(CBMobEffects.BUTTER_ROTATION.getDelegate());
+        if (effect == null)
+            return;
 
-        acceleration = Mth.clamp(acceleration+0.1f*(effect!=null?1:-1),0,1);
-        if(effect!=null){
-            int amplifier0 = effect.getAmplifier();
-            if(amplifier0 != amplifier)
-                amplifier = amplifier0;
-        }
-    }
-
-    @SubscribeEvent
-    public static void onRender(RenderFrameEvent.Pre event) {
-        Player player = Minecraft.getInstance().player;
-        if (player == null || acceleration==0) return;
-
-        float pt = event.getPartialTick().getGameTimeDeltaPartialTick(false);
-        float y= player.getYRot()+ getAngle(pt,amplifier);
-
-        player.setYRot(y);
-    }
-    public static float getAngle(float pt,int a) {
-        return (getTickAngleSpeed(a) * pt ) % 360;
-    }
-    private static float getTickAngleSpeed(int amplifier){
-        return (3*amplifier+1)* ButterRotationEffect.getRotationAngularSpeed() * acceleration;
+        float newYaw = player.getYRot() + ButterRotation.getTickAngleSpeed(effect.getAmplifier());
+        player.setYRot(newYaw);
+        player.setYHeadRot(newYaw);
+        player.setYBodyRot(newYaw);
     }
 }
 

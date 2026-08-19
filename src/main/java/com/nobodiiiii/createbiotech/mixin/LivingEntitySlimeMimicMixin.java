@@ -6,6 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.nobodiiiii.createbiotech.content.buttercat.ButterRotationAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 
@@ -17,15 +18,19 @@ import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.world.entity.LivingEntity;
 
 @Mixin(LivingEntity.class)
-public abstract class LivingEntitySlimeMimicMixin implements SlimeMimicAccess {
+public abstract class LivingEntitySlimeMimicMixin implements SlimeMimicAccess, ButterRotationAccess {
 
 	@Unique
 	private static final EntityDataAccessor<Boolean> CREATE_BIOTECH$SLIME_MIMIC = SynchedEntityData.defineId(
 		LivingEntity.class, EntityDataSerializers.BOOLEAN);
+	@Unique
+	private static final EntityDataAccessor<Integer> CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER =
+		SynchedEntityData.defineId(LivingEntity.class, EntityDataSerializers.INT);
 
 	@Inject(method = "defineSynchedData", at = @At("TAIL"))
-	private void createBiotech$defineSlimeMimicData(SynchedEntityData.Builder builder, CallbackInfo ci) {
+	private void createBiotech$defineData(SynchedEntityData.Builder builder, CallbackInfo ci) {
 		builder.define(CREATE_BIOTECH$SLIME_MIMIC, false);
+		builder.define(CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER, -1);
 	}
 
 	@Inject(method = "addAdditionalSaveData", at = @At("TAIL"))
@@ -48,5 +53,17 @@ public abstract class LivingEntitySlimeMimicMixin implements SlimeMimicAccess {
 	@Override
 	public void createBiotech$setSlimeMimic(boolean slimeMimic) {
 		((LivingEntity) (Object) this).getEntityData().set(CREATE_BIOTECH$SLIME_MIMIC, slimeMimic);
+	}
+
+	@Override
+	public int createBiotech$getButterRotationAmplifier() {
+		return ((LivingEntity) (Object) this).getEntityData().get(CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER);
+	}
+
+	@Override
+	public void createBiotech$setButterRotationAmplifier(int amplifier) {
+		LivingEntity entity = (LivingEntity) (Object) this;
+		if (entity.getEntityData().get(CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER) != amplifier)
+			entity.getEntityData().set(CREATE_BIOTECH$BUTTER_ROTATION_AMPLIFIER, amplifier);
 	}
 }
