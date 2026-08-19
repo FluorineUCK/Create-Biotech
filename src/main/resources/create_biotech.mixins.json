@@ -36,6 +36,7 @@
     "MagmaBeltFunnelBlockMixin",
     "LivingEntitySlimeMimicHurtSoundMixin",
     "LivingEntitySlimeMimicMixin",
+    "LivingEntityButterRotationMixin",
     "HauntingTypeSlimeMimicMixin",
     "NozzleBlockMixin",
     "NetherPortalBlockMixin",
