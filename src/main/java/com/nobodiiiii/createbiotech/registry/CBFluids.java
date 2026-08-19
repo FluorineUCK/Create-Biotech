@@ -4,8 +4,6 @@ import net.minecraft.core.registries.Registries;
 
 import net.minecraft.core.registries.BuiltInRegistries;
 
-import java.util.function.Consumer;
-
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.buttercat.fluid.CreamBucketDispenseBehavior;
 import com.nobodiiiii.createbiotech.content.buttercat.fluid.CreamFluidType;
@@ -13,14 +11,10 @@ import com.nobodiiiii.createbiotech.content.fluid.LiquidLivingSlimeBlock;
 import com.nobodiiiii.createbiotech.content.fluid.LiquidLivingSlimeFluidType;
 import com.nobodiiiii.createbiotech.content.fluid.TeleportationFluid;
 import com.nobodiiiii.createbiotech.content.fluid.TeleportationLiquidBlock;
+import com.nobodiiiii.createbiotech.foundation.fluid.CBFluidType;
 import com.simibubi.create.content.fluids.VirtualFluid;
 import org.joml.Vector3f;
 
-import com.mojang.blaze3d.shaders.FogShape;
-import com.mojang.blaze3d.systems.RenderSystem;
-import net.minecraft.client.Camera;
-import net.minecraft.client.multiplayer.ClientLevel;
-import net.minecraft.client.renderer.FogRenderer.FogMode;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.material.MapColor;
 import net.minecraft.world.item.BucketItem;
@@ -34,7 +28,6 @@ import net.minecraft.world.level.block.LiquidBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.level.material.Fluid;
-import net.neoforged.neoforge.client.extensions.common.IClientFluidTypeExtensions;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.neoforge.common.SoundActions;
 import net.neoforged.neoforge.fluids.FluidType;
@@ -71,25 +64,10 @@ public class CBFluids {
 	private static final Vector3f TELEPORTATION_SUBMERGED_FOG_COLOR = new Vector3f(0.72F, 0.48F, 0.86F);
 	private static final float TELEPORTATION_FOG_DISTANCE_MODIFIER = 1F / 10F;
 
-	public static final DeferredHolder<FluidType, FluidType> EXPERIENCE_TYPE =
+	public static final DeferredHolder<FluidType, CBFluidType> EXPERIENCE_TYPE =
 		FLUID_TYPES.register("experience",
-			() -> new FluidType(FluidType.Properties.create()
-				.lightLevel(15)) {
-				@Override
-				public void initializeClient(Consumer<IClientFluidTypeExtensions> consumer) {
-					consumer.accept(new IClientFluidTypeExtensions() {
-						@Override
-						public ResourceLocation getStillTexture() {
-							return EXPERIENCE_STILL_TEXTURE;
-						}
-
-						@Override
-						public ResourceLocation getFlowingTexture() {
-							return EXPERIENCE_FLOW_TEXTURE;
-						}
-					});
-				}
-			});
+			() -> new CBFluidType(FluidType.Properties.create()
+				.lightLevel(15), EXPERIENCE_STILL_TEXTURE, EXPERIENCE_FLOW_TEXTURE));
 
 	public static final DeferredHolder<Fluid, VirtualFluid> EXPERIENCE =
 		FLUIDS.register("experience", () -> VirtualFluid.createSource(experienceProperties()));
@@ -99,39 +77,20 @@ public class CBFluids {
 
 	public static final DeferredHolder<FluidType, FluidType> TELEPORTATION_TYPE =
 		FLUID_TYPES.register("teleportation",
-			() -> new FluidType(FluidType.Properties.create()
+			() -> new CBFluidType(FluidType.Properties.create()
 				.sound(SoundActions.BUCKET_FILL, SoundEvents.BUCKET_FILL_LAVA)
 				.sound(SoundActions.BUCKET_EMPTY, SoundEvents.BUCKET_EMPTY_LAVA)
 				.density(3000)
 				.viscosity(6000)
-				.lightLevel(11)) {
+				.lightLevel(11), NETHER_PORTAL_TEXTURE, NETHER_PORTAL_TEXTURE) {
 				@Override
-				public void initializeClient(Consumer<IClientFluidTypeExtensions> consumer) {
-					consumer.accept(new IClientFluidTypeExtensions() {
-						@Override
-						public ResourceLocation getStillTexture() {
-							return NETHER_PORTAL_TEXTURE;
-						}
+				protected Vector3f getCustomFogColor() {
+					return TELEPORTATION_SUBMERGED_FOG_COLOR;
+				}
 
-						@Override
-						public ResourceLocation getFlowingTexture() {
-							return NETHER_PORTAL_TEXTURE;
-						}
-
-						@Override
-						public Vector3f modifyFogColor(Camera camera, float partialTick, ClientLevel level,
-							int renderDistance, float darkenWorldAmount, Vector3f fluidFogColor) {
-							return TELEPORTATION_SUBMERGED_FOG_COLOR;
-						}
-
-						@Override
-						public void modifyFogRender(Camera camera, FogMode mode, float renderDistance, float partialTick,
-							float nearDistance, float farDistance, FogShape shape) {
-							RenderSystem.setShaderFogShape(FogShape.CYLINDER);
-							RenderSystem.setShaderFogStart(-8.0F);
-							RenderSystem.setShaderFogEnd(96.0F * TELEPORTATION_FOG_DISTANCE_MODIFIER);
-						}
-					});
+				@Override
+				protected float getFogDistanceModifier() {
+					return TELEPORTATION_FOG_DISTANCE_MODIFIER;
 				}
 			});
 
