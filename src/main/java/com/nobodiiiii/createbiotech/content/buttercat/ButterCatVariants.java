@@ -66,6 +66,12 @@ public final class ButterCatVariants {
 		});
 	}
 
+	/** Breed a butter cat block item renders as and places with. */
+	public static ResourceKey<CatVariant> ofBlockItemOrDefault(ItemStack stack) {
+		ResourceKey<CatVariant> variant = ofBlockItem(stack);
+		return variant != null ? variant : DEFAULT;
+	}
+
 	@Nullable
 	private static ResourceKey<CatVariant> ofCapturedCat(ItemStack stack) {
 		CompoundTag catData = CapturedEntityBoxHelper.getCapturedEntityData(stack, EntityType.CAT);

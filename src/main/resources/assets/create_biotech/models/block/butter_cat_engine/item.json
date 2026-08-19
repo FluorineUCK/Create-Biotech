@@ -1,12 +1,6 @@
 {
   "parent": "block/block",
-  "loader": "neoforge:obj",
-  "flip_v": true,
-  "model": "create_biotech:models/block/butter_cat_engine/cat/cat_item.obj",
   "textures": {
-    "axis": "create:block/axis",
-    "axis_top": "create:block/axis_top",
-    "0": "create_biotech:block/cat/tabby",
     "particle": "create_biotech:block/cat/tabby"
   },
   "display": {
@@ -43,4 +37,3 @@
     }
   }
 }
-

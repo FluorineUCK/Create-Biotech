@@ -19,10 +19,15 @@ public class AllCreateBiotechPonderScenes {
 
 	public static void register(PonderSceneRegistrationHelper<ResourceLocation> helper) {
 		PonderSceneRegistrationHelper<DeferredHolder<?, ?>> HELPER = helper.withKeyFunction(DeferredHolder::getId);
-		HELPER.forComponents(CBItems.SMART_SUPER_GLUE)
-			.addStoryBoard(CREATE_SUPER_GLUE_SCHEMATIC, ChassisScenes::superGlue, AllCreatePonderTags.CONTRAPTION_ASSEMBLY);
 		HELPER.forComponents(CBItems.BUTTER_CAT_ENGINE)
 			.addStoryBoard(BUTTER_CAT_ENGINE_SCHEMATIC, ModPonderScenes::butterCatEngine,
 				AllCreatePonderTags.KINETIC_SOURCES);
+	}
+
+	public static void registerCreateCompat(PonderSceneRegistrationHelper<ResourceLocation> helper) {
+		PonderSceneRegistrationHelper<DeferredHolder<?, ?>> HELPER = helper.withKeyFunction(DeferredHolder::getId);
+		HELPER.forComponents(CBItems.SMART_SUPER_GLUE)
+			.addStoryBoard(CREATE_SUPER_GLUE_SCHEMATIC, ChassisScenes::superGlue,
+				AllCreatePonderTags.CONTRAPTION_ASSEMBLY);
 	}
 }

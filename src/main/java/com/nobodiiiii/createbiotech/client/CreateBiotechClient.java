@@ -68,6 +68,7 @@ import com.nobodiiiii.createbiotech.content.allay.client.render.AllayPortVisual;
 import com.nobodiiiii.createbiotech.content.allay.item.allaycourier.AllayCourierMenu;
 import com.nobodiiiii.createbiotech.content.allay.item.allaycourier.AllayCourierScreen;
 import com.nobodiiiii.createbiotech.foundation.ponder.CreateBiotechPonderPlugin;
+import com.nobodiiiii.createbiotech.foundation.ponder.CreatePonderCompatPlugin;
 import com.nobodiiiii.createbiotech.client.particle.CourierNoteParticle;
 import com.nobodiiiii.createbiotech.client.particle.FrogPortalParticle;
 import com.nobodiiiii.createbiotech.client.particle.SonicConeWaveParticle;
@@ -317,6 +318,7 @@ public class CreateBiotechClient {
 			registerItemTooltips();
 			registerCardboardBoxModelProperties();
 			PonderIndex.addPlugin(new CreateBiotechPonderPlugin());
+			PonderIndex.addPlugin(new CreatePonderCompatPlugin());
 			CardboardBoxPartials.register();
 			ShulkerPackagePartials.register();
 			SimpleBlockEntityVisualizer.builder(CBBlockEntityTypes.EXPERIENCE_PUMP.get())

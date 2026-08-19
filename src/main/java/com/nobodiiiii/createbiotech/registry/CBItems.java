@@ -9,6 +9,7 @@ import java.util.EnumMap;
 import java.util.Map;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.content.buttercat.item.ButterCatBlockItem;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ButterFoodProperties;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterFoodItem;
 import com.nobodiiiii.createbiotech.content.buttercat.item.ConfigurableButterSequencedAssemblyItem;
@@ -276,10 +277,10 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> BUFFER_PAD = BUFFER_PADS.get(DyeColor.RED);
 
 	public static final DeferredHolder<Item, Item> CUTE_CAT_ON_SHAFT = ITEMS.register("cute_cat_on_shaft",
-		() -> new BlockItem(CBBlocks.CUTE_CAT_ON_SHAFT.get(), new Item.Properties()));
+		() -> new ButterCatBlockItem(CBBlocks.CUTE_CAT_ON_SHAFT.get(), new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> BUTTER_CAT_ENGINE = ITEMS.register("butter_cat_engine",
-		() -> new BlockItem(CBBlocks.BUTTER_CAT_ENGINE.get(), new Item.Properties()));
+		() -> new ButterCatBlockItem(CBBlocks.BUTTER_CAT_ENGINE.get(), new Item.Properties()));
 
 	public static final DeferredHolder<Item, ConfigurableButterFoodItem> BUTTER = ITEMS.register("butter",
 		() -> new ConfigurableButterFoodItem(

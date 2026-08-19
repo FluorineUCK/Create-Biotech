@@ -43,6 +43,7 @@ import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.storage.loot.LootParams;
 import net.minecraft.world.level.storage.loot.parameters.LootContextParams;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
@@ -178,14 +179,22 @@ public class ButterCatEngineBlock extends HorizontalKineticBlock implements  IBE
     @Override
     public void setPlacedBy(Level level, BlockPos pos, BlockState state, LivingEntity placer, ItemStack stack) {
         super.setPlacedBy(level, pos, state, placer, stack);
-        if (level.isClientSide)
-            return;
 
         // The cat arrives either boxed up, on its way onto a shaft, or as a block that was
-        // picked up with its breed remembered.
+        // picked up with its breed remembered. Applied on both sides, so the block the client
+        // predicts is never a tabby until the server's block entity data catches up.
         ResourceKey<CatVariant> variant = ButterCatVariants.ofPlacementItem(stack);
         if (variant != null)
             withBlockEntityDo(level, pos, be -> be.setCatVariant(variant));
+    }
+
+    @Override
+    public ItemStack getCloneItemStack(BlockState state, HitResult target, LevelReader level, BlockPos pos,
+        Player player) {
+        ItemStack stack = super.getCloneItemStack(state, target, level, pos, player);
+        if (level.getBlockEntity(pos) instanceof ButterCatEngineBlockEntity be)
+            ButterCatVariants.saveToBlockItem(stack, be.getCatVariant());
+        return stack;
     }
 
     @Override
