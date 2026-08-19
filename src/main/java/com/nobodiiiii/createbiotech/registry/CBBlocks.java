@@ -350,11 +350,13 @@ public class CBBlocks {
 
 	public static final DeferredHolder<Block, ButterBlock> BUTTER_BLOCK =
 		BLOCKS.register("butter_block",
-			() -> new ButterBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)));
+			() -> new ButterBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)
+				.speedFactor(1.0F)));
 
 	public static final DeferredHolder<Block, SuperButterBlock> SUPER_BUTTER_BLOCK =
 		BLOCKS.register("super_butter_block",
-			() -> new SuperButterBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)));
+			() -> new SuperButterBlock(Block.Properties.ofFullCopy(Blocks.HONEY_BLOCK)
+				.speedFactor(1.0F)));
 
 	private static Block.Properties blastProofGlassProperties() {
 		return CBSharedProperties.withExplosionProofResistance(CBSharedProperties.vanillaGlass());
