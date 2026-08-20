@@ -78,7 +78,8 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 	protected void render(ItemStack stack, CustomRenderedItemModel model, PartialItemModelRenderer renderer,
 		ItemDisplayContext transformType, PoseStack poseStack, MultiBufferSource buffer, int light, int overlay) {
 		renderer.render(model.getOriginalModel(), light);
-		float fullChargeAnimationTime = getFullChargeAnimationTime(stack);
+		Player chargingPlayer = findChargingPlayer(stack);
+		float fullChargeAnimationTime = getFullChargeAnimationTime(chargingPlayer);
 		boolean fullCharge = fullChargeAnimationTime >= 0.0f;
 		renderer.render((fullCharge ? WOLF_ANGRY : WOLF).get(), light);
 		if (SonicDogCannonUpgrade.SHRIEK_SONIC_BOOM.isInstalled(stack))
@@ -91,7 +92,7 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		if (SonicDogCannonUpgrade.DOG_COLLAR.isInstalled(stack))
 			renderer.render(COLLAR.get(), light);
 
-		float angle = getGearAngle(stack);
+		float angle = getGearAngle(stack, chargingPlayer);
 		poseStack.pushPose();
 		// The gear's Blockbench pivot is [8, 7, 3.5], relative to the item model's [8, 8, 8] centre.
 		poseStack.translate(0.0d, -1.0d / 16.0d, -4.5d / 16.0d);
@@ -124,9 +125,8 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		return Mth.sin(animationTime * PAW_BOB_SPEED + phaseOffset) * PAW_BOB_AMPLITUDE;
 	}
 
-	private static float getFullChargeAnimationTime(ItemStack stack) {
-		LocalPlayer player = Minecraft.getInstance().player;
-		if (player == null || !player.isUsingItem() || player.getUseItem() != stack)
+	private static float getFullChargeAnimationTime(Player player) {
+		if (player == null)
 			return -1.0f;
 
 		float elapsed = player.getTicksUsingItem() + AnimationTickHolder.getPartialTicks();
@@ -147,18 +147,30 @@ public class SonicDogCannonItemRenderer extends CustomRenderedItemModelRenderer 
 		return player != null && player.getMainArm() == HumanoidArm.LEFT;
 	}
 
-	private static float getGearAngle(ItemStack stack) {
-		LocalPlayer player = Minecraft.getInstance().player;
-		if (player == null)
+	private static float getGearAngle(ItemStack stack, Player chargingPlayer) {
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft.level == null)
 			return 0.0f;
 
-		float renderTime = AnimationTickHolder.getRenderTime(player.clientLevel);
+		float renderTime = AnimationTickHolder.getRenderTime(minecraft.level);
 		float restingAngle = getDeceleratingAngle(stack, renderTime);
-		if (!player.isUsingItem() || player.getUseItem() != stack)
+		if (chargingPlayer == null)
 			return restingAngle;
 
-		float elapsed = player.getTicksUsingItem() + AnimationTickHolder.getPartialTicks();
+		float elapsed = chargingPlayer.getTicksUsingItem() + AnimationTickHolder.getPartialTicks();
 		return (restingAngle + getChargingAngle(elapsed)) % 360.0f;
+	}
+
+	private static Player findChargingPlayer(ItemStack stack) {
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft.level == null)
+			return null;
+
+		for (Player player : minecraft.level.players()) {
+			if (player.isUsingItem() && player.getUseItem() == stack)
+				return player;
+		}
+		return null;
 	}
 
 	public static void onFired(LocalPlayer localPlayer, int shooterId, InteractionHand hand, int chargeTicks) {
