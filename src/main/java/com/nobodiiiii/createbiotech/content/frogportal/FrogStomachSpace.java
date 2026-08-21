@@ -102,14 +102,20 @@ public final class FrogStomachSpace {
 	}
 
 	public static long spaceIndexFromDigestiveTractPos(BlockPos pos) {
+		long index = spaceIndexAt(pos);
+		return index >= 0 && portalTypeFromDigestiveTractPos(index, pos) != null ? index : -1L;
+	}
+
+	/** Returns the room containing {@code pos}, or {@code -1} when it lies in a grid gap. */
+	static long spaceIndexAt(BlockPos pos) {
 		int spacing = width() + GAP;
 		long col = Math.floorDiv(pos.getX(), spacing);
 		long row = Math.floorDiv(pos.getZ(), spacing);
 		if (col < 0 || col >= ROW || row < 0)
 			return -1L;
-
-		long index = row * ROW + col;
-		return portalTypeFromDigestiveTractPos(index, pos) != null ? index : -1L;
+		int localX = Math.floorMod(pos.getX(), spacing);
+		int localZ = Math.floorMod(pos.getZ(), spacing);
+		return localX < width() && localZ < width() ? row * ROW + col : -1L;
 	}
 
 	@Nullable
@@ -238,6 +244,25 @@ public final class FrogStomachSpace {
 					if (!isVine(level.getBlockState(accessPos)))
 						level.setBlock(accessPos, air, Block.UPDATE_CLIENTS);
 				}
+	}
+
+	/** Prevents generated platforms from intruding into either portal's framed approach. */
+	static boolean isPortalApproachProtected(long index, BlockPos pos) {
+		for (PortalType type : PortalType.values()) {
+			BlockPos portal = portalPos(index, type);
+			int offsetX = pos.getX() - portal.getX();
+			int offsetY = pos.getY() - portal.getY();
+			if (offsetX < -1 || offsetX > PORTAL_SIZE || offsetY < -1 || offsetY > PORTAL_SIZE)
+				continue;
+
+			Direction front = type == PortalType.MOUTH ? Direction.SOUTH : Direction.NORTH;
+			int depth = front == Direction.SOUTH
+				? pos.getZ() - portal.getZ()
+				: portal.getZ() - pos.getZ();
+			if (depth >= 1 && depth <= PORTAL_CLEARANCE_DEPTH)
+				return true;
+		}
+		return false;
 	}
 
 	private static boolean isVine(BlockState state) {

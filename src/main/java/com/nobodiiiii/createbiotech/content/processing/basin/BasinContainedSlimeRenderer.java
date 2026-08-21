@@ -66,7 +66,6 @@ public final class BasinContainedSlimeRenderer {
 				.packedLight(packedLight)
 				.partialTicks(partialTicks)
 				.ticks(Mth.floor(time + index * 3f))
-				.renderShadow(false)
 				.flushBuffers(false), poseStack, buffer);
 			poseStack.popPose();
 

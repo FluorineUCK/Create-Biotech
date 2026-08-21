@@ -387,6 +387,7 @@ public class CreateBiotechClient {
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.BLAST_PROOF_GLASS.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.BLAST_PROOF_FRAMED_GLASS.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.FROG_STOMACH_SECRETION.get(), RenderType.translucent());
+			ItemBlockRenderTypes.setRenderLayer(CBBlocks.FROG_STOMACH_FUNGUS.get(), RenderType.cutout());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.FROG_DIGESTIVE_TRACT.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.CUTE_CAT_ON_SHAFT.get(), RenderType.cutoutMipped());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.BUTTER_CAT_ENGINE.get(), RenderType.cutoutMipped());

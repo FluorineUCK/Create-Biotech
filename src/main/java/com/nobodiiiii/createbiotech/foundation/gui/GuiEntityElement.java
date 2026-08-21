@@ -148,11 +148,6 @@ public final class GuiEntityElement {
 			return this;
 		}
 
-		public GuiEntityRenderBuilder<T> renderShadow(boolean renderShadow) {
-			renderSettings.renderShadow(renderShadow);
-			return this;
-		}
-
 		public GuiEntityRenderBuilder<T> partialTicks(float partialTicks) {
 			this.partialTicks = partialTicks;
 			renderSettings.partialTicks(partialTicks);

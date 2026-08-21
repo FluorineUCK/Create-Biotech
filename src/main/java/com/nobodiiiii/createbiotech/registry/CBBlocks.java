@@ -23,6 +23,7 @@ import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionPro
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractWallBlock;
+import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachFungusBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSecretionBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachMucosaBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachWallBlock;
@@ -305,6 +306,11 @@ public class CBBlocks {
 			() -> new FrogStomachMucosaBlock(Block.Properties.ofFullCopy(Blocks.PINK_CONCRETE)
 				.strength(0.8f)
 				.sound(SoundType.SLIME_BLOCK)));
+
+	// Six-way stomach plant; its temporary appearance and mature structure reuse crimson fungus.
+	public static final DeferredHolder<Block, FrogStomachFungusBlock> FROG_STOMACH_FUNGUS =
+		BLOCKS.register("frog_stomach_fungus",
+			() -> new FrogStomachFungusBlock(Block.Properties.ofFullCopy(Blocks.CRIMSON_FUNGUS)));
 
 	// Slime-like secretion that absorbs slime experience and spreads across supported surfaces.
 	// Honey's inset collision shape is not a valid ON_GROUND spawn surface, so permit slimes explicitly.

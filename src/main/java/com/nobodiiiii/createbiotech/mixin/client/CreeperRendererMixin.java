@@ -2,20 +2,30 @@ package com.nobodiiiii.createbiotech.mixin.client;
 
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastChamberBlockEntity;
+import com.nobodiiiii.createbiotech.foundation.render.RenderProxyEntities;
 
 import net.createmod.catnip.animation.AnimationTickHolder;
+import net.createmod.ponder.api.level.PonderLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.monster.Creeper;
 
+/**
+ * Squashes a creeper that a ponder scene has marked as being compressed by a blast chamber.
+ * <p>
+ * In a live world the chamber draws its creepers as render proxies and applies compression itself,
+ * so this only ever fires inside a ponder scene. Wrapping the whole method rather than injecting at
+ * HEAD/RETURN keeps the pose push and the swell override paired through nesting and exceptions
+ * alike, and the guard order makes every other entity in the world leave before anything is read
+ * from persistent data.
+ */
 @Mixin(LivingEntityRenderer.class)
 public abstract class CreeperRendererMixin {
 
@@ -24,61 +34,53 @@ public abstract class CreeperRendererMixin {
 	@Unique
 	private static final float CREATE_BIOTECH_CREEPER_MAX_SPREAD = 0.2f;
 	@Unique
-	private static final ThreadLocal<Integer> CREATE_BIOTECH_TRANSFORM_DEPTH = ThreadLocal.withInitial(() -> 0);
-	@Unique
-	private static final ThreadLocal<int[]> CREATE_BIOTECH_SAVED_SWELL = new ThreadLocal<>();
+	private static final int CREATE_BIOTECH_MAX_RENDER_SWELL = 24;
 
-	@Inject(method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
-		at = @At("HEAD"))
+	@WrapMethod(
+		method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V")
 	private void createBiotech$applyChamberCompression(LivingEntity entity, float entityYaw, float partialTicks,
-		PoseStack poseStack, MultiBufferSource buffer, int packedLight, CallbackInfo ci) {
-		if (!(entity instanceof Creeper creeper))
+		PoseStack poseStack, MultiBufferSource buffer, int packedLight, Operation<Void> original) {
+		float compression = createBiotech$chamberCompression(entity, partialTicks);
+		if (compression <= 0f) {
+			original.call(entity, entityYaw, partialTicks, poseStack, buffer, packedLight);
 			return;
+		}
 
-		float compression = CreeperBlastChamberBlockEntity.getClientWorkingCreeperCompression(creeper, partialTicks);
-		if (compression <= 0f)
-			return;
+		CreeperAccessor accessor = (CreeperAccessor) entity;
+		int oldSwell = accessor.createBiotech$getOldSwell();
+		int swell = accessor.createBiotech$getSwell();
+		float pulse = 0.5f + 0.5f * Mth.sin(AnimationTickHolder.getRenderTime(entity.level()) * 0.9f);
+		int renderSwell = Mth.floor(Mth.clamp(compression * Mth.lerp(pulse, 0.55f, 1f), 0f, 1f)
+			* CREATE_BIOTECH_MAX_RENDER_SWELL);
+		accessor.createBiotech$setOldSwell(renderSwell);
+		accessor.createBiotech$setSwell(renderSwell);
 
 		float horizontalScale = 1f + CREATE_BIOTECH_CREEPER_MAX_SPREAD * compression;
 		float verticalScale = 1f + (CREATE_BIOTECH_CREEPER_FINAL_HEIGHT_SCALE - 1f) * compression;
-
 		poseStack.pushPose();
 		poseStack.scale(horizontalScale, verticalScale, horizontalScale);
-		CREATE_BIOTECH_TRANSFORM_DEPTH.set(CREATE_BIOTECH_TRANSFORM_DEPTH.get() + 1);
-
-		if (CreeperBlastChamberBlockEntity.isPonderCompressionActive(creeper)) {
-			com.nobodiiiii.createbiotech.mixin.client.CreeperAccessor accessor =
-				(com.nobodiiiii.createbiotech.mixin.client.CreeperAccessor) creeper;
-			int origOld = accessor.createBiotech$getOldSwell();
-			int origNew = accessor.createBiotech$getSwell();
-			float pulse = 0.5f + 0.5f * Mth.sin(AnimationTickHolder.getRenderTime(creeper.level()) * 0.9f);
-			int renderSwell = Mth.floor(Mth.clamp(compression * Mth.lerp(pulse, 0.55f, 1f), 0f, 1f) * 24f);
-			accessor.createBiotech$setOldSwell(renderSwell);
-			accessor.createBiotech$setSwell(renderSwell);
-			CREATE_BIOTECH_SAVED_SWELL.set(new int[]{origOld, origNew});
+		try {
+			original.call(entity, entityYaw, partialTicks, poseStack, buffer, packedLight);
+		} finally {
+			poseStack.popPose();
+			accessor.createBiotech$setOldSwell(oldSwell);
+			accessor.createBiotech$setSwell(swell);
 		}
 	}
 
-	@Inject(method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
-		at = @At("RETURN"))
-	private void createBiotech$restoreChamberCompression(LivingEntity entity, float entityYaw, float partialTicks,
-		PoseStack poseStack, MultiBufferSource buffer, int packedLight, CallbackInfo ci) {
-		int depth = CREATE_BIOTECH_TRANSFORM_DEPTH.get();
-		if (depth <= 0)
-			return;
-		poseStack.popPose();
-		if (depth == 1) {
-			CREATE_BIOTECH_TRANSFORM_DEPTH.remove();
-		} else {
-			CREATE_BIOTECH_TRANSFORM_DEPTH.set(depth - 1);
-		}
-		int[] saved = CREATE_BIOTECH_SAVED_SWELL.get();
-		if (saved != null && entity instanceof Creeper creeper) {
-			com.nobodiiiii.createbiotech.mixin.client.CreeperAccessor accessor =
-				(com.nobodiiiii.createbiotech.mixin.client.CreeperAccessor) creeper;
-			accessor.createBiotech$setOldSwell(saved[0]);
-			accessor.createBiotech$setSwell(saved[1]);
-			CREATE_BIOTECH_SAVED_SWELL.remove();
-		}
+	/**
+	 * Ordered cheapest-rejection-first. Reading persistent data is last because NeoForge allocates a
+	 * CompoundTag on the first probe of any entity, and this method runs for every living entity the
+	 * game draws.
+	 */
+	@Unique
+	private static float createBiotech$chamberCompression(LivingEntity entity, float partialTicks) {
+		if (!(entity instanceof Creeper creeper))
+			return 0f;
+		if (!(creeper.level() instanceof PonderLevel))
+			return 0f;
+		if (RenderProxyEntities.isProxy(creeper))
+			return 0f;
+		return CreeperBlastChamberBlockEntity.getClientWorkingCreeperCompression(creeper, partialTicks);
 	}
 }

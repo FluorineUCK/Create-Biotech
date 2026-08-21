@@ -5,6 +5,7 @@ import org.joml.Quaternionf;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.nobodiiiii.createbiotech.mixin.WalkAnimationStateAccessor;
 
 import net.createmod.catnip.animation.AnimationTickHolder;
 import net.minecraft.client.Minecraft;
@@ -15,9 +16,13 @@ import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.WalkAnimationState;
 
 public final class EntityRenderHelper {
 	public static final Direction DEFAULT_FACING = Direction.SOUTH;
+
+	/** Set while a {@link #batch} is open, so nested renders skip the redundant graphics-mode swap. */
+	private static boolean inFancyBatch;
 
 	private EntityRenderHelper() {
 	}
@@ -27,8 +32,25 @@ public final class EntityRenderHelper {
 	}
 
 	/**
+	 * Runs several {@link #render} calls under a single fancy-graphics scope. Without this every
+	 * entity pays its own {@link RenderSystem#runAsFancy} swap and lambda.
+	 */
+	public static void batch(Runnable batch) {
+		if (inFancyBatch) {
+			batch.run();
+			return;
+		}
+		inFancyBatch = true;
+		try {
+			RenderSystem.runAsFancy(batch);
+		} finally {
+			inFancyBatch = false;
+		}
+	}
+
+	/**
 	 * Renders an entity with every orientation input pinned to zero, so the result
-	 * depends only on the caller's pose. Used by every off-world display path
+	 * depends only on the pose supplied by the caller. Used by every off-world display path
 	 * (item models, GUI slots, baked box-face icons) and by the geometry
 	 * measurement passes that must observe exactly what those paths draw.
 	 */
@@ -49,16 +71,20 @@ public final class EntityRenderHelper {
 		MultiBufferSource buffer) {
 		EntityRenderDispatcher dispatcher = Minecraft.getInstance()
 			.getEntityRenderDispatcher();
-		Quaternionf previousCamera = dispatcher.cameraOrientation() == null ? null
-			: new Quaternionf(dispatcher.cameraOrientation());
+		boolean overridesCamera = settings.cameraOrientation != null;
+		Quaternionf previousCamera = overridesCamera && dispatcher.cameraOrientation() != null
+			? new Quaternionf(dispatcher.cameraOrientation()) : null;
 		EntityRenderState state = EntityRenderState.capture(settings.entity);
 
 		try {
 			settings.applyEntityState();
-			if (settings.cameraOrientation != null)
+			if (overridesCamera)
 				dispatcher.overrideCameraOrientation(new Quaternionf(settings.cameraOrientation).conjugate());
-			RenderSystem.runAsFancy(
-				() -> renderWithAssignedRenderer(dispatcher, settings, poseStack, buffer));
+			if (inFancyBatch)
+				renderWithAssignedRenderer(dispatcher, settings, poseStack, buffer);
+			else
+				RenderSystem.runAsFancy(
+					() -> renderWithAssignedRenderer(dispatcher, settings, poseStack, buffer));
 			if (settings.flushBuffers && buffer instanceof MultiBufferSource.BufferSource bufferSource)
 				bufferSource.endBatch();
 		} finally {
@@ -79,7 +105,6 @@ public final class EntityRenderHelper {
 	public static class RenderSettings<T extends Entity> {
 		private final T entity;
 		private int packedLight = LightTexture.FULL_BRIGHT;
-		private boolean renderShadow;
 		private float partialTicks = AnimationTickHolder.getPartialTicks();
 		@Nullable
 		private Integer tickCountOverride;
@@ -95,6 +120,10 @@ public final class EntityRenderHelper {
 		private Float headYaw;
 		@Nullable
 		private Float pitch;
+		@Nullable
+		private Float walkPosition;
+		@Nullable
+		private Float walkSpeed;
 
 		private RenderSettings(T entity) {
 			this.entity = entity;
@@ -103,11 +132,6 @@ public final class EntityRenderHelper {
 
 		public RenderSettings<T> packedLight(int packedLight) {
 			this.packedLight = packedLight;
-			return this;
-		}
-
-		public RenderSettings<T> renderShadow(boolean renderShadow) {
-			this.renderShadow = renderShadow;
 			return this;
 		}
 
@@ -156,6 +180,17 @@ public final class EntityRenderHelper {
 			return this;
 		}
 
+		/**
+		 * Drives the limb swing of a proxy that is never ticked. {@code position} advances the swing
+		 * cycle, {@code speed} scales its amplitude; both the previous and the current value are
+		 * pinned so the result stays independent of {@link #partialTicks}.
+		 */
+		public RenderSettings<T> walkAnimation(float position, float speed) {
+			this.walkPosition = position;
+			this.walkSpeed = speed;
+			return this;
+		}
+
 		public RenderSettings<T> preserveOrientation() {
 			this.renderYaw = null;
 			this.bodyYaw = null;
@@ -191,21 +226,33 @@ public final class EntityRenderHelper {
 				livingEntity.yBodyRotO = appliedBodyYaw;
 				livingEntity.yHeadRot = appliedHeadYaw;
 				livingEntity.yHeadRotO = appliedHeadYaw;
+
+				if (walkPosition != null && walkSpeed != null) {
+					WalkAnimationStateAccessor walk = (WalkAnimationStateAccessor) (Object) livingEntity.walkAnimation;
+					walk.createBiotech$setPosition(walkPosition);
+					walk.createBiotech$setSpeedOld(walkSpeed);
+					walk.createBiotech$setSpeed(walkSpeed);
+				}
 			}
 		}
 	}
 
 	private record EntityRenderState(float yRot, float yRotO, float xRot, float xRotO, int tickCount,
 		float bodyYaw, float bodyYawO, float headYaw, float headYawO, int hurtTime, int deathTime,
-		boolean living) {
+		float walkPosition, float walkSpeedOld, float walkSpeed, boolean living) {
 
 		private static EntityRenderState capture(Entity entity) {
-			if (entity instanceof LivingEntity livingEntity)
+			if (entity instanceof LivingEntity livingEntity) {
+				WalkAnimationState walkAnimation = livingEntity.walkAnimation;
+				WalkAnimationStateAccessor walk = (WalkAnimationStateAccessor) (Object) walkAnimation;
 				return new EntityRenderState(entity.getYRot(), entity.yRotO, entity.getXRot(), entity.xRotO,
 					entity.tickCount, livingEntity.yBodyRot, livingEntity.yBodyRotO, livingEntity.yHeadRot,
-					livingEntity.yHeadRotO, livingEntity.hurtTime, livingEntity.deathTime, true);
+					livingEntity.yHeadRotO, livingEntity.hurtTime, livingEntity.deathTime,
+					walk.createBiotech$getPosition(), walk.createBiotech$getSpeedOld(),
+					walk.createBiotech$getSpeed(), true);
+			}
 			return new EntityRenderState(entity.getYRot(), entity.yRotO, entity.getXRot(), entity.xRotO,
-				entity.tickCount, 0, 0, 0, 0, 0, 0, false);
+				entity.tickCount, 0, 0, 0, 0, 0, 0, 0, 0, 0, false);
 		}
 
 		private void restore(Entity entity) {
@@ -221,6 +268,10 @@ public final class EntityRenderHelper {
 				livingEntity.yHeadRotO = headYawO;
 				livingEntity.hurtTime = hurtTime;
 				livingEntity.deathTime = deathTime;
+				WalkAnimationStateAccessor walk = (WalkAnimationStateAccessor) (Object) livingEntity.walkAnimation;
+				walk.createBiotech$setPosition(walkPosition);
+				walk.createBiotech$setSpeedOld(walkSpeedOld);
+				walk.createBiotech$setSpeed(walkSpeed);
 			}
 		}
 	}

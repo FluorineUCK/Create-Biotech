@@ -7,6 +7,7 @@ import java.util.Map;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.foundation.render.EntityRenderHelper;
+import com.nobodiiiii.createbiotech.foundation.render.RenderProxyEntities;
 import com.nobodiiiii.createbiotech.mixin.client.CreeperAccessor;
 import com.nobodiiiii.createbiotech.network.ContainedEntityHandoffPacket;
 
@@ -52,6 +53,8 @@ public final class ContainedEntityHandoffManager {
 	}
 
 	private static void configureGhost(LivingEntity ghost, ContainedEntityHandoffPacket packet) {
+		// Never added to the level, and this manager applies its own pose: keep decorating mixins off it.
+		RenderProxyEntities.mark(ghost);
 		if (ghost instanceof Slime slime) {
 			slime.setSize(1, false);
 			applySlimePhase(slime, packet.animationPhase());
@@ -145,7 +148,6 @@ public final class ContainedEntityHandoffManager {
 				.bodyYaw(handoff.packet.yaw())
 				.headYaw(handoff.packet.yaw())
 				.pitch(handoff.packet.pitch())
-				.renderShadow(false)
 				.flushBuffers(false), poseStack, buffer);
 			poseStack.popPose();
 		}

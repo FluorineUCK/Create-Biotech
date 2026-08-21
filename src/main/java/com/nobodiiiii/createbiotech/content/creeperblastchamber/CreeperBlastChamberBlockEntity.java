@@ -24,6 +24,7 @@ import javax.annotation.Nullable;
 
 import com.mojang.logging.LogUtils;
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.client.ClientParticleBudget;
 import com.nobodiiiii.createbiotech.client.CreeperBlastChamberClientSoundHandler;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerBlockEntity;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
@@ -52,6 +53,7 @@ import com.simibubi.create.foundation.blockEntity.SyncedBlockEntity;
 import com.simibubi.create.foundation.item.ItemHelper;
 import com.simibubi.create.foundation.utility.CreateLang;
 
+import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.animation.LerpedFloat;
 import net.createmod.catnip.animation.LerpedFloat.Chaser;
 import com.simibubi.create.api.connectivity.ConnectivityHandler;
@@ -65,6 +67,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.sounds.SoundEvents;
@@ -116,7 +119,13 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private static final String CREEPER_FACE_VISIBLE_TAG = "CreeperFaceVisible";
 	private static final String OVERLOAD_POINTS_TAG = "OverloadPoints";
 	private static final int OUTPUT_REQUEST_KEEPALIVE_TICKS = 2;
-	private static final int CREEPER_ENTRY_ANIMATION_TICKS = 5;
+	/**
+	 * Length of the pop-in a creeper plays on arrival. Deliberately independent of the packager
+	 * cycle that drives the outward animation: this one only has to sell the appearance.
+	 */
+	private static final int CREEPER_ENTRY_ANIMATION_TICKS = 8;
+	private static final int APPEARANCE_PUFF_COUNT = 6;
+	private static final double APPEARANCE_PUFF_RADIUS = .32d;
 	private static final int PRESSING_TRIGGER_TICKS = PressingBehaviour.CYCLE / 2;
 	private static final float CLIENT_PRESS_EFFECT_START_OFFSET = 0.4f;
 	private static final float CLIENT_RETURN_EFFECT_ARM_THRESHOLD = 0.95f;
@@ -133,6 +142,8 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private static final ItemStackHandler HIGH_PRESSURE_RECIPE_INVENTORY = new ItemStackHandler(1);
 	private static final RecipeWrapper HIGH_PRESSURE_RECIPE_WRAPPER = new RecipeWrapper(HIGH_PRESSURE_RECIPE_INVENTORY);
 	private static final Map<Long, BlockPos> CLIENT_PRESS_CONTROLLERS = new HashMap<>();
+	@Nullable
+	private static ResourceKey<Level> clientPressControllerDimension;
 	private static final Map<Level, Set<BlockPos>> CLIENT_LOADED_CHAMBERS = new WeakHashMap<>();
 
 	public LerpedFloat gauge = LerpedFloat.linear();
@@ -162,6 +173,24 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private final Map<Long, Float> clientPressOffsets = new HashMap<>();
 	private final Set<Long> clientReturnEffectsArmed = new HashSet<>();
 	private final Set<Long> clientTrackedPressPositions = new HashSet<>();
+
+	/**
+	 * Per-tick memo of the press that drives every synchronized animation in this chamber. Both the
+	 * contained-creeper renderer and every press head in the structure ask for it once per frame, and
+	 * resolving it from scratch rescans the whole press layer each time.
+	 */
+	private int renderPressStateTick = Integer.MIN_VALUE;
+	@Nullable
+	private MechanicalPressBlockEntity renderMasterPress;
+	private boolean renderPressesUnworkable;
+
+	/** Reused by the render and client-tick paths so neither allocates a fresh list every frame. */
+	private final List<RenderManagedCreeper> workingRenderCreepers = new ArrayList<>();
+	private final List<RenderCreeperAnimation> renderAnimations = new ArrayList<>();
+	private final Map<Long, Float> clientNextPressOffsets = new HashMap<>();
+	private final Set<Long> clientActivePackagers = new HashSet<>();
+	private final Set<Long> clientActivePressPositions = new HashSet<>();
+	private final Set<Long> clientAppearanceEffectsSpawned = new HashSet<>();
 	private final ChamberInputHandler inputHandler = new ChamberInputHandler();
 
 	public CreeperBlastChamberBlockEntity(BlockPos pos, BlockState state) {
@@ -1355,12 +1384,43 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		return getSynchronizedPressHeadOffset(press, partialTicks);
 	}
 
+	/**
+	 * Resolves the press whose cycle every animation in this chamber follows, memoized for the current
+	 * tick. Which press is the master depends only on block state and speed, so it is stable within a
+	 * tick while the head progress derived from it still interpolates per frame.
+	 */
+	private void resolveRenderPressState() {
+		int tick = AnimationTickHolder.getTicks();
+		if (renderPressStateTick == tick && (renderMasterPress == null || !renderMasterPress.isRemoved()))
+			return;
+
+		renderPressStateTick = tick;
+		renderMasterPress = null;
+		renderPressesUnworkable = false;
+		if (!structureValid || structureOrigin == null)
+			return;
+		List<MechanicalPressBlockEntity> presses = getMechanicalPresses();
+		if (presses.isEmpty())
+			return;
+		renderPressesUnworkable = hasUnworkablePresses(presses);
+		renderMasterPress = getMasterPress(presses);
+	}
+
 	float getRenderedCreeperEffectPressOffset(BlockPos packagerPos, float partialTicks) {
 		MechanicalPressBlockEntity press = getMechanicalPress(packagerPos.above(3));
-		MechanicalPressBlockEntity masterPress = getMasterPress(getMechanicalPresses());
-		if (press == null || masterPress == null || masterPress.getSpeed() == 0)
+		if (press == null)
 			return 0f;
-		return getSynchronizedPressHeadOffset(press, partialTicks);
+		PressingBehaviour ownBehaviour = press.getPressingBehaviour();
+		if (ownBehaviour.mode == null)
+			return 0f;
+
+		resolveRenderPressState();
+		if (renderMasterPress == null || renderMasterPress.getSpeed() == 0)
+			return 0f;
+		// A structure whose presses cannot run together drives each head from its own cycle, which is
+		// what the shared head-progress path below falls back to as well.
+		PressingBehaviour source = renderPressesUnworkable ? ownBehaviour : renderMasterPress.getPressingBehaviour();
+		return getLocalPressHeadProgress(source, partialTicks) * ownBehaviour.mode.headOffset;
 	}
 
 	float getWorkingCreeperCompression(BlockPos packagerPos, float partialTicks) {
@@ -1576,9 +1636,42 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 
 	private void tickClientAnimations() {
 		syncClientPressControllers();
+		tickClientAppearanceEffects();
 		tickClientAnimationList(pendingAppearances);
 		tickClientAnimationList(pendingPackagings);
 		tickClientWorkingCreeperEffects();
+	}
+
+	/** Puffs a ring of smoke the first client tick a creeper appears in a packager. */
+	private void tickClientAppearanceEffects() {
+		Level level = getLevel();
+		if (level == null || !level.isClientSide)
+			return;
+		if (pendingAppearances.isEmpty()) {
+			clientAppearanceEffectsSpawned.clear();
+			return;
+		}
+
+		for (PendingAppearance pending : pendingAppearances) {
+			if (!clientAppearanceEffectsSpawned.add(pending.packagerPos.asLong()))
+				continue;
+			spawnAppearancePuff(level, pending.packagerPos);
+		}
+		clientAppearanceEffectsSpawned.removeIf(key -> !isPackagerAppearing(BlockPos.of(key)));
+	}
+
+	private void spawnAppearancePuff(Level level, BlockPos packagerPos) {
+		int stride = ClientParticleBudget.decorativeStride();
+		double centerX = packagerPos.getX() + .5d;
+		double centerY = packagerPos.getY() + 1.15d;
+		double centerZ = packagerPos.getZ() + .5d;
+		for (int index = 0; index < APPEARANCE_PUFF_COUNT; index += stride) {
+			double angle = Math.PI * 2d * index / APPEARANCE_PUFF_COUNT;
+			double offsetX = Math.cos(angle);
+			double offsetZ = Math.sin(angle);
+			level.addParticle(ParticleTypes.POOF, centerX + offsetX * APPEARANCE_PUFF_RADIUS, centerY,
+				centerZ + offsetZ * APPEARANCE_PUFF_RADIUS, offsetX * .02d, .02d, offsetZ * .02d);
+		}
 	}
 
 	private void syncClientPressControllers() {
@@ -1588,21 +1681,35 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			return;
 		}
 
-		Set<Long> activePressPositions = new HashSet<>();
+		clientActivePressPositions.clear();
 		for (MechanicalPressBlockEntity press : getMechanicalPresses()) {
-			long key = press.getBlockPos().asLong();
-			activePressPositions.add(key);
+			long key = clientPressKey(level, press.getBlockPos());
+			clientActivePressPositions.add(key);
 			CLIENT_PRESS_CONTROLLERS.put(key, getBlockPos());
 			clientTrackedPressPositions.add(key);
 		}
 
 		clientTrackedPressPositions.removeIf(key -> {
-			if (activePressPositions.contains(key))
+			if (clientActivePressPositions.contains(key))
 				return false;
 			if (Objects.equals(CLIENT_PRESS_CONTROLLERS.get(key), getBlockPos()))
 				CLIENT_PRESS_CONTROLLERS.remove(key);
 			return true;
 		});
+	}
+
+	/**
+	 * The controller registry is keyed by packed position alone, so it is scoped to a single dimension
+	 * at a time: two chambers sharing coordinates across dimensions would otherwise drive each other.
+	 * The client only ever renders one dimension, so switching simply drops the stale mapping.
+	 */
+	private static long clientPressKey(Level level, BlockPos pressPos) {
+		ResourceKey<Level> dimension = level.dimension();
+		if (!dimension.equals(clientPressControllerDimension)) {
+			clientPressControllerDimension = dimension;
+			CLIENT_PRESS_CONTROLLERS.clear();
+		}
+		return pressPos.asLong();
 	}
 
 	private void clearClientTrackedPresses() {
@@ -1618,14 +1725,13 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 	private void tickClientWorkingCreeperEffects() {
 		Level level = getLevel();
 		if (level == null || !structureValid) {
-			resetClientWorkingCreeperEffects();
 			clientPressOffsets.clear();
 			clientReturnEffectsArmed.clear();
 			return;
 		}
 
-		Map<Long, Float> nextPressOffsets = new HashMap<>();
-		Set<Long> activePackagers = new HashSet<>();
+		clientNextPressOffsets.clear();
+		clientActivePackagers.clear();
 		boolean spawnedReturnEffectThisTick = false;
 		for (RenderManagedCreeper creeper : getWorkingRenderCreepers()) {
 			long key = creeper.packagerPos().asLong();
@@ -1633,8 +1739,8 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			float previousOffset = clientPressOffsets.getOrDefault(key, 0f);
 			boolean returning = isPressReturning(previousOffset, pressOffset);
 
-			nextPressOffsets.put(key, pressOffset);
-			activePackagers.add(key);
+			clientNextPressOffsets.put(key, pressOffset);
+			clientActivePackagers.add(key);
 			if (previousOffset < CLIENT_PRESS_EFFECT_START_OFFSET && pressOffset >= CLIENT_PRESS_EFFECT_START_OFFSET) {
 				BlockPos pos = creeper.packagerPos();
 				float pitch = 0.9f + ((Math.floorMod(pos.getX() * 31 + pos.getZ() * 17, 8)) * 0.025f);
@@ -1653,10 +1759,10 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		}
 
 		clientPressOffsets.clear();
-		clientPressOffsets.putAll(nextPressOffsets);
+		clientPressOffsets.putAll(clientNextPressOffsets);
 		if (spawnedReturnEffectThisTick)
 			clientReturnEffectsArmed.clear();
-		clientReturnEffectsArmed.removeIf(key -> !activePackagers.contains(key));
+		clientReturnEffectsArmed.removeIf(key -> !clientActivePackagers.contains(key));
 	}
 
 	private boolean isPressReturning(float previousOffset, float pressOffset) {
@@ -1690,9 +1796,9 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			}
 		}
 
-		int extraExplosionCount = level.random.nextInt(
-			CLIENT_RETURN_EXTRA_EXPLOSION_MAX - CLIENT_RETURN_EXTRA_EXPLOSION_MIN + 1)
-			+ CLIENT_RETURN_EXTRA_EXPLOSION_MIN;
+		int extraExplosionCount = Math.max(CLIENT_RETURN_EXTRA_EXPLOSION_MIN,
+			(level.random.nextInt(CLIENT_RETURN_EXTRA_EXPLOSION_MAX - CLIENT_RETURN_EXTRA_EXPLOSION_MIN + 1)
+				+ CLIENT_RETURN_EXTRA_EXPLOSION_MIN) / ClientParticleBudget.decorativeStride());
 		for (int i = 0; i < extraExplosionCount; i++) {
 			double x = centerX + (level.random.nextDouble() * 2d - 1d) * CLIENT_RETURN_EXTRA_EXPLOSION_RADIUS;
 			double z = centerZ + (level.random.nextDouble() * 2d - 1d) * CLIENT_RETURN_EXTRA_EXPLOSION_RADIUS;
@@ -1714,12 +1820,16 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		if (structureOrigin == null || structureSize <= 0)
 			return;
 
+		int stride = ClientParticleBudget.decorativeStride();
+		int candidate = 0;
 		for (int yOffset = 1; yOffset <= 2; yOffset++) {
 			for (int xOffset = 0; xOffset < structureSize; xOffset++) {
 				for (int zOffset = 0; zOffset < structureSize; zOffset++) {
 					boolean onXWall = xOffset == 0 || xOffset == structureSize - 1;
 					boolean onZWall = zOffset == 0 || zOffset == structureSize - 1;
 					if (onXWall == onZWall)
+						continue;
+					if (candidate++ % stride != 0)
 						continue;
 
 					BlockPos pos = structureOrigin.offset(xOffset, yOffset, zOffset);
@@ -1751,10 +1861,6 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			|| state.is(CBBlocks.BLAST_PROOF_GLASS.get())
 			|| state.is(CBBlocks.BLAST_PROOF_FRAMED_GLASS.get())
 			|| state.is(CBBlocks.BLAST_PROOF_CHAIN_DRIVE.get());
-	}
-
-	private void resetClientWorkingCreeperEffects() {
-		// Render proxies have no persistent visual state to reset.
 	}
 
 	private static <T extends TimedAnimation> void tickClientAnimationList(List<T> animations) {
@@ -2644,28 +2750,34 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		return blockEntity instanceof BioPackagerBlockEntity packager ? packager : null;
 	}
 
+	/**
+	 * Returns a list reused between calls, so consume it before asking for another. Both this and
+	 * {@link #getRenderAnimations()} run every frame for every visible chamber.
+	 */
 	List<RenderManagedCreeper> getWorkingRenderCreepers() {
-		List<RenderManagedCreeper> creepers = new ArrayList<>();
-		Level level = getLevel();
-		if (!structureValid || level == null)
-			return creepers;
+		workingRenderCreepers.clear();
+		if (!structureValid || getLevel() == null || storedCreepers.isEmpty())
+			return workingRenderCreepers;
 		for (StoredCreeper stored : storedCreepers.values()) {
 			BlockPos packagerPos = stored.packagerPos();
 			if (isPackagerAppearing(packagerPos) || isPackagerPackaging(packagerPos))
 				continue;
-			creepers.add(new RenderManagedCreeper(packagerPos, stored.normalizedPayloadBox(), stored.charged(),
-				stored.renderSeed()));
+			workingRenderCreepers
+				.add(new RenderManagedCreeper(packagerPos, stored.normalizedPayloadBox(), stored.renderSeed()));
 		}
-		return creepers;
+		return workingRenderCreepers;
 	}
 
+	/** @see #getWorkingRenderCreepers() for the reuse contract. */
 	List<RenderCreeperAnimation> getRenderAnimations() {
-		List<RenderCreeperAnimation> animations = new ArrayList<>(pendingAppearances.size() + pendingPackagings.size());
+		renderAnimations.clear();
+		if (pendingAppearances.isEmpty() && pendingPackagings.isEmpty())
+			return renderAnimations;
 		for (PendingAppearance pending : pendingAppearances) {
 			StoredCreeper stored = storedCreepers.get(pending.packagerPos);
 			if (stored != null)
-				animations.add(new RenderCreeperAnimation(pending.packagerPos, stored.normalizedPayloadBox(),
-					stored.charged(), stored.renderSeed(), pending.ticksRemaining, pending.totalTicks, false));
+				renderAnimations.add(new RenderCreeperAnimation(pending.packagerPos, stored.normalizedPayloadBox(),
+					stored.renderSeed(), pending.ticksRemaining, pending.totalTicks, false));
 		}
 		for (PendingPackaging pending : pendingPackagings) {
 			if (pending.ticksRemaining <= BioPackagerBlockEntity.getCycleTicks())
@@ -2673,13 +2785,11 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			int outwardTicksRemaining = pending.ticksRemaining - BioPackagerBlockEntity.getCycleTicks();
 			StoredCreeper stored = storedCreepers.get(pending.packagerPos);
 			ItemStack payload = stored == null ? pending.boxStack : stored.normalizedPayloadBox();
-			boolean charged = stored != null ? stored.charged()
-				: getBoxedCreeperKind(payload) == ChamberCreeperKind.CHARGED;
 			long renderSeed = stored == null ? pending.packagerPos.asLong() : stored.renderSeed();
-			animations.add(new RenderCreeperAnimation(pending.packagerPos, payload, charged, renderSeed,
+			renderAnimations.add(new RenderCreeperAnimation(pending.packagerPos, payload, renderSeed,
 				outwardTicksRemaining, BioPackagerBlockEntity.getCycleTicks(), true));
 		}
-		return animations;
+		return renderAnimations;
 	}
 
 	public static float getClientWorkingCreeperCompression(Creeper creeper, float partialTicks) {
@@ -2694,13 +2804,6 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			}
 		}
 		return 0f;
-	}
-
-	public static boolean isPonderCompressionActive(Creeper creeper) {
-		CompoundTag biotechData = getExistingCreateBiotechData(creeper);
-		return biotechData != null
-			&& (biotechData.contains(PONDER_COMPRESSION_TAG, Tag.TAG_FLOAT)
-				|| biotechData.contains(PONDER_COMPRESSION_ANIM_TAG, Tag.TAG_COMPOUND));
 	}
 
 	private static float computePonderCompressionAnim(Creeper creeper, float partialTicks, CompoundTag anim) {
@@ -2736,7 +2839,7 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		if (level == null || !level.isClientSide)
 			return getLocalPressHeadProgress(pressingBehaviour, partialTicks);
 
-		BlockPos controllerPos = CLIENT_PRESS_CONTROLLERS.get(press.getBlockPos().asLong());
+		BlockPos controllerPos = CLIENT_PRESS_CONTROLLERS.get(clientPressKey(level, press.getBlockPos()));
 		if (controllerPos == null)
 			return getLocalPressHeadProgress(pressingBehaviour, partialTicks);
 
@@ -2747,13 +2850,11 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 			return getLocalPressHeadProgress(pressingBehaviour, partialTicks);
 		}
 
-		List<MechanicalPressBlockEntity> presses = chamber.getMechanicalPresses();
-		if (chamber.hasUnworkablePresses(presses))
+		chamber.resolveRenderPressState();
+		if (chamber.renderPressesUnworkable || chamber.renderMasterPress == null)
 			return getLocalPressHeadProgress(pressingBehaviour, partialTicks);
 
-		MechanicalPressBlockEntity masterPress = chamber.getMasterPress(presses);
-		if (masterPress == null)
-			return getLocalPressHeadProgress(pressingBehaviour, partialTicks);
+		MechanicalPressBlockEntity masterPress = chamber.renderMasterPress;
 
 		return getLocalPressHeadProgress(masterPress.getPressingBehaviour(), partialTicks);
 	}
@@ -3026,10 +3127,10 @@ public class CreeperBlastChamberBlockEntity extends SyncedBlockEntity implements
 		}
 	}
 
-	record RenderCreeperAnimation(BlockPos packagerPos, ItemStack payload, boolean charged, long renderSeed,
+	record RenderCreeperAnimation(BlockPos packagerPos, ItemStack payload, long renderSeed,
 		int ticksRemaining, int totalTicks, boolean exiting) {}
 
-	record RenderManagedCreeper(BlockPos packagerPos, ItemStack payload, boolean charged, long renderSeed) {}
+	record RenderManagedCreeper(BlockPos packagerPos, ItemStack payload, long renderSeed) {}
 
 	private record TrackedMarkedCreeper(UUID creeperUuid, BlockPos packagerPos) {
 		private CompoundTag write() {

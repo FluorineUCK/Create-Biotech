@@ -11,6 +11,9 @@ public interface WalkAnimationStateAccessor {
 	@Accessor("speedOld")
 	float createBiotech$getSpeedOld();
 
+	@Accessor("speedOld")
+	void createBiotech$setSpeedOld(float speedOld);
+
 	@Accessor("speed")
 	float createBiotech$getSpeed();
 
