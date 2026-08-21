@@ -1,11 +1,15 @@
 package com.nobodiiiii.createbiotech.content.processing.basin;
 
-import com.nobodiiiii.createbiotech.foundation.item.BlockCenteredSpawnableRenderedLivingEntityItem;
-import com.simibubi.create.content.processing.basin.BasinBlockEntity;
+import java.util.ArrayList;
+import java.util.List;
 
+import com.nobodiiiii.createbiotech.foundation.item.BlockCenteredSpawnableRenderedLivingEntityItem;
+import com.nobodiiiii.createbiotech.network.ContainedEntityHandoffPacket;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -31,15 +35,36 @@ public class CapturedSmallSlimeItem extends BlockCenteredSpawnableRenderedLiving
 		Vec3 position = location.position();
 		Vec3 motion = location.getDeltaMovement();
 		int count = stack.getCount();
-		Slime firstSlime = BasinEntityProcessing.createSmallSlime(level, position.add(getDropSpread(0, count)), motion);
-		if (firstSlime == null)
-			return null;
+		List<Slime> created = new ArrayList<>(count);
+		for (int i = 0; i < count; i++) {
+			Slime slime = BasinEntityProcessing.createSmallSlime(level,
+				position.add(getDropSpread(i, count)), motion);
+			if (slime == null)
+				return null;
+			created.add(slime);
+		}
+		Slime firstSlime = created.get(0);
 
-		if (!level.isClientSide) {
+		if (level instanceof ServerLevel serverLevel) {
+			BlockPos sourcePos = location.blockPosition();
+			ContainedEntityHandoffPacket.announce(serverLevel, firstSlime, sourcePos, sourcePos,
+				location.getId(), BasinEntityProcessing.getContainedSlimeAnimationPhase(level, sourcePos, 0, 0));
+			List<Slime> added = new ArrayList<>(Math.max(0, count - 1));
 			for (int i = 1; i < count; i++) {
-				Slime slime = BasinEntityProcessing.createSmallSlime(level, position.add(getDropSpread(i, count)), motion);
-				if (slime != null)
-					level.addFreshEntity(slime);
+				Slime slime = created.get(i);
+				ContainedEntityHandoffPacket.announce(serverLevel, slime, sourcePos, sourcePos,
+					location.getId() * 31L + i,
+					BasinEntityProcessing.getContainedSlimeAnimationPhase(level, sourcePos, i, 0));
+				if (!level.addFreshEntity(slime)) {
+					ContainedEntityHandoffPacket.cancel(serverLevel, slime, sourcePos);
+					ContainedEntityHandoffPacket.cancel(serverLevel, firstSlime, sourcePos);
+					for (Slime rollback : added) {
+						ContainedEntityHandoffPacket.cancel(serverLevel, rollback, sourcePos);
+						rollback.discard();
+					}
+					return null;
+				}
+				added.add(slime);
 			}
 		}
 
@@ -54,22 +79,39 @@ public class CapturedSmallSlimeItem extends BlockCenteredSpawnableRenderedLiving
 	 */
 	public static boolean materializeTransportedStack(Level level, Vec3 position, Vec3 motion, ItemStack stack) {
 		if (level == null || level.isClientSide || stack.isEmpty()
-			|| !(stack.getItem() instanceof CapturedSmallSlimeItem item))
+			|| !(stack.getItem() instanceof CapturedSmallSlimeItem))
 			return false;
 
-		ItemStack droppedStack = stack.copy();
-		ItemEntity droppedItem = new ItemEntity(level, position.x, position.y, position.z, droppedStack);
-		droppedItem.setDeltaMovement(motion);
-		Entity replacement = item.createEntity(level, droppedItem, droppedStack);
-		if (replacement == null)
+		if (!(level instanceof ServerLevel serverLevel))
 			return false;
+		BlockPos sourcePos = BlockPos.containing(position);
+		List<Slime> slimes = new ArrayList<>(stack.getCount());
+		for (int i = 0; i < stack.getCount(); i++) {
+			Slime slime = BasinEntityProcessing.createSmallSlime(level,
+				position.add(getDropSpread(i, stack.getCount())), motion);
+			if (slime == null)
+				return false;
+			slimes.add(slime);
+		}
 
-		level.addFreshEntity(replacement);
+		List<Slime> added = new ArrayList<>(slimes.size());
+		for (int i = 0; i < slimes.size(); i++) {
+			Slime slime = slimes.get(i);
+			ContainedEntityHandoffPacket.announce(serverLevel, slime, sourcePos, sourcePos,
+				sourcePos.asLong() * 31L + i,
+				BasinEntityProcessing.getContainedSlimeAnimationPhase(level, sourcePos, i, 0));
+			if (level.addFreshEntity(slime)) {
+				added.add(slime);
+				continue;
+			}
+			ContainedEntityHandoffPacket.cancel(serverLevel, slime, sourcePos);
+			for (Slime rollback : added) {
+				ContainedEntityHandoffPacket.cancel(serverLevel, rollback, sourcePos);
+				rollback.discard();
+			}
+			return false;
+		}
 		return true;
-	}
-
-	public static boolean syncInBasin(BasinBlockEntity basin) {
-		return BasinEntityProcessing.syncCapturedSmallSlimeItems(basin);
 	}
 
 	@Override

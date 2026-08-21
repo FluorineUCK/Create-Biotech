@@ -46,7 +46,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 public final class CBPackets {
 
-	private static final String NETWORK_VERSION = "21";
+	private static final String NETWORK_VERSION = "22";
 	private static final List<ServerRegistration<?>> SERVERBOUND = new ArrayList<>();
 	private static final List<ClientRegistration<?>> CLIENTBOUND = new ArrayList<>();
 	private static final Map<Class<?>, Integer> SERVERBOUND_IDS = new HashMap<>();
@@ -102,6 +102,8 @@ public final class CBPackets {
 			SonicDogCannonGearAnimationPacket::write);
 		registerClient(DingDongChickenVoiceSoundPacket.class, DingDongChickenVoiceSoundPacket::new,
 			DingDongChickenVoiceSoundPacket::write);
+		registerClient(ContainedEntityHandoffPacket.class, ContainedEntityHandoffPacket::new,
+			ContainedEntityHandoffPacket::write);
 
 		CatnipPacketRegistry registry = new CatnipPacketRegistry(CreateBiotech.MOD_ID, NETWORK_VERSION);
 		registry.registerPacket(new CatnipPacketRegistry.PacketType<>(

@@ -45,6 +45,10 @@ public class CapturedEntityBoxHelper {
 	private static final String AI_DISABLED_BY_MOD_TAG = "AiDisabledByMod";
 	private static final String NO_AI_TAG = "NoAI";
 	private static final String NEOFORGE_DATA_TAG = "NeoForgeData";
+	private static final String FORGE_DATA_TAG = "ForgeData";
+	private static final String CHAMBER_MARKED_TAG = "CreeperBlastChamberMarked";
+	private static final String CHAMBER_CONTROLLER_POS_TAG = "CreeperBlastChamberControllerPos";
+	private static final String CHAMBER_PACKAGER_POS_TAG = "CreeperBlastChamberPackagerPos";
 
 	private CapturedEntityBoxHelper() {}
 
@@ -127,6 +131,69 @@ public class CapturedEntityBoxHelper {
 		stackTag.remove(CAPTURED_ENTITY_HEALTH_TAG);
 		CBItemData.set(stack, stackTag);
 		return stack;
+	}
+
+	/**
+	 * Copies only the captured-entity payload into a fresh box. Address, package
+	 * contents and unrelated item components deliberately do not cross the machine
+	 * boundary.
+	 */
+	public static ItemStack copyCapturedEntityIntoFreshBox(ItemStack source, Item boxItem) {
+		ItemStack result = new ItemStack(boxItem);
+		CompoundTag sourceData = CBItemData.getReadOnly(source);
+		if (sourceData == null || !sourceData.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND))
+			return ItemStack.EMPTY;
+
+		CompoundTag resultData = new CompoundTag();
+		resultData.put(CAPTURED_ENTITY_TAG, sourceData.getCompound(CAPTURED_ENTITY_TAG).copy());
+		if (sourceData.contains(CAPTURED_ENTITY_DESC_ID_TAG, Tag.TAG_STRING))
+			resultData.putString(CAPTURED_ENTITY_DESC_ID_TAG, sourceData.getString(CAPTURED_ENTITY_DESC_ID_TAG));
+		if (sourceData.contains(CAPTURED_ENTITY_HEALTH_TAG, Tag.TAG_ANY_NUMERIC))
+			resultData.putFloat(CAPTURED_ENTITY_HEALTH_TAG, sourceData.getFloat(CAPTURED_ENTITY_HEALTH_TAG));
+		CBItemData.set(result, resultData);
+		clearLegacyCreeperBlastChamberMarkers(result);
+		return result;
+	}
+
+	/** Removes obsolete chamber ownership tags from both 1.21 and historical data roots. */
+	public static void clearLegacyCreeperBlastChamberMarkers(ItemStack stack) {
+		CBItemData.edit(stack, root -> {
+			if (!root.contains(CAPTURED_ENTITY_TAG, Tag.TAG_COMPOUND))
+				return;
+			CompoundTag entityData = root.getCompound(CAPTURED_ENTITY_TAG);
+			clearLegacyCreeperBlastChamberMarkers(entityData, NEOFORGE_DATA_TAG);
+			clearLegacyCreeperBlastChamberMarkers(entityData, FORGE_DATA_TAG);
+		});
+	}
+
+	public static void clearLegacyCreeperBlastChamberMarkers(Entity entity) {
+		if (entity == null)
+			return;
+		clearChamberKeys(entity.getPersistentData());
+	}
+
+	private static void clearLegacyCreeperBlastChamberMarkers(CompoundTag entityData, String persistentRoot) {
+		if (!entityData.contains(persistentRoot, Tag.TAG_COMPOUND))
+			return;
+		CompoundTag persistentData = entityData.getCompound(persistentRoot);
+		clearChamberKeys(persistentData);
+		if (persistentData.isEmpty())
+			entityData.remove(persistentRoot);
+		else
+			entityData.put(persistentRoot, persistentData);
+	}
+
+	private static void clearChamberKeys(CompoundTag persistentData) {
+		if (!persistentData.contains(DATA_ROOT, Tag.TAG_COMPOUND))
+			return;
+		CompoundTag modData = persistentData.getCompound(DATA_ROOT);
+		modData.remove(CHAMBER_MARKED_TAG);
+		modData.remove(CHAMBER_CONTROLLER_POS_TAG);
+		modData.remove(CHAMBER_PACKAGER_POS_TAG);
+		if (modData.isEmpty())
+			persistentData.remove(DATA_ROOT);
+		else
+			persistentData.put(DATA_ROOT, modData);
 	}
 
 	public static boolean captureEntityFromPlayerStack(ItemStack stack, Player player, LivingEntity target) {

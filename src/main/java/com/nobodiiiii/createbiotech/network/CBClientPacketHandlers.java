@@ -43,6 +43,8 @@ final class CBClientPacketHandlers {
 			sonicDogCannonGearAnimation.handle(player);
 		} else if (packet instanceof DingDongChickenVoiceSoundPacket dingDongChickenVoiceSound) {
 			dingDongChickenVoiceSound.handle(player);
+		} else if (packet instanceof ContainedEntityHandoffPacket containedEntityHandoff) {
+			containedEntityHandoff.handle(player);
 		} else {
 			throw new IllegalArgumentException("Unhandled Create Biotech clientbound packet "
 				+ packet.getClass().getName());

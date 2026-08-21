@@ -29,8 +29,8 @@ public abstract class BasinBlockEntityMixin {
 	protected List<ItemStack> spoutputBuffer;
 
 	@Inject(method = "tick()V", at = @At("TAIL"), remap = false)
-	private void createBiotech$materializeCapturedSmallSlimeItems(CallbackInfo ci) {
-		CapturedSmallSlimeItem.syncInBasin((BasinBlockEntity) (Object) this);
+	private void createBiotech$migrateLegacyCapturedSmallSlimes(CallbackInfo ci) {
+		BasinEntityProcessing.migrateLegacyContainedSlimes((BasinBlockEntity) (Object) this);
 	}
 
 	@Inject(method = "acceptOutputs(Ljava/util/List;Ljava/util/List;Z)Z",
@@ -75,7 +75,7 @@ public abstract class BasinBlockEntityMixin {
 				cir.setReturnValue(false);
 				return;
 			}
-			CapturedSmallSlimeItem.syncInBasin(basin);
+			basin.notifyUpdate();
 		}
 
 		cir.setReturnValue(true);
