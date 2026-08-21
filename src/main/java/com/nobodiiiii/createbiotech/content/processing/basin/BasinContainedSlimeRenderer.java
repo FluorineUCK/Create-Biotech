@@ -16,6 +16,8 @@ import net.minecraft.world.level.Level;
 /** Draws basin contents using off-world client-only slime proxies. */
 public final class BasinContainedSlimeRenderer {
 	private static final int MAX_VISIBLE_SLIMES = 4;
+	private static final double BASE_Y = .2d;
+	private static final double MAX_RANDOM_Y_OFFSET = 1d / 16d;
 	private static final BoundedRenderEntityCache<Integer, Slime> CACHE =
 		new BoundedRenderEntityCache<>(MAX_VISIBLE_SLIMES, (level, index) -> {
 			Slime slime = EntityType.SLIME.create(level);
@@ -54,10 +56,11 @@ public final class BasinContainedSlimeRenderer {
 			double angle = Math.PI * 2d * index / Math.max(1, visible)
 				+ Math.floorMod(pos.getX() * 31 + pos.getZ() * 17, 360) * Mth.DEG_TO_RAD;
 			double radius = visible == 1 ? 0 : .19d;
-			slime.setPos(pos.getX() + .5d + Math.cos(angle) * radius, pos.getY() + .2d,
+			double baseY = BASE_Y + getRandomBaseYOffset(pos, index);
+			slime.setPos(pos.getX() + .5d + Math.cos(angle) * radius, pos.getY() + baseY,
 				pos.getZ() + .5d + Math.sin(angle) * radius);
 			poseStack.pushPose();
-			poseStack.translate(.5d + Math.cos(angle) * radius, .2d, .5d + Math.sin(angle) * radius);
+			poseStack.translate(.5d + Math.cos(angle) * radius, baseY, .5d + Math.sin(angle) * radius);
 			poseStack.scale(densityScale, densityScale, densityScale);
 			EntityRenderHelper.render(EntityRenderHelper.settings(slime)
 				.packedLight(packedLight)
@@ -71,5 +74,11 @@ public final class BasinContainedSlimeRenderer {
 			slime.squish = currentSquish;
 			slime.targetSquish = targetSquish;
 		}
+	}
+
+	private static double getRandomBaseYOffset(BlockPos basinPos, int visualIndex) {
+		int hash = Long.hashCode(basinPos.asLong()) ^ visualIndex * 0x9E3779B9;
+		hash ^= hash >>> 16;
+		return (hash & 0xffff) / (double) 0xffff * MAX_RANDOM_Y_OFFSET;
 	}
 }

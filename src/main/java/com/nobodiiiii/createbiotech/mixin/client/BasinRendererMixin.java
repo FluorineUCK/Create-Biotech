@@ -33,7 +33,9 @@ public abstract class BasinRendererMixin {
 
 	@Inject(
 		method = "renderSafe(Lcom/simibubi/create/content/processing/basin/BasinBlockEntity;FLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;II)V",
-		at = @At("TAIL"))
+		// BasinRenderer returns early for the normal DOWN-facing basin. Inject at
+		// every return so contained slimes render for both basin output modes.
+		at = @At("RETURN"))
 	private void createBiotech$renderContainedSmallSlimes(BasinBlockEntity basin, float partialTicks,
 		PoseStack poseStack, MultiBufferSource buffer, int packedLight, int packedOverlay, CallbackInfo ci) {
 		BasinContainedSlimeRenderer.render(basin, partialTicks, poseStack, buffer, packedLight);
