@@ -100,6 +100,7 @@ public class CreateBiotech {
 
 	private static void onCommonSetup(FMLCommonSetupEvent event) {
 		event.enqueueWork(() -> {
+			CBFluids.registerFluidInteractions();
 			CBMultiBlockLifecycle.registerMovementChecks();
 			CBDisplaySources.register();
 			ExperienceOpenPipeEffectHandler.register();

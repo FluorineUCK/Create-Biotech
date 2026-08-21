@@ -1,5 +1,7 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import java.util.Map;
+
 import net.minecraft.core.registries.Registries;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -29,9 +31,12 @@ import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.material.PushReaction;
 import net.minecraft.world.level.material.Fluid;
 import net.neoforged.bus.api.IEventBus;
+import net.neoforged.neoforge.common.NeoForgeMod;
 import net.neoforged.neoforge.common.SoundActions;
 import net.neoforged.neoforge.fluids.FluidType;
 import net.neoforged.neoforge.fluids.BaseFlowingFluid;
+import net.neoforged.neoforge.fluids.FluidInteractionRegistry;
+import net.neoforged.neoforge.fluids.FluidInteractionRegistry.InteractionInformation;
 import net.neoforged.neoforge.registries.DeferredRegister;
 import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
@@ -220,6 +225,24 @@ public class CBFluids {
 		FLUIDS.register(modEventBus);
 		FLUID_BLOCKS.register(modEventBus);
 		FLUID_ITEMS.register(modEventBus);
+	}
+
+	public static void registerFluidInteractions() {
+		Map<FluidType, Block> flowingLavaResults = Map.of(
+			CREAM_TYPE.get(), Blocks.TUFF,
+			TELEPORTATION_TYPE.get(), Blocks.NETHERRACK,
+			LIQUID_LIVING_SLIME_TYPE.get(), Blocks.MUD);
+
+		FLUID_TYPES.getEntries()
+			.forEach(fluidType -> {
+				Block flowingLavaResult = flowingLavaResults.getOrDefault(fluidType.get(), Blocks.COBBLESTONE);
+				FluidInteractionRegistry.addInteraction(
+					NeoForgeMod.LAVA_TYPE.value(),
+					new InteractionInformation(fluidType.get(),
+						fluidState -> fluidState.isSource()
+							? Blocks.OBSIDIAN.defaultBlockState()
+							: flowingLavaResult.defaultBlockState()));
+			});
 	}
 
 	public static void registerCreamDispenseBehavior() {

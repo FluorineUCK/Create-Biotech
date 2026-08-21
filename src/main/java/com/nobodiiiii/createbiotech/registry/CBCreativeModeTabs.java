@@ -40,11 +40,13 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.WIRELESS_TERMINAL.get());
 				output.accept(CBItems.SONIC_DOG_CANNON.get());
 				output.accept(CBItems.DING_DONG_CHICKEN.get());
+				output.accept(CBItems.CAPTURED_SMALL_SLIME.get());
 				output.accept(CBItems.BIO_PACKAGER.get());
 				output.accept(CBItems.SHULKER_PACKAGER.get());
 				output.accept(CBItems.SHULKER_TELEPORTER.get());
 				output.accept(CBItems.ALLAY_PORT.get());
 				output.accept(CBItems.ALLAY_COURIER.get());
+				output.accept(CBItems.HALF_SHAFT.get());
 				output.accept(CBItems.UNIVERSAL_JOINT.get());
 				output.accept(CBItems.SLIME_CLUTCH.get());
 				output.accept(CBItems.BONE_RATCHET.get());
@@ -85,11 +87,9 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.BIONIC_MECHANISM.get());
 				output.accept(CBItems.ENCHANTMENT_BOOK_COPY.get());
 				output.accept(CBItems.BUTTER.get());
-				output.accept(CBItems.BUTTER_BLOCK.get());
 				output.accept(CBItems.SUPER_BUTTER.get());
+				output.accept(CBItems.BUTTER_BLOCK.get());
 				output.accept(CBItems.SUPER_BUTTER_BLOCK.get());
-				output.accept(CBItems.HALF_SHAFT.get());
-				output.accept(CBItems.CAPTURED_SMALL_SLIME.get());
 				output.accept(CBItems.SLIME_HELMET.get());
 				output.accept(CBItems.SLIME_CHESTPLATE.get());
 				output.accept(CBItems.SLIME_LEGGINGS.get());
