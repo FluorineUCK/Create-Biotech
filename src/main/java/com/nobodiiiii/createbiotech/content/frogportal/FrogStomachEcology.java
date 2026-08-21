@@ -35,6 +35,8 @@ final class FrogStomachEcology {
 	private static final int MIN_POOL_ROOM_SIZE = 12;
 	private static final int MIN_PLATFORM_ROOM_SIZE = 18;
 	private static final int MIN_SECRETION_ROOM_SIZE = 18;
+	private static final int POOL_WATER_LEVEL_OFFSET = 4;
+	private static final double POOL_DEEPENING_DISTANCE = 0.65d;
 	private static final int MIN_SECRETION_GROWTHS = 4;
 	private static final int SECRETION_GROWTH_VARIATION = 5;
 	private static final int MAX_SECRETION_RADIUS = 6;
@@ -75,10 +77,11 @@ final class FrogStomachEcology {
 		SimplexNoise terrainDetailNoise = new SimplexNoise(random);
 		SimplexNoise liningNoise = new SimplexNoise(random);
 		SimplexNoise poolShoreNoise = new SimplexNoise(random);
+		SimplexNoise poolDepthNoise = new SimplexNoise(random);
 
 		generateCeilingAndWallLining(level, origin, width, height, liningNoise);
 		Pool pool = generateFloorAndPool(level, origin, width, height, random, terrainNoise, terrainDetailNoise,
-			poolShoreNoise);
+			poolShoreNoise, poolDepthNoise);
 		generateSecretionGrowths(level, origin, width, height, random);
 		generateWallPlatforms(level, origin, width, height, random);
 		if (pool != null)
@@ -143,7 +146,8 @@ final class FrogStomachEcology {
 	}
 
 	private static Pool generateFloorAndPool(ServerLevel level, BlockPos origin, int width, int height,
-		RandomSource random, SimplexNoise terrainNoise, SimplexNoise detailNoise, SimplexNoise poolShoreNoise) {
+		RandomSource random, SimplexNoise terrainNoise, SimplexNoise detailNoise, SimplexNoise poolShoreNoise,
+		SimplexNoise poolDepthNoise) {
 		BlockState mucosa = CBBlocks.FROG_STOMACH_MUCOSA.get().defaultBlockState();
 		BlockState water = Blocks.WATER.defaultBlockState();
 		int minX = origin.getX();
@@ -152,21 +156,23 @@ final class FrogStomachEcology {
 		int maxX = minX + width - 1;
 		int maxZ = minZ + width - 1;
 		int maximumSurfaceY = minY + Math.max(1, height - maximumLiningThickness(height) - 3);
-		Pool pool = createPool(random, origin, width, poolShoreNoise);
+		Pool pool = createPool(random, origin, width, poolShoreNoise, poolDepthNoise);
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
 		for (int x = minX + 1; x < maxX; x++)
 			for (int z = minZ + 1; z < maxZ; z++) {
 				int surfaceY = Math.min(maximumSurfaceY,
 					terrainSurfaceY(minY, x - minX, z - minZ, terrainNoise, detailNoise));
-				boolean underwater = pool != null && pool.contains(x, z);
-				if (underwater)
-					surfaceY = pool.bedY();
+				int waterDepth = pool == null ? 0 : pool.depthAt(x, z);
+				if (waterDepth > 0)
+					surfaceY = pool.waterY() - waterDepth;
+				else if (pool != null && pool.isBank(x, z))
+					surfaceY = Math.max(surfaceY, pool.waterY());
 
 				for (int y = minY + 1; y <= surfaceY; y++)
 					setMucosa(level, pos.set(x, y, z), mucosa);
 
-				if (underwater)
+				if (waterDepth > 0)
 					for (int y = surfaceY + 1; y <= pool.waterY(); y++)
 						level.setBlock(pos.set(x, y, z), water, Block.UPDATE_CLIENTS);
 			}
@@ -182,7 +188,8 @@ final class FrogStomachEcology {
 		return floorY + 3 + relief;
 	}
 
-	private static Pool createPool(RandomSource random, BlockPos origin, int size, SimplexNoise shoreNoise) {
+	private static Pool createPool(RandomSource random, BlockPos origin, int size, SimplexNoise shoreNoise,
+		SimplexNoise depthNoise) {
 		if (size < MIN_POOL_ROOM_SIZE)
 			return null;
 		int interiorWidth = size - 2;
@@ -198,19 +205,20 @@ final class FrogStomachEcology {
 
 		List<PoolLobe> lobes = new ArrayList<>();
 		lobes.add(new PoolLobe(centerX, centerZ, radiusX, radiusZ));
-		int lobeCount = 3 + random.nextInt(3);
+		int lobeCount = 4 + random.nextInt(4);
 		for (int i = 1; i < lobeCount; i++) {
-			int lobeRadiusX = Math.max(2, radiusX - 1 - random.nextInt(2));
-			int lobeRadiusZ = Math.max(2, radiusZ - 1 - random.nextInt(2));
+			int lobeRadiusX = Math.max(2, radiusX - random.nextInt(4));
+			int lobeRadiusZ = Math.max(2, radiusZ - random.nextInt(4));
 			double angle = random.nextDouble() * Math.PI * 2.0d;
-			double displacement = Math.min(radiusX, radiusZ) * (0.35d + random.nextDouble() * 0.5d);
+			double displacement = Math.min(radiusX, radiusZ) * (0.25d + random.nextDouble() * 0.95d);
 			int candidateX = centerX + Mth.floor(Math.cos(angle) * displacement);
 			int candidateZ = centerZ + Mth.floor(Math.sin(angle) * displacement);
 			int lobeCenterX = clampPoolLobeCenter(candidateX, origin.getX(), size, lobeRadiusX, centerX);
 			int lobeCenterZ = clampPoolLobeCenter(candidateZ, origin.getZ(), size, lobeRadiusZ, centerZ);
 			lobes.add(new PoolLobe(lobeCenterX, lobeCenterZ, lobeRadiusX, lobeRadiusZ));
 		}
-		return new Pool(List.copyOf(lobes), shoreNoise, origin.getY() + 1, origin.getY() + 3);
+		return new Pool(List.copyOf(lobes), shoreNoise, depthNoise, origin.getY(),
+			origin.getY() + POOL_WATER_LEVEL_OFFSET);
 	}
 
 	private static int randomCoordinate(RandomSource random, int minimum, int maximum) {
@@ -671,17 +679,45 @@ final class FrogStomachEcology {
 		level.setBlock(pos, mucosa, Block.UPDATE_CLIENTS);
 	}
 
-	private record Pool(List<PoolLobe> lobes, SimplexNoise shoreNoise, int bedY, int waterY) {
+	private record Pool(List<PoolLobe> lobes, SimplexNoise shoreNoise, SimplexNoise depthNoise,
+		int floorY, int waterY) {
 		boolean contains(int x, int z) {
+			return shapeValue(x, z) >= 0.0d;
+		}
+
+		boolean isBank(int x, int z) {
+			return !contains(x, z)
+				&& (contains(x - 1, z) || contains(x + 1, z)
+					|| contains(x, z - 1) || contains(x, z + 1));
+		}
+
+		int depthAt(int x, int z) {
+			double shapeValue = shapeValue(x, z);
+			if (shapeValue < 0.0d)
+				return 0;
+
+			int maximumDepth = waterY - floorY - 1;
+			double inwardProgress = Mth.clamp(shapeValue / POOL_DEEPENING_DISTANCE, 0.0d, 1.0d);
+			double broadVariation = depthNoise.getValue(x / 4.5d + 41.0d, z / 4.5d - 23.0d) * 0.55d;
+			double detailVariation = depthNoise.getValue(x * 0.71d - 13.0d, z * 0.71d + 37.0d) * 0.20d;
+			double variation = (broadVariation + detailVariation) * (0.35d + inwardProgress * 0.65d);
+			int additionalDepth = Mth.clamp(
+				Mth.floor(inwardProgress * (maximumDepth - 1) + variation + 0.35d),
+				0, maximumDepth - 1);
+			return 1 + additionalDepth;
+		}
+
+		private double shapeValue(int x, int z) {
 			double nearestLobe = Double.POSITIVE_INFINITY;
 			for (PoolLobe lobe : lobes) {
 				double dx = (x - lobe.centerX()) / (double) lobe.radiusX();
 				double dz = (z - lobe.centerZ()) / (double) lobe.radiusZ();
 				nearestLobe = Math.min(nearestLobe, Math.sqrt(dx * dx + dz * dz));
 			}
-			double broadRoughness = shoreNoise.getValue(x / 3.0d, z / 3.0d) * 0.20d;
-			double fineRoughness = shoreNoise.getValue(x * 0.83d + 17.0d, z * 0.83d - 29.0d) * 0.08d;
-			return nearestLobe <= 1.0d + broadRoughness + fineRoughness;
+			double broadRoughness = shoreNoise.getValue(x / 4.5d, z / 4.5d) * 0.24d;
+			double mediumRoughness = shoreNoise.getValue(x / 2.2d + 11.0d, z / 2.2d - 19.0d) * 0.12d;
+			double fineRoughness = shoreNoise.getValue(x * 0.83d + 17.0d, z * 0.83d - 29.0d) * 0.05d;
+			return 1.0d + broadRoughness + mediumRoughness + fineRoughness - nearestLobe;
 		}
 	}
 
