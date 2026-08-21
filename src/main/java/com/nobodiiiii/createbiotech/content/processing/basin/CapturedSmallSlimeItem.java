@@ -3,10 +3,13 @@ package com.nobodiiiii.createbiotech.content.processing.basin;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jetbrains.annotations.Nullable;
+
 import com.nobodiiiii.createbiotech.foundation.item.BlockCenteredSpawnableRenderedLivingEntityItem;
 import com.nobodiiiii.createbiotech.network.ContainedEntityHandoffPacket;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -17,6 +20,7 @@ import net.minecraft.world.phys.Vec3;
 
 public class CapturedSmallSlimeItem extends BlockCenteredSpawnableRenderedLivingEntityItem<Slime> {
 	private static final float ITEM_RENDER_SCALE = 1.5f;
+	private static final String MATERIALIZED_REPLACEMENT_TAG = "CreateBiotechMaterializedReplacement";
 
 	public CapturedSmallSlimeItem(Properties properties) {
 		super(properties, EntityType.SLIME, CapturedSmallSlimeItem::configureSlime, ITEM_RENDER_SCALE);
@@ -66,9 +70,25 @@ public class CapturedSmallSlimeItem extends BlockCenteredSpawnableRenderedLiving
 				}
 				added.add(slime);
 			}
+			// NeoForge replaces the temporary ItemEntity after createEntity returns.
+			// Preserve the replacement identity so a normal extracting funnel can keep
+			// its vanilla last-output obstruction semantics.
+			location.getPersistentData().putUUID(MATERIALIZED_REPLACEMENT_TAG, firstSlime.getUUID());
 		}
 
 		return firstSlime;
+	}
+
+	@Nullable
+	public static Entity consumeMaterializedReplacement(Entity originalItemEntity) {
+		CompoundTag data = originalItemEntity.getPersistentData();
+		if (!data.hasUUID(MATERIALIZED_REPLACEMENT_TAG))
+			return null;
+		var replacementId = data.getUUID(MATERIALIZED_REPLACEMENT_TAG);
+		data.remove(MATERIALIZED_REPLACEMENT_TAG);
+		return originalItemEntity.level() instanceof ServerLevel serverLevel
+			? serverLevel.getEntity(replacementId)
+			: null;
 	}
 
 	/**

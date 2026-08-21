@@ -8,6 +8,7 @@ import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyArg;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
@@ -33,6 +34,8 @@ import com.simibubi.create.infrastructure.config.AllConfigs;
 import net.createmod.catnip.math.BlockFace;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
@@ -74,6 +77,22 @@ public abstract class FunnelBlockEntityMixin implements SlimeCaptureFunnelAccess
 			.logistics.defaultExtractionTimer.get());
 		createBiotech$nextSmallSlimeCaptureTime = gameTime + cooldown;
 		return true;
+	}
+
+	@ModifyArg(
+		method = "activateExtractor()V",
+		at = @At(
+			value = "INVOKE",
+			target = "Ljava/lang/ref/WeakReference;<init>(Ljava/lang/Object;)V",
+			ordinal = 1),
+		index = 0,
+		remap = false)
+	private Object createBiotech$observeMaterializedSlimeInsteadOfTemporaryItem(Object observed) {
+		if (!(observed instanceof ItemEntity itemEntity)
+			|| !BasinEntityProcessing.isCapturedSmallSlimeItem(itemEntity.getItem()))
+			return observed;
+		Entity replacement = CapturedSmallSlimeItem.consumeMaterializedReplacement(itemEntity);
+		return replacement == null ? observed : replacement;
 	}
 
 	@Inject(method = "determineCurrentMode()Lcom/simibubi/create/content/logistics/funnel/FunnelBlockEntity$Mode;",
