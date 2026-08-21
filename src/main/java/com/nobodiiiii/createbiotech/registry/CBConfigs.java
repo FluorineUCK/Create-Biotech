@@ -137,7 +137,6 @@ public class CBConfigs {
 		public final EvokerEnchantingChamber evokerEnchantingChamber;
 		public final SchrodingersCat schrodingersCat;
 		public final BoneRatchet boneRatchet;
-		public final BasinEntityProcessing basinEntityProcessing;
 		public final SlimeClutch slimeClutch;
 		public final LiquidLivingSlime liquidLivingSlime;
 		public final FixedCarrotFishingRod fixedCarrotFishingRod;
@@ -167,7 +166,6 @@ public class CBConfigs {
 			evokerEnchantingChamber = new EvokerEnchantingChamber(builder);
 			schrodingersCat = new SchrodingersCat(builder);
 			boneRatchet = new BoneRatchet(builder);
-			basinEntityProcessing = new BasinEntityProcessing(builder);
 			slimeClutch = new SlimeClutch(builder);
 			liquidLivingSlime = new LiquidLivingSlime(builder);
 			fixedCarrotFishingRod = new FixedCarrotFishingRod(builder);
@@ -341,11 +339,13 @@ public class CBConfigs {
 	}
 
 	public static class FrogStomach {
-		public final ModConfigSpec.IntValue boxSize;
+		public final ModConfigSpec.IntValue width;
+		public final ModConfigSpec.IntValue height;
 
 		FrogStomach(ModConfigSpec.Builder builder) {
 			builder.push("frogStomach");
-			boxSize = builder.defineInRange("boxSize", 48, 16, 256);
+			width = builder.defineInRange("width", 48, 16, 256);
+			height = builder.defineInRange("height", 32, 16, 256);
 			builder.pop();
 		}
 	}
@@ -760,16 +760,6 @@ public class CBConfigs {
 			builder.push("boneRatchet");
 			fallbackJamStressImpact = builder.defineInRange("fallbackJamStressImpact", 20000.0d, 0.0d, Double.MAX_VALUE);
 			creativeMotorMargin = builder.defineInRange("creativeMotorMargin", 1024.0d, 0.0d, Double.MAX_VALUE);
-			builder.pop();
-		}
-	}
-
-	public static class BasinEntityProcessing {
-		public final ModConfigSpec.DoubleValue entityScanHeight;
-
-		BasinEntityProcessing(ModConfigSpec.Builder builder) {
-			builder.push("basinEntityProcessing");
-			entityScanHeight = builder.defineInRange("entityScanHeight", 1.25d, 0.0d, 16.0d);
 			builder.pop();
 		}
 	}

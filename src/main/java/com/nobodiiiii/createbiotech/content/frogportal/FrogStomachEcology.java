@@ -66,7 +66,7 @@ final class FrogStomachEcology {
 
 	private FrogStomachEcology() {}
 
-	static void generate(ServerLevel level, long index, BlockPos origin, int size) {
+	static void generate(ServerLevel level, long index, BlockPos origin, int width, int height) {
 		long seed = level.getSeed()
 			^ Long.rotateLeft(index * 0x9E3779B97F4A7C15L, 17)
 			^ ROOM_SEED_SALT;
@@ -76,39 +76,40 @@ final class FrogStomachEcology {
 		SimplexNoise liningNoise = new SimplexNoise(random);
 		SimplexNoise poolShoreNoise = new SimplexNoise(random);
 
-		generateCeilingAndWallLining(level, origin, size, liningNoise);
-		Pool pool = generateFloorAndPool(level, origin, size, random, terrainNoise, terrainDetailNoise,
+		generateCeilingAndWallLining(level, origin, width, height, liningNoise);
+		Pool pool = generateFloorAndPool(level, origin, width, height, random, terrainNoise, terrainDetailNoise,
 			poolShoreNoise);
-		generateSecretionGrowths(level, origin, size, random);
-		generateWallPlatforms(level, origin, size, random);
+		generateSecretionGrowths(level, origin, width, height, random);
+		generateWallPlatforms(level, origin, width, height, random);
 		if (pool != null)
-			generatePoolWaterfallPlatform(level, origin, size, pool, random);
-		generateCeilingVines(level, origin, size, random);
+			generatePoolWaterfallPlatform(level, origin, width, height, pool, random);
+		generateCeilingVines(level, origin, width, height, random);
 	}
 
-	private static void generateCeilingAndWallLining(ServerLevel level, BlockPos origin, int size,
-		SimplexNoise noise) {
+	private static void generateCeilingAndWallLining(ServerLevel level, BlockPos origin, int width,
+		int height, SimplexNoise noise) {
 		BlockState mucosa = CBBlocks.FROG_STOMACH_MUCOSA.get().defaultBlockState();
 		int minX = origin.getX();
 		int minY = origin.getY();
 		int minZ = origin.getZ();
-		int maxX = minX + size - 1;
-		int maxY = minY + size - 1;
-		int maxZ = minZ + size - 1;
-		int maximumThickness = maximumLiningThickness(size);
+		int maxX = minX + width - 1;
+		int maxY = minY + height - 1;
+		int maxZ = minZ + width - 1;
+		int ceilingThickness = maximumLiningThickness(height);
+		int wallThickness = maximumLiningThickness(width);
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
 		for (int x = minX + 1; x < maxX; x++)
 			for (int z = minZ + 1; z < maxZ; z++) {
-				int thickness = liningThickness(noise, x - minX, z - minZ, 0, maximumThickness);
+				int thickness = liningThickness(noise, x - minX, z - minZ, 0, ceilingThickness);
 				for (int depth = 1; depth <= thickness; depth++)
 					setMucosa(level, pos.set(x, maxY - depth, z), mucosa);
 			}
 
 		for (int x = minX + 1; x < maxX; x++)
 			for (int y = minY + 1; y < maxY; y++) {
-				int northThickness = liningThickness(noise, x - minX, y - minY, 1, maximumThickness);
-				int southThickness = liningThickness(noise, x - minX, y - minY, 2, maximumThickness);
+				int northThickness = liningThickness(noise, x - minX, y - minY, 1, wallThickness);
+				int southThickness = liningThickness(noise, x - minX, y - minY, 2, wallThickness);
 				for (int depth = 1; depth <= northThickness; depth++)
 					setMucosa(level, pos.set(x, y, minZ + depth), mucosa);
 				for (int depth = 1; depth <= southThickness; depth++)
@@ -117,8 +118,8 @@ final class FrogStomachEcology {
 
 		for (int z = minZ + 1; z < maxZ; z++)
 			for (int y = minY + 1; y < maxY; y++) {
-				int westThickness = liningThickness(noise, z - minZ, y - minY, 3, maximumThickness);
-				int eastThickness = liningThickness(noise, z - minZ, y - minY, 4, maximumThickness);
+				int westThickness = liningThickness(noise, z - minZ, y - minY, 3, wallThickness);
+				int eastThickness = liningThickness(noise, z - minZ, y - minY, 4, wallThickness);
 				for (int depth = 1; depth <= westThickness; depth++)
 					setMucosa(level, pos.set(minX + depth, y, z), mucosa);
 				for (int depth = 1; depth <= eastThickness; depth++)
@@ -141,17 +142,17 @@ final class FrogStomachEcology {
 			Math.min(MAX_LINING_THICKNESS, (size - 3) / 2));
 	}
 
-	private static Pool generateFloorAndPool(ServerLevel level, BlockPos origin, int size, RandomSource random,
-		SimplexNoise terrainNoise, SimplexNoise detailNoise, SimplexNoise poolShoreNoise) {
+	private static Pool generateFloorAndPool(ServerLevel level, BlockPos origin, int width, int height,
+		RandomSource random, SimplexNoise terrainNoise, SimplexNoise detailNoise, SimplexNoise poolShoreNoise) {
 		BlockState mucosa = CBBlocks.FROG_STOMACH_MUCOSA.get().defaultBlockState();
 		BlockState water = Blocks.WATER.defaultBlockState();
 		int minX = origin.getX();
 		int minY = origin.getY();
 		int minZ = origin.getZ();
-		int maxX = minX + size - 1;
-		int maxZ = minZ + size - 1;
-		int maximumSurfaceY = minY + Math.max(1, size - maximumLiningThickness(size) - 3);
-		Pool pool = createPool(random, origin, size, poolShoreNoise);
+		int maxX = minX + width - 1;
+		int maxZ = minZ + width - 1;
+		int maximumSurfaceY = minY + Math.max(1, height - maximumLiningThickness(height) - 3);
+		Pool pool = createPool(random, origin, width, poolShoreNoise);
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 
 		for (int x = minX + 1; x < maxX; x++)
@@ -225,12 +226,12 @@ final class FrogStomachEcology {
 		return minimum <= maximum ? Mth.clamp(candidate, minimum, maximum) : fallback;
 	}
 
-	private static void generateSecretionGrowths(ServerLevel level, BlockPos origin, int size,
+	private static void generateSecretionGrowths(ServerLevel level, BlockPos origin, int width, int height,
 		RandomSource random) {
-		if (size < MIN_SECRETION_ROOM_SIZE)
+		if (width < MIN_SECRETION_ROOM_SIZE)
 			return;
-		int maximumRadius = Math.max(2, Math.min(MAX_SECRETION_RADIUS, (size - 6) / 4));
-		generateGuaranteedFloorSecretion(level, origin, size, maximumRadius, random);
+		int maximumRadius = Math.max(2, Math.min(MAX_SECRETION_RADIUS, (width - 6) / 4));
+		generateGuaranteedFloorSecretion(level, origin, width, height, maximumRadius, random);
 		int targetCount = MIN_SECRETION_GROWTHS + random.nextInt(SECRETION_GROWTH_VARIATION);
 		int attempts = targetCount * 6;
 		int generated = 0;
@@ -239,58 +240,59 @@ final class FrogStomachEcology {
 			int radiusFirst = Math.max(2, maximumRadius - random.nextInt(3));
 			int radiusSecond = Math.max(2, maximumRadius - random.nextInt(3));
 			int margin = maximumRadius + 3;
-			SurfaceCoordinates center = randomSurfaceCoordinates(random, origin, size, normal, margin);
+			SurfaceCoordinates center = randomSurfaceCoordinates(random, origin, width, height, normal, margin);
 			if (center == null)
 				continue;
 			int depth = 2 + random.nextInt(2);
-			if (placeSecretionGrowth(level, origin, size, normal, center, radiusFirst, radiusSecond,
+			if (placeSecretionGrowth(level, origin, width, height, normal, center, radiusFirst, radiusSecond,
 				depth, random))
 				generated++;
 		}
 	}
 
-	private static void generateGuaranteedFloorSecretion(ServerLevel level, BlockPos origin, int size,
-		int maximumRadius, RandomSource random) {
+	private static void generateGuaranteedFloorSecretion(ServerLevel level, BlockPos origin, int width,
+		int height, int maximumRadius, RandomSource random) {
 		int margin = maximumRadius + 3;
 		for (int attempt = 0; attempt < 64; attempt++) {
-			SurfaceCoordinates center = randomSurfaceCoordinates(random, origin, size, Direction.UP, margin);
-			if (center != null && placeSecretionGrowth(level, origin, size, Direction.UP, center,
+			SurfaceCoordinates center = randomSurfaceCoordinates(random, origin, width, height,
+				Direction.UP, margin);
+			if (center != null && placeSecretionGrowth(level, origin, width, height, Direction.UP, center,
 				maximumRadius, Math.max(2, maximumRadius - random.nextInt(2)),
 				MAX_SECRETION_GROWTH_DEPTH, random))
 				return;
 		}
 
 		int minX = origin.getX() + 3;
-		int maxX = origin.getX() + size - 4;
+		int maxX = origin.getX() + width - 4;
 		int minZ = origin.getZ() + 3;
-		int maxZ = origin.getZ() + size - 4;
+		int maxZ = origin.getZ() + width - 4;
 		for (int x = minX; x <= maxX; x++)
 			for (int z = minZ; z <= maxZ; z++)
-				if (placeSecretionGrowth(level, origin, size, Direction.UP,
+				if (placeSecretionGrowth(level, origin, width, height, Direction.UP,
 					new SurfaceCoordinates(x, z), 2, 2, 2, random))
 					return;
 	}
 
-	private static SurfaceCoordinates randomSurfaceCoordinates(RandomSource random, BlockPos origin, int size,
-		Direction normal, int margin) {
+	private static SurfaceCoordinates randomSurfaceCoordinates(RandomSource random, BlockPos origin, int width,
+		int height, Direction normal, int margin) {
 		int firstMinimum;
 		int firstMaximum;
 		if (normal.getAxis() == Direction.Axis.X) {
 			firstMinimum = origin.getZ() + margin;
-			firstMaximum = origin.getZ() + size - 1 - margin;
+			firstMaximum = origin.getZ() + width - 1 - margin;
 		} else {
 			firstMinimum = origin.getX() + margin;
-			firstMaximum = origin.getX() + size - 1 - margin;
+			firstMaximum = origin.getX() + width - 1 - margin;
 		}
 
 		int secondMinimum;
 		int secondMaximum;
 		if (normal.getAxis() == Direction.Axis.Y) {
 			secondMinimum = origin.getZ() + margin;
-			secondMaximum = origin.getZ() + size - 1 - margin;
+			secondMaximum = origin.getZ() + width - 1 - margin;
 		} else {
 			secondMinimum = origin.getY() + margin;
-			secondMaximum = origin.getY() + size - 1 - margin;
+			secondMaximum = origin.getY() + height - 1 - margin;
 		}
 		if (firstMinimum > firstMaximum || secondMinimum > secondMaximum)
 			return null;
@@ -299,9 +301,10 @@ final class FrogStomachEcology {
 			randomCoordinate(random, secondMinimum, secondMaximum));
 	}
 
-	private static boolean placeSecretionGrowth(ServerLevel level, BlockPos origin, int size, Direction normal,
-		SurfaceCoordinates center, int radiusFirst, int radiusSecond, int maximumDepth, RandomSource random) {
-		if (findLiningSurface(level, origin, size, normal, center.first(), center.second()) == null)
+	private static boolean placeSecretionGrowth(ServerLevel level, BlockPos origin, int width, int height,
+		Direction normal, SurfaceCoordinates center, int radiusFirst, int radiusSecond, int maximumDepth,
+		RandomSource random) {
+		if (findLiningSurface(level, origin, width, height, normal, center.first(), center.second()) == null)
 			return false;
 		BlockState secretion = CBBlocks.FROG_STOMACH_SECRETION.get().defaultBlockState();
 		List<BlockPos> placed = new ArrayList<>();
@@ -318,7 +321,7 @@ final class FrogStomachEcology {
 				double distance = Math.sqrt(dx * dx + dz * dz) / outline;
 				if (distance > 1.0d)
 					continue;
-				BlockPos surface = findLiningSurface(level, origin, size, normal,
+				BlockPos surface = findLiningSurface(level, origin, width, height, normal,
 					center.first() + firstOffset, center.second() + secondOffset);
 				if (surface == null)
 					continue;
@@ -345,14 +348,14 @@ final class FrogStomachEcology {
 		return distance <= 0.66d ? 2 : 1;
 	}
 
-	private static BlockPos findLiningSurface(ServerLevel level, BlockPos origin, int size, Direction normal,
-		int first, int second) {
+	private static BlockPos findLiningSurface(ServerLevel level, BlockPos origin, int width, int height,
+		Direction normal, int first, int second) {
 		int minX = origin.getX();
 		int minY = origin.getY();
 		int minZ = origin.getZ();
-		int maxX = minX + size - 1;
-		int maxY = minY + size - 1;
-		int maxZ = minZ + size - 1;
+		int maxX = minX + width - 1;
+		int maxY = minY + height - 1;
+		int maxZ = minZ + width - 1;
 		BlockPos surface = switch (normal) {
 			case UP -> new BlockPos(first, minY + 1, second);
 			case DOWN -> new BlockPos(first, maxY - 1, second);
@@ -403,26 +406,27 @@ final class FrogStomachEcology {
 		return count;
 	}
 
-	private static void generateWallPlatforms(ServerLevel level, BlockPos origin, int size, RandomSource random) {
-		if (size < MIN_PLATFORM_ROOM_SIZE)
+	private static void generateWallPlatforms(ServerLevel level, BlockPos origin, int width, int height,
+		RandomSource random) {
+		if (width < MIN_PLATFORM_ROOM_SIZE)
 			return;
-		int platformCount = Math.max(2, size / 12) + random.nextInt(4);
+		int platformCount = Math.max(2, width / 12) + random.nextInt(4);
 		for (int i = 0; i < platformCount; i++)
-			generateWallPlatform(level, origin, size, random,
+			generateWallPlatform(level, origin, width, height, random,
 				PLATFORM_WALLS[random.nextInt(PLATFORM_WALLS.length)]);
 	}
 
-	private static void generatePoolWaterfallPlatform(ServerLevel level, BlockPos origin, int size, Pool pool,
-		RandomSource random) {
-		PoolEdge edge = findNearestPoolEdge(pool, origin, size, random);
+	private static void generatePoolWaterfallPlatform(ServerLevel level, BlockPos origin, int width, int height,
+		Pool pool, RandomSource random) {
+		PoolEdge edge = findNearestPoolEdge(pool, origin, width, random);
 		if (edge == null)
 			return;
 
-		int heightVariation = Math.max(1, size / 10);
-		int desiredTopY = origin.getY() + size / 2
+		int heightVariation = Math.max(1, height / 10);
+		int desiredTopY = origin.getY() + height / 2
 			+ random.nextInt(heightVariation * 2 + 1) - heightVariation;
 		int minimumTopY = pool.waterY() + 4;
-		int maximumTopY = origin.getY() + size - 1 - maximumLiningThickness(size) - 3;
+		int maximumTopY = origin.getY() + height - 1 - maximumLiningThickness(height) - 3;
 		int topY = maximumTopY >= minimumTopY
 			? Mth.clamp(desiredTopY, minimumTopY, maximumTopY)
 			: Math.max(pool.waterY() + 2, maximumTopY);
@@ -438,8 +442,8 @@ final class FrogStomachEcology {
 				0, Math.max(0, edge.wallDistance() - 1));
 			int localDepth = Math.max(1, edge.wallDistance() - edgeInset);
 			for (int inwardStep = 1; inwardStep <= localDepth; inwardStep++) {
-				int x = waterfallPlatformX(origin, size, edge, offset, inwardStep);
-				int z = waterfallPlatformZ(origin, size, edge, offset, inwardStep);
+				int x = waterfallPlatformX(origin, width, edge, offset, inwardStep);
+				int z = waterfallPlatformZ(origin, width, edge, offset, inwardStep);
 				double undersideNoise = Math.sin(offset * 1.41d + inwardStep * 0.83d + undersidePhase);
 				int thickness = inwardStep <= Math.max(2, localDepth / 2) || undersideNoise > 0.4d ? 2 : 1;
 				for (int layer = 0; layer < thickness; layer++)
@@ -515,16 +519,17 @@ final class FrogStomachEcology {
 		};
 	}
 
-	private static void generateCeilingVines(ServerLevel level, BlockPos origin, int size, RandomSource random) {
-		int margin = Math.min(MAX_LINING_THICKNESS + 2, Math.max(1, (size - 3) / 2));
+	private static void generateCeilingVines(ServerLevel level, BlockPos origin, int width, int height,
+		RandomSource random) {
+		int margin = Math.min(MAX_LINING_THICKNESS + 2, Math.max(1, (width - 3) / 2));
 		int minX = origin.getX() + margin;
-		int maxX = origin.getX() + size - 1 - margin;
+		int maxX = origin.getX() + width - 1 - margin;
 		int minZ = origin.getZ() + margin;
-		int maxZ = origin.getZ() + size - 1 - margin;
+		int maxZ = origin.getZ() + width - 1 - margin;
 		if (minX > maxX || minZ > maxZ)
 			return;
 
-		int targetCount = Math.max(2, size / 4) + random.nextInt(Math.max(1, size / 8));
+		int targetCount = Math.max(2, width / 4) + random.nextInt(Math.max(1, width / 8));
 		int attempts = targetCount * 5;
 		int generated = 0;
 		Set<Long> usedColumns = new HashSet<>();
@@ -534,16 +539,16 @@ final class FrogStomachEcology {
 			long columnKey = BlockPos.asLong(x, 0, z);
 			if (!usedColumns.add(columnKey))
 				continue;
-			BlockPos anchor = findCeilingAnchor(level, origin, size, x, z);
+			BlockPos anchor = findCeilingAnchor(level, origin, height, x, z);
 			if (anchor != null && generateGlowBerryVine(level, anchor, origin.getY(), random))
 				generated++;
 		}
 	}
 
-	private static BlockPos findCeilingAnchor(ServerLevel level, BlockPos origin, int size, int x, int z) {
+	private static BlockPos findCeilingAnchor(ServerLevel level, BlockPos origin, int height, int x, int z) {
 		BlockPos anchor = null;
 		BlockPos.MutableBlockPos cursor = new BlockPos.MutableBlockPos(
-			x, origin.getY() + size - 2, z);
+			x, origin.getY() + height - 2, z);
 		while (cursor.getY() > origin.getY() + 2
 			&& level.getBlockState(cursor).is(CBBlocks.FROG_STOMACH_MUCOSA.get())) {
 			anchor = cursor.immutable();
@@ -552,14 +557,14 @@ final class FrogStomachEcology {
 		return anchor != null && level.getBlockState(anchor.below()).isAir() ? anchor : null;
 	}
 
-	private static void generateWallPlatform(ServerLevel level, BlockPos origin, int size, RandomSource random,
-		Direction wall) {
+	private static void generateWallPlatform(ServerLevel level, BlockPos origin, int width, int height,
+		RandomSource random, Direction wall) {
 		int minX = origin.getX();
 		int minY = origin.getY();
 		int minZ = origin.getZ();
-		int maxX = minX + size - 1;
-		int maxY = minY + size - 1;
-		int maxZ = minZ + size - 1;
+		int maxX = minX + width - 1;
+		int maxY = minY + height - 1;
+		int maxZ = minZ + width - 1;
 		int alongMin = (wall.getAxis() == Direction.Axis.Z ? minX : minZ) + 4;
 		int alongMax = (wall.getAxis() == Direction.Axis.Z ? maxX : maxZ) - 4;
 		int availableWidth = alongMax - alongMin + 1;
@@ -567,15 +572,15 @@ final class FrogStomachEcology {
 			return;
 
 		int widthLimit = Math.min(MAX_PLATFORM_WIDTH, availableWidth);
-		int width = MIN_PLATFORM_WIDTH + random.nextInt(widthLimit - MIN_PLATFORM_WIDTH + 1);
-		int halfWidth = width / 2;
+		int platformWidth = MIN_PLATFORM_WIDTH + random.nextInt(widthLimit - MIN_PLATFORM_WIDTH + 1);
+		int halfWidth = platformWidth / 2;
 		int centerMin = alongMin + halfWidth;
-		int centerMax = alongMax - (width - halfWidth - 1);
+		int centerMax = alongMax - (platformWidth - halfWidth - 1);
 		int center = centerMin + random.nextInt(centerMax - centerMin + 1);
-		int depthLimit = Math.min(MAX_PLATFORM_DEPTH, Math.max(MIN_PLATFORM_DEPTH, (size - 4) / 3));
+		int depthLimit = Math.min(MAX_PLATFORM_DEPTH, Math.max(MIN_PLATFORM_DEPTH, (width - 4) / 3));
 		int depth = MIN_PLATFORM_DEPTH + random.nextInt(depthLimit - MIN_PLATFORM_DEPTH + 1);
-		int lowestY = minY + Math.max(8, size / 5);
-		int highestY = maxY - Math.max(8, size / 6);
+		int lowestY = minY + Math.max(8, height / 5);
+		int highestY = maxY - Math.max(8, height / 6);
 		if (highestY < lowestY)
 			return;
 		int topY = lowestY + random.nextInt(highestY - lowestY + 1);
@@ -584,7 +589,7 @@ final class FrogStomachEcology {
 		BlockPos.MutableBlockPos pos = new BlockPos.MutableBlockPos();
 		List<BlockPos> vineAnchors = new ArrayList<>();
 		int firstOffset = -halfWidth;
-		int lastOffset = width - halfWidth - 1;
+		int lastOffset = platformWidth - halfWidth - 1;
 		for (int offset = firstOffset; offset <= lastOffset; offset++) {
 			double edgeDistance = Math.abs(offset) / (double) Math.max(1, halfWidth);
 			int localDepth = Math.max(2, depth - (int) Math.floor(edgeDistance * 2.0d));
@@ -600,7 +605,7 @@ final class FrogStomachEcology {
 			}
 		}
 
-		int vineCount = Math.min(vineAnchors.size(), Math.max(2, width / 3));
+		int vineCount = Math.min(vineAnchors.size(), Math.max(2, platformWidth / 3));
 		for (int i = 0; i < vineCount && !vineAnchors.isEmpty(); i++) {
 			BlockPos anchor = vineAnchors.remove(random.nextInt(vineAnchors.size()));
 			generateGlowBerryVine(level, anchor, minY, random);

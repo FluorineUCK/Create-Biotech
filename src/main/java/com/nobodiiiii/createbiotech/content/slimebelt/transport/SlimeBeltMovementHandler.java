@@ -6,7 +6,6 @@ import static net.minecraft.world.entity.MoverType.SELF;
 
 import java.util.List;
 
-import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlock;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -71,8 +70,6 @@ public class SlimeBeltMovementHandler {
 
 	public static boolean canBeTransported(Entity entity) {
 		if (!entity.isAlive())
-			return false;
-		if (BasinEntityProcessing.isCapturedSmallSlime(entity))
 			return false;
 		if (entity instanceof Player player && player.isShiftKeyDown() && !CardboardArmorHandler.testForStealth(entity))
 			return false;

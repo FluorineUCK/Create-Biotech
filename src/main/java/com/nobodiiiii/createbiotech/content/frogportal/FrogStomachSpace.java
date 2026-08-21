@@ -21,10 +21,10 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Pure geometry + builder for the private rooms in the Frog Stomach dimension. Each space index maps
- * to a fixed, non-overlapping cube laid out on a grid so coordinates stay bounded. A room is a hollow
- * cube walled with the indestructible {@link CBBlocks#FROG_STOMACH_WALL} and lined with generated
- * living terrain. Its north wall contains a high, pre-activated mouth portal and its south wall
- * contains a low, slimeball-activated tail portal.
+ * to a fixed, non-overlapping room laid out on a grid so coordinates stay bounded. A room is a hollow
+ * rectangular prism walled with the indestructible {@link CBBlocks#FROG_STOMACH_WALL} and lined
+ * with generated living terrain. Its north wall contains a high, pre-activated mouth portal and its
+ * south wall contains a low, slimeball-activated tail portal.
  */
 public final class FrogStomachSpace {
 
@@ -49,14 +49,19 @@ public final class FrogStomachSpace {
 		TAIL
 	}
 
-	/** Edge length of a room in blocks, from server config (default 48 = 3x3 chunks). */
-	public static int boxSize() {
-		return Math.max(PORTAL_SECTION_SIZE, CBConfigs.SERVER.frogStomach.boxSize.get());
+	/** Horizontal edge length of a room in blocks, from server config (default 48 = 3x3 chunks). */
+	public static int width() {
+		return Math.max(PORTAL_SECTION_SIZE, CBConfigs.SERVER.frogStomach.width.get());
+	}
+
+	/** Vertical height of a room in blocks, from server config (default 32). */
+	public static int height() {
+		return Math.max(PORTAL_SECTION_SIZE, CBConfigs.SERVER.frogStomach.height.get());
 	}
 
 	/** Lowest-corner (min x/y/z) block position of the room for {@code index}. */
 	public static BlockPos origin(long index) {
-		int spacing = boxSize() + GAP;
+		int spacing = width() + GAP;
 		int col = (int) Math.floorMod(index, (long) ROW);
 		int row = (int) Math.floorDiv(index, (long) ROW);
 		return new BlockPos(col * spacing, BASE_Y, row * spacing);
@@ -65,17 +70,17 @@ public final class FrogStomachSpace {
 	/** Bottom-left block of the 4x4 tail exit, centred in the lower 16x16 wall section. */
 	public static BlockPos tailPortalPos(long index) {
 		BlockPos o = origin(index);
-		int size = boxSize();
-		return new BlockPos(portalSectionX(o, size), o.getY() + PORTAL_SECTION_PADDING,
-			o.getZ() + size - 2);
+		int width = width();
+		return new BlockPos(portalSectionX(o, width), o.getY() + PORTAL_SECTION_PADDING,
+			o.getZ() + width - 2);
 	}
 
 	/** Bottom-left block of the 4x4 mouth entrance, centred in the upper 16x16 wall section. */
 	public static BlockPos mouthPortalPos(long index) {
 		BlockPos o = origin(index);
-		int size = boxSize();
-		return new BlockPos(portalSectionX(o, size),
-			o.getY() + size - PORTAL_SECTION_SIZE + PORTAL_SECTION_PADDING,
+		int width = width();
+		return new BlockPos(portalSectionX(o, width),
+			o.getY() + height() - PORTAL_SECTION_SIZE + PORTAL_SECTION_PADDING,
 			o.getZ() + 1);
 	}
 
@@ -86,8 +91,8 @@ public final class FrogStomachSpace {
 			portal.getY() + PORTAL_SIZE / 2.0d, portal.getZ() + 0.5d);
 	}
 
-	private static int portalSectionX(BlockPos origin, int size) {
-		return origin.getX() + (size - PORTAL_SECTION_SIZE) / 2 + PORTAL_SECTION_PADDING;
+	private static int portalSectionX(BlockPos origin, int width) {
+		return origin.getX() + (width - PORTAL_SECTION_SIZE) / 2 + PORTAL_SECTION_PADDING;
 	}
 
 	/** The southward impulse applied after an entity or item arrives through the mouth. */
@@ -97,7 +102,7 @@ public final class FrogStomachSpace {
 	}
 
 	public static long spaceIndexFromDigestiveTractPos(BlockPos pos) {
-		int spacing = boxSize() + GAP;
+		int spacing = width() + GAP;
 		long col = Math.floorDiv(pos.getX(), spacing);
 		long row = Math.floorDiv(pos.getZ(), spacing);
 		if (col < 0 || col >= ROW || row < 0)
@@ -139,10 +144,11 @@ public final class FrogStomachSpace {
 	 * existing room deliberately leaves player changes to its interior untouched.
 	 */
 	public static void buildRoom(ServerLevel level, long index, boolean generateEcology) {
-		int size = boxSize();
+		int width = width();
+		int height = height();
 		BlockPos o = origin(index);
 		int minX = o.getX(), minY = o.getY(), minZ = o.getZ();
-		int maxX = minX + size - 1, maxY = minY + size - 1, maxZ = minZ + size - 1;
+		int maxX = minX + width - 1, maxY = minY + height - 1, maxZ = minZ + width - 1;
 
 		for (int cx = minX >> 4; cx <= (maxX >> 4); cx++)
 			for (int cz = minZ >> 4; cz <= (maxZ >> 4); cz++)
@@ -161,7 +167,7 @@ public final class FrogStomachSpace {
 				}
 
 		if (generateEcology)
-			FrogStomachEcology.generate(level, index, o, size);
+			FrogStomachEcology.generate(level, index, o, width, height);
 
 		// Keep the full 6x6 framed area clear for five blocks in front, while preserving vines.
 		// The mouth field is installed again below after generated terrain is removed from its opening.
@@ -178,15 +184,15 @@ public final class FrogStomachSpace {
 			level.setBlock(legacyPortal, Blocks.AIR.defaultBlockState(), Block.UPDATE_CLIENTS);
 
 		if (generateEcology)
-			spawnInitialSlimes(level, o, size);
+			spawnInitialSlimes(level, o, width, height);
 	}
 
-	private static void spawnInitialSlimes(ServerLevel level, BlockPos origin, int size) {
+	private static void spawnInitialSlimes(ServerLevel level, BlockPos origin, int width, int height) {
 		RandomSource random = level.getRandom();
 		int targetCount = MIN_INITIAL_SLIMES + random.nextInt(INITIAL_SLIME_VARIATION);
-		List<BlockPos> spawnPositions = findSlimeSpawnPositions(level, origin, size, true);
+		List<BlockPos> spawnPositions = findSlimeSpawnPositions(level, origin, width, height, true);
 		if (spawnPositions.size() < targetCount)
-			spawnPositions.addAll(findSlimeSpawnPositions(level, origin, size, false));
+			spawnPositions.addAll(findSlimeSpawnPositions(level, origin, width, height, false));
 
 		int spawned = 0;
 		while (spawned < targetCount && !spawnPositions.isEmpty()) {
@@ -196,15 +202,15 @@ public final class FrogStomachSpace {
 		}
 	}
 
-	private static List<BlockPos> findSlimeSpawnPositions(ServerLevel level, BlockPos origin, int size,
-		boolean ecologySurfaceOnly) {
+	private static List<BlockPos> findSlimeSpawnPositions(ServerLevel level, BlockPos origin, int width,
+		int height, boolean ecologySurfaceOnly) {
 		List<BlockPos> positions = new ArrayList<>();
 		BlockPos.MutableBlockPos spawnPos = new BlockPos.MutableBlockPos();
-		int maxSpawnY = Math.min(origin.getY() + size - 2,
+		int maxSpawnY = Math.min(origin.getY() + height - 2,
 			origin.getY() + FrogStomachEcology.MAX_FLOOR_SURFACE_OFFSET
 				+ FrogStomachEcology.MAX_SECRETION_GROWTH_DEPTH + 1);
-		for (int x = origin.getX() + 1; x < origin.getX() + size - 1; x++)
-			for (int z = origin.getZ() + 1; z < origin.getZ() + size - 1; z++)
+		for (int x = origin.getX() + 1; x < origin.getX() + width - 1; x++)
+			for (int z = origin.getZ() + 1; z < origin.getZ() + width - 1; z++)
 				for (int y = origin.getY() + 1; y <= maxSpawnY; y++) {
 					spawnPos.set(x, y, z);
 					BlockState support = level.getBlockState(spawnPos.below());

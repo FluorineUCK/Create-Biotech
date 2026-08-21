@@ -7,7 +7,7 @@ import com.nobodiiiii.createbiotech.content.beltsurface.BeltFunnelStateExtension
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurface;
 import com.nobodiiiii.createbiotech.content.beltsurface.BeltSurfaceResolver;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
-import com.nobodiiiii.createbiotech.registry.CBConfigs;
+import com.nobodiiiii.createbiotech.mixin.BlockEntityPersistentDataAccessor;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.simibubi.create.content.kinetics.belt.BeltBlockEntity;
 import com.simibubi.create.content.kinetics.belt.BeltHelper;
@@ -33,25 +33,27 @@ import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.items.IItemHandlerModifiable;
 import net.neoforged.neoforge.items.ItemHandlerHelper;
 
+/**
+ * Contained basin slimes are plain inventory items. The only slime-specific behaviour left here is
+ * the boundary in both directions: a live slime entering through a funnel becomes a control item,
+ * and a control item leaving the basin becomes a live slime again.
+ */
 public final class BasinEntityProcessing {
-	private static final int DATA_VERSION = 2;
-	private static final double BASIN_INNER_MIN = 2 / 16d;
-	private static final double BASIN_INNER_MAX = 14 / 16d;
 	private static final String DATA_ROOT = CreateBiotech.MOD_ID;
-	private static final String DATA_VERSION_TAG = "BasinEntityProcessingDataVersion";
-	private static final String CAPTURED_TAG = "BasinEntityProcessingCaptured";
-	private static final String BASIN_POS_TAG = "BasinEntityProcessingBasinPos";
-	private static final String PREVIOUS_NO_AI_TAG = "BasinEntityProcessingPreviousNoAi";
-	private static final String PREVIOUS_NO_GRAVITY_TAG = "BasinEntityProcessingPreviousNoGravity";
-	private static final String SYNCED_ITEM_COUNT_TAG = "BasinEntityProcessingSyncedItemCount";
 
-	private static final String CREATE_FUNNEL_PACKAGE = "com.simibubi.create.content.logistics.funnel.";
-	private static final String CREATE_BASIN_RECIPE = "com.simibubi.create.content.processing.basin.BasinRecipe";
-	private static final String CREATE_BASIN_BLOCK_ENTITY =
-		"com.simibubi.create.content.processing.basin.BasinBlockEntity";
-	private static final String CREATE_BASIN_ACTIVE_OUTPUT_METHOD = "updateSpoutput";
-	private static final String FUNNEL_MIXIN = "com.nobodiiiii.createbiotech.mixin.FunnelBlockEntityMixin";
-	private static final ThreadLocal<Integer> CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH = new ThreadLocal<>();
+	// 1.3.0.1 mirrored every control item with a real world Slime and stamped these tags. Nothing
+	// writes them any more; they exist only so a legacy save can be reconciled exactly once.
+	private static final String LEGACY_SYNCED_ITEM_COUNT_TAG = "BasinEntityProcessingSyncedItemCount";
+	private static final String LEGACY_DATA_VERSION_TAG = "BasinEntityProcessingDataVersion";
+	private static final String LEGACY_CAPTURED_TAG = "BasinEntityProcessingCaptured";
+	private static final String LEGACY_BASIN_POS_TAG = "BasinEntityProcessingBasinPos";
+	private static final String LEGACY_NO_AI_TAG = "BasinEntityProcessingPreviousNoAi";
+	private static final String LEGACY_NO_GRAVITY_TAG = "BasinEntityProcessingPreviousNoGravity";
+	private static final double LEGACY_SCAN_INNER_MIN = 2 / 16d;
+	private static final double LEGACY_SCAN_INNER_MAX = 14 / 16d;
+	private static final double LEGACY_SCAN_HEIGHT = 1.25d;
+
+	private static final ThreadLocal<int[]> MOVEMENT_SCOPE_DEPTH = ThreadLocal.withInitial(() -> new int[1]);
 
 	private BasinEntityProcessing() {}
 
@@ -69,48 +71,60 @@ public final class BasinEntityProcessing {
 			+ countCapturedSmallSlimeItems(basin.getOutputInventory());
 	}
 
-	public static boolean canMoveCapturedSmallSlimeItems() {
-		Integer movementDepth = CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.get();
-		if (movementDepth != null && movementDepth > 0)
-			return true;
+	/**
+	 * Opens the window in which control items may cross a basin inventory boundary.
+	 * <p>
+	 * Recipes, spoutput and funnels all reach the basin through its item capability, which is the
+	 * same door hoppers and pipes use, so the caller has to declare itself. Every scope must be
+	 * closed in a {@code finally} block or by a matching {@code RETURN} injection.
+	 */
+	public static void beginCapturedSlimeItemMovement() {
+		MOVEMENT_SCOPE_DEPTH.get()[0]++;
+	}
 
-		for (StackTraceElement frame : Thread.currentThread().getStackTrace()) {
-			String className = frame.getClassName();
-			if (className.startsWith(CREATE_FUNNEL_PACKAGE) || className.equals(CREATE_BASIN_RECIPE)
-				|| className.equals(FUNNEL_MIXIN)
-				|| (className.equals(CREATE_BASIN_BLOCK_ENTITY)
-					&& frame.getMethodName().equals(CREATE_BASIN_ACTIVE_OUTPUT_METHOD)))
-				return true;
-		}
-		return false;
+	public static void endCapturedSlimeItemMovement() {
+		int[] depth = MOVEMENT_SCOPE_DEPTH.get();
+		if (depth[0] > 0)
+			depth[0]--;
+	}
+
+	public static boolean canMoveCapturedSmallSlimeItems() {
+		return MOVEMENT_SCOPE_DEPTH.get()[0] > 0;
 	}
 
 	/**
-	 * One-time conversion of old entity mirrors. Existing control items win;
-	 * surplus legacy entities are converted into items when possible and otherwise
-	 * released with their pre-capture movement flags restored.
+	 * One-time reconciliation of a 1.3.0.1 basin. Control items are authoritative, so mirrored
+	 * slimes are absorbed; a surplus slime becomes an extra control item when the basin still has
+	 * room and is otherwise released with its pre-capture movement flags restored.
+	 * <p>
+	 * Callers must invoke this at most a handful of times per block entity: a basin that never saw
+	 * the old mirror carries no persistent data at all and returns on the first null check.
 	 */
-	public static boolean migrateLegacyContainedSlimes(BasinBlockEntity basin) {
+	public static void migrateLegacyContainedSlimes(BasinBlockEntity basin) {
 		Level level = basin.getLevel();
 		if (level == null || level.isClientSide)
-			return false;
-		CompoundTag data = getCreateBiotechData(basin);
-		if (data.getInt(DATA_VERSION_TAG) >= DATA_VERSION)
-			return false;
+			return;
+		CompoundTag persistentData =
+			((BlockEntityPersistentDataAccessor) basin).createBiotech$getExistingPersistentData();
+		if (persistentData == null || !persistentData.contains(DATA_ROOT, Tag.TAG_COMPOUND))
+			return;
+		CompoundTag data = persistentData.getCompound(DATA_ROOT);
+		if (!data.contains(LEGACY_SYNCED_ITEM_COUNT_TAG) && !data.contains(LEGACY_DATA_VERSION_TAG))
+			return;
 
 		int authoritativeItems = getCapturedSmallSlimeItemCount(basin);
-		List<Slime> legacySlimes = level.getEntitiesOfClass(Slime.class, getEntityProcessingBounds(basin.getBlockPos()),
-			slime -> slime.getSize() == 1 && isCapturedInBasin(slime, basin.getBlockPos()));
-		int mirrored = 0;
+		BlockPos basinPos = basin.getBlockPos();
+		List<Slime> legacySlimes = level.getEntitiesOfClass(Slime.class, getLegacyScanBounds(basinPos),
+			slime -> slime.getSize() == 1 && isLegacyMirrorOf(slime, basinPos));
+		int absorbed = 0;
 		for (Slime slime : legacySlimes) {
-			if (mirrored < authoritativeItems) {
+			if (absorbed < authoritativeItems) {
 				clearLegacyCaptureData(slime, false);
 				slime.discard();
-				mirrored++;
+				absorbed++;
 				continue;
 			}
-			if (insertCapturedSmallSlimeItems(basin, 1, true) == 1
-				&& insertCapturedSmallSlimeItems(basin, 1, false) == 1) {
+			if (insertCapturedSmallSlimeItem(basin, true) && insertCapturedSmallSlimeItem(basin, false)) {
 				clearLegacyCaptureData(slime, false);
 				slime.discard();
 				continue;
@@ -118,34 +132,16 @@ public final class BasinEntityProcessing {
 			clearLegacyCaptureData(slime, true);
 		}
 
-		data.remove(SYNCED_ITEM_COUNT_TAG);
-		data.putInt(DATA_VERSION_TAG, DATA_VERSION);
+		data.remove(LEGACY_SYNCED_ITEM_COUNT_TAG);
+		data.remove(LEGACY_DATA_VERSION_TAG);
+		if (data.isEmpty())
+			persistentData.remove(DATA_ROOT);
 		notifyBasinContentsChanged(basin);
-		return !legacySlimes.isEmpty();
-	}
-
-	public static boolean acceptsCapturedSmallSlimeOutput(BasinBlockEntity basin, List<ItemStack> outputItems,
-		boolean simulate) {
-		if (outputItems.isEmpty())
-			return true;
-		beginCapturedSlimeItemMovement();
-		basin.getOutputInventory().allowInsertion();
-		try {
-			for (ItemStack stack : outputItems) {
-				if (!stack.isEmpty() && !ItemHandlerHelper.insertItemStacked(
-					basin.getOutputInventory(), stack.copy(), simulate).isEmpty())
-					return false;
-			}
-		} finally {
-			basin.getOutputInventory().forbidInsertion();
-			endCapturedSlimeItemMovement();
-		}
-		return true;
 	}
 
 	public static void handleFunnelEntityInside(Level level, BlockPos funnelPos, Entity entity) {
 		if (level.isClientSide || !(entity instanceof Slime slime) || !slime.isAlive() || slime.getSize() != 1
-			|| isCapturedSmallSlime(slime) || !getSmallSlimeCaptureBounds(funnelPos).intersects(slime.getBoundingBox()))
+			|| !getSmallSlimeCaptureBounds(funnelPos).intersects(slime.getBoundingBox()))
 			return;
 		if (level.getBlockEntity(funnelPos) instanceof SlimeCaptureFunnelAccess captureFunnel)
 			captureFunnel.createBiotech$tryCaptureSmallSlime(slime);
@@ -154,7 +150,7 @@ public final class BasinEntityProcessing {
 	public static boolean tryCaptureSmallSlimeFromFunnel(FunnelBlockEntity funnel, Slime slime) {
 		Level level = funnel.getLevel();
 		if (level == null || level.isClientSide || slime.level() != level || !slime.isAlive()
-			|| slime.getSize() != 1 || isCapturedSmallSlime(slime)
+			|| slime.getSize() != 1
 			|| !getSmallSlimeCaptureBounds(funnel.getBlockPos()).intersects(slime.getBoundingBox()))
 			return false;
 
@@ -168,21 +164,12 @@ public final class BasinEntityProcessing {
 		if (!(level.getBlockEntity(basinPos) instanceof BasinBlockEntity basin))
 			return false;
 
-		if (insertCapturedSmallSlimeItems(basin, 1, true) != 1)
-			return false;
-		if (insertCapturedSmallSlimeItems(basin, 1, false) != 1)
+		// Commit the machine state first: the entity may only disappear once its item exists.
+		if (!insertCapturedSmallSlimeItem(basin, true) || !insertCapturedSmallSlimeItem(basin, false))
 			return false;
 		slime.discard();
 		notifyBasinContentsChanged(basin);
 		return true;
-	}
-
-	/** True only for legacy mirrors waiting for their one-time basin migration. */
-	public static boolean isCapturedSmallSlime(Entity entity) {
-		if (!(entity instanceof Slime slime) || slime.getSize() != 1)
-			return false;
-		CompoundTag data = getExistingCreateBiotechData(entity);
-		return data != null && data.getBoolean(CAPTURED_TAG);
 	}
 
 	public static Slime createSmallSlime(Level level, Vec3 position, Vec3 motion) {
@@ -205,38 +192,15 @@ public final class BasinEntityProcessing {
 			+ (basinPos.asLong() & 31) * .11f;
 	}
 
-	private static int insertCapturedSmallSlimeItems(BasinBlockEntity basin, int count, boolean simulate) {
+	private static boolean insertCapturedSmallSlimeItem(BasinBlockEntity basin, boolean simulate) {
 		beginCapturedSlimeItemMovement();
 		try {
-			int inserted = 0;
-			int remaining = count;
-			int maxStackSize = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get()).getMaxStackSize();
-			while (remaining > 0) {
-				ItemStack stack = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get(), Math.min(remaining, maxStackSize));
-				ItemStack remainder = ItemHandlerHelper.insertItemStacked(basin.getInputInventory(), stack, simulate);
-				int insertedThisPass = stack.getCount() - remainder.getCount();
-				if (insertedThisPass <= 0)
-					break;
-				inserted += insertedThisPass;
-				remaining -= insertedThisPass;
-			}
-			return inserted;
+			ItemStack stack = new ItemStack(CBItems.CAPTURED_SMALL_SLIME.get());
+			return ItemHandlerHelper.insertItemStacked(basin.getInputInventory(), stack, simulate)
+				.isEmpty();
 		} finally {
 			endCapturedSlimeItemMovement();
 		}
-	}
-
-	private static void beginCapturedSlimeItemMovement() {
-		Integer depth = CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.get();
-		CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.set(depth == null ? 1 : depth + 1);
-	}
-
-	private static void endCapturedSlimeItemMovement() {
-		Integer depth = CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.get();
-		if (depth == null || depth <= 1)
-			CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.remove();
-		else
-			CAPTURED_SLIME_ITEM_MOVEMENT_DEPTH.set(depth - 1);
 	}
 
 	private static int countCapturedSmallSlimeItems(IItemHandlerModifiable inventory) {
@@ -283,57 +247,46 @@ public final class BasinEntityProcessing {
 		return belt != null && belt.getMovementFacing() != worldFacing;
 	}
 
-	private static AABB getEntityProcessingBounds(BlockPos basinPos) {
-		return new AABB(basinPos.getX() + BASIN_INNER_MIN, basinPos.getY(), basinPos.getZ() + BASIN_INNER_MIN,
-			basinPos.getX() + BASIN_INNER_MAX, basinPos.getY() + getEntityScanHeight(),
-			basinPos.getZ() + BASIN_INNER_MAX);
-	}
-
 	private static AABB getSmallSlimeCaptureBounds(BlockPos funnelPos) {
 		return new AABB(funnelPos.getX(), funnelPos.getY(), funnelPos.getZ(), funnelPos.getX() + 1,
 			funnelPos.getY() + .5d, funnelPos.getZ() + 1);
 	}
 
-	private static boolean isCapturedInBasin(Entity entity, BlockPos basinPos) {
-		CompoundTag data = getExistingCreateBiotechData(entity);
-		return data != null && data.getBoolean(CAPTURED_TAG)
-			&& data.contains(BASIN_POS_TAG, Tag.TAG_LONG) && data.getLong(BASIN_POS_TAG) == basinPos.asLong();
+	private static AABB getLegacyScanBounds(BlockPos basinPos) {
+		return new AABB(basinPos.getX() + LEGACY_SCAN_INNER_MIN, basinPos.getY(),
+			basinPos.getZ() + LEGACY_SCAN_INNER_MIN, basinPos.getX() + LEGACY_SCAN_INNER_MAX,
+			basinPos.getY() + LEGACY_SCAN_HEIGHT, basinPos.getZ() + LEGACY_SCAN_INNER_MAX);
+	}
+
+	private static boolean isLegacyMirrorOf(Entity entity, BlockPos basinPos) {
+		CompoundTag persistentData = entity.getPersistentData();
+		if (!persistentData.contains(DATA_ROOT, Tag.TAG_COMPOUND))
+			return false;
+		CompoundTag data = persistentData.getCompound(DATA_ROOT);
+		return data.getBoolean(LEGACY_CAPTURED_TAG) && data.contains(LEGACY_BASIN_POS_TAG, Tag.TAG_LONG)
+			&& data.getLong(LEGACY_BASIN_POS_TAG) == basinPos.asLong();
 	}
 
 	private static void clearLegacyCaptureData(Slime slime, boolean restoreState) {
-		CompoundTag data = getExistingCreateBiotechData(slime);
-		if (data == null)
+		CompoundTag persistentData = slime.getPersistentData();
+		if (!persistentData.contains(DATA_ROOT, Tag.TAG_COMPOUND))
 			return;
+		CompoundTag data = persistentData.getCompound(DATA_ROOT);
 		if (restoreState) {
-			slime.setNoAi(data.getBoolean(PREVIOUS_NO_AI_TAG));
-			slime.setNoGravity(data.getBoolean(PREVIOUS_NO_GRAVITY_TAG));
+			slime.setNoAi(data.getBoolean(LEGACY_NO_AI_TAG));
+			slime.setNoGravity(data.getBoolean(LEGACY_NO_GRAVITY_TAG));
 			CapturedEntityBoxHelper.unmarkAiDisabledByMod(slime);
 		}
-		data.remove(CAPTURED_TAG);
-		data.remove(BASIN_POS_TAG);
-		data.remove(PREVIOUS_NO_AI_TAG);
-		data.remove(PREVIOUS_NO_GRAVITY_TAG);
-	}
-
-	private static double getEntityScanHeight() {
-		return CBConfigs.SERVER.basinEntityProcessing.entityScanHeight.get();
+		data.remove(LEGACY_CAPTURED_TAG);
+		data.remove(LEGACY_BASIN_POS_TAG);
+		data.remove(LEGACY_NO_AI_TAG);
+		data.remove(LEGACY_NO_GRAVITY_TAG);
+		if (data.isEmpty())
+			persistentData.remove(DATA_ROOT);
 	}
 
 	private static void notifyBasinContentsChanged(BasinBlockEntity basin) {
 		basin.notifyChangeOfContents();
 		basin.notifyUpdate();
-	}
-
-	private static CompoundTag getCreateBiotechData(BasinBlockEntity basin) {
-		CompoundTag persistentData = basin.getPersistentData();
-		if (!persistentData.contains(DATA_ROOT, Tag.TAG_COMPOUND))
-			persistentData.put(DATA_ROOT, new CompoundTag());
-		return persistentData.getCompound(DATA_ROOT);
-	}
-
-	private static CompoundTag getExistingCreateBiotechData(Entity entity) {
-		CompoundTag persistentData = entity.getPersistentData();
-		return persistentData.contains(DATA_ROOT, Tag.TAG_COMPOUND)
-			? persistentData.getCompound(DATA_ROOT) : null;
 	}
 }

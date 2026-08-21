@@ -9,7 +9,6 @@ import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachDimensions;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSavedData;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSpace;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltBlockEntity;
-import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimearmor.SlimeArmorHandler;
 import com.nobodiiiii.createbiotech.network.CBPackets;
@@ -532,7 +531,7 @@ public class GiantFrogBlockEntity extends SmartBlockEntity {
 	}
 
 	private static boolean canEat(Slime slime) {
-		return slime.isAlive() && slime.getSize() == 1 && !BasinEntityProcessing.isCapturedSmallSlime(slime);
+		return slime.isAlive() && slime.getSize() == 1;
 	}
 
 	private static Player findSlimeDisguisedPlayer(Level level, BlockPos pos, BlockState state) {

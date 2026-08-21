@@ -3,7 +3,6 @@ package com.nobodiiiii.createbiotech.mixin;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import com.nobodiiiii.createbiotech.content.processing.basin.BasinEntityProcessing;
@@ -15,11 +14,8 @@ import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.ItemInteractionResult;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
@@ -27,13 +23,6 @@ import net.neoforged.neoforge.items.IItemHandlerModifiable;
 
 @Mixin(BasinBlock.class)
 public abstract class BasinBlockMixin {
-
-	@Inject(method = "updateEntityAfterFallOn", at = @At("HEAD"), cancellable = true)
-	private void createBiotech$rejectDroppedCapturedSlimeItems(BlockGetter world, Entity entity, CallbackInfo ci) {
-		if (entity instanceof ItemEntity itemEntity
-			&& BasinEntityProcessing.isCapturedSmallSlimeItem(itemEntity.getItem()))
-			ci.cancel();
-	}
 
 	@Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true)
 	private void createBiotech$keepCapturedSlimesOutOfHandOutput(ItemStack stack, BlockState state, Level level,
@@ -43,7 +32,7 @@ public abstract class BasinBlockMixin {
 			return;
 		if (!(level.getBlockEntity(pos) instanceof BasinBlockEntity basin))
 			return;
-		if (!hasProtectedSlimeItem(basin))
+		if (!BasinEntityProcessing.hasCapturedSmallSlimes(basin))
 			return;
 
 		if (!level.isClientSide) {
@@ -56,19 +45,6 @@ public abstract class BasinBlockMixin {
 		}
 
 		cir.setReturnValue(ItemInteractionResult.SUCCESS);
-	}
-
-	private static boolean hasProtectedSlimeItem(BasinBlockEntity basin) {
-		return BasinEntityProcessing.hasCapturedSmallSlimes(basin)
-			|| containsCapturedSlimeItem(basin.getInputInventory())
-			|| containsCapturedSlimeItem(basin.getOutputInventory());
-	}
-
-	private static boolean containsCapturedSlimeItem(IItemHandlerModifiable inventory) {
-		for (int slot = 0; slot < inventory.getSlots(); slot++)
-			if (BasinEntityProcessing.isCapturedSmallSlimeItem(inventory.getStackInSlot(slot)))
-				return true;
-		return false;
 	}
 
 	private static boolean moveNonSlimeItemsToPlayer(IItemHandlerModifiable inventory, Player player) {
