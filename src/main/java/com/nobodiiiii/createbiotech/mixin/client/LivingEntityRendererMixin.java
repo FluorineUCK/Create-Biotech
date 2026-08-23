@@ -15,6 +15,7 @@ import com.nobodiiiii.createbiotech.client.render.SlimeMimicRenderLayer;
 import com.nobodiiiii.createbiotech.content.buttercat.ButterRotation;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
+import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -67,6 +68,8 @@ public abstract class LivingEntityRendererMixin {
 	private void createBiotech$bindIndependentLayerModel(RenderLayer<?, ?> layer, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight, Entity entity, float limbSwing, float limbSwingAmount,
 		float partialTick, float ageInTicks, float netHeadYaw, float headPitch, Operation<Void> original) {
+		if (EntityGeometry.isBaseModelMeasurement())
+			return;
 		SurgicalModelRenderContext.beginRenderLayer(layer.getParentModel());
 		try {
 			MultiBufferSource trackedBuffer = SlimeMimicRenderLayer.trackRenderLayerBuffer(buffer);

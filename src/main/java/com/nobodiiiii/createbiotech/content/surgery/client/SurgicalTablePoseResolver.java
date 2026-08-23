@@ -29,15 +29,21 @@ public final class SurgicalTablePoseResolver {
 		if (cached != null && cached.profile.equals(profile) && cached.facing == facing)
 			return cached.pose;
 
-		EntityGeometry.Collector geometry = EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
-		EntityGeometry.measureWithFallback(preview, geometry);
-		SurgicalPose selected = createPose(geometry, RotationAxis.NONE, facing);
-		SurgicalPose xPose = createPose(geometry, RotationAxis.X, facing);
-		SurgicalPose zPose = createPose(geometry, RotationAxis.Z, facing);
+		EntityGeometry.Collector bodyGeometry = EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
+		EntityGeometry.measureBaseModelWithFallback(preview, bodyGeometry);
+		SurgicalPose selected = createPose(bodyGeometry, RotationAxis.NONE, facing);
+		SurgicalPose xPose = createPose(bodyGeometry, RotationAxis.X, facing);
+		SurgicalPose zPose = createPose(bodyGeometry, RotationAxis.Z, facing);
 		if (xPose.height + HEIGHT_EPSILON < selected.height)
 			selected = xPose;
 		if (zPose.height + HEIGHT_EPSILON < selected.height)
 			selected = zPose;
+
+		// Attachments do not choose the orientation, but the final placement still contains and
+		// centers everything that will actually be drawn in that already-selected orientation.
+		EntityGeometry.Collector renderedGeometry = EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
+		EntityGeometry.measureWithFallback(preview, renderedGeometry);
+		selected = createPose(renderedGeometry, selected.axis, facing);
 		CACHE.put(owner, new CachedPose(profile, facing, selected));
 		return selected;
 	}

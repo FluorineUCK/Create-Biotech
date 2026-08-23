@@ -91,6 +91,8 @@
   "item.create_biotech.surgical_table.tooltip.behaviour2": "R-Click the green preview to cut a _Seam_",
   "item.create_biotech.surgical_table.tooltip.condition3": "When used with an Empty Box",
   "item.create_biotech.surgical_table.tooltip.behaviour3": "Packs the hit cube's _Unsevered Connected Component_",
+  "message.create_biotech.surgical_table.no_space": "The surgical table does not have enough space",
+  "message.create_biotech.surgical_table.place_cut": "Right-click to place; Shift+Left-click to cancel the cut",
   "create_biotech.recipe.printing": "Printing",
   "item.create_biotech.enchantment_book_copy": "Enchanted Book (Copy)",
   "create_biotech.jei.squid_printer.note.template": "Mark a template enchantment book on the side",

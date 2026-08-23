@@ -17,7 +17,6 @@ import net.createmod.catnip.placement.PlacementOffset;
 import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -92,17 +91,10 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, pos);
 		if (!plane.valid())
 			return ItemInteractionResult.FAIL;
-		BlockPos targetPos = plane.owner() == null ? pos : plane.owner();
-
-		if (level.isClientSide) {
-			SurgicalTableBlockEntity blockEntity = getBlockEntity(level, targetPos);
-			return blockEntity != null && !blockEntity.hasSubject()
-				? ItemInteractionResult.SUCCESS : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
-		}
-
-		InteractionResult result = onBlockEntityUse(level, targetPos,
-			be -> be.tryPlaceSubject(stack) ? InteractionResult.SUCCESS : InteractionResult.PASS);
-		return result.consumesAction() ? ItemInteractionResult.SUCCESS
+		// Filled-box placement is measured and sent by SurgicalTableClientHandler. Consuming the
+		// vanilla interaction here prevents an unmeasured server-side fallback from bypassing the
+		// work-area check.
+		return plane.owner() == null ? ItemInteractionResult.SUCCESS
 			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 	}
 

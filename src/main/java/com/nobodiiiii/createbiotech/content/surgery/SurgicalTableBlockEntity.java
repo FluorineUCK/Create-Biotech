@@ -1,7 +1,9 @@
 package com.nobodiiiii.createbiotech.content.surgery;
 
 import java.util.BitSet;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -28,6 +30,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private static final String PROFILE_TAG = "MimicProfile";
@@ -37,6 +40,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private static final String CUT_SEAMS_TAG = "CutSeams";
 	private static final String LAST_CUT_SEAM_TAG = "LastCutSeam";
 	private static final String CUT_ORDER_TAG = "CutOrder";
+	private static final String ORIGIN_OFFSET_X_TAG = "OriginOffsetX";
+	private static final String ORIGIN_OFFSET_Z_TAG = "OriginOffsetZ";
+	private static final String OFFSET_CUBES_TAG = "OffsetCubes";
+	private static final String OFFSET_X_TAG = "OffsetX";
+	private static final String OFFSET_Z_TAG = "OffsetZ";
 
 	@Nullable
 	private MimicProfile profile;
@@ -45,6 +53,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private List<SurgicalAssembly.Seam> seams = List.of();
 	private BitSet cutSeams = new BitSet();
 	private List<Integer> cutOrder = List.of();
+	private double originOffsetX;
+	private double originOffsetZ;
+	private Map<Integer, Vec3> componentOffsets = Map.of();
 	private int clientRenderRevision;
 	@Nullable
 	private AABB clientRenderBounds;
@@ -104,6 +115,18 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return cutOrder;
 	}
 
+	public double getOriginOffsetX() {
+		return originOffsetX;
+	}
+
+	public double getOriginOffsetZ() {
+		return originOffsetZ;
+	}
+
+	public Map<Integer, Vec3> getComponentOffsetsForRender() {
+		return componentOffsets;
+	}
+
 	public int getClientRenderRevision() {
 		return clientRenderRevision;
 	}
@@ -116,10 +139,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return seamId >= 0 && seamId < seams.size() && cutSeams.get(seamId);
 	}
 
-	public boolean tryPlaceSubject(ItemStack box) {
+	public boolean tryPlaceSubject(ItemStack box, SurgicalTablePlane.Plane plane, double placedOriginOffsetX,
+		double placedOriginOffsetZ, SurgicalTableLayout.Proposal proposal) {
 		if (level == null || level.isClientSide || hasSubject()
 			|| !(box.getItem() instanceof CapturedEntityBoxItem)
-			|| !CapturedEntityBoxHelper.hasCapturedEntity(box))
+			|| !CapturedEntityBoxHelper.hasCapturedEntity(box)
+			|| !SurgicalTableLayout.validatePlacement(plane, placedOriginOffsetX, placedOriginOffsetZ, proposal))
 			return false;
 
 		Entity captured = CapturedEntityBoxHelper.createCapturedEntity(box, level);
@@ -146,6 +171,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		} else {
 			return false;
 		}
+		originOffsetX = placedOriginOffsetX;
+		originOffsetZ = placedOriginOffsetZ;
+		componentOffsets = Map.of();
 		clientRenderBounds = null;
 		CapturedEntityBoxHelper.clearCapturedEntity(box);
 		setChangedAndSync();
@@ -154,7 +182,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	public boolean cutSeam(Player player, ItemStack shears, InteractionHand hand, int seamId, int observedCubeCount,
-		List<SurgicalAssembly.Seam> observedSeams) {
+		List<SurgicalAssembly.Seam> observedSeams, SurgicalTablePlane.Plane plane,
+		SurgicalTableLayout.Proposal proposal) {
 		if (!initializeOrMatchTopology(observedCubeCount, observedSeams)
 			|| seamId < 0 || seamId >= seams.size() || cutSeams.get(seamId))
 			return false;
@@ -162,10 +191,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (!validPresentCube(seam.first()) || !validPresentCube(seam.second()))
 			return false;
 
-		cutSeams.set(seamId);
+		BitSet proposedCuts = (BitSet) cutSeams.clone();
+		proposedCuts.set(seamId);
+		if (!SurgicalTableLayout.validateComponents(plane, cubeCount, presentCubes, seams, proposedCuts, proposal))
+			return false;
+
+		cutSeams = proposedCuts;
 		List<Integer> updatedOrder = new java.util.ArrayList<>(cutOrder);
 		updatedOrder.add(seamId);
 		cutOrder = SurgicalAssembly.normalizeCutOrder(updatedOrder, cutSeams, seams.size());
+		applyLayout(proposal);
 		shears.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
 		setChangedAndSync();
 		if (level != null)
@@ -174,11 +209,13 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	public boolean cutCubeConnections(Player player, ItemStack shears, InteractionHand hand, int cubeId,
-		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams, SurgicalTablePlane.Plane plane,
+		SurgicalTableLayout.Proposal proposal) {
 		if (!initializeOrMatchTopology(observedCubeCount, observedSeams) || !validPresentCube(cubeId))
 			return false;
 
 		List<Integer> updatedOrder = new java.util.ArrayList<>(cutOrder);
+		BitSet proposedCuts = (BitSet) cutSeams.clone();
 		int cutCount = 0;
 		for (int seamId = 0; seamId < seams.size(); seamId++) {
 			if (cutSeams.get(seamId))
@@ -187,14 +224,18 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (seam.first() != cubeId && seam.second() != cubeId
 				|| !validPresentCube(seam.first()) || !validPresentCube(seam.second()))
 				continue;
-			cutSeams.set(seamId);
+			proposedCuts.set(seamId);
 			updatedOrder.add(seamId);
 			cutCount++;
 		}
 		if (cutCount == 0)
 			return false;
+		if (!SurgicalTableLayout.validateComponents(plane, cubeCount, presentCubes, seams, proposedCuts, proposal))
+			return false;
 
+		cutSeams = proposedCuts;
 		cutOrder = SurgicalAssembly.normalizeCutOrder(updatedOrder, cutSeams, seams.size());
+		applyLayout(proposal);
 		shears.hurtAndBreak(cutCount, player, LivingEntity.getSlotForHand(hand));
 		setChangedAndSync();
 		if (level != null)
@@ -224,6 +265,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 
 		presentCubes.andNot(component);
+		if (!componentOffsets.isEmpty()) {
+			Map<Integer, Vec3> retainedOffsets = new HashMap<>(componentOffsets);
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
+				retainedOffsets.remove(cube);
+			componentOffsets = Map.copyOf(retainedOffsets);
+		}
 		if (presentCubes.isEmpty())
 			clearSubject();
 		setChangedAndSync();
@@ -253,6 +300,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return cubeId >= 0 && cubeId < cubeCount && presentCubes.get(cubeId);
 	}
 
+	private void applyLayout(SurgicalTableLayout.Proposal proposal) {
+		Map<Integer, Vec3> offsets = new HashMap<>();
+		for (SurgicalTableLayout.CubeOffset offset : proposal.offsets()) {
+			if (Math.abs(offset.x()) <= 1.0e-12d && Math.abs(offset.z()) <= 1.0e-12d)
+				continue;
+			offsets.put(offset.cubeId(), new Vec3(offset.x(), 0.0d, offset.z()));
+		}
+		componentOffsets = Map.copyOf(offsets);
+	}
+
 	private void clearSubject() {
 		profile = null;
 		cubeCount = 0;
@@ -260,6 +317,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		seams = List.of();
 		cutSeams.clear();
 		cutOrder = List.of();
+		originOffsetX = 0.0d;
+		originOffsetZ = 0.0d;
+		componentOffsets = Map.of();
 	}
 
 	private void setChangedAndSync() {
@@ -271,6 +331,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		if (profile != null)
 			tag.put(PROFILE_TAG, profile.save());
+		if (profile != null && (originOffsetX != 0.0d || originOffsetZ != 0.0d)) {
+			tag.putDouble(ORIGIN_OFFSET_X_TAG, originOffsetX);
+			tag.putDouble(ORIGIN_OFFSET_Z_TAG, originOffsetZ);
+		}
 		if (cubeCount > 0) {
 			tag.putInt(CUBE_COUNT_TAG, cubeCount);
 			tag.putLongArray(PRESENT_CUBES_TAG, presentCubes.toLongArray());
@@ -279,6 +343,22 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				tag.putLongArray(CUT_SEAMS_TAG, cutSeams.toLongArray());
 			if (!cutOrder.isEmpty())
 				tag.putIntArray(CUT_ORDER_TAG, cutOrder.stream().mapToInt(Integer::intValue).toArray());
+			if (!componentOffsets.isEmpty()) {
+				List<Map.Entry<Integer, Vec3>> entries = componentOffsets.entrySet().stream()
+					.sorted(Map.Entry.comparingByKey()).toList();
+				int[] cubes = new int[entries.size()];
+				long[] xOffsets = new long[entries.size()];
+				long[] zOffsets = new long[entries.size()];
+				for (int index = 0; index < entries.size(); index++) {
+					Map.Entry<Integer, Vec3> entry = entries.get(index);
+					cubes[index] = entry.getKey();
+					xOffsets[index] = Double.doubleToRawLongBits(entry.getValue().x);
+					zOffsets[index] = Double.doubleToRawLongBits(entry.getValue().z);
+				}
+				tag.putIntArray(OFFSET_CUBES_TAG, cubes);
+				tag.putLongArray(OFFSET_X_TAG, xOffsets);
+				tag.putLongArray(OFFSET_Z_TAG, zOffsets);
+			}
 		}
 		super.write(tag, registries, clientPacket);
 	}
@@ -288,6 +368,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		super.read(tag, registries, clientPacket);
 		profile = tag.contains(PROFILE_TAG, Tag.TAG_COMPOUND)
 			? MimicProfile.load(tag.getCompound(PROFILE_TAG)) : null;
+		originOffsetX = profile != null && tag.contains(ORIGIN_OFFSET_X_TAG, Tag.TAG_ANY_NUMERIC)
+			? tag.getDouble(ORIGIN_OFFSET_X_TAG) : 0.0d;
+		originOffsetZ = profile != null && tag.contains(ORIGIN_OFFSET_Z_TAG, Tag.TAG_ANY_NUMERIC)
+			? tag.getDouble(ORIGIN_OFFSET_Z_TAG) : 0.0d;
+		if (!Double.isFinite(originOffsetX) || !Double.isFinite(originOffsetZ)
+			|| Math.abs(originOffsetX) > SurgicalTablePlane.MAX_TILES + 2.0d
+			|| Math.abs(originOffsetZ) > SurgicalTablePlane.MAX_TILES + 2.0d) {
+			originOffsetX = 0.0d;
+			originOffsetZ = 0.0d;
+		}
 		cubeCount = profile == null ? 0 : tag.getInt(CUBE_COUNT_TAG);
 		List<SurgicalAssembly.Seam> loadedSeams = tag.contains(SEAMS_TAG, Tag.TAG_INT_ARRAY)
 			? SurgicalAssembly.decodeSeams(tag.getIntArray(SEAMS_TAG)) : null;
@@ -313,6 +403,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			loadedCutOrder.add(legacyLast);
 		}
 		cutOrder = SurgicalAssembly.normalizeCutOrder(loadedCutOrder, cutSeams, seams.size());
+		componentOffsets = readComponentOffsets(tag);
 		if (cubeCount > 0) {
 			if (presentCubes.length() > cubeCount)
 				presentCubes.clear(cubeCount, presentCubes.length());
@@ -327,9 +418,35 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 	}
 
+	private Map<Integer, Vec3> readComponentOffsets(CompoundTag tag) {
+		if (cubeCount <= 0 || !tag.contains(OFFSET_CUBES_TAG, Tag.TAG_INT_ARRAY)
+			|| !tag.contains(OFFSET_X_TAG, Tag.TAG_LONG_ARRAY) || !tag.contains(OFFSET_Z_TAG, Tag.TAG_LONG_ARRAY))
+			return Map.of();
+		int[] cubes = tag.getIntArray(OFFSET_CUBES_TAG);
+		long[] xOffsets = tag.getLongArray(OFFSET_X_TAG);
+		long[] zOffsets = tag.getLongArray(OFFSET_Z_TAG);
+		if (cubes.length != xOffsets.length || cubes.length != zOffsets.length || cubes.length > cubeCount)
+			return Map.of();
+		Map<Integer, Vec3> loaded = new HashMap<>();
+		for (int index = 0; index < cubes.length; index++) {
+			double x = Double.longBitsToDouble(xOffsets[index]);
+			double z = Double.longBitsToDouble(zOffsets[index]);
+			if (cubes[index] < 0 || cubes[index] >= cubeCount || !presentCubes.get(cubes[index])
+				|| !Double.isFinite(x) || !Double.isFinite(z) || Math.abs(x) > SurgicalTablePlane.MAX_TILES + 2.0d
+				|| Math.abs(z) > SurgicalTablePlane.MAX_TILES + 2.0d || loaded.put(cubes[index], new Vec3(x, 0.0d, z)) != null)
+				return Map.of();
+		}
+		return Map.copyOf(loaded);
+	}
+
 	@Override
 	public AABB getRenderBoundingBox() {
-		return clientRenderBounds == null ? new AABB(worldPosition).inflate(8.0d)
-			: clientRenderBounds.minmax(new AABB(worldPosition)).inflate(0.25d);
+		if (clientRenderBounds != null)
+			return clientRenderBounds.minmax(new AABB(worldPosition)).inflate(0.25d);
+		AABB owner = new AABB(worldPosition);
+		AABB placedCenter = new AABB(worldPosition.getX() + originOffsetX, worldPosition.getY(),
+			worldPosition.getZ() + originOffsetZ, worldPosition.getX() + originOffsetX + 1.0d,
+			worldPosition.getY() + 1.0d, worldPosition.getZ() + originOffsetZ + 1.0d);
+		return owner.minmax(placedCenter).inflate(8.0d);
 	}
 }

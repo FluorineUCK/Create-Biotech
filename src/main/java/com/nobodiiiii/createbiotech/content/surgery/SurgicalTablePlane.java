@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.surgery;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -53,7 +54,9 @@ public final class SurgicalTablePlane {
 					frontier.addLast(next.immutable());
 			}
 		}
-		return new Plane(List.copyOf(tiles), Set.copyOf(owners), facing, complete);
+		List<BlockPos> frozenTiles = List.copyOf(tiles);
+		return new Plane(frozenTiles, Set.copyOf(owners), facing, complete,
+			complete ? largestRectangle(frozenTiles, start.getY()) : WorkArea.EMPTY);
 	}
 
 	/** Prevents one placement from joining two independently occupied planes. */
@@ -92,12 +95,57 @@ public final class SurgicalTablePlane {
 			&& state.getValue(SurgicalTableBlock.FACING) == facing;
 	}
 
-	public record Plane(List<BlockPos> tiles, Set<BlockPos> owners, @Nullable Direction facing, boolean complete) {
-		private static final Plane EMPTY = new Plane(List.of(), Set.of(), null, true);
+	/**
+	 * Finds the largest axis-aligned rectangle made entirely from table tiles. Histogram rows keep
+	 * this bounded by the plane's coordinate span rather than trying every possible rectangle.
+	 */
+	private static WorkArea largestRectangle(List<BlockPos> tiles, int y) {
+		if (tiles.isEmpty())
+			return WorkArea.EMPTY;
+		int minX = tiles.stream().mapToInt(BlockPos::getX).min().orElse(0);
+		int maxX = tiles.stream().mapToInt(BlockPos::getX).max().orElse(0);
+		int minZ = tiles.stream().mapToInt(BlockPos::getZ).min().orElse(0);
+		int maxZ = tiles.stream().mapToInt(BlockPos::getZ).max().orElse(0);
+		int width = maxX - minX + 1;
+		int[] heights = new int[width];
+		Set<Long> occupied = new HashSet<>(tiles.size() * 2);
+		for (BlockPos tile : tiles)
+			occupied.add(tile.asLong());
+
+		WorkArea best = WorkArea.EMPTY;
+		for (int z = minZ; z <= maxZ; z++) {
+			for (int xIndex = 0; xIndex < width; xIndex++) {
+				BlockPos tile = new BlockPos(minX + xIndex, y, z);
+				heights[xIndex] = occupied.contains(tile.asLong()) ? heights[xIndex] + 1 : 0;
+			}
+
+			ArrayList<Integer> stack = new ArrayList<>(width + 1);
+			for (int xIndex = 0; xIndex <= width; xIndex++) {
+				int height = xIndex == width ? 0 : heights[xIndex];
+				while (!stack.isEmpty() && heights[stack.getLast()] > height) {
+					int bar = stack.removeLast();
+					int rectangleHeight = heights[bar];
+					int left = stack.isEmpty() ? 0 : stack.getLast() + 1;
+					int rightExclusive = xIndex;
+					WorkArea candidate = new WorkArea(minX + left, z - rectangleHeight + 1,
+						minX + rightExclusive, z + 1, y);
+					if (candidate.betterThan(best))
+						best = candidate;
+				}
+				stack.add(xIndex);
+			}
+		}
+		return best;
+	}
+
+	public record Plane(List<BlockPos> tiles, Set<BlockPos> owners, @Nullable Direction facing, boolean complete,
+		WorkArea workArea) {
+		private static final Plane EMPTY = new Plane(List.of(), Set.of(), null, true, WorkArea.EMPTY);
 
 		public Plane {
 			tiles = List.copyOf(tiles);
 			owners = Set.copyOf(owners);
+			workArea = workArea == null ? WorkArea.EMPTY : workArea;
 		}
 
 		public boolean valid() {
@@ -107,6 +155,38 @@ public final class SurgicalTablePlane {
 		@Nullable
 		public BlockPos owner() {
 			return valid() && owners.size() == 1 ? owners.iterator().next() : null;
+		}
+	}
+
+	/** World-space horizontal bounds of the only usable part of a table plane. */
+	public record WorkArea(int minX, int minZ, int maxXExclusive, int maxZExclusive, int y) {
+		private static final WorkArea EMPTY = new WorkArea(0, 0, 0, 0, 0);
+
+		public boolean isEmpty() {
+			return maxXExclusive <= minX || maxZExclusive <= minZ;
+		}
+
+		public int tileArea() {
+			return isEmpty() ? 0 : (maxXExclusive - minX) * (maxZExclusive - minZ);
+		}
+
+		public boolean contains(double minX, double minZ, double maxX, double maxZ, double epsilon) {
+			return !isEmpty() && minX >= this.minX - epsilon && minZ >= this.minZ - epsilon
+				&& maxX <= maxXExclusive + epsilon && maxZ <= maxZExclusive + epsilon;
+		}
+
+		private boolean betterThan(WorkArea other) {
+			int area = tileArea();
+			int otherArea = other.tileArea();
+			if (area != otherArea)
+				return area > otherArea;
+			if (minX != other.minX)
+				return minX < other.minX;
+			if (minZ != other.minZ)
+				return minZ < other.minZ;
+			int width = maxXExclusive - minX;
+			int otherWidth = other.maxXExclusive - other.minX;
+			return width > otherWidth;
 		}
 	}
 }

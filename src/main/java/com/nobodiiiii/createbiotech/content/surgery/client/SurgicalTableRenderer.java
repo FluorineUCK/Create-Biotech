@@ -33,6 +33,7 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 
 		Direction facing = table.getBlockState().getValue(SurgicalTableBlock.FACING);
 		poseStack.pushPose();
+		poseStack.translate(table.getOriginOffsetX(), 0.0d, table.getOriginOffsetZ());
 		SurgicalTablePoseResolver.resolve(table, profile, preview, facing).apply(poseStack);
 
 		int storedCount = table.getCubeCount();

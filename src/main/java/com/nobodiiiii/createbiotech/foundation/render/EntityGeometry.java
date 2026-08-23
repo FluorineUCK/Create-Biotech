@@ -22,6 +22,7 @@ import net.minecraft.world.entity.LivingEntity;
  * geometry at all.
  */
 public final class EntityGeometry {
+	private static final ThreadLocal<Integer> BASE_MODEL_MEASUREMENT_DEPTH = new ThreadLocal<>();
 
 	/**
 	 * Lower bound applied to auto-scaling divisors, so a very flat or very small
@@ -75,6 +76,43 @@ public final class EntityGeometry {
 		if (!collector.hasVertices())
 			collector.includeEntityDimensions(entity.getDimensions(entity.getPose()));
 		return collector;
+	}
+
+	/**
+	 * Measures only the renderer's primary entity model. {@code RenderLayer} geometry such as
+	 * villager clothing, held items, armor and independently rendered shields is deliberately
+	 * excluded so optional attachments cannot decide the entity's physical orientation.
+	 */
+	public static Collector measureBaseModelWithFallback(LivingEntity entity, Collector collector) {
+		collector.reset();
+		beginBaseModelMeasurement();
+		try {
+			measureInto(entity, collector);
+		} finally {
+			endBaseModelMeasurement();
+		}
+		if (!collector.hasVertices())
+			collector.includeEntityDimensions(entity.getDimensions(entity.getPose()));
+		return collector;
+	}
+
+	/** Used by the living-entity renderer mixin to suppress optional render layers in this scope. */
+	public static boolean isBaseModelMeasurement() {
+		Integer depth = BASE_MODEL_MEASUREMENT_DEPTH.get();
+		return depth != null && depth > 0;
+	}
+
+	private static void beginBaseModelMeasurement() {
+		Integer depth = BASE_MODEL_MEASUREMENT_DEPTH.get();
+		BASE_MODEL_MEASUREMENT_DEPTH.set(depth == null ? 1 : depth + 1);
+	}
+
+	private static void endBaseModelMeasurement() {
+		Integer currentDepth = BASE_MODEL_MEASUREMENT_DEPTH.get();
+		if (currentDepth == null || currentDepth <= 1)
+			BASE_MODEL_MEASUREMENT_DEPTH.remove();
+		else
+			BASE_MODEL_MEASUREMENT_DEPTH.set(currentDepth - 1);
 	}
 
 	/**

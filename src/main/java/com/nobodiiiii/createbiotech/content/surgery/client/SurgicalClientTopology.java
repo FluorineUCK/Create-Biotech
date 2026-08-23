@@ -13,6 +13,8 @@ import java.util.Set;
 import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLayout;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 
 import net.minecraft.world.phys.Vec3;
 
@@ -465,6 +467,193 @@ public final class SurgicalClientTopology {
 		return quantizedSteps(distance) * LAYOUT_QUANTUM;
 	}
 
+	/** Centers a newly placed subject on the nearest fitting 1/4-block slot of the work area. */
+	@Nullable
+	public static PlacementPlan planInitialPlacement(List<SurgicalModelRenderContext.CubeGeometry> cubes,
+		SurgicalTablePlane.WorkArea workArea) {
+		Bounds bounds = null;
+		for (SurgicalModelRenderContext.CubeGeometry cube : cubes) {
+			Bounds cubeBounds = Bounds.of(cube).inflate(OUTER_RENDER_INFLATION);
+			bounds = bounds == null ? cubeBounds : bounds.union(cubeBounds);
+		}
+		if (bounds == null || workArea.isEmpty())
+			return null;
+
+		double targetX = (workArea.minX() + workArea.maxXExclusive()) * 0.5d;
+		double targetZ = (workArea.minZ() + workArea.maxZExclusive()) * 0.5d;
+		for (GridCell cell : orderedCells(workArea, targetX, targetZ)) {
+			double offsetX = cell.centerX() - bounds.centerX();
+			double offsetZ = cell.centerZ() - bounds.centerZ();
+			Bounds placed = bounds.translate(new Vec3(offsetX, 0.0d, offsetZ));
+			if (!fits(workArea, placed))
+				continue;
+			SurgicalTableLayout.Footprint footprint = footprint(-1, placed, cell);
+			return new PlacementPlan(offsetX, offsetZ,
+				new SurgicalTableLayout.Proposal(List.of(), List.of(footprint)));
+		}
+		return null;
+	}
+
+	/** Builds a proposal for a cut that does not create a new detached component. */
+	@Nullable
+	public static PlannedLayout currentLayout(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
+		SurgicalTablePlane.WorkArea workArea) {
+		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
+			workArea, List.of());
+	}
+
+	/** Snaps one detached component to the legal slot nearest the supplied world-space target. */
+	@Nullable
+	public static PlannedLayout snapComponent(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
+		SurgicalTablePlane.WorkArea workArea, BitSet movingComponent, double targetX, double targetZ) {
+		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
+			workArea, List.of(new SnapRequest((BitSet) movingComponent.clone(), targetX, targetZ)));
+	}
+
+	/** Sequentially places every newly detached batch-cut component at its nearest legal slot. */
+	@Nullable
+	public static PlannedLayout autoSnapComponents(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
+		SurgicalTablePlane.WorkArea workArea, List<BitSet> movingComponents) {
+		Map<Integer, Bounds> baseBounds = layoutBounds(presentCubes, cubes);
+		if (baseBounds.size() < presentCubes.cardinality())
+			return null;
+		List<SnapRequest> requests = new ArrayList<>(movingComponents.size());
+		for (BitSet component : movingComponents) {
+			Bounds bounds = unionBounds(component, baseBounds, currentOffsets);
+			if (bounds == null)
+				return null;
+			requests.add(new SnapRequest((BitSet) component.clone(), bounds.centerX(), bounds.centerZ()));
+		}
+		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
+			workArea, requests);
+	}
+
+	@Nullable
+	private static PlannedLayout planSnappedLayout(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
+		SurgicalTablePlane.WorkArea workArea, List<SnapRequest> requests) {
+		if (!SurgicalAssembly.validTopology(cubeCount, seams) || workArea.isEmpty())
+			return null;
+		Map<Integer, Bounds> baseBounds = layoutBounds(presentCubes, cubes);
+		if (baseBounds.size() < presentCubes.cardinality())
+			return null;
+		List<BitSet> components = SurgicalAssembly.components(cubeCount, presentCubes, seams, proposedCuts);
+		Map<Integer, Vec3> plannedOffsets = new HashMap<>();
+		for (int cube = presentCubes.nextSetBit(0); cube >= 0; cube = presentCubes.nextSetBit(cube + 1))
+			plannedOffsets.put(cube, currentOffsets.getOrDefault(cube, Vec3.ZERO));
+		Map<Integer, GridCell> snapped = new HashMap<>();
+
+		for (SnapRequest request : requests) {
+			BitSet moving = matchingComponent(components, request.component);
+			if (moving == null)
+				return null;
+			Bounds movingBounds = unionBounds(moving, baseBounds, plannedOffsets);
+			if (movingBounds == null)
+				return null;
+			GridCell selected = null;
+			Vec3 selectedDelta = Vec3.ZERO;
+			for (GridCell cell : orderedCells(workArea, request.targetX, request.targetZ)) {
+				Vec3 delta = new Vec3(cell.centerX() - movingBounds.centerX(), 0.0d,
+					cell.centerZ() - movingBounds.centerZ());
+				Bounds candidate = movingBounds.translate(delta);
+				if (!fits(workArea, candidate)
+					|| collidesHorizontally(candidate, moving, components, baseBounds, plannedOffsets))
+					continue;
+				selected = cell;
+				selectedDelta = delta;
+				break;
+			}
+			if (selected == null)
+				return null;
+			for (int cube = moving.nextSetBit(0); cube >= 0; cube = moving.nextSetBit(cube + 1))
+				plannedOffsets.put(cube, plannedOffsets.getOrDefault(cube, Vec3.ZERO).add(selectedDelta));
+			snapped.put(moving.nextSetBit(0), selected);
+		}
+
+		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>(components.size());
+		for (BitSet component : components) {
+			int root = component.nextSetBit(0);
+			Bounds bounds = unionBounds(component, baseBounds, plannedOffsets);
+			if (bounds == null || !fits(workArea, bounds))
+				return null;
+			GridCell cell = snapped.get(root);
+			footprints.add(footprint(root, bounds, cell));
+		}
+		for (int first = 0; first < footprints.size(); first++)
+			for (int second = first + 1; second < footprints.size(); second++)
+				if (footprints.get(first).overlapsStrictly(footprints.get(second)))
+					return null;
+
+		List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(presentCubes.cardinality());
+		for (int cube = presentCubes.nextSetBit(0); cube >= 0; cube = presentCubes.nextSetBit(cube + 1)) {
+			Vec3 offset = plannedOffsets.getOrDefault(cube, Vec3.ZERO);
+			offsets.add(new SurgicalTableLayout.CubeOffset(cube, offset.x, offset.z));
+		}
+		return new PlannedLayout(Map.copyOf(plannedOffsets),
+			new SurgicalTableLayout.Proposal(offsets, footprints));
+	}
+
+	private static Map<Integer, Bounds> layoutBounds(BitSet presentCubes,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
+		Map<Integer, Bounds> bounds = new HashMap<>();
+		for (SurgicalModelRenderContext.CubeGeometry cube : cubes)
+			if (presentCubes.get(cube.cubeId()))
+				bounds.putIfAbsent(cube.cubeId(), Bounds.of(cube).inflate(OUTER_RENDER_INFLATION));
+		return bounds;
+	}
+
+	@Nullable
+	private static BitSet matchingComponent(List<BitSet> components, BitSet requested) {
+		for (BitSet component : components)
+			if (component.equals(requested))
+				return component;
+		return null;
+	}
+
+	private static boolean collidesHorizontally(Bounds candidate, BitSet moving, List<BitSet> components,
+		Map<Integer, Bounds> baseBounds, Map<Integer, Vec3> offsets) {
+		for (BitSet component : components) {
+			if (component.equals(moving))
+				continue;
+			Bounds obstacle = unionBounds(component, baseBounds, offsets);
+			if (obstacle != null && candidate.overlapsHorizontally(obstacle))
+				return true;
+		}
+		return false;
+	}
+
+	private static boolean fits(SurgicalTablePlane.WorkArea workArea, Bounds bounds) {
+		return workArea.contains(bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ, DISTANCE_EPSILON);
+	}
+
+	private static List<GridCell> orderedCells(SurgicalTablePlane.WorkArea workArea, double targetX,
+		double targetZ) {
+		List<GridCell> cells = new ArrayList<>(workArea.tileArea() * SurgicalTableLayout.SLOTS_PER_TILE);
+		int minGridX = workArea.minX() * SurgicalTableLayout.SUBDIVISIONS;
+		int maxGridX = workArea.maxXExclusive() * SurgicalTableLayout.SUBDIVISIONS;
+		int minGridZ = workArea.minZ() * SurgicalTableLayout.SUBDIVISIONS;
+		int maxGridZ = workArea.maxZExclusive() * SurgicalTableLayout.SUBDIVISIONS;
+		for (int gridX = minGridX; gridX < maxGridX; gridX++)
+			for (int gridZ = minGridZ; gridZ < maxGridZ; gridZ++)
+				cells.add(new GridCell(gridX, gridZ));
+		cells.sort(Comparator.comparingDouble((GridCell cell) -> cell.distanceToSqr(targetX, targetZ))
+			.thenComparingInt(GridCell::gridX).thenComparingInt(GridCell::gridZ));
+		return cells;
+	}
+
+	private static SurgicalTableLayout.Footprint footprint(int root, Bounds bounds, @Nullable GridCell cell) {
+		return new SurgicalTableLayout.Footprint(root, bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ,
+			cell == null ? SurgicalTableLayout.UNSNAPPED : cell.gridX,
+			cell == null ? SurgicalTableLayout.UNSNAPPED : cell.gridZ);
+	}
+
 	public static Vec3 center(SurgicalModelRenderContext.CubeGeometry cube) {
 		Vec3 total = Vec3.ZERO;
 		for (Vec3 corner : cube.corners())
@@ -743,6 +932,33 @@ public final class SurgicalClientTopology {
 
 	private record Collision(Bounds moving, Bounds obstacle) {}
 
+	public record PlacementPlan(double originOffsetX, double originOffsetZ,
+		SurgicalTableLayout.Proposal proposal) {}
+
+	public record PlannedLayout(Map<Integer, Vec3> offsets, SurgicalTableLayout.Proposal proposal) {
+		public PlannedLayout {
+			offsets = Map.copyOf(offsets);
+		}
+	}
+
+	private record SnapRequest(BitSet component, double targetX, double targetZ) {}
+
+	private record GridCell(int gridX, int gridZ) {
+		private double centerX() {
+			return SurgicalTableLayout.gridCenter(gridX);
+		}
+
+		private double centerZ() {
+			return SurgicalTableLayout.gridCenter(gridZ);
+		}
+
+		private double distanceToSqr(double x, double z) {
+			double dx = centerX() - x;
+			double dz = centerZ() - z;
+			return dx * dx + dz * dz;
+		}
+	}
+
 	private record Bounds(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
 		private static Bounds of(SurgicalModelRenderContext.CubeGeometry geometry) {
 			double minX = Double.POSITIVE_INFINITY;
@@ -788,6 +1004,19 @@ public final class SurgicalClientTopology {
 			return minX < other.maxX - DISTANCE_EPSILON && maxX > other.minX + DISTANCE_EPSILON
 				&& minY < other.maxY - DISTANCE_EPSILON && maxY > other.minY + DISTANCE_EPSILON
 				&& minZ < other.maxZ - DISTANCE_EPSILON && maxZ > other.minZ + DISTANCE_EPSILON;
+		}
+
+		private boolean overlapsHorizontally(Bounds other) {
+			return minX < other.maxX - DISTANCE_EPSILON && maxX > other.minX + DISTANCE_EPSILON
+				&& minZ < other.maxZ - DISTANCE_EPSILON && maxZ > other.minZ + DISTANCE_EPSILON;
+		}
+
+		private double centerX() {
+			return (minX + maxX) * 0.5d;
+		}
+
+		private double centerZ() {
+			return (minZ + maxZ) * 0.5d;
 		}
 	}
 
