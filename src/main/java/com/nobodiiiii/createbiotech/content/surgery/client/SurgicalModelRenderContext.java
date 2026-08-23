@@ -29,8 +29,14 @@ public final class SurgicalModelRenderContext {
 	public static void begin(PoseStack poseStack, int expectedCubeCount, BitSet presentCubes,
 		Map<Integer, Vec3> cubeOffsets,
 		boolean collectGeometry, @Nullable Vec3 cameraPosition) {
+		begin(poseStack, expectedCubeCount, presentCubes, cubeOffsets, collectGeometry, cameraPosition, false);
+	}
+
+	public static void begin(PoseStack poseStack, int expectedCubeCount, BitSet presentCubes,
+		Map<Integer, Vec3> cubeOffsets, boolean collectGeometry, @Nullable Vec3 cameraPosition,
+		boolean renderSourceGeometry) {
 		CONTEXTS.get().push(new Context(expectedCubeCount, presentCubes, cubeOffsets,
-			collectGeometry, cameraPosition));
+			collectGeometry, cameraPosition, renderSourceGeometry));
 	}
 
 	public static Snapshot end() {
@@ -84,6 +90,12 @@ public final class SurgicalModelRenderContext {
 	public static boolean isRenderLayerActive() {
 		Context context = current();
 		return context != null && context.isRenderLayerActive();
+	}
+
+	/** Whether the selected surgical cubes should use their source-model geometry and texture. */
+	public static boolean isRenderingSourceGeometry() {
+		Context context = current();
+		return context != null && context.renderSourceGeometry;
 	}
 
 	public static void recordRenderLayerConsumer(VertexConsumer consumer, @Nullable ResourceLocation texture) {
@@ -250,13 +262,14 @@ public final class SurgicalModelRenderContext {
 		private final BitSet presentCubes;
 		private final Map<Integer, Vec3> cubeOffsets;
 		private final boolean collectGeometry;
+		private final boolean renderSourceGeometry;
 		@Nullable
 		private final Vec3 cameraPosition;
 		private final List<CubeGeometry> geometry = new ArrayList<>();
 		private final BitSet capturedGeometry = new BitSet();
 
 		private Context(int expectedCubeCount, BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
-			boolean collectGeometry, @Nullable Vec3 cameraPosition) {
+			boolean collectGeometry, @Nullable Vec3 cameraPosition, boolean renderSourceGeometry) {
 			this.expectedCubeCount = expectedCubeCount;
 			// A context cannot escape its synchronous render call. The caller-owned values
 			// remain unchanged until end(), so copying them on every frame only creates garbage.
@@ -264,6 +277,7 @@ public final class SurgicalModelRenderContext {
 			this.cubeOffsets = cubeOffsets;
 			this.collectGeometry = collectGeometry;
 			this.cameraPosition = cameraPosition;
+			this.renderSourceGeometry = renderSourceGeometry;
 		}
 
 		private int idFor(Object cube) {

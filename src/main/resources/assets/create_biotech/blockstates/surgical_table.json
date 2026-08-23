@@ -1,8 +1,5 @@
 {
   "variants": {
-    "facing=north": { "model": "create_biotech:block/surgical_table" },
-    "facing=east": { "model": "create_biotech:block/surgical_table", "y": 90 },
-    "facing=south": { "model": "create_biotech:block/surgical_table", "y": 180 },
-    "facing=west": { "model": "create_biotech:block/surgical_table", "y": 270 }
+    "": { "model": "create_biotech:block/surgical_table" }
   }
 }

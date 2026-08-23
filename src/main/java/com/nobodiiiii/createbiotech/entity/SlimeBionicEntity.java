@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.entity;
 
 import org.jetbrains.annotations.Nullable;
 
+import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 
 import net.minecraft.nbt.CompoundTag;
@@ -18,6 +19,7 @@ import net.minecraft.world.level.Level;
 /** A real, AI-free entity whose visible body is supplied by a surgical assembly. */
 public class SlimeBionicEntity extends PathfinderMob {
 	private static final String ASSEMBLY_TAG = "SurgicalAssembly";
+	private static final String SOURCE_FORM_TAG = "BionicSourceForm";
 	private static final EntityDataAccessor<CompoundTag> ASSEMBLY = SynchedEntityData.defineId(
 		SlimeBionicEntity.class, EntityDataSerializers.COMPOUND_TAG);
 	@Nullable
@@ -27,6 +29,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 
 	public SlimeBionicEntity(EntityType<? extends SlimeBionicEntity> type, Level level) {
 		super(type, level);
+		// The bionic body begins in the same synced slime state used by ordinary mimics.
+		// Loading a cured entity can still restore this value to false from its saved data.
+		((SlimeMimicAccess) (Object) this).createBiotech$setSlimeMimic(true);
 		setNoAi(true);
 		setPersistenceRequired();
 	}
@@ -69,6 +74,8 @@ public class SlimeBionicEntity extends PathfinderMob {
 	@Override
 	public void addAdditionalSaveData(CompoundTag tag) {
 		super.addAdditionalSaveData(tag);
+		SlimeMimicAccess slimeState = (SlimeMimicAccess) (Object) this;
+		tag.putBoolean(SOURCE_FORM_TAG, !slimeState.createBiotech$isSlimeMimic());
 		CompoundTag assembly = entityData.get(ASSEMBLY);
 		if (!assembly.isEmpty())
 			tag.put(ASSEMBLY_TAG, assembly.copy());
@@ -77,6 +84,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 	@Override
 	public void readAdditionalSaveData(CompoundTag tag) {
 		super.readAdditionalSaveData(tag);
+		// Saves predating this flag always represented the original bionic slime form.
+		boolean sourceForm = tag.contains(SOURCE_FORM_TAG, Tag.TAG_BYTE) && tag.getBoolean(SOURCE_FORM_TAG);
+		((SlimeMimicAccess) (Object) this).createBiotech$setSlimeMimic(!sourceForm);
 		setNoAi(true);
 		if (tag.contains(ASSEMBLY_TAG, Tag.TAG_COMPOUND)) {
 			SurgicalAssembly assembly = SurgicalAssembly.load(tag.getCompound(ASSEMBLY_TAG));

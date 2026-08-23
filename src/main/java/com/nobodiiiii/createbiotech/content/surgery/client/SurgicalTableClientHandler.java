@@ -22,6 +22,7 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLayout;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalSubject;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 import com.nobodiiiii.createbiotech.network.CBPackets;
@@ -71,7 +72,7 @@ public final class SurgicalTableClientHandler {
 	private static final List<Object> SEAM_OUTLINE_SLOTS = new ArrayList<>();
 	private static final List<Object> CUBE_OUTLINE_SLOTS = new ArrayList<>();
 	private static final Object PLACEMENT_OUTLINE_SLOT = new Object();
-	private static final Map<BlockPos, TableGeometry> TABLES = new HashMap<>();
+	private static final Map<SubjectKey, TableGeometry> TABLES = new HashMap<>();
 	private static int highlightedSeamEdgeCount;
 	private static int highlightedCubeEdgeCount;
 	@Nullable
@@ -90,31 +91,32 @@ public final class SurgicalTableClientHandler {
 	private SurgicalTableClientHandler() {}
 
 	/** Returns true only when the immutable source-model geometry has to be captured again. */
-	public static boolean needsGeometryUpdate(SurgicalTableBlockEntity table) {
-		if (table.getLevel() == null || table.getProfile() == null)
+	public static boolean needsGeometryUpdate(SurgicalTableBlockEntity table, SurgicalSubject subject) {
+		if (table.getLevel() == null)
 			return false;
-		TableGeometry geometry = TABLES.get(table.getBlockPos());
+		SubjectKey key = new SubjectKey(table.getBlockPos(), subject.id());
+		TableGeometry geometry = TABLES.get(key);
 		if (geometry == null)
 			return true;
-		if (!geometry.matchesModel(table)) {
-			TABLES.remove(table.getBlockPos());
+		if (!geometry.matchesModel(table, subject)) {
+			TABLES.remove(key);
 			return true;
 		}
-		geometry.refresh(table);
+		geometry.refresh(table, subject);
 		return false;
 	}
 
-	public static void updateGeometry(SurgicalTableBlockEntity table,
+	public static void updateGeometry(SurgicalTableBlockEntity table, SurgicalSubject subject,
 		SurgicalModelRenderContext.Snapshot snapshot) {
-		MimicProfile profile = table.getProfile();
-		if (table.getLevel() == null || profile == null || snapshot.observedCubeCount() <= 0)
+		MimicProfile profile = subject.profile();
+		if (table.getLevel() == null || snapshot.observedCubeCount() <= 0)
 			return;
 		int cubeCount = snapshot.observedCubeCount();
 		List<SurgicalAssembly.Seam> seams;
 		List<SurgicalClientTopology.Contact> contacts;
 		CompletableFuture<SurgicalClientTopology.ContactTopology> pendingTopology = null;
-		if (table.getCubeCount() == cubeCount) {
-			seams = table.getSeams();
+		if (subject.cubeCount() == cubeCount) {
+			seams = subject.seams();
 			if (cubeCount > ASYNC_TOPOLOGY_CUBE_THRESHOLD) {
 				List<SurgicalAssembly.Seam> frozenSeams = List.copyOf(seams);
 				List<SurgicalModelRenderContext.CubeGeometry> frozenCubes = List.copyOf(snapshot.cubes());
@@ -139,27 +141,28 @@ public final class SurgicalTableClientHandler {
 				contacts = topology.contacts();
 			}
 		}
-		Direction facing = table.getBlockState().getValue(com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock.FACING);
-		TableGeometry geometry = new TableGeometry(profile, facing, table.getOriginOffsetX(),
-			table.getOriginOffsetZ(), cubeCount, snapshot.cubes(), seams, contacts, pendingTopology,
+		TableGeometry geometry = new TableGeometry(subject.id(), profile, subject.placementFacing(),
+			subject.originOffsetX(), subject.originOffsetZ(), cubeCount, snapshot.cubes(), seams, contacts, pendingTopology,
 			table.getLevel().getGameTime());
-		geometry.refresh(table);
-		TABLES.put(table.getBlockPos(), geometry);
+		geometry.refresh(table, subject);
+		TABLES.put(new SubjectKey(table.getBlockPos(), subject.id()), geometry);
 	}
 
-	public static Map<Integer, Vec3> offsetsFor(SurgicalTableBlockEntity table) {
-		TableGeometry geometry = TABLES.get(table.getBlockPos());
-		if (geometry == null || !geometry.matchesModel(table))
+	public static Map<Integer, Vec3> offsetsFor(SurgicalTableBlockEntity table, SurgicalSubject subject) {
+		TableGeometry geometry = TABLES.get(new SubjectKey(table.getBlockPos(), subject.id()));
+		if (geometry == null || !geometry.matchesModel(table, subject))
 			return Map.of();
 		geometry.markSeen(table);
 		return geometry.offsets;
 	}
 
-	public static BitSet presentCubesFor(SurgicalTableBlockEntity table, int observedCubeCount) {
-		TableGeometry geometry = TABLES.get(table.getBlockPos());
-		if (geometry != null && geometry.observedCubeCount == observedCubeCount && geometry.matchesModel(table))
+	public static BitSet presentCubesFor(SurgicalTableBlockEntity table, SurgicalSubject subject,
+		int observedCubeCount) {
+		TableGeometry geometry = TABLES.get(new SubjectKey(table.getBlockPos(), subject.id()));
+		if (geometry != null && geometry.observedCubeCount == observedCubeCount
+			&& geometry.matchesModel(table, subject))
 			return geometry.presentCubes;
-		return table.getPresentCubesForRender(observedCubeCount);
+		return subject.presentCubesForRender(observedCubeCount);
 	}
 
 	public static void clear() {
@@ -185,8 +188,9 @@ public final class SurgicalTableClientHandler {
 
 		long now = level.getGameTime();
 		TABLES.entrySet().removeIf(entry -> now - entry.getValue().lastSeenTick > 5
-			|| !(level.getBlockEntity(entry.getKey()) instanceof SurgicalTableBlockEntity));
-		if (pendingCut != null && !TABLES.containsKey(pendingCut.tablePos))
+			|| !(level.getBlockEntity(entry.getKey().tablePos) instanceof SurgicalTableBlockEntity table)
+			|| !table.hasSubject(entry.getKey().subjectId));
+		if (pendingCut != null && !TABLES.containsKey(new SubjectKey(pendingCut.tablePos, pendingCut.subjectId)))
 			abortPendingCut();
 	}
 
@@ -227,19 +231,20 @@ public final class SurgicalTableClientHandler {
 		}
 
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, hit.getBlockPos());
-		if (!plane.valid() || plane.facing() == null || plane.workArea().isEmpty()) {
+		if (!plane.valid() || plane.source() == null || plane.workArea().isEmpty()) {
 			clearPlacementPreview();
 			return;
 		}
-		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane, null);
+		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane, -1);
 		if (occupied == null) {
 			clearPlacementPreview();
 			return;
 		}
 		Vec3 target = tableSurfaceTarget(playerRay(player), plane.workArea().y() + 1.01d);
-		BlockPos ownerPos = nearestEmptyOwner(level, plane, target);
-		EntityGeometry.Bounds localBounds = source.measure(plane.facing());
-		if (ownerPos == null || localBounds == null) {
+		BlockPos ownerPos = plane.source();
+		Direction placementFacing = player.getDirection();
+		EntityGeometry.Bounds localBounds = source.measure(placementFacing);
+		if (localBounds == null) {
 			clearPlacementPreview();
 			return;
 		}
@@ -252,7 +257,7 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 
-		placementPreview = new PlacementPreview(ownerPos, hand, source, plane.facing(), plan);
+		placementPreview = new PlacementPreview(ownerPos, hand, source, placementFacing, plan);
 		SurgicalTableLayout.Footprint footprint = plan.proposal().footprints().getFirst();
 		Outliner.getInstance().showAABB(PLACEMENT_OUTLINE_SLOT,
 			new AABB(footprint.minX(), plane.workArea().y() + 1.002d, footprint.minZ(),
@@ -285,22 +290,6 @@ public final class SurgicalTableClientHandler {
 		}
 		placementSource = new PlacementSource(held.copyWithCount(1), profile, assembly);
 		return placementSource;
-	}
-
-	@Nullable
-	private static BlockPos nearestEmptyOwner(ClientLevel level, SurgicalTablePlane.Plane plane, Vec3 target) {
-		BlockPos selected = null;
-		double bestDistance = Double.MAX_VALUE;
-		for (BlockPos tile : plane.tiles()) {
-			if (!(level.getBlockEntity(tile) instanceof SurgicalTableBlockEntity table) || table.hasSubject())
-				continue;
-			double distance = Vec3.atCenterOf(tile).distanceToSqr(target);
-			if (distance < bestDistance) {
-				bestDistance = distance;
-				selected = tile;
-			}
-		}
-		return selected;
 	}
 
 	private static void clearPlacementPreview() {
@@ -455,7 +444,8 @@ public final class SurgicalTableClientHandler {
 	private static void sendInteraction(Selection selected, InteractionHand hand,
 		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal) {
 		CBPackets.sendToServer(new SurgicalTableInteractionPacket(selected.tablePos, hand, action,
-			selected.targetId, selected.observedCubeCount, selected.seams, 0.0d, 0.0d, proposal));
+			selected.subjectId, selected.targetId, selected.observedCubeCount, selected.seams,
+			0.0d, 0.0d, proposal));
 	}
 
 	private static boolean tryPlaceSubject(LocalPlayer player, ClientLevel level, InteractionHand hand,
@@ -473,13 +463,13 @@ public final class SurgicalTableClientHandler {
 		}
 
 		CBPackets.sendToServer(new SurgicalTableInteractionPacket(placement.ownerPos, hand,
-			SurgicalTableInteractionPacket.Action.PLACE, 0, 0, List.of(), placement.plan.originOffsetX(),
-			placement.plan.originOffsetZ(), placement.plan.proposal()));
+			SurgicalTableInteractionPacket.Action.PLACE, -1, 0, 0, List.of(),
+			placement.plan.originOffsetX(), placement.plan.originOffsetZ(), placement.plan.proposal()));
 		return true;
 	}
 
 	private static void beginSingleCut(ClientLevel level, Selection selected, InteractionHand hand) {
-		TableGeometry geometry = TABLES.get(selected.tablePos);
+		TableGeometry geometry = TABLES.get(new SubjectKey(selected.tablePos, selected.subjectId));
 		if (geometry == null || selected.targetId < 0 || selected.targetId >= geometry.seams.size())
 			return;
 		SurgicalAssembly.Seam seam = geometry.seams.get(selected.targetId);
@@ -490,10 +480,10 @@ public final class SurgicalTableClientHandler {
 		BitSet second = SurgicalAssembly.componentContaining(geometry.observedCubeCount, geometry.presentCubes,
 			geometry.seams, proposedCuts, seam.second());
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, selected.tablePos);
-		if (!plane.valid() || !plane.owners().contains(selected.tablePos))
+		if (!plane.valid() || !selected.tablePos.equals(plane.source()))
 			return;
 		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
-			selected.tablePos);
+			selected.subjectId);
 		if (occupied == null) {
 			showNoSpace(Minecraft.getInstance().player);
 			return;
@@ -511,14 +501,15 @@ public final class SurgicalTableClientHandler {
 		}
 
 		BitSet moving = first.cardinality() < second.cardinality() ? first : second;
-		pendingCut = new PendingCut(selected.tablePos, hand, selected.targetId, selected.observedCubeCount,
-			selected.seams, proposedCuts, (BitSet) moving.clone(), geometry.renderRevision, null);
+		pendingCut = new PendingCut(selected.tablePos, selected.subjectId, hand, selected.targetId,
+			selected.observedCubeCount, selected.seams, proposedCuts, (BitSet) moving.clone(),
+			geometry.renderRevision, null);
 		updatePendingCut(Minecraft.getInstance().player, level);
 	}
 
 	@Nullable
 	private static SurgicalClientTopology.PlannedLayout planBatchCut(ClientLevel level, Selection selected) {
-		TableGeometry geometry = TABLES.get(selected.tablePos);
+		TableGeometry geometry = TABLES.get(new SubjectKey(selected.tablePos, selected.subjectId));
 		if (geometry == null || selected.targetId < 0 || selected.targetId >= geometry.observedCubeCount)
 			return null;
 		BitSet proposedCuts = (BitSet) geometry.cutSeams.clone();
@@ -534,10 +525,10 @@ public final class SurgicalTableClientHandler {
 			proposedCuts);
 		List<BitSet> moving = split.size() <= 1 ? List.of() : split.subList(1, split.size());
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, selected.tablePos);
-		if (!plane.valid() || !plane.owners().contains(selected.tablePos))
+		if (!plane.valid() || !selected.tablePos.equals(plane.source()))
 			return null;
 		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
-			selected.tablePos);
+			selected.subjectId);
 		if (occupied == null)
 			return null;
 		return moving.isEmpty()
@@ -552,8 +543,9 @@ public final class SurgicalTableClientHandler {
 		PendingCut pending = pendingCut;
 		if (pending == null || player == null)
 			return;
-		TableGeometry geometry = TABLES.get(pending.tablePos);
+		TableGeometry geometry = TABLES.get(new SubjectKey(pending.tablePos, pending.subjectId));
 		if (!(level.getBlockEntity(pending.tablePos) instanceof SurgicalTableBlockEntity table)
+			|| !table.hasSubject(pending.subjectId)
 			|| geometry == null || geometry.renderRevision != pending.renderRevision
 			|| !player.getItemInHand(pending.hand).is(Items.SHEARS)
 			|| pending.targetId >= geometry.seams.size() || geometry.cutSeams.get(pending.targetId)) {
@@ -561,12 +553,12 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, pending.tablePos);
-		if (!plane.valid() || !plane.owners().contains(pending.tablePos)) {
+		if (!plane.valid() || !pending.tablePos.equals(plane.source())) {
 			abortPendingCut();
 			return;
 		}
 		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
-			pending.tablePos);
+			pending.subjectId);
 		if (occupied == null) {
 			showNoSpace(player);
 			abortPendingCut();
@@ -586,8 +578,8 @@ public final class SurgicalTableClientHandler {
 		geometry.applyPreview(table, planned.offsets(), pending.proposedCuts);
 		seamSelection = null;
 		cubeSelection = null;
-		componentSelection = new Selection(pending.tablePos, pending.targetId, pending.observedCubeCount,
-			pending.seams, List.of(), geometry.componentCubeEdges(pending.movingComponent));
+		componentSelection = new Selection(pending.tablePos, pending.subjectId, pending.targetId,
+			pending.observedCubeCount, pending.seams, List.of(), geometry.componentCubeEdges(pending.movingComponent));
 		highlightSelection(componentSelection);
 		player.displayClientMessage(Component.translatable(
 			"message.create_biotech.surgical_table.place_cut"), true);
@@ -602,8 +594,8 @@ public final class SurgicalTableClientHandler {
 			abortPendingCut();
 			return;
 		}
-		Selection selected = new Selection(pending.tablePos, pending.targetId, pending.observedCubeCount,
-			pending.seams, List.of(), List.of());
+		Selection selected = new Selection(pending.tablePos, pending.subjectId, pending.targetId,
+			pending.observedCubeCount, pending.seams, List.of(), List.of());
 		sendInteraction(selected, pending.hand, SurgicalTableInteractionPacket.Action.CUT,
 			pending.planned.proposal());
 		abortPendingCut();
@@ -616,8 +608,8 @@ public final class SurgicalTableClientHandler {
 			return;
 		Minecraft minecraft = Minecraft.getInstance();
 		if (minecraft.level != null && minecraft.level.getBlockEntity(pending.tablePos) instanceof SurgicalTableBlockEntity table) {
-			TableGeometry geometry = TABLES.get(pending.tablePos);
-			if (geometry != null)
+			TableGeometry geometry = TABLES.get(new SubjectKey(pending.tablePos, pending.subjectId));
+			if (geometry != null && table.hasSubject(pending.subjectId))
 				geometry.clearPreview(table);
 		}
 		componentSelection = null;
@@ -702,7 +694,7 @@ public final class SurgicalTableClientHandler {
 			if (score > 1.0d || score >= bestScore)
 				continue;
 			bestScore = score;
-			best = new Selection(cubeHit.tablePos, seamId, geometry.observedCubeCount,
+			best = new Selection(cubeHit.tablePos, geometry.subjectId, seamId, geometry.observedCubeCount,
 				geometry.seams, contact.edges(), geometry.cubeEdges(seam));
 		}
 		return best;
@@ -712,14 +704,15 @@ public final class SurgicalTableClientHandler {
 	private static Selection findDirectSeamSelection(LocalPlayer player, ClientLevel level, Ray ray) {
 		Selection best = null;
 		double bestDistance = Double.MAX_VALUE;
-		for (Map.Entry<BlockPos, TableGeometry> entry : TABLES.entrySet()) {
-			BlockPos tablePos = entry.getKey();
+		for (Map.Entry<SubjectKey, TableGeometry> entry : TABLES.entrySet()) {
+			BlockPos tablePos = entry.getKey().tablePos;
 			if (!(level.getBlockEntity(tablePos) instanceof SurgicalTableBlockEntity table)
-				|| !table.hasSubject())
+				|| !table.hasSubject(entry.getKey().subjectId))
 				continue;
 			TableGeometry geometry = entry.getValue();
+			SurgicalSubject subject = table.getSubject(geometry.subjectId);
 			if (!geometry.topologyReady()
-				|| !table.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
+				|| subject == null || !subject.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
 				continue;
 			for (SurgicalClientTopology.Contact contact : geometry.contacts) {
 				SurgicalAssembly.Seam seam = contact.seam();
@@ -734,7 +727,7 @@ public final class SurgicalTableClientHandler {
 				if (distance >= bestDistance || isOccluded(level, player, ray.start, hit, tablePos))
 					continue;
 				bestDistance = distance;
-				best = new Selection(tablePos, seamId, geometry.observedCubeCount,
+				best = new Selection(tablePos, geometry.subjectId, seamId, geometry.observedCubeCount,
 					geometry.seams, contact.edges(), geometry.cubeEdges(seam));
 			}
 		}
@@ -760,20 +753,20 @@ public final class SurgicalTableClientHandler {
 
 	@Nullable
 	private static Selection findCubeSelection(@Nullable CubeHit hit) {
-		return hit == null ? null : new Selection(hit.tablePos, hit.cubeId,
+		return hit == null ? null : new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
 			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(), List.of());
 	}
 
 	@Nullable
 	private static Selection findConnectedComponentSelection(@Nullable CubeHit hit) {
-		return hit == null ? null : new Selection(hit.tablePos, hit.cubeId,
+		return hit == null ? null : new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
 			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(),
 			hit.geometry.connectedCubeEdges(hit.cubeId));
 	}
 
 	@Nullable
 	private static Selection findDirectConnectionSelection(@Nullable CubeHit hit) {
-		return hit == null ? null : new Selection(hit.tablePos, hit.cubeId,
+		return hit == null ? null : new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
 			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(),
 			hit.geometry.directConnectionCubeEdges(hit.cubeId));
 	}
@@ -788,13 +781,15 @@ public final class SurgicalTableClientHandler {
 	private static CubeHit findNearestCubeHit(LocalPlayer player, ClientLevel level, Ray ray) {
 		CubeHit best = null;
 		double bestDistance = Double.MAX_VALUE;
-		for (Map.Entry<BlockPos, TableGeometry> entry : TABLES.entrySet()) {
-			BlockPos pos = entry.getKey();
-			if (!(level.getBlockEntity(pos) instanceof SurgicalTableBlockEntity table) || !table.hasSubject())
+		for (Map.Entry<SubjectKey, TableGeometry> entry : TABLES.entrySet()) {
+			BlockPos pos = entry.getKey().tablePos;
+			if (!(level.getBlockEntity(pos) instanceof SurgicalTableBlockEntity table)
+				|| !table.hasSubject(entry.getKey().subjectId))
 				continue;
 			TableGeometry geometry = entry.getValue();
+			SurgicalSubject subject = table.getSubject(geometry.subjectId);
 			if (!geometry.topologyReady()
-				|| !table.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
+				|| subject == null || !subject.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
 				continue;
 			for (SurgicalModelRenderContext.CubeGeometry cube : geometry.cubes) {
 				if (!geometry.presentCubes.get(cube.cubeId()))
@@ -1010,6 +1005,7 @@ public final class SurgicalTableClientHandler {
 	}
 
 	private static final class TableGeometry {
+		private final int subjectId;
 		private final MimicProfile profile;
 		private final Direction facing;
 		private final double originOffsetX;
@@ -1035,12 +1031,13 @@ public final class SurgicalTableClientHandler {
 		private int renderRevision = Integer.MIN_VALUE;
 		private long lastSeenTick;
 
-		private TableGeometry(MimicProfile profile, Direction facing, double originOffsetX,
+		private TableGeometry(int subjectId, MimicProfile profile, Direction facing, double originOffsetX,
 			double originOffsetZ, int observedCubeCount,
 			List<SurgicalModelRenderContext.CubeGeometry> cubes, List<SurgicalAssembly.Seam> seams,
 			List<SurgicalClientTopology.Contact> contacts,
 			@Nullable CompletableFuture<SurgicalClientTopology.ContactTopology> pendingTopology,
 			long lastSeenTick) {
+			this.subjectId = subjectId;
 			this.profile = profile;
 			this.facing = facing;
 			this.originOffsetX = originOffsetX;
@@ -1059,31 +1056,29 @@ public final class SurgicalTableClientHandler {
 			this.lastSeenTick = lastSeenTick;
 		}
 
-		private boolean matchesModel(SurgicalTableBlockEntity table) {
-			MimicProfile currentProfile = table.getProfile();
-			return currentProfile != null && profile.equals(currentProfile)
-				&& table.getBlockState().getValue(
-					com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock.FACING) == facing
-				&& Double.doubleToLongBits(table.getOriginOffsetX()) == Double.doubleToLongBits(originOffsetX)
-				&& Double.doubleToLongBits(table.getOriginOffsetZ()) == Double.doubleToLongBits(originOffsetZ)
-				&& (table.getCubeCount() == 0 || table.getCubeCount() == observedCubeCount);
+		private boolean matchesModel(SurgicalTableBlockEntity table, SurgicalSubject subject) {
+			return table.hasSubject(subjectId) && subject.id() == subjectId && profile.equals(subject.profile())
+				&& subject.placementFacing() == facing
+				&& Double.doubleToLongBits(subject.originOffsetX()) == Double.doubleToLongBits(originOffsetX)
+				&& Double.doubleToLongBits(subject.originOffsetZ()) == Double.doubleToLongBits(originOffsetZ)
+				&& (subject.cubeCount() == 0 || subject.cubeCount() == observedCubeCount);
 		}
 
-		private void refresh(SurgicalTableBlockEntity table) {
+		private void refresh(SurgicalTableBlockEntity table, SurgicalSubject subject) {
 			markSeen(table);
 			boolean topologyChanged = resolvePendingTopology();
-			int revision = table.getClientRenderRevision();
+			int revision = subject.clientRenderRevision();
 			if (revision == renderRevision && !topologyChanged)
 				return;
 
-			if (table.getCubeCount() == observedCubeCount && !seams.equals(table.getSeams())) {
-				seams = List.copyOf(table.getSeams());
+			if (subject.cubeCount() == observedCubeCount && !seams.equals(subject.seams())) {
+				seams = List.copyOf(subject.seams());
 				seamIds = seamIds(seams);
 				baseContacts = SurgicalClientTopology.contactsFor(seams, baseCubes);
 			}
-			presentCubes = table.getPresentCubesForRender(observedCubeCount);
-			cutSeams = table.getCutSeamsForRender();
-			serverOffsets = Map.copyOf(table.getComponentOffsetsForRender());
+			presentCubes = subject.presentCubesForRender(observedCubeCount);
+			cutSeams = subject.cutSeamsForRender();
+			serverOffsets = Map.copyOf(subject.componentOffsetsForRender());
 			applyOffsets(table, serverOffsets);
 			renderRevision = revision;
 		}
@@ -1134,7 +1129,7 @@ public final class SurgicalTableClientHandler {
 				}
 			}
 			if (minX != Double.POSITIVE_INFINITY)
-				table.setClientRenderBounds(new AABB(minX, minY, minZ, maxX, maxY, maxZ));
+				table.includeClientRenderBounds(new AABB(minX, minY, minZ, maxX, maxY, maxZ));
 		}
 
 		private boolean resolvePendingTopology() {
@@ -1319,7 +1314,9 @@ public final class SurgicalTableClientHandler {
 		}
 	}
 
-	private record Selection(BlockPos tablePos, int targetId, int observedCubeCount,
+	private record SubjectKey(BlockPos tablePos, int subjectId) {}
+
+	private record Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
 		List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
 		List<SurgicalClientTopology.Edge> cubeEdges) {}
 
@@ -1388,6 +1385,7 @@ public final class SurgicalTableClientHandler {
 
 	private static final class PendingCut {
 		private final BlockPos tablePos;
+		private final int subjectId;
 		private final InteractionHand hand;
 		private final int targetId;
 		private final int observedCubeCount;
@@ -1398,10 +1396,11 @@ public final class SurgicalTableClientHandler {
 		@Nullable
 		private SurgicalClientTopology.PlannedLayout planned;
 
-		private PendingCut(BlockPos tablePos, InteractionHand hand, int targetId, int observedCubeCount,
-			List<SurgicalAssembly.Seam> seams, BitSet proposedCuts, BitSet movingComponent,
+		private PendingCut(BlockPos tablePos, int subjectId, InteractionHand hand, int targetId,
+			int observedCubeCount, List<SurgicalAssembly.Seam> seams, BitSet proposedCuts, BitSet movingComponent,
 			int renderRevision, @Nullable SurgicalClientTopology.PlannedLayout planned) {
 			this.tablePos = tablePos;
+			this.subjectId = subjectId;
 			this.hand = hand;
 			this.targetId = targetId;
 			this.observedCubeCount = observedCubeCount;

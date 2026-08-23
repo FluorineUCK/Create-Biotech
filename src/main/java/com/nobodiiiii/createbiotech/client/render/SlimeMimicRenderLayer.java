@@ -88,6 +88,8 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		float limbSwingAmount, float partialTicks, float ageInTicks, float netHeadYaw, float headPitch) {
 		if (!SlimeMimicHandler.isSlimeMimic(entity) || entity.isInvisible())
 			return;
+		if (SurgicalModelRenderContext.isRenderingSourceGeometry())
+			return;
 
 		beginFallbackOverlay(buffer);
 		try {
@@ -111,8 +113,11 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		livingRenderer.addLayer((RenderLayer) new SlimeMimicRenderLayer<>(livingRenderer));
 	}
 
-	public static void beginBodyPartReplacement(MultiBufferSource buffer, LivingEntity entity) {
-		pushContext(new RenderContext(RenderMode.SLIMEIFY_MODEL_PARTS, buffer, lookupTextureLocation(entity)));
+	public static void beginBodyPartReplacement(MultiBufferSource buffer, LivingEntity entity,
+		VertexConsumer sourceConsumer, int sourceColor) {
+		RenderMode mode = SurgicalModelRenderContext.isRenderingSourceGeometry()
+			? RenderMode.SOURCE_MODEL_PARTS : RenderMode.SLIMEIFY_MODEL_PARTS;
+		pushContext(new RenderContext(mode, buffer, lookupTextureLocation(entity), sourceConsumer, sourceColor));
 	}
 
 	public static void beginFallbackOverlay(MultiBufferSource buffer) {
@@ -137,6 +142,10 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 
 		if (context.mode == RenderMode.SKIP_MODEL_PARTS)
 			return true;
+		if (context.mode == RenderMode.SOURCE_MODEL_PARTS) {
+			renderSourcePartRecursive(part, poseStack, context, packedLight, overlay, null);
+			return true;
+		}
 
 		context.deferredParts()
 			.add(new DeferredPart(part, new Matrix4f(poseStack.last().pose()),
@@ -183,6 +192,10 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				return false;
 			if (context.mode == RenderMode.SKIP_MODEL_PARTS)
 				return true;
+			if (context.mode == RenderMode.SOURCE_MODEL_PARTS) {
+				renderSourceLionfishPartRecursive(part, poseStack, context, packedLight, overlay);
+				return true;
+			}
 
 			context.deferredLionfishParts()
 				.add(new DeferredLionfishPart(part, new Matrix4f(poseStack.last().pose()),
@@ -494,6 +507,83 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		poseStack.popPose();
 	}
 
+	private static void renderSourcePartRecursive(ModelPart part, PoseStack poseStack, RenderContext context,
+		int packedLight, int overlay, Integer inheritedAnchor) {
+		if (!part.visible)
+			return;
+
+		poseStack.pushPose();
+		part.translateAndRotate(poseStack);
+		ModelPartAccessor accessor = (ModelPartAccessor) (Object) part;
+		Integer partAnchor = inheritedAnchor;
+		if (!part.skipDraw) {
+			for (ModelPart.Cube cube : accessor.createBiotech$getCubes()) {
+				if (!cubeHasVisiblePixels(cube, context.texture()))
+					continue;
+				poseStack.pushPose();
+				if (SurgicalModelRenderContext.prepareCube(cube, poseStack, false)) {
+					cube.compile(poseStack.last(), context.sourceConsumer(), packedLight, overlay,
+						context.sourceColor());
+				}
+				poseStack.popPose();
+				Integer cubeId = SurgicalModelRenderContext.registeredCubeId(cube);
+				if (partAnchor == null && cubeId != null)
+					partAnchor = cubeId;
+			}
+			if (partAnchor != null) {
+				for (ModelPart.Cube cube : accessor.createBiotech$getCubes()) {
+					if (!cubeHasVisiblePixels(cube, context.texture()))
+						SurgicalModelRenderContext.associateLayerCube(cube, partAnchor);
+				}
+			}
+		}
+
+		Integer childAnchor = partAnchor;
+		accessor.createBiotech$getChildren().entrySet().stream()
+			.sorted(Map.Entry.comparingByKey())
+			.forEach(child -> renderSourcePartRecursive(child.getValue(), poseStack, context, packedLight,
+				overlay, childAnchor));
+		poseStack.popPose();
+	}
+
+	private static void renderSourceLionfishPartRecursive(Object part, PoseStack poseStack, RenderContext context,
+		int packedLight, int overlay) {
+		if (!LionfishModelPartCompat.isVisible(part))
+			return;
+
+		poseStack.pushPose();
+		try {
+			LionfishModelPartCompat.translateAndRotate(part, poseStack);
+			for (Object cube : LionfishModelPartCompat.cubes(part)) {
+				if (!lionfishCubeHasVisiblePixels(cube, context.texture()))
+					continue;
+				LionfishModelPartCompat.CubeBounds bounds = LionfishModelPartCompat.bounds(cube);
+				poseStack.pushPose();
+				try {
+					if (!SurgicalModelRenderContext.prepareCube(cube, poseStack, false,
+						bounds.minX(), bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ()))
+						continue;
+					LionfishModelPartCompat.compileCube(cube, poseStack.last(), context.sourceConsumer(),
+						packedLight, overlay, colorComponent(context.sourceColor(), 16),
+						colorComponent(context.sourceColor(), 8), colorComponent(context.sourceColor(), 0),
+						colorComponent(context.sourceColor(), 24), 0.0f);
+				} finally {
+					poseStack.popPose();
+				}
+			}
+			if (!LionfishModelPartCompat.scaleChildren(part)) {
+				poseStack.scale(
+					1.0f / Math.max(LionfishModelPartCompat.xScale(part), 1.0e-4f),
+					1.0f / Math.max(LionfishModelPartCompat.yScale(part), 1.0e-4f),
+					1.0f / Math.max(LionfishModelPartCompat.zScale(part), 1.0e-4f));
+			}
+			for (Object child : LionfishModelPartCompat.children(part))
+				renderSourceLionfishPartRecursive(child, poseStack, context, packedLight, overlay);
+		} finally {
+			poseStack.popPose();
+		}
+	}
+
 	private static void renderLionfishCube(Object cube, PoseStack poseStack, RenderContext context, int packedLight,
 		int overlay, RenderPass pass) {
 		if (!lionfishCubeHasVisiblePixels(cube, context.texture()))
@@ -684,6 +774,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 
 	private enum RenderMode {
 		SLIMEIFY_MODEL_PARTS,
+		SOURCE_MODEL_PARTS,
 		SKIP_MODEL_PARTS
 	}
 
@@ -693,9 +784,15 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	}
 
 	private record RenderContext(RenderMode mode, MultiBufferSource buffer, ResourceLocation texture,
+		VertexConsumer sourceConsumer, int sourceColor,
 		List<DeferredPart> deferredParts, List<DeferredLionfishPart> deferredLionfishParts) {
 		private RenderContext(RenderMode mode, MultiBufferSource buffer, ResourceLocation texture) {
-			this(mode, buffer, texture, new ArrayList<>(), new ArrayList<>());
+			this(mode, buffer, texture, null, 0xFFFFFFFF, new ArrayList<>(), new ArrayList<>());
+		}
+
+		private RenderContext(RenderMode mode, MultiBufferSource buffer, ResourceLocation texture,
+			VertexConsumer sourceConsumer, int sourceColor) {
+			this(mode, buffer, texture, sourceConsumer, sourceColor, new ArrayList<>(), new ArrayList<>());
 		}
 	}
 

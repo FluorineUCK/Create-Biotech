@@ -13,7 +13,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand, Action action,
-	int targetId, int observedCubeCount, List<SurgicalAssembly.Seam> seams,
+	int subjectId, int targetId, int observedCubeCount, List<SurgicalAssembly.Seam> seams,
 	double originOffsetX, double originOffsetZ, SurgicalTableLayout.Proposal layout) {
 
 	public SurgicalTableInteractionPacket {
@@ -23,14 +23,15 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 
 	public SurgicalTableInteractionPacket(FriendlyByteBuf buffer) {
 		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), buffer.readEnum(Action.class),
-			buffer.readVarInt(), buffer.readVarInt(), readSeams(buffer), buffer.readDouble(), buffer.readDouble(),
-			readLayout(buffer));
+			buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), readSeams(buffer), buffer.readDouble(),
+			buffer.readDouble(), readLayout(buffer));
 	}
 
 	public void write(FriendlyByteBuf buffer) {
 		buffer.writeBlockPos(pos);
 		buffer.writeEnum(hand);
 		buffer.writeEnum(action);
+		buffer.writeVarInt(subjectId);
 		buffer.writeVarInt(targetId);
 		buffer.writeVarInt(observedCubeCount);
 		buffer.writeVarInt(seams.size());
@@ -65,30 +66,30 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1.0d;
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(player.level(), pos);
 		boolean placement = action == Action.PLACE;
-		if (!plane.valid() || (!placement && !plane.owners().contains(pos))
+		if (!plane.valid() || !pos.equals(plane.source())
 			|| plane.tiles().stream()
 			.noneMatch(tile -> player.distanceToSqr(Vec3.atCenterOf(tile)) <= range * range))
 			return;
-		if (!(player.level().getBlockEntity(pos) instanceof SurgicalTableBlockEntity table))
+		SurgicalTableBlockEntity table = SurgicalTableBlockEntity.controller(player.level(), plane);
+		if (table == null)
 			return;
 
 		ItemStack held = player.getItemInHand(hand);
 		if (placement) {
-			if (table.hasSubject())
-				return;
 			if (held.getItem() instanceof com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper.hasCapturedEntity(held)
-				&& !table.tryPlaceSubject(held, plane, originOffsetX, originOffsetZ, layout))
+				&& !table.tryPlaceSubject(held, plane, player.getDirection(), originOffsetX, originOffsetZ, layout))
 				noSpace(player);
 			return;
 		}
+		SurgicalSubject subject = table.getSubject(subjectId);
 		if (targetId < 0 || !SurgicalAssembly.validTopology(observedCubeCount, seams)
-			|| !table.hasSubject() || !table.matchesObservedTopology(observedCubeCount, seams))
+			|| subject == null || !subject.matchesObservedTopology(observedCubeCount, seams))
 			return;
 		switch (action) {
 		case CUT -> {
 			if (targetId < seams.size() && held.is(Items.SHEARS)) {
-				if (!table.cutSeam(player, held, hand, targetId, observedCubeCount, seams, plane, layout))
+				if (!table.cutSeam(player, held, hand, subjectId, targetId, observedCubeCount, seams, plane, layout))
 					noSpace(player);
 			}
 		}
@@ -96,11 +97,12 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			if (targetId < observedCubeCount
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.isBox(held)
 				&& !com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.hasCapturedEntity(held))
-				table.packComponent(player, held, targetId, observedCubeCount, seams);
+				table.packComponent(player, held, subjectId, targetId, observedCubeCount, seams);
 		}
 		case CUT_CUBE_CONNECTIONS -> {
 			if (targetId < observedCubeCount && held.is(Items.SHEARS)) {
-				if (!table.cutCubeConnections(player, held, hand, targetId, observedCubeCount, seams, plane, layout))
+				if (!table.cutCubeConnections(player, held, hand, subjectId, targetId, observedCubeCount, seams,
+					plane, layout))
 					noSpace(player);
 			}
 		}

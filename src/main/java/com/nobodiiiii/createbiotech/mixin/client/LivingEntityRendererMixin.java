@@ -52,7 +52,7 @@ public abstract class LivingEntityRendererMixin {
 			return;
 		}
 
-		SlimeMimicRenderLayer.beginBodyPartReplacement(buffer, entity);
+		SlimeMimicRenderLayer.beginBodyPartReplacement(buffer, entity, consumer, color);
 		try {
 			original.call(model, poseStack, consumer, packedLight, overlay, color);
 			SlimeMimicRenderLayer.renderDeferredOuterParts();

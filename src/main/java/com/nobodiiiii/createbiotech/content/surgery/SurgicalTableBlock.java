@@ -21,25 +21,20 @@ import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
-import net.minecraft.world.level.block.HorizontalDirectionalBlock;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.state.StateDefinition;
-import net.minecraft.world.level.block.state.properties.DirectionProperty;
 import net.minecraft.world.level.pathfinder.PathComputationType;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.shapes.CollisionContext;
 import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 
-public class SurgicalTableBlock extends HorizontalDirectionalBlock
+public class SurgicalTableBlock extends Block
 	implements IBE<SurgicalTableBlockEntity>, IWrenchable {
 	public static final MapCodec<SurgicalTableBlock> CODEC = simpleCodec(SurgicalTableBlock::new);
-	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
 	private static final int PLACEMENT_HELPER_ID = PlacementHelpers.register(new PlacementHelper());
 	private static final VoxelShape SHAPE = Shapes.or(
 		box(0, 12, 0, 16, 16, 16),
@@ -50,22 +45,11 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 
 	public SurgicalTableBlock(Properties properties) {
 		super(properties);
-		registerDefaultState(defaultBlockState().setValue(FACING, Direction.NORTH));
 	}
 
 	@Override
-	protected MapCodec<? extends HorizontalDirectionalBlock> codec() {
+	protected MapCodec<? extends Block> codec() {
 		return CODEC;
-	}
-
-	@Override
-	protected void createBlockStateDefinition(StateDefinition.Builder<Block, BlockState> builder) {
-		builder.add(FACING);
-	}
-
-	@Override
-	public BlockState getStateForPlacement(BlockPlaceContext context) {
-		return defaultBlockState().setValue(FACING, context.getHorizontalDirection().getOpposite());
 	}
 
 	@Override
@@ -104,6 +88,8 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 
 	@Override
 	public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
+		if (!state.is(newState.getBlock()) && level.getBlockEntity(pos) instanceof SurgicalTableBlockEntity table)
+			SurgicalTableBlockEntity.transferBeforeRemoval(level, pos, table);
 		IBE.onRemove(state, level, pos, newState);
 	}
 
@@ -133,17 +119,15 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 		@Override
 		public PlacementOffset getOffset(Player player, Level level, BlockState state, BlockPos pos,
 			BlockHitResult hit) {
-			Direction facing = state.getValue(FACING);
 			List<Direction> directions = IPlacementHelper.orderedByDistanceExceptAxis(pos, hit.getLocation(),
 				Direction.Axis.Y, direction -> {
 					BlockPos destination = pos.relative(direction);
 					return level.getBlockState(destination).canBeReplaced()
-						&& SurgicalTablePlane.canExtendAt(level, destination, facing);
+						&& SurgicalTablePlane.canExtendAt(level, destination);
 				});
 			if (directions.isEmpty())
 				return PlacementOffset.fail();
-			return PlacementOffset.success(pos.relative(directions.getFirst()),
-				placed -> placed.setValue(FACING, facing));
+			return PlacementOffset.success(pos.relative(directions.getFirst()), placed -> placed);
 		}
 	}
 }

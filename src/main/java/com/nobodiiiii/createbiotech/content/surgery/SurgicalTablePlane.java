@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.surgery;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashSet;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -12,9 +13,8 @@ import org.jetbrains.annotations.Nullable;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.level.block.state.BlockState;
 
-/** Resolves one horizontal, same-facing surgical-table work surface. */
+/** Resolves one horizontal connected surgical-table work surface, independent of block orientation. */
 public final class SurgicalTablePlane {
 	public static final int MAX_TILES = 1024;
 	private static final Direction[] HORIZONTAL = {
@@ -24,14 +24,20 @@ public final class SurgicalTablePlane {
 	private SurgicalTablePlane() {}
 
 	public static Plane scan(Level level, BlockPos start) {
-		BlockState origin = level.getBlockState(start);
-		if (!(origin.getBlock() instanceof SurgicalTableBlock) || !origin.hasProperty(SurgicalTableBlock.FACING))
+		return scan(level, start, null);
+	}
+
+	/** Scans a surface as though one table position had already been removed. */
+	static Plane scanExcluding(Level level, BlockPos start, BlockPos excluded) {
+		return scan(level, start, excluded);
+	}
+
+	private static Plane scan(Level level, BlockPos start, @Nullable BlockPos excluded) {
+		if (!matches(level, start, start.getY(), excluded))
 			return Plane.EMPTY;
 
-		Direction facing = origin.getValue(SurgicalTableBlock.FACING);
 		ArrayDeque<BlockPos> frontier = new ArrayDeque<>();
 		LinkedHashSet<BlockPos> tiles = new LinkedHashSet<>();
-		LinkedHashSet<BlockPos> owners = new LinkedHashSet<>();
 		frontier.add(start.immutable());
 		boolean complete = true;
 		while (!frontier.isEmpty()) {
@@ -42,12 +48,10 @@ public final class SurgicalTablePlane {
 				complete = false;
 				break;
 			}
-			if (!matches(level, current, start.getY(), facing))
+			if (!matches(level, current, start.getY(), excluded))
 				continue;
 
 			tiles.add(current);
-			if (level.getBlockEntity(current) instanceof SurgicalTableBlockEntity table && table.hasSubject())
-				owners.add(current);
 			for (Direction direction : HORIZONTAL) {
 				BlockPos next = current.relative(direction);
 				if (!tiles.contains(next) && level.isLoaded(next))
@@ -55,17 +59,20 @@ public final class SurgicalTablePlane {
 			}
 		}
 		List<BlockPos> frozenTiles = List.copyOf(tiles);
-		return new Plane(frozenTiles, Set.copyOf(owners), facing, complete,
-			complete ? largestRectangle(frozenTiles, start.getY()) : WorkArea.EMPTY);
+		WorkArea workArea = complete ? WorkArea.of(frozenTiles, start.getY()) : WorkArea.EMPTY;
+		BlockPos source = complete ? frozenTiles.stream()
+			.min(Comparator.comparingInt((BlockPos pos) -> pos.getZ()).thenComparingInt(pos -> pos.getX()))
+			.orElse(null) : null;
+		return new Plane(frozenTiles, source, complete, workArea);
 	}
 
 	/** Keeps a newly joined surface within the same bounded scan used by normal interactions. */
-	public static boolean canExtendAt(Level level, BlockPos destination, Direction facing) {
+	public static boolean canExtendAt(Level level, BlockPos destination) {
 		Set<BlockPos> scanned = new HashSet<>();
 		for (Direction direction : HORIZONTAL) {
 			BlockPos neighbor = destination.relative(direction);
 			if (!level.isLoaded(neighbor) || scanned.contains(neighbor)
-				|| !matches(level, neighbor, destination.getY(), facing))
+				|| !matches(level, neighbor, destination.getY(), null))
 				continue;
 			Plane plane = scan(level, neighbor);
 			if (!plane.complete())
@@ -77,138 +84,139 @@ public final class SurgicalTablePlane {
 		return true;
 	}
 
-	/**
-	 * Returns the persisted world-space footprints of every subject on a surface. A null result
-	 * means at least one legacy subject has no trustworthy footprint and placement must stay
-	 * conservative until that subject is packed away.
-	 */
+	/** Returns all persisted footprints, or null if legacy data makes collision checks uncertain. */
 	@Nullable
 	public static List<SurgicalTableLayout.Footprint> occupiedFootprints(Level level, Plane plane,
-		@Nullable BlockPos excludedOwner) {
-		if (!plane.valid())
+		int excludedSubjectId) {
+		if (!plane.valid() || plane.source() == null)
+			return null;
+		SurgicalTableBlockEntity controller = SurgicalTableBlockEntity.controller(level, plane);
+		if (controller == null)
 			return null;
 		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>();
-		for (BlockPos owner : plane.owners()) {
-			if (owner.equals(excludedOwner))
+		for (SurgicalSubject subject : controller.getSubjects()) {
+			if (subject.id() == excludedSubjectId)
 				continue;
-			if (!(level.getBlockEntity(owner) instanceof SurgicalTableBlockEntity table) || !table.hasSubject())
-				continue;
-			List<SurgicalTableLayout.Footprint> occupied = table.getOccupiedFootprints();
-			if (occupied.isEmpty())
+			if (subject.occupiedFootprints().isEmpty())
 				return null;
-			footprints.addAll(occupied);
+			footprints.addAll(subject.occupiedFootprints());
 		}
 		return List.copyOf(footprints);
 	}
 
-	@Nullable
-	public static SurgicalTableBlockEntity uniqueOwner(Level level, BlockPos member) {
-		Plane plane = scan(level, member);
-		BlockPos owner = plane.owner();
-		return owner != null && level.getBlockEntity(owner) instanceof SurgicalTableBlockEntity table ? table : null;
+	private static boolean matches(Level level, BlockPos pos, int y, @Nullable BlockPos excluded) {
+		return pos.getY() == y && !pos.equals(excluded)
+			&& level.getBlockState(pos).getBlock() instanceof SurgicalTableBlock;
 	}
 
-	private static boolean matches(Level level, BlockPos pos, int y, Direction facing) {
-		if (pos.getY() != y)
-			return false;
-		BlockState state = level.getBlockState(pos);
-		return state.getBlock() instanceof SurgicalTableBlock
-			&& state.hasProperty(SurgicalTableBlock.FACING)
-			&& state.getValue(SurgicalTableBlock.FACING) == facing;
-	}
-
-	/**
-	 * Finds the largest axis-aligned rectangle made entirely from table tiles. Histogram rows keep
-	 * this bounded by the plane's coordinate span rather than trying every possible rectangle.
-	 */
-	private static WorkArea largestRectangle(List<BlockPos> tiles, int y) {
-		if (tiles.isEmpty())
-			return WorkArea.EMPTY;
-		int minX = tiles.stream().mapToInt(BlockPos::getX).min().orElse(0);
-		int maxX = tiles.stream().mapToInt(BlockPos::getX).max().orElse(0);
-		int minZ = tiles.stream().mapToInt(BlockPos::getZ).min().orElse(0);
-		int maxZ = tiles.stream().mapToInt(BlockPos::getZ).max().orElse(0);
-		int width = maxX - minX + 1;
-		int[] heights = new int[width];
-		Set<Long> occupied = new HashSet<>(tiles.size() * 2);
-		for (BlockPos tile : tiles)
-			occupied.add(tile.asLong());
-
-		WorkArea best = WorkArea.EMPTY;
-		for (int z = minZ; z <= maxZ; z++) {
-			for (int xIndex = 0; xIndex < width; xIndex++) {
-				BlockPos tile = new BlockPos(minX + xIndex, y, z);
-				heights[xIndex] = occupied.contains(tile.asLong()) ? heights[xIndex] + 1 : 0;
-			}
-
-			ArrayList<Integer> stack = new ArrayList<>(width + 1);
-			for (int xIndex = 0; xIndex <= width; xIndex++) {
-				int height = xIndex == width ? 0 : heights[xIndex];
-				while (!stack.isEmpty() && heights[stack.getLast()] > height) {
-					int bar = stack.removeLast();
-					int rectangleHeight = heights[bar];
-					int left = stack.isEmpty() ? 0 : stack.getLast() + 1;
-					int rightExclusive = xIndex;
-					WorkArea candidate = new WorkArea(minX + left, z - rectangleHeight + 1,
-						minX + rightExclusive, z + 1, y);
-					if (candidate.betterThan(best))
-						best = candidate;
-				}
-				stack.add(xIndex);
-			}
-		}
-		return best;
-	}
-
-	public record Plane(List<BlockPos> tiles, Set<BlockPos> owners, @Nullable Direction facing, boolean complete,
-		WorkArea workArea) {
-		private static final Plane EMPTY = new Plane(List.of(), Set.of(), null, true, WorkArea.EMPTY);
+	public record Plane(List<BlockPos> tiles, @Nullable BlockPos source, boolean complete, WorkArea workArea) {
+		private static final Plane EMPTY = new Plane(List.of(), null, true, WorkArea.EMPTY);
 
 		public Plane {
 			tiles = List.copyOf(tiles);
-			owners = Set.copyOf(owners);
 			workArea = workArea == null ? WorkArea.EMPTY : workArea;
 		}
 
 		public boolean valid() {
-			return complete;
-		}
-
-		@Nullable
-		public BlockPos owner() {
-			return valid() && owners.size() == 1 ? owners.iterator().next() : null;
+			return complete && source != null;
 		}
 	}
 
-	/** World-space horizontal bounds of the only usable part of a table plane. */
-	public record WorkArea(int minX, int minZ, int maxXExclusive, int maxZExclusive, int y) {
-		private static final WorkArea EMPTY = new WorkArea(0, 0, 0, 0, 0);
+	/** Exact union of the connected table tiles, including gaps in its bounding box. */
+	public static final class WorkArea {
+		private static final WorkArea EMPTY = new WorkArea(List.of(), Set.of(), 0, 0, 0, 0, 0);
+
+		private final List<BlockPos> tiles;
+		private final Set<Long> tileKeys;
+		private final int minX;
+		private final int minZ;
+		private final int maxXExclusive;
+		private final int maxZExclusive;
+		private final int y;
+
+		private WorkArea(List<BlockPos> tiles, Set<Long> tileKeys, int minX, int minZ,
+			int maxXExclusive, int maxZExclusive, int y) {
+			this.tiles = List.copyOf(tiles);
+			this.tileKeys = Set.copyOf(tileKeys);
+			this.minX = minX;
+			this.minZ = minZ;
+			this.maxXExclusive = maxXExclusive;
+			this.maxZExclusive = maxZExclusive;
+			this.y = y;
+		}
+
+		private static WorkArea of(List<BlockPos> tiles, int y) {
+			if (tiles.isEmpty())
+				return EMPTY;
+			Set<Long> keys = new HashSet<>(tiles.size() * 2);
+			for (BlockPos tile : tiles)
+				keys.add(tile.asLong());
+			return new WorkArea(tiles, keys,
+				tiles.stream().mapToInt(BlockPos::getX).min().orElse(0),
+				tiles.stream().mapToInt(BlockPos::getZ).min().orElse(0),
+				tiles.stream().mapToInt(BlockPos::getX).max().orElse(-1) + 1,
+				tiles.stream().mapToInt(BlockPos::getZ).max().orElse(-1) + 1, y);
+		}
+
+		public List<BlockPos> tiles() {
+			return tiles;
+		}
+
+		public int minX() {
+			return minX;
+		}
+
+		public int minZ() {
+			return minZ;
+		}
+
+		public int maxXExclusive() {
+			return maxXExclusive;
+		}
+
+		public int maxZExclusive() {
+			return maxZExclusive;
+		}
+
+		public int y() {
+			return y;
+		}
 
 		public boolean isEmpty() {
-			return maxXExclusive <= minX || maxZExclusive <= minZ;
+			return tiles.isEmpty();
 		}
 
 		public int tileArea() {
-			return isEmpty() ? 0 : (maxXExclusive - minX) * (maxZExclusive - minZ);
+			return tiles.size();
 		}
 
-		public boolean contains(double minX, double minZ, double maxX, double maxZ, double epsilon) {
-			return !isEmpty() && minX >= this.minX - epsilon && minZ >= this.minZ - epsilon
-				&& maxX <= maxXExclusive + epsilon && maxZ <= maxZExclusive + epsilon;
-		}
+		/** True only when every tile touched by the horizontal bounds actually exists. */
+		public boolean contains(double boundMinX, double boundMinZ, double boundMaxX, double boundMaxZ,
+			double epsilon) {
+			if (isEmpty() || !Double.isFinite(boundMinX) || !Double.isFinite(boundMinZ)
+				|| !Double.isFinite(boundMaxX) || !Double.isFinite(boundMaxZ)
+				|| boundMaxX < boundMinX || boundMaxZ < boundMinZ
+				|| boundMinX < minX - epsilon || boundMinZ < minZ - epsilon
+				|| boundMaxX > maxXExclusive + epsilon || boundMaxZ > maxZExclusive + epsilon)
+				return false;
 
-		private boolean betterThan(WorkArea other) {
-			int area = tileArea();
-			int otherArea = other.tileArea();
-			if (area != otherArea)
-				return area > otherArea;
-			if (minX != other.minX)
-				return minX < other.minX;
-			if (minZ != other.minZ)
-				return minZ < other.minZ;
-			int width = maxXExclusive - minX;
-			int otherWidth = other.maxXExclusive - other.minX;
-			return width > otherWidth;
+			double sampleMinX = boundMinX + epsilon;
+			double sampleMaxX = boundMaxX - epsilon;
+			double sampleMinZ = boundMinZ + epsilon;
+			double sampleMaxZ = boundMaxZ - epsilon;
+			if (sampleMinX > sampleMaxX)
+				sampleMinX = sampleMaxX = (boundMinX + boundMaxX) * 0.5d;
+			if (sampleMinZ > sampleMaxZ)
+				sampleMinZ = sampleMaxZ = (boundMinZ + boundMaxZ) * 0.5d;
+			int firstX = (int) Math.floor(sampleMinX);
+			int lastX = (int) Math.floor(sampleMaxX);
+			int firstZ = (int) Math.floor(sampleMinZ);
+			int lastZ = (int) Math.floor(sampleMaxZ);
+			for (int x = firstX; x <= lastX; x++)
+				for (int z = firstZ; z <= lastZ; z++)
+					if (!tileKeys.contains(BlockPos.asLong(x, y, z)))
+						return false;
+			return true;
 		}
 	}
 }

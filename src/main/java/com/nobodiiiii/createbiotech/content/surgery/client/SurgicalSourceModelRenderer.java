@@ -52,20 +52,19 @@ public final class SurgicalSourceModelRenderer {
 	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
 		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition) {
-		preview.setYRot(yaw);
-		preview.yRotO = yaw;
-		preview.yBodyRot = yaw;
-		preview.yBodyRotO = yaw;
-		preview.yHeadRot = yaw;
-		preview.yHeadRotO = yaw;
-		preview.tickCount = 0;
+		return render(preview, cubeCount, presentCubes, cubeOffsets, poseStack, buffer, packedLight, yaw,
+			partialTick, collectGeometry, cameraPosition, false);
+	}
 
-		@SuppressWarnings("unchecked")
-		EntityRenderer<LivingEntity> renderer = (EntityRenderer<LivingEntity>) Minecraft.getInstance()
-			.getEntityRenderDispatcher().getRenderer(preview);
+	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
+		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition,
+		boolean renderSourceGeometry) {
+		preparePreview(preview, yaw);
+		EntityRenderer<LivingEntity> renderer = renderer(preview);
 
 		SurgicalModelRenderContext.begin(poseStack, cubeCount, presentCubes, cubeOffsets,
-			collectGeometry, cameraPosition);
+			collectGeometry, cameraPosition, renderSourceGeometry);
 		SurgicalModelRenderContext.Snapshot snapshot;
 		try {
 			renderer.render(preview, yaw, partialTick, poseStack, buffer, packedLight);
@@ -73,6 +72,23 @@ public final class SurgicalSourceModelRenderer {
 			snapshot = SurgicalModelRenderContext.end();
 		}
 		return snapshot;
+	}
+
+	private static void preparePreview(LivingEntity preview, float yaw) {
+		preview.setYRot(yaw);
+		preview.yRotO = yaw;
+		preview.yBodyRot = yaw;
+		preview.yBodyRotO = yaw;
+		preview.yHeadRot = yaw;
+		preview.yHeadRotO = yaw;
+		preview.tickCount = 0;
+	}
+
+	@SuppressWarnings("unchecked")
+	private static EntityRenderer<LivingEntity> renderer(LivingEntity preview) {
+		EntityRenderer<LivingEntity> renderer = (EntityRenderer<LivingEntity>) Minecraft.getInstance()
+			.getEntityRenderDispatcher().getRenderer(preview);
+		return renderer;
 	}
 
 	public static void clear() {

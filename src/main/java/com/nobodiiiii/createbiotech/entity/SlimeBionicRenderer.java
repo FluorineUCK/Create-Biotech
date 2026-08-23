@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.WeakHashMap;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
+import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalClientTopology;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
@@ -38,11 +40,16 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		SurgicalAssembly assembly = entity.getAssembly();
 		if (assembly != null) {
 			poseStack.pushPose();
+			LivingEntity preview = SurgicalSourceModelRenderer.preview(entity, assembly.profile());
+			boolean slimeForm = SlimeMimicHandler.isSlimeMimic(entity);
+			if (preview != null)
+				((SlimeMimicAccess) (Object) preview).createBiotech$setSlimeMimic(true);
 			CachedGeometry cached = GEOMETRY.get(entity);
 			boolean rebuildGeometry = cached == null || cached.assembly != assembly
-				|| Float.floatToIntBits(cached.yaw) != Float.floatToIntBits(yaw);
+				|| Float.floatToIntBits(cached.yaw) != Float.floatToIntBits(yaw)
+				|| cached.slimeForm != slimeForm;
 			if (rebuildGeometry) {
-				cached = rebuildGeometry(entity, assembly, yaw, partialTick, packedLight);
+				cached = rebuildGeometry(preview, assembly, yaw, partialTick, packedLight, slimeForm);
 				if (cached != null) {
 					GEOMETRY.put(entity, cached);
 				} else {
@@ -54,8 +61,10 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			Map<Integer, Vec3> offsets = cached == null ? Map.of() : cached.offsets;
 			if (cached != null)
 				poseStack.translate(cached.modelOffset.x, cached.modelOffset.y, cached.modelOffset.z);
-			SurgicalSourceModelRenderer.render(entity, assembly.profile(), assembly.cubeCount(), presentCubes,
-				offsets, poseStack, buffer, packedLight, yaw, partialTick, false, null);
+			if (preview != null) {
+				SurgicalSourceModelRenderer.render(preview, assembly.cubeCount(), presentCubes, offsets,
+					poseStack, buffer, packedLight, yaw, partialTick, false, null, !slimeForm);
+			}
 			poseStack.popPose();
 		} else {
 			GEOMETRY.remove(entity);
@@ -63,32 +72,37 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		super.render(entity, yaw, partialTick, poseStack, buffer, packedLight);
 	}
 
-	private static CachedGeometry rebuildGeometry(SlimeBionicEntity owner, SurgicalAssembly assembly,
-		float yaw, float partialTick, int packedLight) {
-		LivingEntity preview = SurgicalSourceModelRenderer.preview(owner, assembly.profile());
+	private static CachedGeometry rebuildGeometry(LivingEntity preview, SurgicalAssembly assembly,
+		float yaw, float partialTick, int packedLight, boolean slimeForm) {
 		if (preview == null)
 			return null;
 
 		BitSet presentCubes = assembly.presentCubes();
-		EntityGeometry.Collector discardedVertices = EntityGeometry.Collector.boundsOnly();
-		MultiBufferSource discardedBuffer = renderType -> discardedVertices;
-		SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(preview,
-			assembly.cubeCount(), presentCubes, Map.of(), new PoseStack(), discardedBuffer, packedLight,
-			yaw, partialTick, true, null);
-		Map<Integer, Vec3> offsets = SurgicalClientTopology.componentOffsets(assembly.cubeCount(),
-			presentCubes, assembly.seams(), assembly.cutSeams(), snapshot.cubes());
+		Map<Integer, Vec3> offsets = componentOffsets(preview, assembly, presentCubes, yaw, partialTick,
+			packedLight);
 
-		// Measure the final separated slime geometry, not the source creature's model origin.
+		// Measure the active visual body's geometry, not the source creature's model origin.
 		// EntityGeometry suppresses optional RenderLayers here, so clothes, armor and held items
 		// follow the resulting translation without affecting where the body is centered or grounded.
 		EntityGeometry.Collector bodyGeometry = EntityGeometry.Collector.boundsOnly();
 		MultiBufferSource measuringBuffer = renderType -> bodyGeometry;
 		EntityGeometry.measureBaseModelWithFallback(preview, bodyGeometry, () ->
 			SurgicalSourceModelRenderer.render(preview, assembly.cubeCount(), presentCubes, offsets,
-				new PoseStack(), measuringBuffer, packedLight, yaw, partialTick, false, null));
+				new PoseStack(), measuringBuffer, packedLight, yaw, partialTick, false, null, !slimeForm));
 		EntityGeometry.Bounds bounds = bodyGeometry.bounds();
 		Vec3 modelOffset = new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ());
-		return new CachedGeometry(assembly, yaw, presentCubes, offsets, modelOffset);
+		return new CachedGeometry(assembly, yaw, slimeForm, presentCubes, offsets, modelOffset);
+	}
+
+	private static Map<Integer, Vec3> componentOffsets(LivingEntity preview, SurgicalAssembly assembly,
+		BitSet presentCubes, float yaw, float partialTick, int packedLight) {
+		EntityGeometry.Collector discardedVertices = EntityGeometry.Collector.boundsOnly();
+		MultiBufferSource discardedBuffer = renderType -> discardedVertices;
+		SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(preview,
+			assembly.cubeCount(), presentCubes, Map.of(), new PoseStack(), discardedBuffer, packedLight,
+			yaw, partialTick, true, null);
+		return SurgicalClientTopology.componentOffsets(assembly.cubeCount(), presentCubes,
+			assembly.seams(), assembly.cutSeams(), snapshot.cubes());
 	}
 
 	@Override
@@ -96,7 +110,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		return SLIME_TEXTURE;
 	}
 
-	private record CachedGeometry(SurgicalAssembly assembly, float yaw, BitSet presentCubes,
+	private record CachedGeometry(SurgicalAssembly assembly, float yaw, boolean slimeForm, BitSet presentCubes,
 		Map<Integer, Vec3> offsets, Vec3 modelOffset) {
 		private CachedGeometry {
 			presentCubes = (BitSet) presentCubes.clone();

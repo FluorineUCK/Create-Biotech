@@ -16,6 +16,7 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLayout;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 
+import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
 
 /** Deterministic client geometry helpers; no result is trusted without server validation. */
@@ -727,13 +728,13 @@ public final class SurgicalClientTopology {
 	private static List<GridCell> orderedCells(SurgicalTablePlane.WorkArea workArea, double targetX,
 		double targetZ) {
 		List<GridCell> cells = new ArrayList<>(workArea.tileArea() * SurgicalTableLayout.SLOTS_PER_TILE);
-		int minGridX = workArea.minX() * SurgicalTableLayout.SUBDIVISIONS;
-		int maxGridX = workArea.maxXExclusive() * SurgicalTableLayout.SUBDIVISIONS;
-		int minGridZ = workArea.minZ() * SurgicalTableLayout.SUBDIVISIONS;
-		int maxGridZ = workArea.maxZExclusive() * SurgicalTableLayout.SUBDIVISIONS;
-		for (int gridX = minGridX; gridX < maxGridX; gridX++)
-			for (int gridZ = minGridZ; gridZ < maxGridZ; gridZ++)
-				cells.add(new GridCell(gridX, gridZ));
+		for (BlockPos tile : workArea.tiles()) {
+			int minGridX = tile.getX() * SurgicalTableLayout.SUBDIVISIONS;
+			int minGridZ = tile.getZ() * SurgicalTableLayout.SUBDIVISIONS;
+			for (int xOffset = 0; xOffset < SurgicalTableLayout.SUBDIVISIONS; xOffset++)
+				for (int zOffset = 0; zOffset < SurgicalTableLayout.SUBDIVISIONS; zOffset++)
+					cells.add(new GridCell(minGridX + xOffset, minGridZ + zOffset));
+		}
 		cells.sort(Comparator.comparingDouble((GridCell cell) -> cell.distanceToSqr(targetX, targetZ))
 			.thenComparingInt(GridCell::gridX).thenComparingInt(GridCell::gridZ));
 		return cells;
