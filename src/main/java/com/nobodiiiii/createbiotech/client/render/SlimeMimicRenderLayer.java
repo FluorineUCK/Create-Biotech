@@ -67,7 +67,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	private static final ThreadLocal<Deque<RenderContext>> RENDER_CONTEXTS = ThreadLocal.withInitial(ArrayDeque::new);
 	private static final ThreadLocal<Integer> INTERNAL_RENDER_DEPTH = ThreadLocal.withInitial(() -> 0);
 	private static final Map<ResourceLocation, NativeImage> TEXTURE_IMAGE_CACHE = new HashMap<>();
-	private static final Map<ResourceLocation, IdentityHashMap<ModelPart.Cube, Boolean>> CUBE_VISIBILITY_CACHE =
+	private static final Map<ResourceLocation, IdentityHashMap<Object, Boolean>> CUBE_VISIBILITY_CACHE =
 		new HashMap<>();
 	private static volatile ReflectionAccess reflectionAccess;
 	private static volatile boolean reflectionAccessResolved;
@@ -142,6 +142,37 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		return true;
 	}
 
+	/**
+	 * Optional entry point used by the pseudo-mixin for Lionfish API's AdvancedModelBox.
+	 * Any incompatibility falls back to the original Lionfish renderer instead of escaping
+	 * into the render loop.
+	 */
+	public static boolean interceptLionfishModelPart(Object part, PoseStack poseStack, int packedLight, int overlay) {
+		if (INTERNAL_RENDER_DEPTH.get() > 0)
+			return false;
+
+		RenderContext context = currentContext();
+		if (context == null)
+			return false;
+
+		try {
+			if (!isSupportedLionfishTree(part))
+				return false;
+			if (context.mode == RenderMode.SKIP_MODEL_PARTS)
+				return true;
+
+			context.deferredLionfishParts()
+				.add(new DeferredLionfishPart(part, new Matrix4f(poseStack.last().pose()),
+					new Matrix3f(poseStack.last().normal()), packedLight, overlay));
+			renderLionfishPartRecursive(part, poseStack, context, packedLight, overlay, RenderPass.INNER);
+			return true;
+		} catch (RuntimeException | LinkageError e) {
+			context.deferredLionfishParts().clear();
+			LionfishModelPartCompat.disable(e);
+			return false;
+		}
+	}
+
 	public static void renderDeferredOuterParts() {
 		RenderContext context = currentContext();
 		if (context == null || context.mode() != RenderMode.SLIMEIFY_MODEL_PARTS)
@@ -155,6 +186,54 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				deferredPart.overlay(), RenderPass.OUTER);
 		}
 		context.deferredParts().clear();
+
+		try {
+			for (DeferredLionfishPart deferredPart : context.deferredLionfishParts()) {
+				PoseStack poseStack = new PoseStack();
+				poseStack.last().pose().set(deferredPart.pose());
+				poseStack.last().normal().set(deferredPart.normal());
+				renderLionfishPartRecursive(deferredPart.part(), poseStack, context, deferredPart.packedLight(),
+					deferredPart.overlay(), RenderPass.OUTER);
+			}
+		} catch (RuntimeException | LinkageError e) {
+			LionfishModelPartCompat.disable(e);
+		} finally {
+			context.deferredLionfishParts().clear();
+		}
+	}
+
+	private static boolean isSupportedLionfishTree(Object part) {
+		if (!LionfishModelPartCompat.supports(part))
+			return false;
+		for (Object child : LionfishModelPartCompat.children(part)) {
+			if (!isSupportedLionfishTree(child))
+				return false;
+		}
+		return true;
+	}
+
+	private static void renderLionfishPartRecursive(Object part, PoseStack poseStack, RenderContext context,
+		int packedLight, int overlay, RenderPass pass) {
+		if (!LionfishModelPartCompat.isVisible(part))
+			return;
+
+		poseStack.pushPose();
+		try {
+			LionfishModelPartCompat.translateAndRotate(part, poseStack);
+			for (Object cube : LionfishModelPartCompat.cubes(part))
+				renderLionfishCube(cube, poseStack, context, packedLight, overlay, pass);
+
+			if (!LionfishModelPartCompat.scaleChildren(part)) {
+				poseStack.scale(
+					1.0f / Math.max(LionfishModelPartCompat.xScale(part), 1.0e-4f),
+					1.0f / Math.max(LionfishModelPartCompat.yScale(part), 1.0e-4f),
+					1.0f / Math.max(LionfishModelPartCompat.zScale(part), 1.0e-4f));
+			}
+			for (Object child : LionfishModelPartCompat.children(part))
+				renderLionfishPartRecursive(child, poseStack, context, packedLight, overlay, pass);
+		} finally {
+			poseStack.popPose();
+		}
 	}
 
 	private static void renderPartRecursive(ModelPart part, PoseStack poseStack, RenderContext context,
@@ -227,6 +306,56 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		poseStack.popPose();
 	}
 
+	private static void renderLionfishCube(Object cube, PoseStack poseStack, RenderContext context, int packedLight,
+		int overlay, RenderPass pass) {
+		if (!lionfishCubeHasVisiblePixels(cube, context.texture()))
+			return;
+
+		LionfishModelPartCompat.CubeBounds bounds = LionfishModelPartCompat.bounds(cube);
+		float width = bounds.maxX() - bounds.minX();
+		float height = bounds.maxY() - bounds.minY();
+		float depth = bounds.maxZ() - bounds.minZ();
+		if (width < 0 || height < 0 || depth < 0)
+			return;
+
+		poseStack.pushPose();
+		if (!SurgicalModelRenderContext.prepareCube(cube, poseStack, pass == RenderPass.INNER,
+			bounds.minX(), bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ())) {
+			poseStack.popPose();
+			return;
+		}
+
+		boolean flatCube = isFlatCube(width, height, depth);
+		float centerX = (bounds.minX() + bounds.maxX()) * 0.5f / 16.0f;
+		float centerY = (bounds.minY() + bounds.maxY()) * 0.5f / 16.0f;
+		float centerZ = (bounds.minZ() + bounds.maxZ()) * 0.5f / 16.0f;
+
+		if (flatCube) {
+			if (pass == RenderPass.INNER)
+				renderLionfishFlatCubeBase(cube, poseStack, context, packedLight, overlay);
+			else
+				renderLionfishFlatCubeFilter(cube, poseStack, context, packedLight, overlay);
+			poseStack.popPose();
+			return;
+		}
+
+		if (pass == RenderPass.INNER) {
+			VertexConsumer innerConsumer = context.buffer()
+				.getBuffer(RenderType.entityCutoutNoCull(SLIME_TEXTURE));
+			renderSlimeCube(innerCube(), poseStack, innerConsumer, packedLight, overlay, centerX, centerY, centerZ,
+				width, height, depth, color(INNER_RED, INNER_GREEN, INNER_BLUE, INNER_ALPHA));
+			poseStack.popPose();
+			return;
+		}
+
+		VertexConsumer outerConsumer = context.buffer()
+			.getBuffer(RenderType.entityTranslucent(SLIME_TEXTURE));
+		renderSlimeCube(outerCube(), poseStack, outerConsumer, packedLight, overlay, centerX, centerY, centerZ,
+			width + 2.0f * OUTER_CUBE_INFLATE_PIXELS, height + 2.0f * OUTER_CUBE_INFLATE_PIXELS,
+			depth + 2.0f * OUTER_CUBE_INFLATE_PIXELS, color(OUTER_RED, OUTER_GREEN, OUTER_BLUE, OUTER_ALPHA));
+		poseStack.popPose();
+	}
+
 	private static void renderSlimeCube(ModelPart slimeCube, PoseStack poseStack, VertexConsumer consumer,
 		int packedLight, int overlay, float centerX, float centerY, float centerZ, float width, float height,
 		float depth, int color) {
@@ -264,6 +393,31 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		runWithoutPartInterception(() ->
 			compileCubeWithNormalOffset(cube, poseStack.last(), filterConsumer, packedLight, overlay,
 				OVERLAY_RED, OVERLAY_GREEN, OVERLAY_BLUE, FLAT_CUBE_FILTER_ALPHA, FLAT_CUBE_FILTER_NORMAL_OFFSET));
+	}
+
+	private static void renderLionfishFlatCubeBase(Object cube, PoseStack poseStack, RenderContext context,
+		int packedLight, int overlay) {
+		ResourceLocation texture = context.texture();
+		if (texture == null)
+			return;
+
+		VertexConsumer baseConsumer = context.buffer()
+			.getBuffer(RenderType.entityCutoutNoCull(texture));
+		runWithoutPartInterception(() -> LionfishModelPartCompat.compileCube(cube, poseStack.last(), baseConsumer,
+			packedLight, overlay, 1.0f, 1.0f, 1.0f, 1.0f, 0.0f));
+	}
+
+	private static void renderLionfishFlatCubeFilter(Object cube, PoseStack poseStack, RenderContext context,
+		int packedLight, int overlay) {
+		ResourceLocation texture = context.texture();
+		if (texture == null)
+			return;
+
+		VertexConsumer filterConsumer = context.buffer()
+			.getBuffer(RenderType.entityTranslucent(texture));
+		runWithoutPartInterception(() -> LionfishModelPartCompat.compileCube(cube, poseStack.last(), filterConsumer,
+			packedLight, overlay, OVERLAY_RED, OVERLAY_GREEN, OVERLAY_BLUE, FLAT_CUBE_FILTER_ALPHA,
+			FLAT_CUBE_FILTER_NORMAL_OFFSET));
 	}
 
 	private static boolean isFlatCube(float width, float height, float depth) {
@@ -351,20 +505,23 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	}
 
 	private record RenderContext(RenderMode mode, MultiBufferSource buffer, ResourceLocation texture,
-		List<DeferredPart> deferredParts) {
+		List<DeferredPart> deferredParts, List<DeferredLionfishPart> deferredLionfishParts) {
 		private RenderContext(RenderMode mode, MultiBufferSource buffer, ResourceLocation texture) {
-			this(mode, buffer, texture, new ArrayList<>());
+			this(mode, buffer, texture, new ArrayList<>(), new ArrayList<>());
 		}
 	}
 
 	private record DeferredPart(ModelPart part, Matrix4f pose, Matrix3f normal, int packedLight, int overlay) {
 	}
 
+	private record DeferredLionfishPart(Object part, Matrix4f pose, Matrix3f normal, int packedLight, int overlay) {
+	}
+
 	private static boolean cubeHasVisiblePixels(ModelPart.Cube cube, ResourceLocation texture) {
 		if (texture == null)
 			return true;
 
-		IdentityHashMap<ModelPart.Cube, Boolean> visibilityByCube =
+		IdentityHashMap<Object, Boolean> visibilityByCube =
 			CUBE_VISIBILITY_CACHE.computeIfAbsent(texture, key -> new IdentityHashMap<>());
 		Boolean cachedVisibility = visibilityByCube.get(cube);
 		if (cachedVisibility != null)
@@ -372,6 +529,22 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 
 		NativeImage image = textureImage(texture);
 		boolean visible = image == null || cubeHasVisiblePixels(cube, image);
+		visibilityByCube.put(cube, visible);
+		return visible;
+	}
+
+	private static boolean lionfishCubeHasVisiblePixels(Object cube, ResourceLocation texture) {
+		if (texture == null)
+			return true;
+
+		IdentityHashMap<Object, Boolean> visibilityByCube =
+			CUBE_VISIBILITY_CACHE.computeIfAbsent(texture, key -> new IdentityHashMap<>());
+		Boolean cachedVisibility = visibilityByCube.get(cube);
+		if (cachedVisibility != null)
+			return cachedVisibility;
+
+		NativeImage image = textureImage(texture);
+		boolean visible = image == null || LionfishModelPartCompat.cubeHasVisiblePixels(cube, image);
 		visibilityByCube.put(cube, visible);
 		return visible;
 	}

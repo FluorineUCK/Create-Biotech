@@ -7,8 +7,6 @@ import java.util.Map;
 
 import org.jetbrains.annotations.Nullable;
 
-import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
@@ -16,14 +14,13 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 
+import net.createmod.catnip.animation.AnimationTickHolder;
+import net.createmod.catnip.outliner.Outliner;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.core.BlockPos;
-import net.minecraft.util.Mth;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
@@ -38,12 +35,16 @@ import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderHighlightEvent;
-import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
 @EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public final class SurgicalTableClientHandler {
-	private static final int HIGHLIGHT_COLOR = 0x68C586;
+	private static final int HIGHLIGHT_DARK_COLOR = 0x68C586;
+	private static final int HIGHLIGHT_LIGHT_COLOR = 0x88E5A6;
+	private static final float HIGHLIGHT_LINE_WIDTH = 1.0f / 32.0f;
+	private static final Object[] SEAM_OUTLINE_SLOTS = {
+		new Object(), new Object(), new Object(), new Object()
+	};
 	private static final Map<BlockPos, TableGeometry> TABLES = new HashMap<>();
 	@Nullable
 	private static Selection seamSelection;
@@ -98,6 +99,8 @@ public final class SurgicalTableClientHandler {
 		boolean holdingEmptyBox = isEmptyBox(player.getMainHandItem()) || isEmptyBox(player.getOffhandItem());
 		seamSelection = holdingShears ? findSeamSelection(player, level) : null;
 		cubeSelection = holdingEmptyBox ? findCubeSelection(player, level) : null;
+		if (seamSelection != null)
+			highlightSeam(seamSelection);
 	}
 
 	@SubscribeEvent
@@ -130,34 +133,6 @@ public final class SurgicalTableClientHandler {
 		minecraft.player.swing(hand);
 		event.setSwingHand(false);
 		event.setCanceled(true);
-	}
-
-	@SubscribeEvent
-	public static void onRenderLevel(RenderLevelStageEvent event) {
-		if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || seamSelection == null)
-			return;
-		Minecraft minecraft = Minecraft.getInstance();
-		LocalPlayer player = minecraft.player;
-		if (player == null || (!player.getMainHandItem().is(Items.SHEARS)
-			&& !player.getOffhandItem().is(Items.SHEARS)))
-			return;
-
-		Vec3 camera = event.getCamera().getPosition();
-		PoseStack poseStack = event.getPoseStack();
-		MultiBufferSource.BufferSource buffers = minecraft.renderBuffers().bufferSource();
-		VertexConsumer lines = buffers.getBuffer(RenderType.lines());
-		poseStack.pushPose();
-		poseStack.translate(-camera.x, -camera.y, -camera.z);
-
-		Vec3 normal = seamSelection.face.get(1).subtract(seamSelection.face.get(0))
-			.cross(seamSelection.face.get(3).subtract(seamSelection.face.get(0))).normalize();
-		List<Vec3> face = seamSelection.face.stream()
-			.map(point -> point.add(normal.scale(1.0d / 512.0d))).toList();
-		for (int i = 0; i < 4; i++)
-			renderLine(poseStack.last(), lines, face.get(i), face.get((i + 1) & 3));
-
-		poseStack.popPose();
-		buffers.endBatch(RenderType.lines());
 	}
 
 	@SubscribeEvent
@@ -286,27 +261,21 @@ public final class SurgicalTableClientHandler {
 		return u >= -1.0e-5d && u <= 1.00001d && v >= -1.0e-5d && v <= 1.00001d ? hit : null;
 	}
 
-	private static void renderLine(PoseStack.Pose pose, VertexConsumer consumer, Vec3 from, Vec3 to) {
-		float dx = (float) (to.x - from.x);
-		float dy = (float) (to.y - from.y);
-		float dz = (float) (to.z - from.z);
-		float length = Mth.sqrt(dx * dx + dy * dy + dz * dz);
-		if (length <= 1.0e-6f)
+	private static void highlightSeam(Selection selection) {
+		if (selection.face.size() != 4)
 			return;
-		dx /= length;
-		dy /= length;
-		dz /= length;
-		float red = (HIGHLIGHT_COLOR >> 16 & 0xff) / 255.0f;
-		float green = (HIGHLIGHT_COLOR >> 8 & 0xff) / 255.0f;
-		float blue = (HIGHLIGHT_COLOR & 0xff) / 255.0f;
-		consumer.addVertex(pose.pose(), (float) from.x, (float) from.y, (float) from.z)
-			.setColor(red, green, blue, 1.0f).setNormal(pose.copy(), dx, dy, dz);
-		consumer.addVertex(pose.pose(), (float) to.x, (float) to.y, (float) to.z)
-			.setColor(red, green, blue, 1.0f).setNormal(pose.copy(), dx, dy, dz);
+		int color = AnimationTickHolder.getTicks() % 16 < 8
+			? HIGHLIGHT_DARK_COLOR : HIGHLIGHT_LIGHT_COLOR;
+		for (int edge = 0; edge < 4; edge++)
+			Outliner.getInstance()
+				.showLine(SEAM_OUTLINE_SLOTS[edge], selection.face.get(edge), selection.face.get((edge + 1) & 3))
+				.lineWidth(HIGHLIGHT_LINE_WIDTH)
+				.disableLineNormals()
+				.colored(color);
 	}
 
 	private static boolean isEmptyBox(ItemStack stack) {
-		return CapturedEntityBoxItem.isBox(stack) && !CapturedEntityBoxItem.hasAnyContents(stack);
+		return CapturedEntityBoxItem.isBox(stack) && !CapturedEntityBoxItem.hasCapturedEntity(stack);
 	}
 
 	private static void clearSelections() {

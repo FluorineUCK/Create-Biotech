@@ -4,7 +4,6 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBConfigs;
 import com.nobodiiiii.createbiotech.registry.CBItems;
-import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssemblyBoxHelper;
 import com.simibubi.create.content.logistics.box.PackageRenderer;
 
 import dev.engine_room.flywheel.lib.model.baked.PartialModel;
@@ -37,9 +36,8 @@ public class CardboardBoxEntityRenderer extends EntityRenderer<CardboardBoxEntit
 	public void render(CardboardBoxEntity entity, float yaw, float partialTicks, PoseStack poseStack,
 		MultiBufferSource buffer, int light) {
 		ItemStack stack = entity.getBox();
-		boolean capturedEntity = CapturedEntityBoxHelper.hasCapturedEntity(stack);
-		boolean captured = capturedEntity || SurgicalAssemblyBoxHelper.hasAssembly(stack);
-		boolean renderCapturedEntity = capturedEntity && CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get();
+		boolean captured = CapturedEntityBoxHelper.hasCapturedEntity(stack);
+		boolean renderCapturedEntity = captured && CBConfigs.CLIENT.renderCapturedEntitiesOnBoxes.get();
 		PackageRenderer.renderBox(entity, yaw, poseStack, buffer, light,
 			getModel(stack, captured, renderCapturedEntity));
 		if (renderCapturedEntity && isIconWithinDistance(entity))

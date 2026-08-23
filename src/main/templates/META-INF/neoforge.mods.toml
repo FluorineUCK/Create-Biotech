@@ -22,6 +22,9 @@ config = "create_biotech_sable.mixins.json"
 [[mixins]]
 config = "create_biotech_alternate_current.mixins.json"
 
+[[mixins]]
+config = "create_biotech_lionfish.mixins.json"
+
 [[dependencies."${mod_id}"]]
 modId = "neoforge"
 type = "required"

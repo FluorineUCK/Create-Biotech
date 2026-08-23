@@ -9,7 +9,9 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
+import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
 
@@ -103,18 +105,27 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 
 		Entity captured = CapturedEntityBoxHelper.createCapturedEntity(box, level);
-		if (!(captured instanceof LivingEntity living) || !SlimeMimicHandler.isSlimeMimic(living))
+		if (captured instanceof SlimeBionicEntity bionic) {
+			SurgicalAssembly assembly = bionic.getAssembly();
+			if (assembly == null)
+				return false;
+			profile = assembly.profile();
+			cubeCount = assembly.cubeCount();
+			presentCubes = assembly.presentCubes();
+			seams = assembly.seams();
+			cutSeams = assembly.cutSeams();
+		} else if (captured instanceof LivingEntity living && SlimeMimicHandler.isSlimeMimic(living)) {
+			MimicProfile capturedProfile = MimicProfile.capture(living);
+			if (capturedProfile == null)
+				return false;
+			profile = capturedProfile;
+			cubeCount = 0;
+			presentCubes.clear();
+			seams = List.of();
+			cutSeams.clear();
+		} else {
 			return false;
-
-		MimicProfile capturedProfile = MimicProfile.capture(living);
-		if (capturedProfile == null)
-			return false;
-
-		profile = capturedProfile;
-		cubeCount = 0;
-		presentCubes.clear();
-		seams = List.of();
-		cutSeams.clear();
+		}
 		CapturedEntityBoxHelper.clearCapturedEntity(box);
 		setChangedAndSync();
 		level.playSound(null, worldPosition, SoundEvents.WOOL_PLACE, SoundSource.BLOCKS, 0.8f, 0.9f);
@@ -141,7 +152,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	public boolean packComponent(Player player, ItemStack boxes, int cubeId, int observedCubeCount,
 		List<SurgicalAssembly.Seam> observedSeams) {
 		if (!initializeOrMatchTopology(observedCubeCount, observedSeams) || !validPresentCube(cubeId)
-			|| !CapturedEntityBoxItem.isBox(boxes) || CapturedEntityBoxItem.hasAnyContents(boxes))
+			|| !CapturedEntityBoxItem.isBox(boxes) || CapturedEntityBoxItem.hasCapturedEntity(boxes))
 			return false;
 
 		BitSet component = SurgicalAssembly.componentContaining(cubeCount, presentCubes, seams, cutSeams, cubeId);
@@ -149,7 +160,13 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 
 		SurgicalAssembly assembly = SurgicalAssembly.create(profile, cubeCount, component, seams, cutSeams);
-		if (assembly == null || !SurgicalAssemblyBoxHelper.fillFromPlayerStack(boxes, player, assembly))
+		if (assembly == null || level == null)
+			return false;
+		SlimeBionicEntity bionic = CBEntityTypes.SLIME_BIONIC.get().create(level);
+		if (bionic == null)
+			return false;
+		bionic.setAssembly(assembly);
+		if (!CapturedEntityBoxHelper.captureEntityFromPlayerStack(boxes, player, bionic))
 			return false;
 
 		presentCubes.andNot(component);

@@ -6,7 +6,6 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
-import net.minecraft.network.chat.Component;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -26,7 +25,6 @@ public class SlimeBionicEntity extends PathfinderMob {
 		super(type, level);
 		setNoAi(true);
 		setPersistenceRequired();
-		setCustomName(Component.translatable("entity.create_biotech.slime_bionic.instance_name"));
 	}
 
 	public static AttributeSupplier.Builder createAttributes() {
@@ -73,7 +71,5 @@ public class SlimeBionicEntity extends PathfinderMob {
 			if (assembly != null)
 				setAssembly(assembly);
 		}
-		if (!hasCustomName())
-			setCustomName(Component.translatable("entity.create_biotech.slime_bionic.instance_name"));
 	}
 }

@@ -5,7 +5,7 @@
 在 Minecraft 1.21.1 / NeoForge 21.1.234 / Create 6.0.10-281 下实现一套可保存、可同步、可在专用服务端运行的生物切分流程：
 
 1. 新增 `create_biotech:surgical_table`（手术台）。临时外观全部复用 `create_biotech:block/biotech_casing` 纹理，模型为一格宽的台面与四条桌腿。
-2. 装有“拟态生物”的小型或大型纸箱普通右击空手术台后，纸箱变空，拟态生物以原模型 1:1 比例横躺在台面上。
+2. 装有“拟态生物”或 `create_biotech:slime_bionic` 的小型/大型纸箱普通右击空手术台后，纸箱变空，生物以保存的 cube 集合、原模型 1:1 比例横躺在台面上。
 3. 玩家手持原版剪刀时，鼠标射线命中的是两个相连 cube 之间的“切缝”，而不是 cube 本体；在命中的切缝平面绘制绿色矩形预览框，右击后断开该连接。
 4. 切缝断开后比较两侧连通分量的 cube 数量（相同时保留含最低 cube id 的一侧），较小分量作为一个整体沿“大分量中心指向小分量中心”的方向产生很小的视觉偏移，使切缝清晰可见；偏移不缩放、不拆散分量内部 cube。
 5. 空纸箱右击某个 cube 时，收起该 cube 所属的未切分连通分量：
@@ -14,8 +14,8 @@
    - 纸箱收起目标 cube 在当前未断开拓扑中的整个连通分量；
    - 被收起的 cube 从手术台移除，其他分量继续留在台面。
 6. 潜行使用装有切分组件的纸箱时，生成真正注册的新实体 `create_biotech:slime_bionic`：
-   - 实体注册显示名为“史莱姆仿生体”；
-   - 生成实例的自定义名称为“史莱姆？”；
+   - 实体的中英文注册译名分别为“史莱姆？”和“Slime?”；
+   - 不设置实例自定义名称，因此不会额外显示悬浮名称；
    - 它不是原生物实体的换皮，不复制原生物 AI、属性、物品栏、主人或行为；
    - 它没有目标/寻路 AI，仅受基础物理与伤害规则影响；
    - 它的客户端模型仅由纸箱内保存的 cube 集合组成，并继续使用现有拟态史莱姆 cube 渲染风格。
@@ -99,13 +99,7 @@ SurgicalAssembly {
 
 ### 4.3 纸箱状态
 
-在现有 `CBItemData` 根下增加 `SurgicalAssembly` compound。它与 `CapturedEntity` 互斥。所有“纸箱是否装有内容”的判断扩展为两者任一存在：
-
-- 最大堆叠数为 1；
-- 使用捕获模型外观；
-- tooltip 显示“史莱姆仿生体”；
-- 无法再捕获普通实体或再次放入手术台；
-- 释放成功后删除 `SurgicalAssembly`，恢复为空箱。
+装箱时在服务端创建一个不加入世界的真实 `SlimeBionicEntity`，写入 assembly 后调用现有 `CapturedEntityBoxHelper.captureEntityFromPlayerStack`。纸箱只使用既有 `CapturedEntity`、`CapturedEntityDescId`、`CapturedEntityHealth` 字段，与任何普通捕获生物采用完全相同的堆叠、模型、tooltip、掉落实体和释放路径。不保留独立 `SurgicalAssembly` 纸箱分支，也不兼容该分支的早期开发数据。
 
 ## 5. 方块与交互
 
@@ -117,17 +111,17 @@ SurgicalAssembly {
 - 实现 `IWrenchable`，扳手可旋转。
 - 破坏时若仍有模型，当前第一阶段不返还生物内容；方块实体清除缓存。该行为需通过 tooltip/文档避免误解，后续可单独设计安全回收。
 
-### 5.2 放入拟态生物
+### 5.2 放入拟态生物或“史莱姆？”
 
 普通右击空手术台：
 
 1. 仅接受 `CapturedEntityBoxItem` 且存在 `CapturedEntity`；
-2. 服务端临时创建被捕获实体，要求其为 `LivingEntity` 且 `SlimeMimicHandler.isSlimeMimic == true`；
-3. 捕获 `MimicProfile`；
+2. 服务端临时创建被捕获实体；拟态生物要求 `SlimeMimicHandler.isSlimeMimic == true` 并捕获 `MimicProfile`；
+3. 若实体是 `SlimeBionicEntity`，直接读取并恢复其 profile、cube 集合、切缝拓扑和切缝状态；
 4. 写入手术台并同步；
 5. 清除纸箱的 `CapturedEntity`，不生成原实体。
 
-非拟态生物、损坏数据、已有内容的手术台均返回 `PASS` 或明确失败提示，不消耗纸箱内容。
+其他普通生物、损坏数据、已有内容的手术台均返回 `PASS` 或明确失败提示，不消耗纸箱内容。
 
 ### 5.3 切分
 
@@ -144,7 +138,7 @@ SurgicalAssembly {
 
 客户端命中 cube 后发送 `PACK` 请求。服务端验证手中是完全空的生物纸箱，然后从该 cube 出发，仅沿未断开的切缝执行 BFS，选择完整连通分量。
 
-将选中集合、原拓扑和切缝状态写入一个纸箱的 `SurgicalAssembly`。若玩家手中是多只堆叠空箱，只消耗 1 只并把装好的一只放入物品栏；物品栏满时掉落在玩家位置。成功后从手术台 `presentCubes` 删除该分量；全部取走后清空 profile 与模型状态。
+用选中集合、原拓扑和切缝状态构造 `SurgicalAssembly`，将其写入一个临时 `SlimeBionicEntity`，再把这个真实实体按普通捕获生物格式写入纸箱 NBT。若玩家手中是多只堆叠空箱，只消耗 1 只并把装好的一只放入物品栏；物品栏满时掉落在玩家位置。成功后从手术台 `presentCubes` 删除该分量；全部取走后清空 profile 与模型状态。
 
 ## 6. 客户端渲染与命中
 
@@ -198,7 +192,7 @@ SurgicalAssembly {
 - 分类 `CREATURE`，常规跟踪范围；
 - 固定基础碰撞箱，默认最大生命 10；
 - `registerGoals` 为空，并始终 `setNoAi(true)`；
-- 生成时设置自定义名“史莱姆？”；
+- 实体类型译名为“史莱姆？”/“Slime?”，不设置实例自定义名称；
 - 用同步的 compound entity data 保存 `SurgicalAssembly`，同时写入实体 NBT；
 - 不调用或代理来源生物逻辑。
 
@@ -256,7 +250,7 @@ renderer 不显示来源生物名称、阴影或额外 AI 动画。拓扑和切�
 
 ## 11. 实施顺序
 
-1. 新增公共 `SurgicalAssembly` 数据类型及纸箱读写/释放支持。
+1. 新增公共 `SurgicalAssembly` 数据类型，并让 `SlimeBionicEntity` 将其同步和保存到普通实体 NBT。
 2. 新增手术台 block、BE、注册项与基础资源。
 3. 新增服务端交互包和服务端验证/切分/装箱逻辑。
 4. 扩展拟态 cube 渲染上下文，输出稳定编号和变换后几何。
@@ -268,7 +262,7 @@ renderer 不显示来源生物名称、阴影或额外 AI 动画。拓扑和切�
 
 ## 12. 验收清单
 
-- 空手术台只接受装有拟态生物的纸箱，普通生物纸箱不被消费。
+- 空手术台只接受装有拟态生物或“史莱姆？”的纸箱，其他普通生物纸箱不被消费。
 - 放入后纸箱为空，来源实体没有在世界生成。
 - 猪、村民、史莱姆等不同体型拟态均以 1:1 比例横躺并保持外观变种/幼体状态。
 - 剪刀只在命中有效切缝矩形时显示绿色预览框；遮挡、超距、空台不显示。
@@ -276,7 +270,7 @@ renderer 不显示来源生物名称、阴影或额外 AI 动画。拓扑和切�
 - 切缝断开后较小连通分量整体外移，分量内部 cube 不互相散开。
 - 空纸箱点任意 cube 时，收起它通过未断开切缝可达的全部 cube。
 - 多个空箱堆叠时只消耗一个箱，装好箱不会堆叠。
-- 释放后生成注册实体 `create_biotech:slime_bionic`，显示名“史莱姆仿生体”、实例名“史莱姆？”，没有来源 AI。
+- 纸箱使用标准 `CapturedEntity` NBT；释放后生成注册实体 `create_biotech:slime_bionic`，类型译名“史莱姆？”/“Slime?”，没有自定义悬浮名和来源 AI。
 - 释放实体只渲染纸箱保存的 cube 集合；重进世界后模型集合不丢失。
 - 专用服务端可启动，不加载任何 `net.minecraft.client.*` 类。
 - `compileJava` 与 `build` 通过，新增 JSON 资源可解析且被打入产物；本次不改 Mixin 注入点，按项目规则不启动客户端，后续若改变注入点再执行 `quickPlaySmoke`。

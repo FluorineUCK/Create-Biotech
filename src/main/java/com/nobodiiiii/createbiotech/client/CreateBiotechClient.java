@@ -18,7 +18,6 @@ import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastCham
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.client.render.SlimeBeltFunnelModel;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
-import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityRenderManager;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CardboardBoxPartials;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultCTBehaviour;
@@ -476,8 +475,8 @@ public class CreateBiotechClient {
 		registerCreateStyleTooltip(CBItems.MEDIUM_EXPERIENCE_BUD.get());
 		registerCreateStyleTooltip(CBItems.LARGE_EXPERIENCE_BUD.get());
 		registerCreateStyleTooltip(CBItems.EXPERIENCE_CLUSTER.get());
-		registerCreateStyleTooltip(CBItems.CARDBOARD_BOX.get(), CapturedEntityBoxItem::hasAnyContents);
-		registerCreateStyleTooltip(CBItems.LARGE_CARDBOARD_BOX.get(), CapturedEntityBoxItem::hasAnyContents);
+		registerCreateStyleTooltip(CBItems.CARDBOARD_BOX.get(), CapturedEntityBoxHelper::hasCapturedEntity);
+		registerCreateStyleTooltip(CBItems.LARGE_CARDBOARD_BOX.get(), CapturedEntityBoxHelper::hasCapturedEntity);
 		registerCreateStyleTooltip(CBItems.CAPTURED_SMALL_SLIME.get());
 		registerCreateStyleTooltip(CBItems.DING_DONG_CHICKEN.get());
 		registerCreateStyleTooltip(CBItems.SMART_SUPER_GLUE.get());
@@ -523,10 +522,8 @@ public class CreateBiotechClient {
 
 	private static void registerCardboardBoxModelProperties() {
 		ItemProperties.register(CBItems.CARDBOARD_BOX.get(), CreateBiotech.asResource("captured"),
-			(stack, level, entity, seed) -> com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
-				.hasAnyContents(stack) ? 1.0f : 0.0f);
+			(stack, level, entity, seed) -> CapturedEntityBoxHelper.hasCapturedEntity(stack) ? 1.0f : 0.0f);
 		ItemProperties.register(CBItems.LARGE_CARDBOARD_BOX.get(), CreateBiotech.asResource("captured"),
-			(stack, level, entity, seed) -> com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
-				.hasAnyContents(stack) ? 1.0f : 0.0f);
+			(stack, level, entity, seed) -> CapturedEntityBoxHelper.hasCapturedEntity(stack) ? 1.0f : 0.0f);
 	}
 }

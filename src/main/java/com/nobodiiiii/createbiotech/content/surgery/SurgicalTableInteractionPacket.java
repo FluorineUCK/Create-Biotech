@@ -58,7 +58,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		case PACK -> {
 			if (targetId < observedCubeCount
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.isBox(held)
-				&& !com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.hasAnyContents(held))
+				&& !com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.hasCapturedEntity(held))
 				table.packComponent(player, held, targetId, observedCubeCount, seams);
 		}
 		}

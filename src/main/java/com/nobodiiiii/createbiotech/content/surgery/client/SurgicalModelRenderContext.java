@@ -42,6 +42,13 @@ public final class SurgicalModelRenderContext {
 
 	/** Called only after the existing texture-visibility check accepted the cube. */
 	public static boolean prepareCube(ModelPart.Cube cube, PoseStack poseStack, boolean innerPass) {
+		return prepareCube(cube, poseStack, innerPass,
+			cube.minX, cube.minY, cube.minZ, cube.maxX, cube.maxY, cube.maxZ);
+	}
+
+	/** Optional-model overload used by compatibility renderers that expose equivalent cube bounds. */
+	public static boolean prepareCube(Object cube, PoseStack poseStack, boolean innerPass,
+		float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
 		Context context = current();
 		if (context == null)
 			return true;
@@ -52,7 +59,7 @@ public final class SurgicalModelRenderContext {
 
 		context.applyOffset(cubeId, poseStack);
 		if (innerPass && context.collectGeometry)
-			context.capture(cubeId, cube, poseStack);
+			context.capture(cubeId, poseStack, minX, minY, minZ, maxX, maxY, maxZ);
 		return true;
 	}
 
@@ -78,7 +85,7 @@ public final class SurgicalModelRenderContext {
 	}
 
 	private static final class Context {
-		private final IdentityHashMap<ModelPart.Cube, Integer> cubeIds = new IdentityHashMap<>();
+		private final IdentityHashMap<Object, Integer> cubeIds = new IdentityHashMap<>();
 		private final int expectedCubeCount;
 		private final BitSet presentCubes;
 		private final Map<Integer, Vec3> cubeOffsets;
@@ -97,7 +104,7 @@ public final class SurgicalModelRenderContext {
 			this.cameraPosition = cameraPosition;
 		}
 
-		private int idFor(ModelPart.Cube cube) {
+		private int idFor(Object cube) {
 			return cubeIds.computeIfAbsent(cube, ignored -> cubeIds.size());
 		}
 
@@ -112,17 +119,18 @@ public final class SurgicalModelRenderContext {
 			poseStack.last().pose().translateLocal((float) offset.x, (float) offset.y, (float) offset.z);
 		}
 
-		private void capture(int cubeId, ModelPart.Cube cube, PoseStack poseStack) {
+		private void capture(int cubeId, PoseStack poseStack,
+			float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
 			if (capturedGeometry.get(cubeId))
 				return;
 			capturedGeometry.set(cubeId);
 			Matrix4f pose = poseStack.last().pose();
-			float minX = cube.minX / 16.0f;
-			float minY = cube.minY / 16.0f;
-			float minZ = cube.minZ / 16.0f;
-			float maxX = cube.maxX / 16.0f;
-			float maxY = cube.maxY / 16.0f;
-			float maxZ = cube.maxZ / 16.0f;
+			minX /= 16.0f;
+			minY /= 16.0f;
+			minZ /= 16.0f;
+			maxX /= 16.0f;
+			maxY /= 16.0f;
+			maxZ /= 16.0f;
 
 			List<Vec3> corners = new ArrayList<>(8);
 			for (int z = 0; z < 2; z++) {
