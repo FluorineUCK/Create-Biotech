@@ -17,8 +17,8 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 
-import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.catnip.outliner.Outliner;
+import net.createmod.ponder.api.PonderPalette;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -44,18 +44,12 @@ import net.neoforged.neoforge.event.level.LevelEvent;
 
 @EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public final class SurgicalTableClientHandler {
-	private static final int HIGHLIGHT_DARK_COLOR = 0x68C586;
-	private static final int HIGHLIGHT_LIGHT_COLOR = 0x88E5A6;
+	private static final int HIGHLIGHT_COLOR = PonderPalette.BLUE.getColor();
 	private static final float HIGHLIGHT_LINE_WIDTH = 1.0f / 32.0f;
 	private static final double MIN_SELECTION_THRESHOLD = 2.0d / 16.0d;
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
-	private static final Object[] SEAM_OUTLINE_SLOTS = {
-		new Object(), new Object(), new Object(), new Object(),
-		new Object(), new Object(), new Object(), new Object(),
-		new Object(), new Object(), new Object(), new Object(),
-		new Object(), new Object(), new Object(), new Object()
-	};
+	private static final List<Object> SEAM_OUTLINE_SLOTS = new ArrayList<>();
 	private static final Map<BlockPos, TableGeometry> TABLES = new HashMap<>();
 	private static int highlightedEdgeCount;
 	@Nullable
@@ -174,9 +168,10 @@ public final class SurgicalTableClientHandler {
 		boolean holdingShears = player.getMainHandItem().is(Items.SHEARS)
 			|| player.getOffhandItem().is(Items.SHEARS);
 		boolean holdingEmptyBox = isEmptyBox(player.getMainHandItem()) || isEmptyBox(player.getOffhandItem());
+		Ray ray = playerRay(player);
 		CubeHit cubeHit = holdingShears || holdingEmptyBox
-			? findNearestCubeHit(player, level, playerRay(player)) : null;
-		seamSelection = holdingShears ? findSeamSelection(cubeHit) : null;
+			? findNearestCubeHit(player, level, ray) : null;
+		seamSelection = holdingShears ? findSeamSelection(player, level, ray, cubeHit) : null;
 		cubeSelection = holdingEmptyBox ? findCubeSelection(cubeHit) : null;
 		if (seamSelection != null)
 			highlightSeam(seamSelection);
@@ -200,10 +195,11 @@ public final class SurgicalTableClientHandler {
 			return;
 		SurgicalTableInteractionPacket.Action action;
 		Selection selected;
-		CubeHit cubeHit = findNearestCubeHit(minecraft.player, level, playerRay(minecraft.player));
+		Ray ray = playerRay(minecraft.player);
+		CubeHit cubeHit = findNearestCubeHit(minecraft.player, level, ray);
 		if (held.is(Items.SHEARS)) {
 			action = SurgicalTableInteractionPacket.Action.CUT;
-			selected = findSeamSelection(cubeHit);
+			selected = findSeamSelection(minecraft.player, level, ray, cubeHit);
 			seamSelection = selected;
 		} else if (isEmptyBox(held)) {
 			action = SurgicalTableInteractionPacket.Action.PACK;
@@ -239,7 +235,11 @@ public final class SurgicalTableClientHandler {
 	}
 
 	@Nullable
-	private static Selection findSeamSelection(@Nullable CubeHit cubeHit) {
+	private static Selection findSeamSelection(LocalPlayer player, ClientLevel level, Ray ray,
+		@Nullable CubeHit cubeHit) {
+		Selection directHit = findDirectSeamSelection(player, level, ray);
+		if (directHit != null)
+			return directHit;
 		if (cubeHit == null)
 			return null;
 
@@ -255,14 +255,64 @@ public final class SurgicalTableClientHandler {
 			if (seamId == null || geometry.cutSeams.get(seamId)
 				|| !geometry.presentCubes.get(seam.first()) || !geometry.presentCubes.get(seam.second()))
 				continue;
-			double score = pointToPolygonDistance(cubeHit.location, contact.polygon()) / threshold;
+			double score = pointToContactDistance(cubeHit.location, contact) / threshold;
 			if (score > 1.0d || score >= bestScore)
 				continue;
 			bestScore = score;
 			best = new Selection(cubeHit.tablePos, seamId, geometry.observedCubeCount,
-				geometry.seams, contact.polygon());
+				geometry.seams, contact.edges());
 		}
 		return best;
+	}
+
+	@Nullable
+	private static Selection findDirectSeamSelection(LocalPlayer player, ClientLevel level, Ray ray) {
+		Selection best = null;
+		double bestDistance = Double.MAX_VALUE;
+		for (Map.Entry<BlockPos, TableGeometry> entry : TABLES.entrySet()) {
+			BlockPos tablePos = entry.getKey();
+			if (!(level.getBlockEntity(tablePos) instanceof SurgicalTableBlockEntity table)
+				|| !table.hasSubject())
+				continue;
+			TableGeometry geometry = entry.getValue();
+			if (!geometry.topologyReady()
+				|| !table.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
+				continue;
+			for (SurgicalClientTopology.Contact contact : geometry.contacts) {
+				SurgicalAssembly.Seam seam = contact.seam();
+				Integer seamId = geometry.seamIds.get(seam);
+				if (seamId == null || geometry.cutSeams.get(seamId)
+					|| !geometry.presentCubes.get(seam.first()) || !geometry.presentCubes.get(seam.second()))
+					continue;
+				Vec3 hit = intersectContact(ray, contact);
+				if (hit == null)
+					continue;
+				double distance = ray.start.distanceToSqr(hit);
+				if (distance >= bestDistance || isOccluded(level, player, ray.start, hit, tablePos))
+					continue;
+				bestDistance = distance;
+				best = new Selection(tablePos, seamId, geometry.observedCubeCount,
+					geometry.seams, contact.edges());
+			}
+		}
+		return best;
+	}
+
+	@Nullable
+	private static Vec3 intersectContact(Ray ray, SurgicalClientTopology.Contact contact) {
+		Vec3 nearest = null;
+		double nearestDistance = Double.MAX_VALUE;
+		for (List<Vec3> face : contact.faces()) {
+			Vec3 hit = intersectPolygon(ray.start, ray.end, face);
+			if (hit == null)
+				continue;
+			double distance = ray.start.distanceToSqr(hit);
+			if (distance < nearestDistance) {
+				nearest = hit;
+				nearestDistance = distance;
+			}
+		}
+		return nearest;
 	}
 
 	@Nullable
@@ -352,8 +402,41 @@ public final class SurgicalTableClientHandler {
 		return u >= -1.0e-5d && u <= 1.00001d && v >= -1.0e-5d && v <= 1.00001d ? hit : null;
 	}
 
+	@Nullable
+	private static Vec3 intersectPolygon(Vec3 start, Vec3 end, List<Vec3> polygon) {
+		if (polygon.size() < 3)
+			return null;
+		Vec3 origin = polygon.getFirst();
+		Vec3 normal = Vec3.ZERO;
+		for (int vertex = 1; vertex + 1 < polygon.size(); vertex++) {
+			normal = polygon.get(vertex).subtract(origin)
+				.cross(polygon.get(vertex + 1).subtract(origin));
+			if (normal.lengthSqr() > 1.0e-12d)
+				break;
+		}
+		if (normal.lengthSqr() <= 1.0e-12d)
+			return null;
+		normal = normal.normalize();
+		Vec3 direction = end.subtract(start);
+		double denominator = normal.dot(direction);
+		if (Math.abs(denominator) <= 1.0e-9d)
+			return null;
+		double amount = normal.dot(origin.subtract(start)) / denominator;
+		if (amount < 0.0d || amount > 1.0d)
+			return null;
+		Vec3 hit = start.add(direction.scale(amount));
+		return insideConvexPolygon(hit, polygon, normal) ? hit : null;
+	}
+
 	private static double selectionThreshold(double distance) {
 		return Math.max(MIN_SELECTION_THRESHOLD, Math.min(MAX_SELECTION_THRESHOLD, distance * 0.015d));
+	}
+
+	private static double pointToContactDistance(Vec3 point, SurgicalClientTopology.Contact contact) {
+		double best = Double.MAX_VALUE;
+		for (List<Vec3> face : contact.faces())
+			best = Math.min(best, pointToPolygonDistance(point, face));
+		return best;
 	}
 
 	private static double pointToPolygonDistance(Vec3 point, List<Vec3> polygon) {
@@ -408,26 +491,26 @@ public final class SurgicalTableClientHandler {
 	}
 
 	private static void highlightSeam(Selection selection) {
-		int edgeCount = Math.min(selection.polygon.size(), SEAM_OUTLINE_SLOTS.length);
+		int edgeCount = selection.edges.size();
 		if (edgeCount < 3)
 			return;
-		int color = AnimationTickHolder.getTicks() % 16 < 8
-			? HIGHLIGHT_DARK_COLOR : HIGHLIGHT_LIGHT_COLOR;
+		while (SEAM_OUTLINE_SLOTS.size() < edgeCount)
+			SEAM_OUTLINE_SLOTS.add(new Object());
 		for (int edge = 0; edge < edgeCount; edge++)
 			Outliner.getInstance()
-				.showLine(SEAM_OUTLINE_SLOTS[edge], selection.polygon.get(edge),
-					selection.polygon.get((edge + 1) % edgeCount))
+				.showLine(SEAM_OUTLINE_SLOTS.get(edge), selection.edges.get(edge).start(),
+					selection.edges.get(edge).end())
 				.lineWidth(HIGHLIGHT_LINE_WIDTH)
 				.disableLineNormals()
-				.colored(color);
+				.colored(HIGHLIGHT_COLOR);
 		for (int edge = edgeCount; edge < highlightedEdgeCount; edge++)
-			Outliner.getInstance().remove(SEAM_OUTLINE_SLOTS[edge]);
+			Outliner.getInstance().remove(SEAM_OUTLINE_SLOTS.get(edge));
 		highlightedEdgeCount = edgeCount;
 	}
 
 	private static void clearSeamHighlight() {
 		for (int edge = 0; edge < highlightedEdgeCount; edge++)
-			Outliner.getInstance().remove(SEAM_OUTLINE_SLOTS[edge]);
+			Outliner.getInstance().remove(SEAM_OUTLINE_SLOTS.get(edge));
 		highlightedEdgeCount = 0;
 	}
 
@@ -450,6 +533,7 @@ public final class SurgicalTableClientHandler {
 		private List<SurgicalAssembly.Seam> seams;
 		private Map<SurgicalAssembly.Seam, Integer> seamIds;
 		private List<SurgicalClientTopology.Contact> baseContacts;
+		private List<SurgicalClientTopology.Contact> contacts;
 		private List<List<SurgicalClientTopology.Contact>> contactsByCube;
 		@Nullable
 		private CompletableFuture<SurgicalClientTopology.ContactTopology> pendingTopology;
@@ -473,7 +557,8 @@ public final class SurgicalTableClientHandler {
 			this.seams = List.copyOf(seams);
 			this.seamIds = seamIds(this.seams);
 			this.baseContacts = List.copyOf(contacts);
-			this.contactsByCube = contactsByCube(observedCubeCount, this.baseContacts);
+			this.contacts = this.baseContacts;
+			this.contactsByCube = contactsByCube(observedCubeCount, this.contacts);
 			this.pendingTopology = pendingTopology;
 			this.topologyAvailable = pendingTopology == null;
 			this.lastSeenTick = lastSeenTick;
@@ -504,7 +589,7 @@ public final class SurgicalTableClientHandler {
 			offsets = SurgicalClientTopology.componentOffsets(observedCubeCount, presentCubes, seams,
 				cutSeams, baseCubes);
 			cubes = translateCubes(baseCubes, offsets);
-			List<SurgicalClientTopology.Contact> contacts = translateContacts(baseContacts, offsets);
+			contacts = translateContacts(baseContacts, offsets);
 			contactsByCube = contactsByCube(observedCubeCount, contacts);
 			renderRevision = revision;
 		}
@@ -565,15 +650,19 @@ public final class SurgicalTableClientHandler {
 				return contacts;
 			List<SurgicalClientTopology.Contact> translated = new ArrayList<>(contacts.size());
 			for (SurgicalClientTopology.Contact contact : contacts) {
-				Vec3 offset = offsets.get(contact.surfaceCubeId());
+				Vec3 offset = offsets.get(contact.anchorCubeId());
 				if (offset == null) {
 					translated.add(contact);
 					continue;
 				}
-				List<Vec3> polygon = new ArrayList<>(contact.polygon().size());
-				for (Vec3 point : contact.polygon())
-					polygon.add(point.add(offset));
-				translated.add(new SurgicalClientTopology.Contact(contact.seam(), contact.surfaceCubeId(), polygon));
+				List<List<Vec3>> faces = new ArrayList<>(contact.faces().size());
+				for (List<Vec3> face : contact.faces()) {
+					List<Vec3> translatedFace = new ArrayList<>(face.size());
+					for (Vec3 point : face)
+						translatedFace.add(point.add(offset));
+					faces.add(translatedFace);
+				}
+				translated.add(new SurgicalClientTopology.Contact(contact.seam(), contact.anchorCubeId(), faces));
 			}
 			return List.copyOf(translated);
 		}
@@ -597,7 +686,7 @@ public final class SurgicalTableClientHandler {
 	}
 
 	private record Selection(BlockPos tablePos, int targetId, int observedCubeCount,
-		List<SurgicalAssembly.Seam> seams, List<Vec3> polygon) {}
+		List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges) {}
 
 	private record Ray(Vec3 start, Vec3 end) {}
 

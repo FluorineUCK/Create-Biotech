@@ -36,8 +36,6 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		poseStack.pushPose();
 		poseStack.translate(0.5d, 1.01d, 0.5d);
 		poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - facing.toYRot()));
-		poseStack.translate(0.0d, 0.0d, -preview.getBbHeight() * 0.5d);
-		poseStack.mulPose(Axis.XP.rotationDegrees(90.0f));
 
 		int storedCount = table.getCubeCount();
 		boolean collectGeometry = SurgicalTableClientHandler.needsGeometryUpdate(table);

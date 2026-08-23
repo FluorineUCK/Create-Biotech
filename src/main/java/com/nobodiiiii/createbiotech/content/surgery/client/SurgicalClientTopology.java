@@ -4,8 +4,10 @@ import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -24,9 +26,10 @@ public final class SurgicalClientTopology {
 	private static final double DISTANCE_EPSILON = 1.0e-9d;
 	private static final double INTERSECTION_EPSILON = 1.0e-12d;
 	private static final double DEGENERATE_EPSILON = 1.0e-18d;
+	private static final double POLYHEDRON_EPSILON = 1.0e-8d;
+	private static final double VERTEX_MERGE_DISTANCE_SQR = 1.0e-14d;
 	private static final double CONTACT_TOLERANCE = 1.0d / 64.0d;
 	private static final double MIN_CONTACT_AREA = 1.0e-8d;
-	private static final double[] CONTACT_TOLERANCES = {0.0d, CONTACT_TOLERANCE};
 
 	private SurgicalClientTopology() {}
 
@@ -107,33 +110,154 @@ public final class SurgicalClientTopology {
 
 		PreparedCube smaller = first.volume <= second.volume ? first : second;
 		PreparedCube other = smaller == first ? second : first;
-		// Clipping an actual transformed face preserves the irregular polygon made by a
-		// rotated cube instead of replacing the joint with an axis-aligned rectangle.
+		List<Plane> intersectionPlanes = new ArrayList<>(first.planes.size() + second.planes.size());
+		intersectionPlanes.addAll(first.planes);
+		intersectionPlanes.addAll(second.planes);
+		List<List<Vec3>> intersectionFaces = convexIntersectionFaces(intersectionPlanes);
+		if (!intersectionFaces.isEmpty())
+			return new Contact(seam, smaller.geometry.cubeId(), intersectionFaces);
+
+		// Keep near-adjacent model parts connected. This is deliberately a planar
+		// fallback: only real overlap is represented by the complete intersection solid.
 		List<Vec3> bestContact = List.of();
 		double bestCenterDistance = Double.MAX_VALUE;
 		double bestArea = 0.0d;
-		for (double tolerance : CONTACT_TOLERANCES) {
-			for (int[] indices : CUBE_FACES) {
-				List<Vec3> face = List.of(smaller.geometry.corners().get(indices[0]),
-					smaller.geometry.corners().get(indices[1]), smaller.geometry.corners().get(indices[2]),
-					smaller.geometry.corners().get(indices[3]));
-				List<Vec3> contact = clipAgainstPlanes(face, other.planes, tolerance);
-				double area = polygonArea(contact);
-				if (area < MIN_CONTACT_AREA)
-					continue;
-				double centerDistance = faceCenter(face).distanceToSqr(other.center);
-				if (centerDistance < bestCenterDistance - DISTANCE_EPSILON
-					|| Math.abs(centerDistance - bestCenterDistance) <= DISTANCE_EPSILON
-						&& area > bestArea + MIN_CONTACT_AREA) {
-					bestCenterDistance = centerDistance;
-					bestArea = area;
-					bestContact = contact;
+		for (int[] indices : CUBE_FACES) {
+			List<Vec3> face = List.of(smaller.geometry.corners().get(indices[0]),
+				smaller.geometry.corners().get(indices[1]), smaller.geometry.corners().get(indices[2]),
+				smaller.geometry.corners().get(indices[3]));
+			List<Vec3> contact = clipAgainstPlanes(face, other.planes, CONTACT_TOLERANCE);
+			double area = polygonArea(contact);
+			if (area < MIN_CONTACT_AREA)
+				continue;
+			double centerDistance = faceCenter(face).distanceToSqr(other.center);
+			if (centerDistance < bestCenterDistance - DISTANCE_EPSILON
+				|| Math.abs(centerDistance - bestCenterDistance) <= DISTANCE_EPSILON
+					&& area > bestArea + MIN_CONTACT_AREA) {
+				bestCenterDistance = centerDistance;
+				bestArea = area;
+				bestContact = contact;
+			}
+		}
+		return bestContact.isEmpty() ? null
+			: new Contact(seam, smaller.geometry.cubeId(), List.of(bestContact));
+	}
+
+	/** Builds every boundary face of the convex polyhedron shared by all half-spaces. */
+	private static List<List<Vec3>> convexIntersectionFaces(List<Plane> planes) {
+		List<Vec3> vertices = new ArrayList<>();
+		for (int first = 0; first < planes.size(); first++) {
+			for (int second = first + 1; second < planes.size(); second++) {
+				for (int third = second + 1; third < planes.size(); third++) {
+					Vec3 vertex = intersect(planes.get(first), planes.get(second), planes.get(third));
+					if (vertex == null || !insideAll(vertex, planes) || containsPoint(vertices, vertex))
+						continue;
+					vertices.add(vertex);
 				}
 			}
-			if (!bestContact.isEmpty())
-				break;
 		}
-		return bestContact.isEmpty() ? null : new Contact(seam, smaller.geometry.cubeId(), bestContact);
+		if (vertices.size() < 3)
+			return List.of();
+
+		List<List<Vec3>> faces = new ArrayList<>();
+		Set<List<Integer>> uniqueFaces = new HashSet<>();
+		for (Plane plane : planes) {
+			List<Integer> onPlane = new ArrayList<>();
+			for (int vertex = 0; vertex < vertices.size(); vertex++)
+				if (Math.abs(plane.signedDistance(vertices.get(vertex))) <= POLYHEDRON_EPSILON)
+					onPlane.add(vertex);
+			if (onPlane.size() < 3)
+				continue;
+
+			List<Integer> ordered = orderFace(onPlane, vertices, plane.normal);
+			ordered = removeCollinearVertices(ordered, vertices);
+			if (ordered.size() < 3)
+				continue;
+			List<Vec3> polygon = new ArrayList<>(ordered.size());
+			for (int vertex : ordered)
+				polygon.add(vertices.get(vertex));
+			if (polygonArea(polygon) < MIN_CONTACT_AREA)
+				continue;
+
+			List<Integer> faceKey = new ArrayList<>(ordered);
+			faceKey.sort(Integer::compareTo);
+			if (uniqueFaces.add(List.copyOf(faceKey)))
+				faces.add(List.copyOf(polygon));
+		}
+		return List.copyOf(faces);
+	}
+
+	@Nullable
+	private static Vec3 intersect(Plane first, Plane second, Plane third) {
+		Vec3 secondCrossThird = second.normal.cross(third.normal);
+		double determinant = first.normal.dot(secondCrossThird);
+		if (Math.abs(determinant) <= INTERSECTION_EPSILON)
+			return null;
+		return secondCrossThird.scale(first.maximum)
+			.add(third.normal.cross(first.normal).scale(second.maximum))
+			.add(first.normal.cross(second.normal).scale(third.maximum))
+			.scale(1.0d / determinant);
+	}
+
+	private static boolean insideAll(Vec3 point, List<Plane> planes) {
+		for (Plane plane : planes)
+			if (plane.signedDistance(point) > POLYHEDRON_EPSILON)
+				return false;
+		return true;
+	}
+
+	private static boolean containsPoint(List<Vec3> points, Vec3 candidate) {
+		for (Vec3 point : points)
+			if (point.distanceToSqr(candidate) <= VERTEX_MERGE_DISTANCE_SQR)
+				return true;
+		return false;
+	}
+
+	private static List<Integer> orderFace(List<Integer> face, List<Vec3> vertices, Vec3 normal) {
+		Vec3 center = Vec3.ZERO;
+		for (int vertex : face)
+			center = center.add(vertices.get(vertex));
+		center = center.scale(1.0d / face.size());
+		final Vec3 faceCenter = center;
+
+		Vec3 axisU = vertices.get(face.getFirst()).subtract(faceCenter);
+		if (axisU.lengthSqr() <= DEGENERATE_EPSILON)
+			return List.of();
+		axisU = axisU.normalize();
+		final Vec3 faceAxisU = axisU;
+		final Vec3 faceAxisV = normal.cross(faceAxisU).normalize();
+		List<Integer> ordered = new ArrayList<>(face);
+		ordered.sort(Comparator.comparingDouble(vertex -> {
+			Vec3 relative = vertices.get(vertex).subtract(faceCenter);
+			return Math.atan2(relative.dot(faceAxisV), relative.dot(faceAxisU));
+		}));
+
+		Vec3 polygonNormal = vertices.get(ordered.get(1)).subtract(vertices.get(ordered.getFirst()))
+			.cross(vertices.get(ordered.get(2)).subtract(vertices.get(ordered.getFirst())));
+		if (polygonNormal.dot(normal) < 0.0d)
+			java.util.Collections.reverse(ordered);
+		return ordered;
+	}
+
+	private static List<Integer> removeCollinearVertices(List<Integer> face, List<Vec3> vertices) {
+		List<Integer> simplified = new ArrayList<>(face);
+		boolean changed;
+		do {
+			changed = false;
+			for (int current = 0; current < simplified.size() && simplified.size() > 3; current++) {
+				Vec3 previousPoint = vertices.get(simplified.get((current + simplified.size() - 1)
+					% simplified.size()));
+				Vec3 currentPoint = vertices.get(simplified.get(current));
+				Vec3 nextPoint = vertices.get(simplified.get((current + 1) % simplified.size()));
+				if (currentPoint.subtract(previousPoint).cross(nextPoint.subtract(currentPoint))
+					.lengthSqr() > VERTEX_MERGE_DISTANCE_SQR)
+					continue;
+				simplified.remove(current);
+				changed = true;
+				break;
+			}
+		} while (changed);
+		return List.copyOf(simplified);
 	}
 
 	public static Map<Integer, Vec3> componentOffsets(int cubeCount, BitSet presentCubes,
@@ -332,11 +456,47 @@ public final class SurgicalClientTopology {
 		}
 	}
 
-	public record Contact(SurgicalAssembly.Seam seam, int surfaceCubeId, List<Vec3> polygon) {
+	public record Contact(SurgicalAssembly.Seam seam, int anchorCubeId, List<List<Vec3>> faces) {
 		public Contact {
-			polygon = List.copyOf(polygon);
-			if (polygon.size() < 3)
-				throw new IllegalArgumentException("A surgical contact requires at least three vertices");
+			List<List<Vec3>> copiedFaces = new ArrayList<>(faces.size());
+			for (List<Vec3> face : faces) {
+				if (face.size() < 3)
+					throw new IllegalArgumentException("A surgical contact face requires at least three vertices");
+				copiedFaces.add(List.copyOf(face));
+			}
+			if (copiedFaces.isEmpty())
+				throw new IllegalArgumentException("A surgical contact requires at least one face");
+			faces = List.copyOf(copiedFaces);
+		}
+
+		public List<Edge> edges() {
+			List<Edge> edges = new ArrayList<>();
+			for (List<Vec3> face : faces) {
+				for (int vertex = 0; vertex < face.size(); vertex++) {
+					Edge candidate = new Edge(face.get(vertex), face.get((vertex + 1) % face.size()));
+					boolean duplicate = false;
+					for (Edge edge : edges) {
+						if (edge.sameUndirected(candidate)) {
+							duplicate = true;
+							break;
+						}
+					}
+					if (!duplicate)
+						edges.add(candidate);
+				}
+			}
+			return List.copyOf(edges);
+		}
+	}
+
+	public record Edge(Vec3 start, Vec3 end) {
+		private boolean sameUndirected(Edge other) {
+			return samePoint(start, other.start) && samePoint(end, other.end)
+				|| samePoint(start, other.end) && samePoint(end, other.start);
+		}
+
+		private static boolean samePoint(Vec3 first, Vec3 second) {
+			return first.distanceToSqr(second) <= VERTEX_MERGE_DISTANCE_SQR;
 		}
 	}
 
