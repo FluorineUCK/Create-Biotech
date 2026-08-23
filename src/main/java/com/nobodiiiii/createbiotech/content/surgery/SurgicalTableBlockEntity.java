@@ -20,6 +20,7 @@ import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -45,6 +46,14 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private static final String OFFSET_CUBES_TAG = "OffsetCubes";
 	private static final String OFFSET_X_TAG = "OffsetX";
 	private static final String OFFSET_Z_TAG = "OffsetZ";
+	private static final String FOOTPRINTS_TAG = "Footprints";
+	private static final String FOOTPRINT_ROOT_TAG = "Root";
+	private static final String FOOTPRINT_MIN_X_TAG = "MinX";
+	private static final String FOOTPRINT_MIN_Z_TAG = "MinZ";
+	private static final String FOOTPRINT_MAX_X_TAG = "MaxX";
+	private static final String FOOTPRINT_MAX_Z_TAG = "MaxZ";
+	private static final String FOOTPRINT_GRID_X_TAG = "GridX";
+	private static final String FOOTPRINT_GRID_Z_TAG = "GridZ";
 
 	@Nullable
 	private MimicProfile profile;
@@ -56,6 +65,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private double originOffsetX;
 	private double originOffsetZ;
 	private Map<Integer, Vec3> componentOffsets = Map.of();
+	private List<SurgicalTableLayout.Footprint> occupiedFootprints = List.of();
 	private int clientRenderRevision;
 	@Nullable
 	private AABB clientRenderBounds;
@@ -127,6 +137,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return componentOffsets;
 	}
 
+	public List<SurgicalTableLayout.Footprint> getOccupiedFootprints() {
+		return occupiedFootprints;
+	}
+
 	public int getClientRenderRevision() {
 		return clientRenderRevision;
 	}
@@ -141,10 +155,14 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	public boolean tryPlaceSubject(ItemStack box, SurgicalTablePlane.Plane plane, double placedOriginOffsetX,
 		double placedOriginOffsetZ, SurgicalTableLayout.Proposal proposal) {
+		List<SurgicalTableLayout.Footprint> otherFootprints = level == null ? null
+			: SurgicalTablePlane.occupiedFootprints(level, plane, worldPosition);
 		if (level == null || level.isClientSide || hasSubject()
 			|| !(box.getItem() instanceof CapturedEntityBoxItem)
 			|| !CapturedEntityBoxHelper.hasCapturedEntity(box)
-			|| !SurgicalTableLayout.validatePlacement(plane, placedOriginOffsetX, placedOriginOffsetZ, proposal))
+			|| otherFootprints == null
+			|| !SurgicalTableLayout.validatePlacement(plane, placedOriginOffsetX, placedOriginOffsetZ, proposal,
+				otherFootprints))
 			return false;
 
 		Entity captured = CapturedEntityBoxHelper.createCapturedEntity(box, level);
@@ -174,6 +192,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		originOffsetX = placedOriginOffsetX;
 		originOffsetZ = placedOriginOffsetZ;
 		componentOffsets = Map.of();
+		occupiedFootprints = proposal.footprints();
 		clientRenderBounds = null;
 		CapturedEntityBoxHelper.clearCapturedEntity(box);
 		setChangedAndSync();
@@ -193,7 +212,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 		BitSet proposedCuts = (BitSet) cutSeams.clone();
 		proposedCuts.set(seamId);
-		if (!SurgicalTableLayout.validateComponents(plane, cubeCount, presentCubes, seams, proposedCuts, proposal))
+		List<SurgicalTableLayout.Footprint> otherFootprints = otherOccupiedFootprints(plane);
+		if (otherFootprints == null || !SurgicalTableLayout.validateComponents(plane, cubeCount, presentCubes,
+			seams, proposedCuts, proposal, otherFootprints))
 			return false;
 
 		cutSeams = proposedCuts;
@@ -230,7 +251,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 		if (cutCount == 0)
 			return false;
-		if (!SurgicalTableLayout.validateComponents(plane, cubeCount, presentCubes, seams, proposedCuts, proposal))
+		List<SurgicalTableLayout.Footprint> otherFootprints = otherOccupiedFootprints(plane);
+		if (otherFootprints == null || !SurgicalTableLayout.validateComponents(plane, cubeCount, presentCubes,
+			seams, proposedCuts, proposal, otherFootprints))
 			return false;
 
 		cutSeams = proposedCuts;
@@ -265,6 +288,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 
 		presentCubes.andNot(component);
+		int packedRoot = component.nextSetBit(0);
+		if (!occupiedFootprints.isEmpty())
+			occupiedFootprints = occupiedFootprints.stream()
+				.filter(footprint -> footprint.componentRoot() != packedRoot)
+				.toList();
 		if (!componentOffsets.isEmpty()) {
 			Map<Integer, Vec3> retainedOffsets = new HashMap<>(componentOffsets);
 			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
@@ -308,6 +336,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			offsets.put(offset.cubeId(), new Vec3(offset.x(), 0.0d, offset.z()));
 		}
 		componentOffsets = Map.copyOf(offsets);
+		occupiedFootprints = proposal.footprints();
+	}
+
+	@Nullable
+	private List<SurgicalTableLayout.Footprint> otherOccupiedFootprints(SurgicalTablePlane.Plane plane) {
+		return level == null ? null : SurgicalTablePlane.occupiedFootprints(level, plane, worldPosition);
 	}
 
 	private void clearSubject() {
@@ -320,6 +354,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		originOffsetX = 0.0d;
 		originOffsetZ = 0.0d;
 		componentOffsets = Map.of();
+		occupiedFootprints = List.of();
+		clientRenderBounds = null;
 	}
 
 	private void setChangedAndSync() {
@@ -335,6 +371,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			tag.putDouble(ORIGIN_OFFSET_X_TAG, originOffsetX);
 			tag.putDouble(ORIGIN_OFFSET_Z_TAG, originOffsetZ);
 		}
+		if (profile != null && !occupiedFootprints.isEmpty())
+			tag.put(FOOTPRINTS_TAG, writeFootprints());
 		if (cubeCount > 0) {
 			tag.putInt(CUBE_COUNT_TAG, cubeCount);
 			tag.putLongArray(PRESENT_CUBES_TAG, presentCubes.toLongArray());
@@ -404,6 +442,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 		cutOrder = SurgicalAssembly.normalizeCutOrder(loadedCutOrder, cutSeams, seams.size());
 		componentOffsets = readComponentOffsets(tag);
+		occupiedFootprints = profile == null ? List.of() : readFootprints(tag);
 		if (cubeCount > 0) {
 			if (presentCubes.length() > cubeCount)
 				presentCubes.clear(cubeCount, presentCubes.length());
@@ -416,6 +455,43 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			clientRenderBounds = null;
 			clientRenderRevision++;
 		}
+	}
+
+	private ListTag writeFootprints() {
+		ListTag encoded = new ListTag();
+		for (SurgicalTableLayout.Footprint footprint : occupiedFootprints) {
+			CompoundTag entry = new CompoundTag();
+			entry.putInt(FOOTPRINT_ROOT_TAG, footprint.componentRoot());
+			entry.putDouble(FOOTPRINT_MIN_X_TAG, footprint.minX());
+			entry.putDouble(FOOTPRINT_MIN_Z_TAG, footprint.minZ());
+			entry.putDouble(FOOTPRINT_MAX_X_TAG, footprint.maxX());
+			entry.putDouble(FOOTPRINT_MAX_Z_TAG, footprint.maxZ());
+			entry.putInt(FOOTPRINT_GRID_X_TAG, footprint.gridX());
+			entry.putInt(FOOTPRINT_GRID_Z_TAG, footprint.gridZ());
+			encoded.add(entry);
+		}
+		return encoded;
+	}
+
+	private List<SurgicalTableLayout.Footprint> readFootprints(CompoundTag tag) {
+		if (!tag.contains(FOOTPRINTS_TAG, Tag.TAG_LIST))
+			return List.of();
+		ListTag encoded = tag.getList(FOOTPRINTS_TAG, Tag.TAG_COMPOUND);
+		if (encoded.isEmpty() || encoded.size() > SurgicalAssembly.MAX_CUBES)
+			return List.of();
+		List<SurgicalTableLayout.Footprint> loaded = new java.util.ArrayList<>(encoded.size());
+		for (int index = 0; index < encoded.size(); index++) {
+			CompoundTag entry = encoded.getCompound(index);
+			SurgicalTableLayout.Footprint footprint = new SurgicalTableLayout.Footprint(
+				entry.getInt(FOOTPRINT_ROOT_TAG), entry.getDouble(FOOTPRINT_MIN_X_TAG),
+				entry.getDouble(FOOTPRINT_MIN_Z_TAG), entry.getDouble(FOOTPRINT_MAX_X_TAG),
+				entry.getDouble(FOOTPRINT_MAX_Z_TAG), entry.getInt(FOOTPRINT_GRID_X_TAG),
+				entry.getInt(FOOTPRINT_GRID_Z_TAG));
+			if (!SurgicalTableLayout.validStoredFootprint(footprint))
+				return List.of();
+			loaded.add(footprint);
+		}
+		return List.copyOf(loaded);
 	}
 
 	private Map<Integer, Vec3> readComponentOffsets(CompoundTag tag) {

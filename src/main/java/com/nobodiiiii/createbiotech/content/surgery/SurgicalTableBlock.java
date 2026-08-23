@@ -94,8 +94,7 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 		// Filled-box placement is measured and sent by SurgicalTableClientHandler. Consuming the
 		// vanilla interaction here prevents an unmeasured server-side fallback from bypassing the
 		// work-area check.
-		return plane.owner() == null ? ItemInteractionResult.SUCCESS
-			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+		return ItemInteractionResult.SUCCESS;
 	}
 
 	@Override

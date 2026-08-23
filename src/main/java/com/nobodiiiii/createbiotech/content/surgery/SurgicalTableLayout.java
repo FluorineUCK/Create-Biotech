@@ -26,18 +26,20 @@ public final class SurgicalTableLayout {
 	}
 
 	public static boolean validatePlacement(SurgicalTablePlane.Plane plane, double originOffsetX,
-		double originOffsetZ, Proposal proposal) {
+		double originOffsetZ, Proposal proposal, List<Footprint> occupiedFootprints) {
 		if (!plane.valid() || plane.workArea().isEmpty() || !finiteBounded(originOffsetX)
 			|| !finiteBounded(originOffsetZ) || !proposal.offsets().isEmpty()
 			|| proposal.footprints().size() != 1)
 			return false;
 		Footprint footprint = proposal.footprints().getFirst();
 		return footprint.componentRoot() == -1
-			&& validFootprints(plane.workArea(), List.of(footprint), true);
+			&& validFootprints(plane.workArea(), List.of(footprint), true)
+			&& doesNotOverlap(proposal.footprints(), occupiedFootprints);
 	}
 
 	public static boolean validateComponents(SurgicalTablePlane.Plane plane, int cubeCount,
-		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal) {
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
+		List<Footprint> occupiedFootprints) {
 		if (!plane.valid() || plane.workArea().isEmpty()
 			|| !SurgicalAssembly.validTopology(cubeCount, seams)
 			|| proposal.offsets().size() != presentCubes.cardinality())
@@ -89,18 +91,24 @@ public final class SurgicalTableLayout {
 					for (Footprint second : footprints.get(roots.get(secondRoot)))
 						if (first.overlapsStrictly(second))
 							return false;
-		return true;
+		return doesNotOverlap(proposal.footprints(), occupiedFootprints);
 	}
 
-	private static boolean validFootprintBounds(SurgicalTablePlane.WorkArea area, Footprint footprint) {
-		if (!Double.isFinite(footprint.minX()) || !Double.isFinite(footprint.minZ())
+	public static boolean validStoredFootprint(Footprint footprint) {
+		if (footprint == null || !Double.isFinite(footprint.minX()) || !Double.isFinite(footprint.minZ())
 			|| !Double.isFinite(footprint.maxX()) || !Double.isFinite(footprint.maxZ())
-			|| footprint.maxX() < footprint.minX() || footprint.maxZ() < footprint.minZ()
-			|| !area.contains(footprint.minX(), footprint.minZ(), footprint.maxX(), footprint.maxZ(), EPSILON))
+			|| footprint.maxX() < footprint.minX() || footprint.maxZ() < footprint.minZ())
 			return false;
 		boolean snappedX = footprint.gridX() != UNSNAPPED;
 		boolean snappedZ = footprint.gridZ() != UNSNAPPED;
 		return snappedX == snappedZ;
+	}
+
+	private static boolean validFootprintBounds(SurgicalTablePlane.WorkArea area, Footprint footprint) {
+		if (!validStoredFootprint(footprint)
+			|| !area.contains(footprint.minX(), footprint.minZ(), footprint.maxX(), footprint.maxZ(), EPSILON))
+			return false;
+		return true;
 	}
 
 	private static boolean validFootprints(SurgicalTablePlane.WorkArea area, List<Footprint> footprints,
@@ -137,6 +145,14 @@ public final class SurgicalTableLayout {
 			&& Math.abs((minZ + maxZ) * 0.5d - gridCenterZ) <= EPSILON
 			&& gridCenterX >= area.minX() && gridCenterX < area.maxXExclusive()
 			&& gridCenterZ >= area.minZ() && gridCenterZ < area.maxZExclusive();
+	}
+
+	private static boolean doesNotOverlap(List<Footprint> proposed, List<Footprint> occupied) {
+		for (Footprint footprint : proposed)
+			for (Footprint obstacle : occupied)
+				if (footprint.overlapsStrictly(obstacle))
+					return false;
+		return true;
 	}
 
 	private static boolean finiteBounded(double value) {

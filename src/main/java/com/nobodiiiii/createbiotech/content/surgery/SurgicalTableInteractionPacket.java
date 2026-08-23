@@ -65,7 +65,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1.0d;
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(player.level(), pos);
 		boolean placement = action == Action.PLACE;
-		if (!plane.valid() || (placement ? plane.owner() != null : !pos.equals(plane.owner()))
+		if (!plane.valid() || (!placement && !plane.owners().contains(pos))
 			|| plane.tiles().stream()
 			.noneMatch(tile -> player.distanceToSqr(Vec3.atCenterOf(tile)) <= range * range))
 			return;
@@ -74,6 +74,8 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 
 		ItemStack held = player.getItemInHand(hand);
 		if (placement) {
+			if (table.hasSubject())
+				return;
 			if (held.getItem() instanceof com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper.hasCapturedEntity(held)
 				&& !table.tryPlaceSubject(held, plane, originOffsetX, originOffsetZ, layout))

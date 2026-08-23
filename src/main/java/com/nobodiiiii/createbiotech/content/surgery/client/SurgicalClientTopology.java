@@ -467,10 +467,11 @@ public final class SurgicalClientTopology {
 		return quantizedSteps(distance) * LAYOUT_QUANTUM;
 	}
 
-	/** Centers a newly placed subject on the nearest fitting 1/4-block slot of the work area. */
+	/** Places a new subject on the nearest free 1/4-block slot to the supplied world-space target. */
 	@Nullable
 	public static PlacementPlan planInitialPlacement(List<SurgicalModelRenderContext.CubeGeometry> cubes,
-		SurgicalTablePlane.WorkArea workArea) {
+		SurgicalTablePlane.WorkArea workArea, double targetX, double targetZ,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		Bounds bounds = null;
 		for (SurgicalModelRenderContext.CubeGeometry cube : cubes) {
 			Bounds cubeBounds = Bounds.of(cube).inflate(OUTER_RENDER_INFLATION);
@@ -479,8 +480,6 @@ public final class SurgicalClientTopology {
 		if (bounds == null || workArea.isEmpty())
 			return null;
 
-		double targetX = (workArea.minX() + workArea.maxXExclusive()) * 0.5d;
-		double targetZ = (workArea.minZ() + workArea.maxZExclusive()) * 0.5d;
 		for (GridCell cell : orderedCells(workArea, targetX, targetZ)) {
 			double offsetX = cell.centerX() - bounds.centerX();
 			double offsetZ = cell.centerZ() - bounds.centerZ();
@@ -488,6 +487,8 @@ public final class SurgicalClientTopology {
 			if (!fits(workArea, placed))
 				continue;
 			SurgicalTableLayout.Footprint footprint = footprint(-1, placed, cell);
+			if (overlapsAny(footprint, occupiedFootprints))
+				continue;
 			return new PlacementPlan(offsetX, offsetZ,
 				new SurgicalTableLayout.Proposal(List.of(), List.of(footprint)));
 		}
@@ -499,9 +500,9 @@ public final class SurgicalClientTopology {
 	public static PlannedLayout currentLayout(int cubeCount, BitSet presentCubes,
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
-		SurgicalTablePlane.WorkArea workArea) {
+		SurgicalTablePlane.WorkArea workArea, List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, List.of());
+			workArea, List.of(), occupiedFootprints);
 	}
 
 	/** Snaps one detached component to the legal slot nearest the supplied world-space target. */
@@ -509,9 +510,11 @@ public final class SurgicalClientTopology {
 	public static PlannedLayout snapComponent(int cubeCount, BitSet presentCubes,
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
-		SurgicalTablePlane.WorkArea workArea, BitSet movingComponent, double targetX, double targetZ) {
+		SurgicalTablePlane.WorkArea workArea, BitSet movingComponent, double targetX, double targetZ,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, List.of(new SnapRequest((BitSet) movingComponent.clone(), targetX, targetZ)));
+			workArea, List.of(new SnapRequest((BitSet) movingComponent.clone(), targetX, targetZ)),
+			occupiedFootprints);
 	}
 
 	/** Sequentially places every newly detached batch-cut component at its nearest legal slot. */
@@ -519,7 +522,8 @@ public final class SurgicalClientTopology {
 	public static PlannedLayout autoSnapComponents(int cubeCount, BitSet presentCubes,
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
-		SurgicalTablePlane.WorkArea workArea, List<BitSet> movingComponents) {
+		SurgicalTablePlane.WorkArea workArea, List<BitSet> movingComponents,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		Map<Integer, Bounds> baseBounds = layoutBounds(presentCubes, cubes);
 		if (baseBounds.size() < presentCubes.cardinality())
 			return null;
@@ -531,7 +535,7 @@ public final class SurgicalClientTopology {
 			requests.add(new SnapRequest((BitSet) component.clone(), bounds.centerX(), bounds.centerZ()));
 		}
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, requests);
+			workArea, requests, occupiedFootprints);
 	}
 
 	/** Aligns every detached component so its rendered outer bounds touch the table surface. */
@@ -577,7 +581,8 @@ public final class SurgicalClientTopology {
 	private static PlannedLayout planSnappedLayout(int cubeCount, BitSet presentCubes,
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
-		SurgicalTablePlane.WorkArea workArea, List<SnapRequest> requests) {
+		SurgicalTablePlane.WorkArea workArea, List<SnapRequest> requests,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		if (!SurgicalAssembly.validTopology(cubeCount, seams) || workArea.isEmpty())
 			return null;
 		Map<Integer, Bounds> baseBounds = layoutBounds(presentCubes, cubes);
@@ -603,7 +608,8 @@ public final class SurgicalClientTopology {
 					cell.centerZ() - movingBounds.centerZ());
 				Bounds candidate = movingBounds.translate(delta);
 				if (!fits(workArea, candidate)
-					|| collidesHorizontally(candidate, moving, components, baseBounds, plannedOffsets, delta))
+					|| collidesHorizontally(candidate, moving, components, baseBounds, plannedOffsets, delta,
+						occupiedFootprints))
 					continue;
 				selected = cell;
 				selectedDelta = delta;
@@ -630,6 +636,9 @@ public final class SurgicalClientTopology {
 				if (footprints.get(first).componentRoot() != footprints.get(second).componentRoot()
 					&& footprints.get(first).overlapsStrictly(footprints.get(second)))
 					return null;
+		for (SurgicalTableLayout.Footprint footprint : footprints)
+			if (overlapsAny(footprint, occupiedFootprints))
+				return null;
 
 		List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(presentCubes.cardinality());
 		for (int cube = presentCubes.nextSetBit(0); cube >= 0; cube = presentCubes.nextSetBit(cube + 1)) {
@@ -658,7 +667,8 @@ public final class SurgicalClientTopology {
 	}
 
 	private static boolean collidesHorizontally(Bounds candidate, BitSet moving, List<BitSet> components,
-		Map<Integer, Bounds> baseBounds, Map<Integer, Vec3> offsets, Vec3 delta) {
+		Map<Integer, Bounds> baseBounds, Map<Integer, Vec3> offsets, Vec3 delta,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		for (BitSet component : components) {
 			if (component.equals(moving))
 				continue;
@@ -682,7 +692,32 @@ public final class SurgicalClientTopology {
 				}
 			}
 		}
+		for (int movingCube = moving.nextSetBit(0); movingCube >= 0;
+			movingCube = moving.nextSetBit(movingCube + 1)) {
+			Bounds movingBounds = baseBounds.get(movingCube);
+			if (movingBounds == null)
+				continue;
+			movingBounds = movingBounds.translate(offsets.getOrDefault(movingCube, Vec3.ZERO).add(delta));
+			for (SurgicalTableLayout.Footprint occupied : occupiedFootprints)
+				if (overlapsHorizontally(movingBounds, occupied))
+					return true;
+		}
 		return false;
+	}
+
+	private static boolean overlapsAny(SurgicalTableLayout.Footprint footprint,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
+		for (SurgicalTableLayout.Footprint occupied : occupiedFootprints)
+			if (footprint.overlapsStrictly(occupied))
+				return true;
+		return false;
+	}
+
+	private static boolean overlapsHorizontally(Bounds bounds, SurgicalTableLayout.Footprint footprint) {
+		return bounds.minX < footprint.maxX() - DISTANCE_EPSILON
+			&& bounds.maxX > footprint.minX() + DISTANCE_EPSILON
+			&& bounds.minZ < footprint.maxZ() - DISTANCE_EPSILON
+			&& bounds.maxZ > footprint.minZ() + DISTANCE_EPSILON;
 	}
 
 	private static boolean fits(SurgicalTablePlane.WorkArea workArea, Bounds bounds) {

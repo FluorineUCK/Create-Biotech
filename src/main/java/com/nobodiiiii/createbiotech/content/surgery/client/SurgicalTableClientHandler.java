@@ -27,12 +27,14 @@ import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 
 import net.createmod.catnip.outliner.Outliner;
+import net.createmod.catnip.animation.AnimationTickHolder;
 import net.createmod.ponder.api.PonderPalette;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.client.renderer.LightTexture;
+import net.minecraft.client.renderer.LevelRenderer;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -55,6 +57,7 @@ import net.neoforged.neoforge.client.event.ClientTickEvent;
 import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.RenderFrameEvent;
 import net.neoforged.neoforge.client.event.RenderHighlightEvent;
+import net.neoforged.neoforge.client.event.RenderLevelStageEvent;
 import net.neoforged.neoforge.event.level.LevelEvent;
 
 @EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
@@ -67,6 +70,7 @@ public final class SurgicalTableClientHandler {
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
 	private static final List<Object> SEAM_OUTLINE_SLOTS = new ArrayList<>();
 	private static final List<Object> CUBE_OUTLINE_SLOTS = new ArrayList<>();
+	private static final Object PLACEMENT_OUTLINE_SLOT = new Object();
 	private static final Map<BlockPos, TableGeometry> TABLES = new HashMap<>();
 	private static int highlightedSeamEdgeCount;
 	private static int highlightedCubeEdgeCount;
@@ -78,6 +82,10 @@ public final class SurgicalTableClientHandler {
 	private static Selection componentSelection;
 	@Nullable
 	private static PendingCut pendingCut;
+	@Nullable
+	private static PlacementSource placementSource;
+	@Nullable
+	private static PlacementPreview placementPreview;
 
 	private SurgicalTableClientHandler() {}
 
@@ -156,6 +164,8 @@ public final class SurgicalTableClientHandler {
 
 	public static void clear() {
 		pendingCut = null;
+		placementSource = null;
+		clearPlacementPreview();
 		TABLES.clear();
 		SurgicalTablePoseResolver.clear();
 		clearSelections();
@@ -168,6 +178,7 @@ public final class SurgicalTableClientHandler {
 		ClientLevel level = minecraft.level;
 		if (player == null || level == null || minecraft.screen != null) {
 			abortPendingCut();
+			clearPlacementPreview();
 			clearSelections();
 			return;
 		}
@@ -181,7 +192,149 @@ public final class SurgicalTableClientHandler {
 
 	@SubscribeEvent
 	public static void onRenderFrame(RenderFrameEvent.Pre event) {
+		updatePlacementPreview();
 		updateSelections();
+	}
+
+	private static void updatePlacementPreview() {
+		Minecraft minecraft = Minecraft.getInstance();
+		LocalPlayer player = minecraft.player;
+		ClientLevel level = minecraft.level;
+		if (player == null || level == null || minecraft.screen != null || pendingCut != null
+			|| !(minecraft.hitResult instanceof BlockHitResult hit)
+			|| !(level.getBlockState(hit.getBlockPos()).getBlock() instanceof SurgicalTableBlock)) {
+			clearPlacementPreview();
+			return;
+		}
+
+		InteractionHand hand = null;
+		PlacementSource source = null;
+		for (InteractionHand candidate : InteractionHand.values()) {
+			ItemStack held = player.getItemInHand(candidate);
+			if (!(held.getItem() instanceof CapturedEntityBoxItem)
+				|| !CapturedEntityBoxHelper.hasCapturedEntity(held))
+				continue;
+			PlacementSource prepared = placementSourceFor(held, level);
+			if (prepared != null) {
+				hand = candidate;
+				source = prepared;
+				break;
+			}
+		}
+		if (hand == null || source == null) {
+			clearPlacementPreview();
+			return;
+		}
+
+		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, hit.getBlockPos());
+		if (!plane.valid() || plane.facing() == null || plane.workArea().isEmpty()) {
+			clearPlacementPreview();
+			return;
+		}
+		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane, null);
+		if (occupied == null) {
+			clearPlacementPreview();
+			return;
+		}
+		Vec3 target = tableSurfaceTarget(playerRay(player), plane.workArea().y() + 1.01d);
+		BlockPos ownerPos = nearestEmptyOwner(level, plane, target);
+		EntityGeometry.Bounds localBounds = source.measure(plane.facing());
+		if (ownerPos == null || localBounds == null) {
+			clearPlacementPreview();
+			return;
+		}
+		SurgicalModelRenderContext.CubeGeometry renderedBounds = boundsGeometry(localBounds,
+			Vec3.atLowerCornerOf(ownerPos));
+		SurgicalClientTopology.PlacementPlan plan = SurgicalClientTopology.planInitialPlacement(
+			List.of(renderedBounds), plane.workArea(), target.x, target.z, occupied);
+		if (plan == null) {
+			clearPlacementPreview();
+			return;
+		}
+
+		placementPreview = new PlacementPreview(ownerPos, hand, source, plane.facing(), plan);
+		SurgicalTableLayout.Footprint footprint = plan.proposal().footprints().getFirst();
+		Outliner.getInstance().showAABB(PLACEMENT_OUTLINE_SLOT,
+			new AABB(footprint.minX(), plane.workArea().y() + 1.002d, footprint.minZ(),
+				footprint.maxX(), plane.workArea().y() + 1.012d, footprint.maxZ()))
+			.colored(PonderPalette.GREEN.getColor())
+			.disableLineNormals()
+			.lineWidth(HIGHLIGHT_LINE_WIDTH);
+		player.displayClientMessage(Component.translatable(
+			"message.create_biotech.surgical_table.place_subject"), true);
+	}
+
+	@Nullable
+	private static PlacementSource placementSourceFor(ItemStack held, ClientLevel level) {
+		if (placementSource != null && ItemStack.isSameItemSameComponents(placementSource.box, held))
+			return placementSource;
+		Entity captured = CapturedEntityBoxHelper.createCapturedEntity(held, level);
+		MimicProfile profile;
+		SurgicalAssembly assembly = null;
+		if (captured instanceof SlimeBionicEntity bionic) {
+			assembly = bionic.getAssembly();
+			if (assembly == null)
+				return null;
+			profile = assembly.profile();
+		} else if (captured instanceof LivingEntity living && SlimeMimicHandler.isSlimeMimic(living)) {
+			profile = MimicProfile.capture(living);
+			if (profile == null)
+				return null;
+		} else {
+			return null;
+		}
+		placementSource = new PlacementSource(held.copyWithCount(1), profile, assembly);
+		return placementSource;
+	}
+
+	@Nullable
+	private static BlockPos nearestEmptyOwner(ClientLevel level, SurgicalTablePlane.Plane plane, Vec3 target) {
+		BlockPos selected = null;
+		double bestDistance = Double.MAX_VALUE;
+		for (BlockPos tile : plane.tiles()) {
+			if (!(level.getBlockEntity(tile) instanceof SurgicalTableBlockEntity table) || table.hasSubject())
+				continue;
+			double distance = Vec3.atCenterOf(tile).distanceToSqr(target);
+			if (distance < bestDistance) {
+				bestDistance = distance;
+				selected = tile;
+			}
+		}
+		return selected;
+	}
+
+	private static void clearPlacementPreview() {
+		placementPreview = null;
+		Outliner.getInstance().remove(PLACEMENT_OUTLINE_SLOT);
+	}
+
+	@SubscribeEvent
+	public static void renderPlacementPreview(RenderLevelStageEvent event) {
+		if (event.getStage() != RenderLevelStageEvent.Stage.AFTER_PARTICLES || placementPreview == null)
+			return;
+		Minecraft minecraft = Minecraft.getInstance();
+		if (minecraft.level == null)
+			return;
+		PlacementPreview placement = placementPreview;
+		LivingEntity preview = placement.source.preview();
+		if (preview == null)
+			return;
+
+		Vec3 camera = event.getCamera().getPosition();
+		PoseStack poseStack = event.getPoseStack();
+		poseStack.pushPose();
+		poseStack.translate(placement.ownerPos.getX() - camera.x, placement.ownerPos.getY() - camera.y,
+			placement.ownerPos.getZ() - camera.z);
+		poseStack.translate(placement.plan.originOffsetX(), 0.0d, placement.plan.originOffsetZ());
+		SurgicalTablePoseResolver.resolve(placement.source, placement.source.profile, preview, placement.facing)
+			.apply(poseStack);
+		MultiBufferSource.BufferSource buffer = minecraft.renderBuffers().bufferSource();
+		SurgicalSourceModelRenderer.render(preview, placement.source.cubeCount(), placement.source.presentCubes(),
+			Map.of(), poseStack, buffer,
+			LevelRenderer.getLightColor(minecraft.level, placement.ownerPos.above()), 0.0f,
+			AnimationTickHolder.getPartialTicks(), false, camera);
+		poseStack.popPose();
+		buffer.endBatch();
 	}
 
 	private static void updateSelections() {
@@ -311,59 +464,17 @@ public final class SurgicalTableClientHandler {
 			|| !(Minecraft.getInstance().hitResult instanceof BlockHitResult hit)
 			|| !(level.getBlockState(hit.getBlockPos()).getBlock() instanceof SurgicalTableBlock))
 			return false;
-		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, hit.getBlockPos());
-		if (!plane.valid() || plane.owner() != null)
-			return false;
-
-		Entity captured = CapturedEntityBoxHelper.createCapturedEntity(held, level);
-		MimicProfile profile;
-		SurgicalAssembly assembly = null;
-		if (captured instanceof SlimeBionicEntity bionic) {
-			assembly = bionic.getAssembly();
-			if (assembly == null)
-				return false;
-			profile = assembly.profile();
-		} else if (captured instanceof LivingEntity living && SlimeMimicHandler.isSlimeMimic(living)) {
-			profile = MimicProfile.capture(living);
-			if (profile == null)
-				return false;
-		} else {
-			return false;
-		}
-
-		Object measurementOwner = new PlacementMeasurement(hit.getBlockPos(), profile);
-		LivingEntity preview = SurgicalSourceModelRenderer.preview(measurementOwner, profile);
-		if (preview == null || plane.facing() == null) {
-			showNoSpace(player);
-			return true;
-		}
-		PoseStack poseStack = new PoseStack();
-		SurgicalTablePoseResolver.resolve(measurementOwner, profile, preview, plane.facing()).apply(poseStack);
-		int cubeCount = assembly == null ? 0 : assembly.cubeCount();
-		BitSet present = assembly == null ? new BitSet() : assembly.presentCubes();
-		EntityGeometry.Collector sink = EntityGeometry.Collector.boundsOnly();
-		MultiBufferSource measuringBuffer = renderType -> sink;
-		// A freshly captured mimic has no surgical cube topology until its first table render.
-		// Placement only needs the emitted model bounds; topology is discovered afterwards.
-		SurgicalSourceModelRenderer.render(preview, cubeCount, present, Map.of(), poseStack,
-			measuringBuffer, LightTexture.FULL_BRIGHT, 0.0f, 0.0f, true, null);
-		if (!sink.hasVertices()) {
-			showNoSpace(player);
-			return true;
-		}
-		SurgicalModelRenderContext.CubeGeometry renderedBounds = boundsGeometry(sink.bounds(),
-			Vec3.atLowerCornerOf(hit.getBlockPos()));
-		SurgicalClientTopology.PlacementPlan plan = SurgicalClientTopology.planInitialPlacement(
-			List.of(renderedBounds),
-			plane.workArea());
-		if (plan == null) {
+		updatePlacementPreview();
+		PlacementPreview placement = placementPreview;
+		if (placement == null || placement.hand != hand
+			|| !ItemStack.isSameItemSameComponents(placement.source.box, held)) {
 			showNoSpace(player);
 			return true;
 		}
 
-		CBPackets.sendToServer(new SurgicalTableInteractionPacket(hit.getBlockPos(), hand,
-			SurgicalTableInteractionPacket.Action.PLACE, 0, 0, List.of(), plan.originOffsetX(),
-			plan.originOffsetZ(), plan.proposal()));
+		CBPackets.sendToServer(new SurgicalTableInteractionPacket(placement.ownerPos, hand,
+			SurgicalTableInteractionPacket.Action.PLACE, 0, 0, List.of(), placement.plan.originOffsetX(),
+			placement.plan.originOffsetZ(), placement.plan.proposal()));
 		return true;
 	}
 
@@ -379,13 +490,19 @@ public final class SurgicalTableClientHandler {
 		BitSet second = SurgicalAssembly.componentContaining(geometry.observedCubeCount, geometry.presentCubes,
 			geometry.seams, proposedCuts, seam.second());
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, selected.tablePos);
-		if (!plane.valid() || !selected.tablePos.equals(plane.owner()))
+		if (!plane.valid() || !plane.owners().contains(selected.tablePos))
 			return;
+		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
+			selected.tablePos);
+		if (occupied == null) {
+			showNoSpace(Minecraft.getInstance().player);
+			return;
+		}
 
 		if (first.equals(second)) {
 			SurgicalClientTopology.PlannedLayout planned = SurgicalClientTopology.currentLayout(
 				geometry.observedCubeCount, geometry.presentCubes, geometry.seams, proposedCuts,
-				geometry.baseCubes, geometry.serverOffsets, plane.workArea());
+				geometry.baseCubes, geometry.serverOffsets, plane.workArea(), occupied);
 			if (planned == null)
 				showNoSpace(Minecraft.getInstance().player);
 			else
@@ -417,13 +534,18 @@ public final class SurgicalTableClientHandler {
 			proposedCuts);
 		List<BitSet> moving = split.size() <= 1 ? List.of() : split.subList(1, split.size());
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, selected.tablePos);
-		if (!plane.valid() || !selected.tablePos.equals(plane.owner()))
+		if (!plane.valid() || !plane.owners().contains(selected.tablePos))
+			return null;
+		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
+			selected.tablePos);
+		if (occupied == null)
 			return null;
 		return moving.isEmpty()
 			? SurgicalClientTopology.currentLayout(geometry.observedCubeCount, geometry.presentCubes,
-				geometry.seams, proposedCuts, geometry.baseCubes, geometry.serverOffsets, plane.workArea())
+				geometry.seams, proposedCuts, geometry.baseCubes, geometry.serverOffsets, plane.workArea(), occupied)
 			: SurgicalClientTopology.autoSnapComponents(geometry.observedCubeCount, geometry.presentCubes,
-				geometry.seams, proposedCuts, geometry.baseCubes, geometry.serverOffsets, plane.workArea(), moving);
+				geometry.seams, proposedCuts, geometry.baseCubes, geometry.serverOffsets, plane.workArea(), moving,
+				occupied);
 	}
 
 	private static void updatePendingCut(@Nullable LocalPlayer player, ClientLevel level) {
@@ -439,7 +561,14 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, pending.tablePos);
-		if (!plane.valid() || !pending.tablePos.equals(plane.owner())) {
+		if (!plane.valid() || !plane.owners().contains(pending.tablePos)) {
+			abortPendingCut();
+			return;
+		}
+		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
+			pending.tablePos);
+		if (occupied == null) {
+			showNoSpace(player);
 			abortPendingCut();
 			return;
 		}
@@ -447,7 +576,7 @@ public final class SurgicalTableClientHandler {
 		SurgicalClientTopology.PlannedLayout planned = SurgicalClientTopology.snapComponent(
 			geometry.observedCubeCount, geometry.presentCubes, geometry.seams, pending.proposedCuts,
 			geometry.baseCubes, geometry.serverOffsets, plane.workArea(), pending.movingComponent,
-			target.x, target.z);
+			target.x, target.z, occupied);
 		if (planned == null) {
 			showNoSpace(player);
 			abortPendingCut();
@@ -537,7 +666,7 @@ public final class SurgicalTableClientHandler {
 		if (selection == null)
 			return false;
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, target);
-		return selection.tablePos.equals(plane.owner());
+		return plane.tiles().contains(selection.tablePos);
 	}
 
 	@SubscribeEvent
@@ -702,8 +831,16 @@ public final class SurgicalTableClientHandler {
 		BlockPos tablePos) {
 		BlockHitResult blockHit = level.clip(new ClipContext(start, hit, ClipContext.Block.OUTLINE,
 			ClipContext.Fluid.NONE, player));
-		return blockHit.getType() == HitResult.Type.BLOCK && !blockHit.getBlockPos().equals(tablePos)
-			&& start.distanceToSqr(blockHit.getLocation()) + 1.0e-5d < start.distanceToSqr(hit);
+		if (blockHit.getType() != HitResult.Type.BLOCK
+			|| start.distanceToSqr(blockHit.getLocation()) + 1.0e-5d >= start.distanceToSqr(hit))
+			return false;
+		BlockPos obstruction = blockHit.getBlockPos();
+		if (level.getBlockState(obstruction).getBlock() instanceof SurgicalTableBlock) {
+			SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, obstruction);
+			if (plane.tiles().contains(tablePos))
+				return false;
+		}
+		return true;
 	}
 
 	@Nullable
@@ -1191,7 +1328,63 @@ public final class SurgicalTableClientHandler {
 	private record CubeHit(BlockPos tablePos, TableGeometry geometry, int cubeId,
 		Vec3 location, double distanceSqr) {}
 
-	private record PlacementMeasurement(BlockPos tablePos, MimicProfile profile) {}
+
+	private record PlacementPreview(BlockPos ownerPos, InteractionHand hand, PlacementSource source,
+		Direction facing, SurgicalClientTopology.PlacementPlan plan) {}
+
+	private static final class PlacementSource {
+		private final ItemStack box;
+		private final MimicProfile profile;
+		@Nullable
+		private final SurgicalAssembly assembly;
+		@Nullable
+		private LivingEntity preview;
+		@Nullable
+		private Direction measuredFacing;
+		@Nullable
+		private EntityGeometry.Bounds measuredBounds;
+
+		private PlacementSource(ItemStack box, MimicProfile profile, @Nullable SurgicalAssembly assembly) {
+			this.box = box;
+			this.profile = profile;
+			this.assembly = assembly;
+		}
+
+		@Nullable
+		private LivingEntity preview() {
+			if (preview == null)
+				preview = SurgicalSourceModelRenderer.preview(this, profile);
+			return preview;
+		}
+
+		@Nullable
+		private EntityGeometry.Bounds measure(Direction facing) {
+			if (measuredBounds != null && measuredFacing == facing)
+				return measuredBounds;
+			LivingEntity entity = preview();
+			if (entity == null)
+				return null;
+			PoseStack poseStack = new PoseStack();
+			SurgicalTablePoseResolver.resolve(this, profile, entity, facing).apply(poseStack);
+			EntityGeometry.Collector sink = EntityGeometry.Collector.boundsOnly();
+			MultiBufferSource measuringBuffer = renderType -> sink;
+			SurgicalSourceModelRenderer.render(entity, cubeCount(), presentCubes(), Map.of(), poseStack,
+				measuringBuffer, LightTexture.FULL_BRIGHT, 0.0f, 0.0f, true, null);
+			if (!sink.hasVertices())
+				return null;
+			measuredFacing = facing;
+			measuredBounds = sink.bounds();
+			return measuredBounds;
+		}
+
+		private int cubeCount() {
+			return assembly == null ? 0 : assembly.cubeCount();
+		}
+
+		private BitSet presentCubes() {
+			return assembly == null ? new BitSet() : assembly.presentCubes();
+		}
+	}
 
 	private static final class PendingCut {
 		private final BlockPos tablePos;

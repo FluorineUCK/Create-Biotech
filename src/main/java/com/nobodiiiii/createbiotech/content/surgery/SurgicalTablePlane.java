@@ -59,9 +59,8 @@ public final class SurgicalTablePlane {
 			complete ? largestRectangle(frozenTiles, start.getY()) : WorkArea.EMPTY);
 	}
 
-	/** Prevents one placement from joining two independently occupied planes. */
+	/** Keeps a newly joined surface within the same bounded scan used by normal interactions. */
 	public static boolean canExtendAt(Level level, BlockPos destination, Direction facing) {
-		Set<BlockPos> owners = new HashSet<>();
 		Set<BlockPos> scanned = new HashSet<>();
 		for (Direction direction : HORIZONTAL) {
 			BlockPos neighbor = destination.relative(direction);
@@ -72,11 +71,34 @@ public final class SurgicalTablePlane {
 			if (!plane.complete())
 				return false;
 			scanned.addAll(plane.tiles());
-			owners.addAll(plane.owners());
-			if (owners.size() > 1)
+			if (scanned.size() >= MAX_TILES)
 				return false;
 		}
 		return true;
+	}
+
+	/**
+	 * Returns the persisted world-space footprints of every subject on a surface. A null result
+	 * means at least one legacy subject has no trustworthy footprint and placement must stay
+	 * conservative until that subject is packed away.
+	 */
+	@Nullable
+	public static List<SurgicalTableLayout.Footprint> occupiedFootprints(Level level, Plane plane,
+		@Nullable BlockPos excludedOwner) {
+		if (!plane.valid())
+			return null;
+		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>();
+		for (BlockPos owner : plane.owners()) {
+			if (owner.equals(excludedOwner))
+				continue;
+			if (!(level.getBlockEntity(owner) instanceof SurgicalTableBlockEntity table) || !table.hasSubject())
+				continue;
+			List<SurgicalTableLayout.Footprint> occupied = table.getOccupiedFootprints();
+			if (occupied.isEmpty())
+				return null;
+			footprints.addAll(occupied);
+		}
+		return List.copyOf(footprints);
 	}
 
 	@Nullable
@@ -149,7 +171,7 @@ public final class SurgicalTablePlane {
 		}
 
 		public boolean valid() {
-			return complete && owners.size() <= 1;
+			return complete;
 		}
 
 		@Nullable
