@@ -20,14 +20,17 @@ public final class SurgicalTablePoseResolver {
 	static final float TABLE_CLEARANCE = 1.0f / 1024.0f;
 	private static final float HEIGHT_EPSILON = 1.0e-5f;
 	private static final int[] CARDINAL_YAWS = { 0, 90, 180, 270 };
-	private static final Map<Object, CachedPose> CACHE = new WeakHashMap<>();
+	private static final Map<Object, Map<PoseKey, SurgicalPose>> CACHE = new WeakHashMap<>();
 
 	private SurgicalTablePoseResolver() {}
 
 	public static SurgicalPose resolve(Object owner, MimicProfile profile, LivingEntity preview, Direction facing) {
-		CachedPose cached = CACHE.get(owner);
-		if (cached != null && cached.profile.equals(profile) && cached.facing == facing)
-			return cached.pose;
+		Map<PoseKey, SurgicalPose> ownerPoses = CACHE.computeIfAbsent(owner,
+			ignored -> new java.util.HashMap<>());
+		PoseKey key = new PoseKey(profile, facing);
+		SurgicalPose cached = ownerPoses.get(key);
+		if (cached != null)
+			return cached;
 
 		EntityGeometry.Collector bodyGeometry = EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
 		EntityGeometry.measureBaseModelWithFallback(preview, bodyGeometry);
@@ -44,7 +47,7 @@ public final class SurgicalTablePoseResolver {
 		EntityGeometry.Collector renderedGeometry = EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
 		EntityGeometry.measureWithFallback(preview, renderedGeometry);
 		selected = createPose(renderedGeometry, selected.axis, facing);
-		CACHE.put(owner, new CachedPose(profile, facing, selected));
+		ownerPoses.put(key, selected);
 		return selected;
 	}
 
@@ -54,7 +57,7 @@ public final class SurgicalTablePoseResolver {
 
 	private static SurgicalPose createPose(EntityGeometry.Collector geometry, RotationAxis axis,
 		Direction facing) {
-		int yaw = footFacingYaw(axis, facing);
+		int yaw = Math.floorMod(facingYaw(axis, facing) + 180, 360);
 		Matrix4f rotation = rotation(axis, yaw);
 		EntityGeometry.Bounds bounds = geometry.transformBounds(rotation);
 		return new SurgicalPose(axis, yaw,
@@ -62,15 +65,15 @@ public final class SurgicalTablePoseResolver {
 			0.5f - bounds.centerZ(), bounds.sizeY());
 	}
 
-	private static int footFacingYaw(RotationAxis axis, Direction facing) {
-		if (axis == RotationAxis.NONE)
-			return 0;
+	private static int facingYaw(RotationAxis axis, Direction facing) {
 		Vector3f target = new Vector3f(facing.getStepX(), 0.0f, facing.getStepZ());
 		int bestYaw = 0;
 		float bestDot = Float.NEGATIVE_INFINITY;
 		for (int yaw : CARDINAL_YAWS) {
-			Vector3f foot = rotation(axis, yaw).transformDirection(new Vector3f(0.0f, -1.0f, 0.0f));
-			float dot = foot.dot(target);
+			Vector3f reference = axis == RotationAxis.NONE
+				? new Vector3f(0.0f, 0.0f, 1.0f) : new Vector3f(0.0f, -1.0f, 0.0f);
+			Vector3f oriented = rotation(axis, yaw).transformDirection(reference);
+			float dot = oriented.dot(target);
 			if (dot > bestDot + 1.0e-6f) {
 				bestDot = dot;
 				bestYaw = yaw;
@@ -92,10 +95,9 @@ public final class SurgicalTablePoseResolver {
 		float translateZ, float height) {
 		public void apply(PoseStack poseStack) {
 			poseStack.translate(translateX, translateY, translateZ);
-			if (axis == RotationAxis.NONE)
-				return;
 			poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
-			poseStack.mulPose((axis == RotationAxis.X ? Axis.XP : Axis.ZP).rotationDegrees(-90.0f));
+			if (axis != RotationAxis.NONE)
+				poseStack.mulPose((axis == RotationAxis.X ? Axis.XP : Axis.ZP).rotationDegrees(-90.0f));
 		}
 	}
 
@@ -105,5 +107,5 @@ public final class SurgicalTablePoseResolver {
 		Z
 	}
 
-	private record CachedPose(MimicProfile profile, Direction facing, SurgicalPose pose) {}
+	private record PoseKey(MimicProfile profile, Direction facing) {}
 }

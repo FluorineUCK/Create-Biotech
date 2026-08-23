@@ -1,0 +1,147 @@
+package com.nobodiiiii.createbiotech.content.surgery;
+
+import java.util.ArrayList;
+import java.util.List;
+
+import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueItem;
+import com.simibubi.create.content.contraptions.glue.SuperGlueItem;
+
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.ai.attributes.Attributes;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.Vec3;
+
+/** Server-validated second click for gluing two surgical components at exact hit points. */
+public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoint first, Endpoint second) {
+	public SurgicalTableGluePacket(FriendlyByteBuf buffer) {
+		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), Endpoint.read(buffer), Endpoint.read(buffer));
+	}
+
+	public void write(FriendlyByteBuf buffer) {
+		buffer.writeBlockPos(pos);
+		buffer.writeEnum(hand);
+		first.write(buffer);
+		second.write(buffer);
+	}
+
+	public void handle(ServerPlayer player) {
+		if (player == null || player.isSpectator() || !player.mayBuild() || !player.level().isLoaded(pos)
+			|| !first.valid() || !second.valid())
+			return;
+		ItemStack held = player.getItemInHand(hand);
+		if (!(held.getItem() instanceof SuperGlueItem) || held.getItem() instanceof SmartSuperGlueItem)
+			return;
+
+		double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1.0d;
+		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(player.level(), pos);
+		if (!plane.valid() || !pos.equals(plane.source()) || plane.tiles().stream()
+			.noneMatch(tile -> player.distanceToSqr(Vec3.atCenterOf(tile)) <= range * range)
+			|| !hitOnPlane(first.hit, plane) || !hitOnPlane(second.hit, plane))
+			return;
+		SurgicalTableBlockEntity table = SurgicalTableBlockEntity.controller(player.level(), plane);
+		if (table == null)
+			return;
+		SurgicalSubject firstSubject = table.getSubject(first.subjectId);
+		SurgicalSubject secondSubject = table.getSubject(second.subjectId);
+		if (firstSubject == null || secondSubject == null
+			|| !firstSubject.initializeOrMatchTopology(first.observedCubeCount, first.seams)
+			|| !secondSubject.initializeOrMatchTopology(second.observedCubeCount, second.seams)
+			|| !table.prepareGlueLayout(firstSubject, plane, first.layout)
+			|| firstSubject != secondSubject && !table.prepareGlueLayout(secondSubject, plane, second.layout))
+			return;
+		table.glueComponents(player, held, hand, first.subjectId, first.cubeId,
+			second.subjectId, second.cubeId, first.hit.subtract(second.hit), plane);
+	}
+
+	private boolean hitOnPlane(Vec3 localHit, SurgicalTablePlane.Plane plane) {
+		double worldX = pos.getX() + localHit.x;
+		double worldZ = pos.getZ() + localHit.z;
+		return localHit.y >= -64.0d && localHit.y <= 64.0d
+			&& plane.workArea().contains(worldX, worldZ, worldX, worldZ, 1.0e-6d);
+	}
+
+	public record Endpoint(int subjectId, int cubeId, int observedCubeCount,
+		List<SurgicalAssembly.Seam> seams, Vec3 hit, SurgicalTableLayout.Proposal layout) {
+		public Endpoint {
+			seams = List.copyOf(seams);
+			layout = layout == null ? SurgicalTableLayout.Proposal.EMPTY : layout;
+		}
+
+		private boolean valid() {
+			double bound = SurgicalTablePlane.MAX_TILES + 2.0d;
+			return subjectId >= 0 && cubeId >= 0 && cubeId < observedCubeCount
+				&& SurgicalAssembly.validTopology(observedCubeCount, seams)
+				&& hit != null && Double.isFinite(hit.x) && Double.isFinite(hit.y) && Double.isFinite(hit.z)
+				&& Math.abs(hit.x) <= bound && Math.abs(hit.y) <= bound && Math.abs(hit.z) <= bound;
+		}
+
+		private void write(FriendlyByteBuf buffer) {
+			buffer.writeVarInt(subjectId);
+			buffer.writeVarInt(cubeId);
+			buffer.writeVarInt(observedCubeCount);
+			buffer.writeVarInt(seams.size());
+			for (SurgicalAssembly.Seam seam : seams) {
+				buffer.writeVarInt(seam.first());
+				buffer.writeVarInt(seam.second());
+			}
+			buffer.writeDouble(hit.x);
+			buffer.writeDouble(hit.y);
+			buffer.writeDouble(hit.z);
+			writeLayout(buffer, layout);
+		}
+
+		private static Endpoint read(FriendlyByteBuf buffer) {
+			int subjectId = buffer.readVarInt();
+			int cubeId = buffer.readVarInt();
+			int cubeCount = buffer.readVarInt();
+			int seamCount = buffer.readVarInt();
+			if (seamCount < 0 || seamCount > SurgicalAssembly.MAX_SEAMS)
+				throw new IllegalArgumentException("Invalid surgical seam count " + seamCount);
+			List<SurgicalAssembly.Seam> seams = new ArrayList<>(seamCount);
+			for (int index = 0; index < seamCount; index++)
+				seams.add(SurgicalAssembly.Seam.of(buffer.readVarInt(), buffer.readVarInt()));
+			return new Endpoint(subjectId, cubeId, cubeCount, seams,
+				new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble()), readLayout(buffer));
+		}
+
+		private static void writeLayout(FriendlyByteBuf buffer, SurgicalTableLayout.Proposal layout) {
+			buffer.writeVarInt(layout.offsets().size());
+			for (SurgicalTableLayout.CubeOffset offset : layout.offsets()) {
+				buffer.writeVarInt(offset.cubeId());
+				buffer.writeDouble(offset.x());
+				buffer.writeDouble(offset.z());
+			}
+			buffer.writeVarInt(layout.footprints().size());
+			for (SurgicalTableLayout.Footprint footprint : layout.footprints()) {
+				buffer.writeVarInt(footprint.componentRoot());
+				buffer.writeDouble(footprint.minX());
+				buffer.writeDouble(footprint.minZ());
+				buffer.writeDouble(footprint.maxX());
+				buffer.writeDouble(footprint.maxZ());
+				buffer.writeInt(footprint.gridX());
+				buffer.writeInt(footprint.gridZ());
+			}
+		}
+
+		private static SurgicalTableLayout.Proposal readLayout(FriendlyByteBuf buffer) {
+			int offsetCount = buffer.readVarInt();
+			if (offsetCount < 0 || offsetCount > SurgicalAssembly.MAX_CUBES)
+				throw new IllegalArgumentException("Invalid surgical offset count " + offsetCount);
+			List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(offsetCount);
+			for (int index = 0; index < offsetCount; index++)
+				offsets.add(new SurgicalTableLayout.CubeOffset(buffer.readVarInt(), buffer.readDouble(),
+					buffer.readDouble()));
+			int footprintCount = buffer.readVarInt();
+			if (footprintCount < 0 || footprintCount > SurgicalAssembly.MAX_CUBES)
+				throw new IllegalArgumentException("Invalid surgical footprint count " + footprintCount);
+			List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>(footprintCount);
+			for (int index = 0; index < footprintCount; index++)
+				footprints.add(new SurgicalTableLayout.Footprint(buffer.readVarInt(), buffer.readDouble(),
+					buffer.readDouble(), buffer.readDouble(), buffer.readDouble(), buffer.readInt(), buffer.readInt()));
+			return new SurgicalTableLayout.Proposal(offsets, footprints);
+		}
+	}
+}

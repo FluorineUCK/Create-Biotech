@@ -503,7 +503,17 @@ public final class SurgicalClientTopology {
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
 		SurgicalTablePlane.WorkArea workArea, List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, List.of(), occupiedFootprints);
+			workArea, List.of(), occupiedFootprints, false);
+	}
+
+	/** Preserves the exact overlapping layout of one source in a packed glued assembly. */
+	@Nullable
+	public static PlannedLayout preserveCompositeLayout(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
+		SurgicalTablePlane.WorkArea workArea, List<SurgicalTableLayout.Footprint> occupiedFootprints) {
+		return planSnappedLayout(cubeCount, presentCubes, seams, cutSeams, cubes, currentOffsets,
+			workArea, List.of(), occupiedFootprints, true);
 	}
 
 	/** Snaps one detached component to the legal slot nearest the supplied world-space target. */
@@ -515,7 +525,7 @@ public final class SurgicalClientTopology {
 		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
 			workArea, List.of(new SnapRequest((BitSet) movingComponent.clone(), targetX, targetZ)),
-			occupiedFootprints);
+			occupiedFootprints, false);
 	}
 
 	/** Sequentially places every newly detached batch-cut component at its nearest legal slot. */
@@ -536,7 +546,7 @@ public final class SurgicalClientTopology {
 			requests.add(new SnapRequest((BitSet) component.clone(), bounds.centerX(), bounds.centerZ()));
 		}
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, requests, occupiedFootprints);
+			workArea, requests, occupiedFootprints, false);
 	}
 
 	/** Aligns every detached component so its rendered outer bounds touch the table surface. */
@@ -583,7 +593,7 @@ public final class SurgicalClientTopology {
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
 		SurgicalTablePlane.WorkArea workArea, List<SnapRequest> requests,
-		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
+		List<SurgicalTableLayout.Footprint> occupiedFootprints, boolean allowComponentOverlap) {
 		if (!SurgicalAssembly.validTopology(cubeCount, seams) || workArea.isEmpty())
 			return null;
 		Map<Integer, Bounds> baseBounds = layoutBounds(presentCubes, cubes);
@@ -632,11 +642,12 @@ public final class SurgicalClientTopology {
 			GridCell cell = snapped.get(root);
 			footprints.addAll(footprints(root, component, baseBounds, plannedOffsets, cell));
 		}
-		for (int first = 0; first < footprints.size(); first++)
-			for (int second = first + 1; second < footprints.size(); second++)
-				if (footprints.get(first).componentRoot() != footprints.get(second).componentRoot()
-					&& footprints.get(first).overlapsStrictly(footprints.get(second)))
-					return null;
+		if (!allowComponentOverlap)
+			for (int first = 0; first < footprints.size(); first++)
+				for (int second = first + 1; second < footprints.size(); second++)
+					if (footprints.get(first).componentRoot() != footprints.get(second).componentRoot()
+						&& footprints.get(first).overlapsStrictly(footprints.get(second)))
+						return null;
 		for (SurgicalTableLayout.Footprint footprint : footprints)
 			if (overlapsAny(footprint, occupiedFootprints))
 				return null;

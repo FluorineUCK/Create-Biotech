@@ -26,6 +26,8 @@ import com.nobodiiiii.createbiotech.content.allay.block.allayport.AllayPortFlapP
 import com.nobodiiiii.createbiotech.content.allay.logistics.courier.hud.AllayCourierHudPacket;
 import com.nobodiiiii.createbiotech.content.allay.network.allay.AllayCourierConfirmPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableGluePacket;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlacementPacket;
 
 import net.createmod.catnip.annotations.ClientOnly;
 import net.createmod.catnip.net.base.BasePacketPayload.PacketTypeProvider;
@@ -47,7 +49,7 @@ import net.neoforged.api.distmarker.OnlyIn;
 
 public final class CBPackets {
 
-	private static final String NETWORK_VERSION = "23";
+	private static final String NETWORK_VERSION = "25";
 	private static final List<ServerRegistration<?>> SERVERBOUND = new ArrayList<>();
 	private static final List<ClientRegistration<?>> CLIENTBOUND = new ArrayList<>();
 	private static final Map<Class<?>, Integer> SERVERBOUND_IDS = new HashMap<>();
@@ -80,6 +82,10 @@ public final class CBPackets {
 		// Keep every existing packet id stable; new packets are appended.
 		registerServer(SurgicalTableInteractionPacket.class, SurgicalTableInteractionPacket::new,
 			SurgicalTableInteractionPacket::write, SurgicalTableInteractionPacket::handle);
+		registerServer(SurgicalTableGluePacket.class, SurgicalTableGluePacket::new,
+			SurgicalTableGluePacket::write, SurgicalTableGluePacket::handle);
+		registerServer(SurgicalTablePlacementPacket.class, SurgicalTablePlacementPacket::new,
+			SurgicalTablePlacementPacket::write, SurgicalTablePlacementPacket::handle);
 
 		registerClient(PowerBeltEntityAnimationPacket.class, PowerBeltEntityAnimationPacket::new,
 			PowerBeltEntityAnimationPacket::write);

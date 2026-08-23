@@ -40,6 +40,24 @@ public final class SurgicalTableLayout {
 	public static boolean validateComponents(SurgicalTablePlane.Plane plane, int cubeCount,
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
 		List<Footprint> occupiedFootprints) {
+		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
+			occupiedFootprints, null, false);
+	}
+
+	/**
+	 * Validates one source restored from a packed glued assembly. Components and sources in the
+	 * same assembly may overlap because the glue points themselves can be inside both models.
+	 */
+	public static boolean validateCompositeComponents(SurgicalTablePlane.Plane plane, int cubeCount,
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
+		List<Footprint> occupiedFootprints, Footprint assemblyEnvelope) {
+		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
+			occupiedFootprints, assemblyEnvelope, true);
+	}
+
+	private static boolean validateComponents(SurgicalTablePlane.Plane plane, int cubeCount,
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
+		List<Footprint> occupiedFootprints, Footprint assemblyEnvelope, boolean allowComponentOverlap) {
 		if (!plane.valid() || plane.workArea().isEmpty()
 			|| !SurgicalAssembly.validTopology(cubeCount, seams)
 			|| proposal.offsets().size() != presentCubes.cardinality())
@@ -58,7 +76,8 @@ public final class SurgicalTableLayout {
 			return false;
 		Map<Integer, List<Footprint>> footprints = new HashMap<>();
 		for (Footprint footprint : proposal.footprints()) {
-			if (footprint == null || !validFootprintBounds(plane.workArea(), footprint))
+			if (footprint == null || !validFootprintBounds(plane.workArea(), footprint)
+				|| assemblyEnvelope != null && !contains(assemblyEnvelope, footprint))
 				return false;
 			footprints.computeIfAbsent(footprint.componentRoot(), ignored -> new java.util.ArrayList<>())
 				.add(footprint);
@@ -84,14 +103,23 @@ public final class SurgicalTableLayout {
 		if (!footprints.keySet().equals(expectedRoots))
 			return false;
 
-		List<Integer> roots = List.copyOf(expectedRoots);
-		for (int firstRoot = 0; firstRoot < roots.size(); firstRoot++)
-			for (int secondRoot = firstRoot + 1; secondRoot < roots.size(); secondRoot++)
-				for (Footprint first : footprints.get(roots.get(firstRoot)))
-					for (Footprint second : footprints.get(roots.get(secondRoot)))
-						if (first.overlapsStrictly(second))
-							return false;
+		if (!allowComponentOverlap) {
+			List<Integer> roots = List.copyOf(expectedRoots);
+			for (int firstRoot = 0; firstRoot < roots.size(); firstRoot++)
+				for (int secondRoot = firstRoot + 1; secondRoot < roots.size(); secondRoot++)
+					for (Footprint first : footprints.get(roots.get(firstRoot)))
+						for (Footprint second : footprints.get(roots.get(secondRoot)))
+							if (first.overlapsStrictly(second))
+								return false;
+		}
 		return doesNotOverlap(proposal.footprints(), occupiedFootprints);
+	}
+
+	private static boolean contains(Footprint envelope, Footprint footprint) {
+		return footprint.minX() >= envelope.minX() - EPSILON
+			&& footprint.minZ() >= envelope.minZ() - EPSILON
+			&& footprint.maxX() <= envelope.maxX() + EPSILON
+			&& footprint.maxZ() <= envelope.maxZ() + EPSILON;
 	}
 
 	public static boolean validStoredFootprint(Footprint footprint) {

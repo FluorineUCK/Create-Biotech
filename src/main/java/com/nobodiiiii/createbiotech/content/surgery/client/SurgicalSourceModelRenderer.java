@@ -17,7 +17,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 public final class SurgicalSourceModelRenderer {
-	private static final Map<Object, CachedPreview> PREVIEWS = new WeakHashMap<>();
+	private static final Map<Object, Map<MimicProfile, CachedPreview>> PREVIEWS = new WeakHashMap<>();
 
 	private SurgicalSourceModelRenderer() {}
 
@@ -28,14 +28,16 @@ public final class SurgicalSourceModelRenderer {
 		if (level == null)
 			return null;
 
-		CachedPreview cached = PREVIEWS.get(owner);
+		Map<MimicProfile, CachedPreview> ownerPreviews = PREVIEWS.computeIfAbsent(owner,
+			ignored -> new java.util.HashMap<>());
+		CachedPreview cached = ownerPreviews.get(profile);
 		if (cached != null && cached.level == level && cached.profile.equals(profile))
 			return cached.entity;
 
 		LivingEntity entity = profile.createPreviewEntity(level);
 		if (entity == null)
 			return null;
-		PREVIEWS.put(owner, new CachedPreview(level, profile, entity));
+		ownerPreviews.put(profile, new CachedPreview(level, profile, entity));
 		return entity;
 	}
 

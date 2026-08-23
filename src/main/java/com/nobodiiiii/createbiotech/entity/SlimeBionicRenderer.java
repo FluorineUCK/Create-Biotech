@@ -4,6 +4,8 @@ import java.util.BitSet;
 import java.util.Map;
 import java.util.WeakHashMap;
 
+import org.jetbrains.annotations.Nullable;
+
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
@@ -11,6 +13,7 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalClientTopology;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalSourceModelRenderer;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalTablePoseResolver;
 import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -24,6 +27,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	private static final ResourceLocation SLIME_TEXTURE =
 		ResourceLocation.withDefaultNamespace("textures/entity/slime/slime.png");
 	private static final Map<SlimeBionicEntity, CachedGeometry> GEOMETRY = new WeakHashMap<>();
+	private static final Map<SlimeBionicEntity, CompositeCachedGeometry> COMPOSITE_GEOMETRY = new WeakHashMap<>();
 
 	public SlimeBionicRenderer(EntityRendererProvider.Context context) {
 		super(context);
@@ -32,6 +36,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 
 	public static void clearCache() {
 		GEOMETRY.clear();
+		COMPOSITE_GEOMETRY.clear();
 	}
 
 	@Override
@@ -39,6 +44,12 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		MultiBufferSource buffer, int packedLight) {
 		SurgicalAssembly assembly = entity.getAssembly();
 		if (assembly != null) {
+			if (assembly.preservesLayout() || assembly.sources().size() > 1) {
+				renderComposite(entity, assembly, yaw, partialTick, poseStack, buffer, packedLight);
+				super.render(entity, yaw, partialTick, poseStack, buffer, packedLight);
+				return;
+			}
+			COMPOSITE_GEOMETRY.remove(entity);
 			poseStack.pushPose();
 			LivingEntity preview = SurgicalSourceModelRenderer.preview(entity, assembly.profile());
 			boolean slimeForm = SlimeMimicHandler.isSlimeMimic(entity);
@@ -68,8 +79,66 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			poseStack.popPose();
 		} else {
 			GEOMETRY.remove(entity);
+			COMPOSITE_GEOMETRY.remove(entity);
 		}
 		super.render(entity, yaw, partialTick, poseStack, buffer, packedLight);
+	}
+
+	private static void renderComposite(SlimeBionicEntity entity, SurgicalAssembly assembly,
+		float yaw, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+		GEOMETRY.remove(entity);
+		boolean slimeForm = SlimeMimicHandler.isSlimeMimic(entity);
+		CompositeCachedGeometry cached = COMPOSITE_GEOMETRY.get(entity);
+		if (cached == null || cached.assembly != assembly
+			|| Float.floatToIntBits(cached.yaw) != Float.floatToIntBits(yaw)
+			|| cached.slimeForm != slimeForm) {
+			Vec3 modelOffset = measureComposite(entity, assembly, yaw, partialTick, packedLight, slimeForm);
+			cached = modelOffset == null ? null
+				: new CompositeCachedGeometry(assembly, yaw, slimeForm, modelOffset);
+			if (cached == null)
+				COMPOSITE_GEOMETRY.remove(entity);
+			else
+				COMPOSITE_GEOMETRY.put(entity, cached);
+		}
+
+		poseStack.pushPose();
+		if (cached != null)
+			poseStack.translate(cached.modelOffset.x, cached.modelOffset.y, cached.modelOffset.z);
+		renderCompositeSources(entity, assembly, yaw, partialTick, poseStack, buffer, packedLight,
+			!slimeForm);
+		poseStack.popPose();
+	}
+
+	@Nullable
+	private static Vec3 measureComposite(SlimeBionicEntity entity, SurgicalAssembly assembly,
+		float yaw, float partialTick, int packedLight, boolean slimeForm) {
+		EntityGeometry.Collector geometry = EntityGeometry.Collector.boundsOnly();
+		MultiBufferSource measuringBuffer = renderType -> geometry;
+		renderCompositeSources(entity, assembly, yaw, partialTick, new PoseStack(), measuringBuffer,
+			packedLight, !slimeForm);
+		if (!geometry.hasVertices())
+			return null;
+		EntityGeometry.Bounds bounds = geometry.bounds();
+		return new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ());
+	}
+
+	private static void renderCompositeSources(SlimeBionicEntity entity, SurgicalAssembly assembly,
+		float yaw, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+		boolean renderSourceGeometry) {
+		for (SurgicalAssembly.Source source : assembly.sources()) {
+			LivingEntity preview = SurgicalSourceModelRenderer.preview(entity, source.profile());
+			if (preview == null)
+				continue;
+			((SlimeMimicAccess) (Object) preview).createBiotech$setSlimeMimic(true);
+			poseStack.pushPose();
+			poseStack.translate(source.originOffset().x, source.originOffset().y, source.originOffset().z);
+			if (assembly.preservesLayout())
+				SurgicalTablePoseResolver.resolve(entity, source.profile(), preview, source.facing()).apply(poseStack);
+			SurgicalSourceModelRenderer.render(preview, source.cubeCount(), source.presentCubes(),
+				source.cubeOffsets(), poseStack, buffer, packedLight, yaw, partialTick, false, null,
+				renderSourceGeometry);
+			poseStack.popPose();
+		}
 	}
 
 	private static CachedGeometry rebuildGeometry(LivingEntity preview, SurgicalAssembly assembly,
@@ -117,4 +186,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			offsets = Map.copyOf(offsets);
 		}
 	}
+
+	private record CompositeCachedGeometry(SurgicalAssembly assembly, float yaw, boolean slimeForm,
+		Vec3 modelOffset) {}
 }
