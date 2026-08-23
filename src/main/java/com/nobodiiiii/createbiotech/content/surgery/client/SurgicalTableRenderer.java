@@ -16,12 +16,28 @@ import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableBlockEntity> {
 	private static final BitSet EMPTY_CUBES = new BitSet();
 
 	public SurgicalTableRenderer(BlockEntityRendererProvider.Context context) {}
+
+	@Override
+	public AABB getRenderBoundingBox(SurgicalTableBlockEntity table) {
+		return table.getRenderBoundingBox();
+	}
+
+	@Override
+	public boolean shouldRenderOffScreen(SurgicalTableBlockEntity table) {
+		return table.hasSubjects();
+	}
+
+	@Override
+	public boolean shouldRender(SurgicalTableBlockEntity table, Vec3 cameraPosition) {
+		return table.hasSubjects();
+	}
 
 	@Override
 	public void render(SurgicalTableBlockEntity table, float partialTick, PoseStack poseStack,

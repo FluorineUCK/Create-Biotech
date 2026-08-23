@@ -293,6 +293,31 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return true;
 	}
 
+	public boolean cutGlueJoint(Player player, ItemStack shears, InteractionHand hand, int subjectId,
+		int glueJointId, int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
+			|| glueJointId < 0 || glueJointId >= subject.glueJoints().size())
+			return false;
+		SurgicalGlueJoint joint = subject.glueJoints().get(glueJointId);
+		if (!joint.touches(subject.persistentId()))
+			return false;
+		SurgicalSubject first = getSubjectByPersistentId(joint.first().subjectKey());
+		SurgicalSubject second = getSubjectByPersistentId(joint.second().subjectKey());
+		if (first == null || second == null || !first.validPresentCube(joint.first().cubeId())
+			|| !second.validPresentCube(joint.second().cubeId()))
+			return false;
+
+		Set<SurgicalGlueJoint> removed = Set.of(joint);
+		for (SurgicalSubject connected : subjects)
+			connected.removeGlueJoints(removed);
+		shears.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
+		setChangedAndSync();
+		if (level != null)
+			level.playSound(null, worldPosition, SoundEvents.SHEEP_SHEAR, SoundSource.BLOCKS, 0.8f, 1.15f);
+		return true;
+	}
+
 	public boolean cutCubeConnections(Player player, ItemStack shears, InteractionHand hand, int subjectId,
 		int cubeId, int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams,
 		SurgicalTablePlane.Plane plane, SurgicalTableLayout.Proposal proposal) {
@@ -440,6 +465,21 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			}
 		} while (changed);
 		return new ComponentGroup(components);
+	}
+
+	/** Native components joined transitively through surgical glue, keyed by current subject id. */
+	public Map<Integer, BitSet> connectedComponents(int subjectId, int cubeId) {
+		SurgicalSubject start = getSubject(subjectId);
+		if (start == null || !start.validPresentCube(cubeId))
+			return Map.of();
+		ComponentGroup group = gluedGroup(start, cubeId);
+		Map<Integer, BitSet> result = new HashMap<>();
+		for (SurgicalSubject subject : subjects) {
+			BitSet included = group.components.get(subject.persistentId());
+			if (included != null && !included.isEmpty())
+				result.put(subject.id(), (BitSet) included.clone());
+		}
+		return Map.copyOf(result);
 	}
 
 	private boolean followJoint(SurgicalGlueJoint.Endpoint from, SurgicalGlueJoint.Endpoint to,
@@ -747,6 +787,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	@Override
 	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		boolean previouslyHadSubjects = hasSubjects();
 		super.read(tag, registries, clientPacket);
 		List<SurgicalSubject> loaded = new ArrayList<>();
 		Set<Integer> ids = new HashSet<>();
@@ -782,6 +823,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			clientDataRevision++;
 			for (SurgicalSubject subject : subjects)
 				subject.setClientRenderRevision(clientDataRevision);
+			if (previouslyHadSubjects != hasSubjects() && level != null)
+				level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 16);
 		}
 	}
 

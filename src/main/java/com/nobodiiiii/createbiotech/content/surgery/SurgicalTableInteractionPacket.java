@@ -93,6 +93,10 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 					noSpace(player);
 			}
 		}
+		case CUT_GLUE -> {
+			if (held.is(Items.SHEARS))
+				table.cutGlueJoint(player, held, hand, subjectId, targetId, observedCubeCount, seams);
+		}
 		case PACK -> {
 			if (targetId < observedCubeCount
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.isBox(held)
@@ -146,6 +150,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		PLACE,
 		CUT,
 		PACK,
-		CUT_CUBE_CONNECTIONS
+		CUT_CUBE_CONNECTIONS,
+		CUT_GLUE
 	}
 }
