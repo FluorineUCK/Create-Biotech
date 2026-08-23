@@ -37,6 +37,7 @@ import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltBlock;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlock;
 import com.nobodiiiii.createbiotech.content.slimeclutch.SlimeClutchBlock;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlock;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock;
 import com.nobodiiiii.createbiotech.content.schrodingerscat.SchrodingersCatBlock;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerBlock;
 import com.nobodiiiii.createbiotech.content.shulkerteleporter.ShulkerTeleporterBlock;
@@ -148,6 +149,12 @@ public class CBBlocks {
 			.sound(SoundType.GLASS)
 			.strength(1.5f)
 			.mapColor(MapColor.METAL)
+			.noOcclusion()));
+
+	public static final DeferredHolder<Block, SurgicalTableBlock> SURGICAL_TABLE = BLOCKS.register("surgical_table",
+		() -> new SurgicalTableBlock(CBSharedProperties.createSoftMetal()
+			.sound(SoundType.METAL)
+			.mapColor(MapColor.COLOR_LIGHT_BLUE)
 			.noOcclusion()));
 
 	public static final DeferredHolder<Block, UniversalJointBlock> UNIVERSAL_JOINT = BLOCKS.register("universal_joint",

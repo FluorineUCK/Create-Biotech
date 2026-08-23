@@ -18,6 +18,7 @@ import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.mixin.client.ModelPartAccessor;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.model.EntityModel;
@@ -170,8 +171,9 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				renderCube(cube, poseStack, context, packedLight, overlay, pass);
 		}
 
-		for (Map.Entry<String, ModelPart> child : accessor.createBiotech$getChildren().entrySet())
-			renderPartRecursive(child.getValue(), poseStack, context, packedLight, overlay, pass);
+		accessor.createBiotech$getChildren().entrySet().stream()
+			.sorted(Map.Entry.comparingByKey())
+			.forEach(child -> renderPartRecursive(child.getValue(), poseStack, context, packedLight, overlay, pass));
 
 		poseStack.popPose();
 	}
@@ -187,6 +189,12 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		if (width < 0 || height < 0 || depth < 0)
 			return;
 
+		poseStack.pushPose();
+		if (!SurgicalModelRenderContext.prepareCube(cube, poseStack, pass == RenderPass.INNER)) {
+			poseStack.popPose();
+			return;
+		}
+
 		boolean flatCube = isFlatCube(width, height, depth);
 
 		float centerX = (cube.minX + cube.maxX) * 0.5f / 16.0f;
@@ -198,6 +206,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				renderFlatCubeBase(cube, poseStack, context, packedLight, overlay);
 			else
 				renderFlatCubeFilter(cube, poseStack, context, packedLight, overlay);
+			poseStack.popPose();
 			return;
 		}
 
@@ -206,6 +215,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				.getBuffer(RenderType.entityCutoutNoCull(SLIME_TEXTURE));
 			renderSlimeCube(innerCube(), poseStack, innerConsumer, packedLight, overlay, centerX, centerY, centerZ,
 				width, height, depth, color(INNER_RED, INNER_GREEN, INNER_BLUE, INNER_ALPHA));
+			poseStack.popPose();
 			return;
 		}
 
@@ -214,6 +224,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		renderSlimeCube(outerCube(), poseStack, outerConsumer, packedLight, overlay, centerX, centerY, centerZ,
 			width + 2.0f * OUTER_CUBE_INFLATE_PIXELS, height + 2.0f * OUTER_CUBE_INFLATE_PIXELS,
 			depth + 2.0f * OUTER_CUBE_INFLATE_PIXELS, color(OUTER_RED, OUTER_GREEN, OUTER_BLUE, OUTER_ALPHA));
+		poseStack.popPose();
 	}
 
 	private static void renderSlimeCube(ModelPart slimeCube, PoseStack poseStack, VertexConsumer consumer,

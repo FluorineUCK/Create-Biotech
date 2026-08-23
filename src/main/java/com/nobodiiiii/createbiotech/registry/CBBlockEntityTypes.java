@@ -28,6 +28,7 @@ import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltBlockEntity;
 import com.nobodiiiii.createbiotech.content.slimeclutch.SlimeClutchBlockEntity;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlockEntity;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.universaljoint.HalfShaftBlockEntity;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointBlockEntity;
 import com.nobodiiiii.createbiotech.content.creeperblastchamber.BlastProofChainDriveBlockEntity;
@@ -125,6 +126,11 @@ public class CBBlockEntityTypes {
 		BLOCK_ENTITY_TYPES.register("petri_dish",
 			() -> BlockEntityType.Builder
 				.of(PetriDishBlockEntity::new, CBBlocks.PETRI_DISH.get())
+				.build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<SurgicalTableBlockEntity>> SURGICAL_TABLE =
+		BLOCK_ENTITY_TYPES.register("surgical_table",
+			() -> BlockEntityType.Builder.of(SurgicalTableBlockEntity::new, CBBlocks.SURGICAL_TABLE.get())
 				.build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<UniversalJointBlockEntity>> UNIVERSAL_JOINT =

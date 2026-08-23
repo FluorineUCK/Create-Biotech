@@ -16,6 +16,7 @@ import net.minecraft.world.entity.AgeableMob;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.Level;
 
 /**
  * A deliberately small snapshot of stable biological and appearance data.
@@ -118,6 +119,40 @@ public final class MimicProfile {
 		if (baby != null)
 			tag.putBoolean(BABY_TAG, baby);
 		return tag;
+	}
+
+	public ResourceLocation entityTypeId() {
+		return entityTypeId;
+	}
+
+	/**
+	 * Creates the source-model adapter used by client renderers. The returned entity is
+	 * deliberately not added to the level and contains only the stable appearance data
+	 * captured by this profile.
+	 */
+	@Nullable
+	public LivingEntity createPreviewEntity(Level level) {
+		EntityType<?> entityType = BuiltInRegistries.ENTITY_TYPE.getOptional(entityTypeId)
+			.orElse(null);
+		if (entityType == null)
+			return null;
+
+		net.minecraft.world.entity.Entity created = entityType.create(level);
+		if (!(created instanceof LivingEntity living))
+			return null;
+
+		apply(living);
+		SlimeMimicHandler.setSlimeMimic(living, true);
+		living.setYRot(0.0f);
+		living.setXRot(0.0f);
+		living.yRotO = 0.0f;
+		living.xRotO = 0.0f;
+		living.yBodyRot = 0.0f;
+		living.yBodyRotO = 0.0f;
+		living.yHeadRot = 0.0f;
+		living.yHeadRotO = 0.0f;
+		living.tickCount = 0;
+		return living;
 	}
 
 	public boolean matches(@Nullable ResourceLocation expectedEntityTypeId) {

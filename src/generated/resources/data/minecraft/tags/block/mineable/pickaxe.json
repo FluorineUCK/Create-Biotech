@@ -13,6 +13,7 @@
     "create_biotech:experience_cluster",
     "create_biotech:squid_printer",
     "create_biotech:petri_dish",
+    "create_biotech:surgical_table",
     "create_biotech:universal_joint",
     "create_biotech:half_shaft",
     "create_biotech:slime_clutch",

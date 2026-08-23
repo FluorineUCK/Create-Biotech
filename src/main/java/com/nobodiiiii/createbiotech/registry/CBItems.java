@@ -100,6 +100,9 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> PETRI_DISH = ITEMS.register("petri_dish",
 		() -> new BlockItem(CBBlocks.PETRI_DISH.get(), new Item.Properties()));
 
+	public static final DeferredHolder<Item, Item> SURGICAL_TABLE = ITEMS.register("surgical_table",
+		() -> new BlockItem(CBBlocks.SURGICAL_TABLE.get(), new Item.Properties()));
+
 	public static final DeferredHolder<Item, EnchantmentBookCopyItem> ENCHANTMENT_BOOK_COPY =
 		ITEMS.register("enchantment_book_copy", () -> new EnchantmentBookCopyItem(new Item.Properties()));
 

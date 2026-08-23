@@ -11,6 +11,7 @@ import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloo
 import com.nobodiiiii.createbiotech.content.ghasthotairballoon.GhastHotAirBalloonSeatEntity;
 import com.simibubi.create.content.logistics.box.PackageEntity;
 import com.nobodiiiii.createbiotech.content.allay.entity.courier.AllayCourierEntity;
+import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.MobCategory;
@@ -79,6 +80,15 @@ public class CBEntityTypes {
 			.setShouldReceiveVelocityUpdates(true)
 			.build("ding_dong_chicken"));
 
+	public static final DeferredHolder<EntityType<?>, EntityType<SlimeBionicEntity>> SLIME_BIONIC =
+		ENTITY_TYPES.register("slime_bionic", () -> EntityType.Builder
+			.<SlimeBionicEntity>of(SlimeBionicEntity::new, MobCategory.CREATURE)
+			.sized(0.6F, 0.8F)
+			.setTrackingRange(10)
+			.setUpdateInterval(3)
+			.setShouldReceiveVelocityUpdates(true)
+			.build("slime_bionic"));
+
 	private CBEntityTypes() {}
 
 	public static void register(IEventBus modEventBus) {
@@ -91,5 +101,6 @@ public class CBEntityTypes {
 			.build());
 		event.put(ALLAY_COURIER.get(), Allay.createAttributes().build());
 		event.put(DING_DONG_CHICKEN.get(), DingDongChickenEntity.createAttributes().build());
+		event.put(SLIME_BIONIC.get(), SlimeBionicEntity.createAttributes().build());
 	}
 }

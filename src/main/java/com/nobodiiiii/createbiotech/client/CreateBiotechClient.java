@@ -18,6 +18,7 @@ import com.nobodiiiii.createbiotech.content.creeperblastchamber.CreeperBlastCham
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.client.render.SlimeBeltFunnelModel;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
+import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityRenderManager;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CardboardBoxPartials;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultCTBehaviour;
@@ -37,6 +38,9 @@ import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltRenderer;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltSpriteShifts;
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltVisual;
 import com.nobodiiiii.createbiotech.content.petridish.PetriDishRenderer;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalSourceModelRenderer;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalTableClientHandler;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalTableRenderer;
 import com.nobodiiiii.createbiotech.content.schrodingerscat.SchrodingersCatRenderer;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerConnectionHandler;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagePartials;
@@ -56,6 +60,7 @@ import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterRenderer;
 import com.nobodiiiii.createbiotech.content.sonicdogcannon.SonicDogCannonUpgrade;
 import com.nobodiiiii.createbiotech.content.universaljoint.HalfShaftVisual;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointRenderer;
+import com.nobodiiiii.createbiotech.entity.SlimeBionicRenderer;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessStockKeeperRequestMenu;
 import com.nobodiiiii.createbiotech.content.wirelessterminal.WirelessStockKeeperRequestScreen;
 import com.simibubi.create.content.kinetics.transmission.SplitShaftRenderer;
@@ -171,6 +176,7 @@ public class CreateBiotechClient {
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.SHULKER_TELEPORTER.get(), ShulkerTeleporterRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.BONE_RATCHET.get(), BoneRatchetRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.PETRI_DISH.get(), PetriDishRenderer::new);
+		event.registerBlockEntityRenderer(CBBlockEntityTypes.SURGICAL_TABLE.get(), SurgicalTableRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.BUTTER_CAT_ENGINE.get(), ButterCatEngineRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.ALLAY_PORT.get(), AllayPortRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.GIANT_FROG.get(), GiantFrogRenderer::new);
@@ -182,6 +188,7 @@ public class CreateBiotechClient {
 		event.registerEntityRenderer(CBEntityTypes.ALLAY_COURIER.get(),
 			context -> new AllayCourierEntityRenderer(context));
 		event.registerEntityRenderer(CBEntityTypes.DING_DONG_CHICKEN.get(), DingDongChickenRenderer::new);
+		event.registerEntityRenderer(CBEntityTypes.SLIME_BIONIC.get(), SlimeBionicRenderer::new);
 	}
 
 	@SubscribeEvent
@@ -282,6 +289,9 @@ public class CreateBiotechClient {
 			public void onResourceManagerReload(ResourceManager resourceManager) {
 				SlimeMimicRenderLayer.clearCachedTextureData();
 				CapturedEntityRenderManager.clearForResourceReload();
+				SurgicalTableClientHandler.clear();
+				SurgicalSourceModelRenderer.clear();
+				SlimeBionicRenderer.clearCache();
 			}
 		});
 		event.registerReloadListener(SlimeBeltHelper.LISTENER);
@@ -466,8 +476,8 @@ public class CreateBiotechClient {
 		registerCreateStyleTooltip(CBItems.MEDIUM_EXPERIENCE_BUD.get());
 		registerCreateStyleTooltip(CBItems.LARGE_EXPERIENCE_BUD.get());
 		registerCreateStyleTooltip(CBItems.EXPERIENCE_CLUSTER.get());
-		registerCreateStyleTooltip(CBItems.CARDBOARD_BOX.get(), CapturedEntityBoxHelper::hasCapturedEntity);
-		registerCreateStyleTooltip(CBItems.LARGE_CARDBOARD_BOX.get(), CapturedEntityBoxHelper::hasCapturedEntity);
+		registerCreateStyleTooltip(CBItems.CARDBOARD_BOX.get(), CapturedEntityBoxItem::hasAnyContents);
+		registerCreateStyleTooltip(CBItems.LARGE_CARDBOARD_BOX.get(), CapturedEntityBoxItem::hasAnyContents);
 		registerCreateStyleTooltip(CBItems.CAPTURED_SMALL_SLIME.get());
 		registerCreateStyleTooltip(CBItems.DING_DONG_CHICKEN.get());
 		registerCreateStyleTooltip(CBItems.SMART_SUPER_GLUE.get());
@@ -477,6 +487,7 @@ public class CreateBiotechClient {
 		registerCreateStyleTooltip(CBItems.SHULKER_PACKAGER.get());
 		registerCreateStyleTooltip(CBItems.SHULKER_TELEPORTER.get());
 		registerCreateStyleTooltip(CBItems.GIANT_FROG.get());
+		registerCreateStyleTooltip(CBItems.SURGICAL_TABLE.get());
 		registerCreateStyleTooltip(CBItems.ALLAY_PORT.get());
 		registerCreateStyleTooltip(CBItems.ALLAY_COURIER.get());
 		registerCreateStyleTooltip(CBItems.CUTE_CAT_ON_SHAFT.get());
@@ -512,8 +523,10 @@ public class CreateBiotechClient {
 
 	private static void registerCardboardBoxModelProperties() {
 		ItemProperties.register(CBItems.CARDBOARD_BOX.get(), CreateBiotech.asResource("captured"),
-			(stack, level, entity, seed) -> CapturedEntityBoxHelper.hasCapturedEntity(stack) ? 1.0f : 0.0f);
+			(stack, level, entity, seed) -> com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
+				.hasAnyContents(stack) ? 1.0f : 0.0f);
 		ItemProperties.register(CBItems.LARGE_CARDBOARD_BOX.get(), CreateBiotech.asResource("captured"),
-			(stack, level, entity, seed) -> CapturedEntityBoxHelper.hasCapturedEntity(stack) ? 1.0f : 0.0f);
+			(stack, level, entity, seed) -> com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
+				.hasAnyContents(stack) ? 1.0f : 0.0f);
 	}
 }

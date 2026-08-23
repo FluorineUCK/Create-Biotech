@@ -50,6 +50,7 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 			CBBlocks.EXPERIENCE_CLUSTER.get(),
 			CBBlocks.SQUID_PRINTER.get(),
 			CBBlocks.PETRI_DISH.get(),
+			CBBlocks.SURGICAL_TABLE.get(),
 			CBBlocks.UNIVERSAL_JOINT.get(),
 			CBBlocks.HALF_SHAFT.get(),
 			CBBlocks.SLIME_CLUTCH.get(),

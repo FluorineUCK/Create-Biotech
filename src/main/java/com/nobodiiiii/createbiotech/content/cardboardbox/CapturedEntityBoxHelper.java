@@ -10,6 +10,7 @@ import java.util.function.Function;
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointRepair;
 import com.nobodiiiii.createbiotech.foundation.item.CBItemData;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssemblyBoxHelper;
 import com.simibubi.create.content.logistics.box.PackageItem;
 
 import net.minecraft.ChatFormatting;
@@ -89,10 +90,11 @@ public class CapturedEntityBoxHelper {
 	public static void appendHoverText(ItemStack stack, List<Component> tooltipComponents) {
 		appendAddressTooltip(stack, tooltipComponents);
 		appendContentsTooltip(stack, tooltipComponents);
+		SurgicalAssemblyBoxHelper.appendTooltip(stack, tooltipComponents);
 	}
 
 	public static boolean captureEntity(ItemStack stack, LivingEntity target) {
-		if (hasCapturedEntity(stack))
+		if (hasCapturedEntity(stack) || SurgicalAssemblyBoxHelper.hasAssembly(stack))
 			return false;
 
 		CompoundTag entityData = new CompoundTag();
