@@ -534,6 +534,45 @@ public final class SurgicalClientTopology {
 			workArea, requests);
 	}
 
+	/** Aligns every detached component so its rendered outer bounds touch the table surface. */
+	public static Map<Integer, Vec3> groundComponents(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> horizontalOffsets,
+		double surfaceY) {
+		if (!Double.isFinite(surfaceY) || !SurgicalAssembly.validTopology(cubeCount, seams)
+			|| cutSeams.isEmpty())
+			return Map.copyOf(horizontalOffsets);
+
+		List<BitSet> components = SurgicalAssembly.components(cubeCount, presentCubes, seams, cutSeams);
+		if (components.isEmpty())
+			return Map.copyOf(horizontalOffsets);
+		Map<Integer, Bounds> baseBounds = layoutBounds(presentCubes, cubes);
+		if (baseBounds.size() < presentCubes.cardinality())
+			return Map.copyOf(horizontalOffsets);
+
+		Map<Integer, Vec3> grounded = new HashMap<>();
+		for (BitSet component : components) {
+			double bottomY = Double.POSITIVE_INFINITY;
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+				Bounds bounds = baseBounds.get(cube);
+				if (bounds == null)
+					continue;
+				bottomY = Math.min(bottomY,
+					bounds.minY + horizontalOffsets.getOrDefault(cube, Vec3.ZERO).y);
+			}
+			if (!Double.isFinite(bottomY))
+				continue;
+			double groundDelta = surfaceY - bottomY;
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+				Vec3 offset = horizontalOffsets.getOrDefault(cube, Vec3.ZERO);
+				Vec3 adjusted = new Vec3(offset.x, offset.y + groundDelta, offset.z);
+				if (adjusted.lengthSqr() > DISTANCE_EPSILON)
+					grounded.put(cube, adjusted);
+			}
+		}
+		return Map.copyOf(grounded);
+	}
+
 	@Nullable
 	private static PlannedLayout planSnappedLayout(int cubeCount, BitSet presentCubes,
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,

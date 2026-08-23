@@ -454,7 +454,7 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 		pending.planned = planned;
-		geometry.applyPreview(table, planned.offsets());
+		geometry.applyPreview(table, planned.offsets(), pending.proposedCuts);
 		seamSelection = null;
 		cubeSelection = null;
 		componentSelection = new Selection(pending.tablePos, pending.targetId, pending.observedCubeCount,
@@ -951,8 +951,9 @@ public final class SurgicalTableClientHandler {
 			renderRevision = revision;
 		}
 
-		private void applyPreview(SurgicalTableBlockEntity table, Map<Integer, Vec3> previewOffsets) {
-			applyOffsets(table, previewOffsets);
+		private void applyPreview(SurgicalTableBlockEntity table, Map<Integer, Vec3> previewOffsets,
+			BitSet previewCutSeams) {
+			applyOffsets(table, previewOffsets, previewCutSeams);
 		}
 
 		private void clearPreview(SurgicalTableBlockEntity table) {
@@ -960,7 +961,14 @@ public final class SurgicalTableClientHandler {
 		}
 
 		private void applyOffsets(SurgicalTableBlockEntity table, Map<Integer, Vec3> appliedOffsets) {
-			offsets = Map.copyOf(appliedOffsets);
+			applyOffsets(table, appliedOffsets, cutSeams);
+		}
+
+		private void applyOffsets(SurgicalTableBlockEntity table, Map<Integer, Vec3> appliedOffsets,
+			BitSet appliedCutSeams) {
+			double surfaceY = table.getBlockPos().getY() + 1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE;
+			offsets = SurgicalClientTopology.groundComponents(observedCubeCount, presentCubes,
+				seams, appliedCutSeams, baseCubes, appliedOffsets, surfaceY);
 			cubes = translateCubes(baseCubes, offsets);
 			cubesById = indexCubes(cubes);
 			connectedCubeEdgeCache.clear();

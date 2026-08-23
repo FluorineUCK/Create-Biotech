@@ -17,7 +17,7 @@ import org.joml.Vector3f;
 /** Measures the real preview renderer and chooses the lowest deterministic recumbent pose. */
 public final class SurgicalTablePoseResolver {
 	private static final int MAX_MEASURED_VERTICES = 200_000;
-	private static final float TABLE_CLEARANCE = 1.0f / 1024.0f;
+	static final float TABLE_CLEARANCE = 1.0f / 1024.0f;
 	private static final float HEIGHT_EPSILON = 1.0e-5f;
 	private static final int[] CARDINAL_YAWS = { 0, 90, 180, 270 };
 	private static final Map<Object, CachedPose> CACHE = new WeakHashMap<>();
