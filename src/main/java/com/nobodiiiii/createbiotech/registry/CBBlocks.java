@@ -56,6 +56,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.item.DyeColor;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.RotatedPillarBlock;
 import net.minecraft.world.level.block.SoundType;
 import net.minecraft.world.level.block.TransparentBlock;
 import net.minecraft.world.level.material.MapColor;
@@ -307,10 +308,26 @@ public class CBBlocks {
 				.strength(0.8f)
 				.sound(SoundType.SLIME_BLOCK)));
 
-	// Six-way stomach plant; its temporary appearance and mature structure reuse crimson fungus.
+	// Six-way stomach plant with a dedicated mature structure palette.
 	public static final DeferredHolder<Block, FrogStomachFungusBlock> FROG_STOMACH_FUNGUS =
 		BLOCKS.register("frog_stomach_fungus",
 			() -> new FrogStomachFungusBlock(Block.Properties.ofFullCopy(Blocks.CRIMSON_FUNGUS)));
+
+	// Internal blocks used only by the mature Frog Stomach Fungus structure.
+	public static final DeferredHolder<Block, RotatedPillarBlock> FROG_STOMACH_FUNGUS_STEM =
+		BLOCKS.register("frog_stomach_fungus_stem",
+			() -> new RotatedPillarBlock(Block.Properties.ofFullCopy(Blocks.CRIMSON_STEM)
+				.noLootTable()));
+
+	public static final DeferredHolder<Block, Block> FROG_STOMACH_FUNGUS_CAP =
+		BLOCKS.register("frog_stomach_fungus_cap",
+			() -> new Block(Block.Properties.ofFullCopy(Blocks.NETHER_WART_BLOCK)
+				.noLootTable()));
+
+	public static final DeferredHolder<Block, Block> FROG_STOMACH_FUNGUS_LIGHT =
+		BLOCKS.register("frog_stomach_fungus_light",
+			() -> new Block(Block.Properties.ofFullCopy(Blocks.SHROOMLIGHT)
+				.noLootTable()));
 
 	// Slime-like secretion that absorbs slime experience and spreads across supported surfaces.
 	// Honey's inset collision shape is not a valid ON_GROUND spawn surface, so permit slimes explicitly.

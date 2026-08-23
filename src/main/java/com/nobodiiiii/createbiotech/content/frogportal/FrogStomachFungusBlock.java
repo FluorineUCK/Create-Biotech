@@ -126,7 +126,7 @@ public class FrogStomachFungusBlock extends Block implements BonemealableBlock {
 		grow(level, random, pos, state.getValue(FACING));
 	}
 
-	/** Grows a vanilla-style huge crimson fungus rotated to face away from its stomach surface. */
+	/** Grows a huge stomach fungus rotated to face away from its supporting surface. */
 	public static boolean grow(ServerLevel level, RandomSource random, BlockPos origin,
 		Direction growthDirection) {
 		if (!isStomachSurface(level, origin.relative(growthDirection.getOpposite()), growthDirection))
@@ -159,7 +159,7 @@ public class FrogStomachFungusBlock extends Block implements BonemealableBlock {
 		if (random.nextInt(12) == 0)
 			stemHeight *= 2;
 
-		BlockState stem = Blocks.CRIMSON_STEM.defaultBlockState()
+		BlockState stem = CBBlocks.FROG_STOMACH_FUNGUS_STEM.get().defaultBlockState()
 			.setValue(BlockStateProperties.AXIS, growthDirection.getAxis());
 		for (int step = 0; step < stemHeight; step++)
 			structure.put(localPos(origin, growthDirection, firstAxis, secondAxis, 0, step, 0), stem);
@@ -198,16 +198,17 @@ public class FrogStomachFungusBlock extends Block implements BonemealableBlock {
 	private static void placeHatBlock(Map<BlockPos, BlockState> structure, BlockPos pos,
 		RandomSource random, float shroomlightChance, float hatChance) {
 		if (random.nextFloat() < shroomlightChance)
-			structure.put(pos, Blocks.SHROOMLIGHT.defaultBlockState());
+			structure.put(pos, CBBlocks.FROG_STOMACH_FUNGUS_LIGHT.get().defaultBlockState());
 		else if (random.nextFloat() < hatChance)
-			structure.put(pos, Blocks.NETHER_WART_BLOCK.defaultBlockState());
+			structure.put(pos, CBBlocks.FROG_STOMACH_FUNGUS_CAP.get().defaultBlockState());
 	}
 
 	private static void placeHatDropBlock(Map<BlockPos, BlockState> structure, BlockPos pos,
 		Direction growthDirection, RandomSource random) {
 		BlockState previous = structure.get(pos.relative(growthDirection.getOpposite()));
-		if ((previous != null && previous.is(Blocks.NETHER_WART_BLOCK)) || random.nextFloat() < 0.15f)
-			structure.put(pos, Blocks.NETHER_WART_BLOCK.defaultBlockState());
+		if ((previous != null && previous.is(CBBlocks.FROG_STOMACH_FUNGUS_CAP.get()))
+			|| random.nextFloat() < 0.15f)
+			structure.put(pos, CBBlocks.FROG_STOMACH_FUNGUS_CAP.get().defaultBlockState());
 	}
 
 	private static BlockPos localPos(BlockPos origin, Direction growthDirection, Direction firstAxis,

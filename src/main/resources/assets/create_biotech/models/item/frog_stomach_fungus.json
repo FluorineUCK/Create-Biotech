@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:item/generated",
   "textures": {
-    "layer0": "minecraft:block/crimson_fungus"
+    "layer0": "create_biotech:block/frog_stomach_fungus"
   }
 }

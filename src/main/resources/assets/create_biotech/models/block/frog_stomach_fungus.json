@@ -1,6 +1,6 @@
 {
   "parent": "minecraft:block/cross",
   "textures": {
-    "cross": "minecraft:block/crimson_fungus"
+    "cross": "create_biotech:block/frog_stomach_fungus"
   }
 }

@@ -1,0 +1,7 @@
+{
+  "parent": "minecraft:block/cube_column",
+  "textures": {
+    "side": "create_biotech:block/frog_stomach_fungus_stem",
+    "end": "create_biotech:block/frog_stomach_fungus_stem_top"
+  }
+}

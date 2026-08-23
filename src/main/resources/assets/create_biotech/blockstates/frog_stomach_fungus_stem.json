@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "axis=x": { "model": "create_biotech:block/frog_stomach_fungus_stem", "x": 90, "y": 90 },
+    "axis=y": { "model": "create_biotech:block/frog_stomach_fungus_stem" },
+    "axis=z": { "model": "create_biotech:block/frog_stomach_fungus_stem", "x": 90 }
+  }
+}
