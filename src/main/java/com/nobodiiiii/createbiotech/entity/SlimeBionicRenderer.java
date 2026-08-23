@@ -10,6 +10,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalClientTopology;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalSourceModelRenderer;
@@ -28,6 +29,8 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		ResourceLocation.withDefaultNamespace("textures/entity/slime/slime.png");
 	private static final Map<SlimeBionicEntity, CachedGeometry> GEOMETRY = new WeakHashMap<>();
 	private static final Map<SlimeBionicEntity, CompositeCachedGeometry> COMPOSITE_GEOMETRY = new WeakHashMap<>();
+	private static final Map<SurgicalAssembly, Map<SurgicalAssembly.Source, Map<Integer, Vec3>>>
+		UPRIGHT_OFFSETS = new WeakHashMap<>();
 
 	public SlimeBionicRenderer(EntityRendererProvider.Context context) {
 		super(context);
@@ -37,6 +40,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	public static void clearCache() {
 		GEOMETRY.clear();
 		COMPOSITE_GEOMETRY.clear();
+		UPRIGHT_OFFSETS.clear();
 	}
 
 	@Override
@@ -137,7 +141,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			if (assembly.preservesLayout())
 				SurgicalTablePoseResolver.resolve(source.layPose()).apply(poseStack);
 			SurgicalSourceModelRenderer.render(preview, source.cubeCount(), source.presentCubes(),
-				inverseRotateOffsets(assembly.layoutLayPose(), source.cubeOffsets()),
+				uprightOffsets(assembly, source),
 				poseStack, buffer, packedLight, yaw, partialTick, false, null,
 				renderSourceGeometry);
 			poseStack.popPose();
@@ -145,13 +149,22 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		poseStack.popPose();
 	}
 
-	private static Map<Integer, Vec3> inverseRotateOffsets(com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose pose,
-		Map<Integer, Vec3> offsets) {
+	private static Map<Integer, Vec3> uprightOffsets(SurgicalAssembly assembly,
+		SurgicalAssembly.Source source) {
+		Map<SurgicalAssembly.Source, Map<Integer, Vec3>> assemblyOffsets = UPRIGHT_OFFSETS
+			.computeIfAbsent(assembly, ignored -> new java.util.IdentityHashMap<>());
+		Map<Integer, Vec3> cached = assemblyOffsets.get(source);
+		if (cached != null)
+			return cached;
+		SurgicalLayPose pose = assembly.layoutLayPose();
+		Map<Integer, Vec3> offsets = source.cubeOffsets();
 		if (offsets.isEmpty())
 			return offsets;
 		Map<Integer, Vec3> transformed = new java.util.HashMap<>();
 		offsets.forEach((cube, offset) -> transformed.put(cube, pose.inverseRotate(offset)));
-		return Map.copyOf(transformed);
+		Map<Integer, Vec3> result = Map.copyOf(transformed);
+		assemblyOffsets.put(source, result);
+		return result;
 	}
 
 	private static CachedGeometry rebuildGeometry(LivingEntity preview, SurgicalAssembly assembly,

@@ -660,9 +660,9 @@ public final class SurgicalTableClientHandler {
 		if (targetSubject == null)
 			return null;
 		Map<Integer, BitSet> moving = table.connectedComponents(first.selection.subjectId,
-			first.selection.targetId);
+			first.selection.targetId, first.selection.observedCubeCount, first.selection.seams);
 		Map<Integer, BitSet> anchored = table.connectedComponents(targetHit.geometry.subjectId,
-			targetHit.cubeId);
+			targetHit.cubeId, targetHit.geometry.observedCubeCount, targetHit.geometry.seams);
 		if (moving.isEmpty() || anchored.isEmpty() || componentMapsIntersect(moving, anchored))
 			return null;
 
@@ -674,7 +674,6 @@ public final class SurgicalTableClientHandler {
 		Vec3 secondPoint = targetHit.location;
 		SurgicalLayPose targetPose = targetSubject.layPose();
 		List<GluePlanningSubject> planning = new ArrayList<>();
-		double lowestY = Double.POSITIVE_INFINITY;
 
 		for (Map.Entry<Integer, BitSet> entry : moving.entrySet()) {
 			SurgicalSubject subject = table.getSubject(entry.getKey());
@@ -698,26 +697,24 @@ public final class SurgicalTableClientHandler {
 					firstPoint, secondPoint, subject.layPose(), targetPose);
 				baseTarget.put(cube, reframedBase);
 				desired.put(cube, reframedCurrent);
-				for (Vec3 corner : reframedCurrent.corners())
-					lowestY = Math.min(lowestY, corner.y);
 			}
 			planning.add(new GluePlanningSubject(subject, cubes, List.copyOf(baseTarget.values()),
 				Map.copyOf(desired)));
 		}
-		if (!Double.isFinite(lowestY))
-			return null;
 		double surfaceY = plane.workArea().y() + 1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE;
-		double groundDelta = surfaceY - lowestY;
 		List<GlueSubjectPreview> previews = new ArrayList<>(planning.size());
 		List<SurgicalTableGluePacket.Move> moves = new ArrayList<>(planning.size());
 		for (GluePlanningSubject source : planning) {
+			Map<Integer, Double> groundDeltas = componentGroundDeltas(source, surfaceY);
+			if (groundDeltas.size() != source.cubes.cardinality())
+				return null;
 			Map<Integer, Vec3> offsets = new HashMap<>();
 			for (int cube = source.cubes.nextSetBit(0); cube >= 0; cube = source.cubes.nextSetBit(cube + 1)) {
 				SurgicalModelRenderContext.CubeGeometry base = cubeById(source.baseTarget, cube);
 				SurgicalModelRenderContext.CubeGeometry desired = source.desired.get(cube);
 				if (base == null || desired == null)
 					return null;
-				offsets.put(cube, cubeCenter(desired).add(0.0d, groundDelta, 0.0d)
+				offsets.put(cube, cubeCenter(desired).add(0.0d, groundDeltas.get(cube), 0.0d)
 					.subtract(cubeCenter(base)));
 			}
 			SurgicalClientTopology.PlannedLayout planned = SurgicalClientTopology.preserveCompositeLayout(
@@ -733,6 +730,28 @@ public final class SurgicalTableClientHandler {
 			previews.add(new GlueSubjectPreview(source.subject.id(), source.cubes, planned.offsets()));
 		}
 		return new GluePreview(targetHit.tablePos, targetPose, previews, moves);
+	}
+
+	private static Map<Integer, Double> componentGroundDeltas(GluePlanningSubject source,
+		double surfaceY) {
+		Map<Integer, Double> deltas = new HashMap<>();
+		for (BitSet component : SurgicalAssembly.components(source.subject.cubeCount(), source.cubes,
+			source.subject.seams(), source.subject.cutSeamsForRender())) {
+			double lowestY = Double.POSITIVE_INFINITY;
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+				SurgicalModelRenderContext.CubeGeometry geometry = source.desired.get(cube);
+				if (geometry == null)
+					continue;
+				for (Vec3 corner : geometry.corners())
+					lowestY = Math.min(lowestY, corner.y);
+			}
+			if (!Double.isFinite(lowestY))
+				return Map.of();
+			double delta = surfaceY - lowestY;
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
+				deltas.put(cube, delta);
+		}
+		return Map.copyOf(deltas);
 	}
 
 	private static boolean componentMapsIntersect(Map<Integer, BitSet> first, Map<Integer, BitSet> second) {
@@ -1359,7 +1378,8 @@ public final class SurgicalTableClientHandler {
 		ClientLevel level = Minecraft.getInstance().level;
 		if (level == null || !(level.getBlockEntity(hit.tablePos) instanceof SurgicalTableBlockEntity table))
 			return null;
-		Map<Integer, BitSet> components = table.connectedComponents(hit.geometry.subjectId, hit.cubeId);
+		Map<Integer, BitSet> components = table.connectedComponents(hit.geometry.subjectId, hit.cubeId,
+			hit.geometry.observedCubeCount, hit.geometry.seams);
 		if (components.isEmpty())
 			return null;
 		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();

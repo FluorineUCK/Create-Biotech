@@ -131,8 +131,7 @@ public final class SurgicalAssembly {
 		int version = tag.getInt(VERSION_TAG);
 		if (version == 1 || version == 2)
 			return loadLegacy(tag, version);
-		if ((version != 3 && version != 4 && version != CURRENT_VERSION)
-			|| !tag.contains(SOURCES_TAG, Tag.TAG_LIST))
+		if (version != CURRENT_VERSION || !tag.contains(SOURCES_TAG, Tag.TAG_LIST))
 			return null;
 
 		ListTag encodedSources = tag.getList(SOURCES_TAG, Tag.TAG_COMPOUND);

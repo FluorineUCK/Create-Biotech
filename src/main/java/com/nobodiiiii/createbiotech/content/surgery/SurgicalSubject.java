@@ -54,7 +54,7 @@ public final class SurgicalSubject {
 	private int id;
 	private final UUID persistentId;
 	private final MimicProfile profile;
-	private final Direction placementFacing;
+	private Direction placementFacing;
 	private SurgicalLayPose layPose;
 	int cubeCount;
 	BitSet presentCubes;
@@ -120,12 +120,6 @@ public final class SurgicalSubject {
 
 	public SurgicalLayPose layPose() {
 		return layPose;
-	}
-
-	void setLayPose(SurgicalLayPose layPose) {
-		if (layPose == null || !layPose.valid())
-			throw new IllegalArgumentException("Invalid surgical lay pose");
-		this.layPose = layPose;
 	}
 
 	public int cubeCount() {
@@ -309,13 +303,14 @@ public final class SurgicalSubject {
 		return result;
 	}
 
-	void applyGlueMove(SurgicalLayPose targetPose, Map<Integer, Vec3> offsets,
+	void applyGlueMove(Direction targetFacing, SurgicalLayPose targetPose, Map<Integer, Vec3> offsets,
 		List<SurgicalTableLayout.Footprint> footprints) {
 		if (targetPose == null || offsets.size() != presentCubes.cardinality())
 			throw new IllegalArgumentException("Incomplete surgical glue move");
 		for (int cube = presentCubes.nextSetBit(0); cube >= 0; cube = presentCubes.nextSetBit(cube + 1))
 			if (!offsets.containsKey(cube))
 				throw new IllegalArgumentException("Missing surgical glue cube offset");
+		placementFacing = horizontal(targetFacing);
 		layPose = targetPose;
 		componentOffsets = Map.copyOf(offsets);
 		occupiedFootprints = List.copyOf(footprints);

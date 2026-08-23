@@ -448,7 +448,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				subjects.add(moved);
 				extracted.put(original.persistentId(), new ExtractedSubject((BitSet) selected.clone(), moved));
 			}
-			moved.applyGlueMove(targetPose, move.offsets, move.layout.footprints());
+			moved.applyGlueMove(second.placementFacing(), targetPose, move.offsets,
+				move.layout.footprints());
 		}
 
 		List<SurgicalGlueJoint> remappedJoints = existingJoints.stream()
@@ -495,6 +496,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 					return null;
 			if (offsets.size() != selected.cardinality()
 				|| !layoutMatchesTranslations(move.layout(), offsets)
+				|| !componentYTranslationsMatch(subject, selected, offsets)
 				|| !SurgicalTableLayout.validateGlueComponents(plane, subject.cubeCount, selected,
 					subject.seams, subject.cutSeams, move.layout(), obstacles))
 				return null;
@@ -517,6 +519,18 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				|| Math.abs(expected.x - proposed.x()) > 1.0e-6d
 				|| Math.abs(expected.z - proposed.z()) > 1.0e-6d)
 				return false;
+		}
+		return true;
+	}
+
+	private static boolean componentYTranslationsMatch(SurgicalSubject subject, BitSet selected,
+		Map<Integer, Vec3> offsets) {
+		for (BitSet component : SurgicalAssembly.components(subject.cubeCount, selected,
+			subject.seams, subject.cutSeams)) {
+			double expected = offsets.get(component.nextSetBit(0)).y;
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
+				if (Math.abs(offsets.get(cube).y - expected) > 1.0e-6d)
+					return false;
 		}
 		return true;
 	}
@@ -614,6 +628,15 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				result.put(subject.id(), (BitSet) included.clone());
 		}
 		return Map.copyOf(result);
+	}
+
+	/** Client-side topology-aware variant for untouched subjects that are still lazily initialized. */
+	public Map<Integer, BitSet> connectedComponents(int subjectId, int cubeId, int observedCubeCount,
+		List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject start = getSubject(subjectId);
+		if (start == null || !start.initializeOrMatchTopology(observedCubeCount, observedSeams))
+			return Map.of();
+		return connectedComponents(subjectId, cubeId);
 	}
 
 	@Nullable
@@ -791,50 +814,6 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 		return SurgicalAssembly.createComposite(sources, encodedJoints, anchor.placementFacing(),
 			anchor.layPose());
-	}
-
-	private boolean canTranslateForGlue(ComponentGroup anchored, ComponentGroup moving, Vec3 delta,
-		SurgicalTablePlane.Plane plane) {
-		List<SurgicalTableLayout.Footprint> obstacles = new ArrayList<>();
-		for (SurgicalSubject subject : subjects) {
-			if (subject.occupiedFootprints().isEmpty())
-				return false;
-			BitSet ignored = anchored.components.get(subject.persistentId());
-			BitSet moved = moving.components.get(subject.persistentId());
-			for (SurgicalTableLayout.Footprint footprint : subject.occupiedFootprints()) {
-				if (ignored != null && ignored.get(footprint.componentRoot())
-					|| moved != null && moved.get(footprint.componentRoot()))
-					continue;
-				obstacles.add(footprint);
-			}
-		}
-
-		for (Map.Entry<UUID, BitSet> entry : moving.components.entrySet()) {
-			SurgicalSubject subject = getSubjectByPersistentId(entry.getKey());
-			if (subject == null)
-				return false;
-			for (SurgicalTableLayout.Footprint footprint : subject.occupiedFootprints()) {
-				if (!entry.getValue().get(footprint.componentRoot()))
-					continue;
-				SurgicalTableLayout.Footprint translated = new SurgicalTableLayout.Footprint(
-					footprint.componentRoot(), footprint.minX() + delta.x, footprint.minZ() + delta.z,
-					footprint.maxX() + delta.x, footprint.maxZ() + delta.z,
-					SurgicalTableLayout.UNSNAPPED, SurgicalTableLayout.UNSNAPPED);
-				if (!plane.workArea().contains(translated.minX(), translated.minZ(), translated.maxX(),
-					translated.maxZ(), 1.0e-6d))
-					return false;
-				for (SurgicalTableLayout.Footprint obstacle : obstacles)
-					if (translated.overlapsStrictly(obstacle))
-						return false;
-			}
-		}
-		return true;
-	}
-
-	private static boolean validGlueDelta(Vec3 delta) {
-		double bound = SurgicalTablePlane.MAX_TILES + 2.0d;
-		return delta != null && Double.isFinite(delta.x) && Double.isFinite(delta.y) && Double.isFinite(delta.z)
-			&& Math.abs(delta.x) <= bound && Math.abs(delta.y) <= 128.0d && Math.abs(delta.z) <= bound;
 	}
 
 	private record ComponentGroup(Map<UUID, BitSet> components) {

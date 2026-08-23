@@ -75,14 +75,8 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			return;
 
 		ItemStack held = player.getItemInHand(hand);
-		if (placement) {
-			if (held.getItem() instanceof com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
-				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper.hasCapturedEntity(held)
-				&& !table.tryPlaceSubject(held, plane, player.getDirection(), SurgicalLayPose.IDENTITY,
-					originOffsetX, originOffsetZ, layout))
-				noSpace(player);
+		if (placement)
 			return;
-		}
 		SurgicalSubject subject = table.getSubject(subjectId);
 		if (targetId < 0 || !SurgicalAssembly.validTopology(observedCubeCount, seams)
 			|| subject == null || !subject.matchesObservedTopology(observedCubeCount, seams))
