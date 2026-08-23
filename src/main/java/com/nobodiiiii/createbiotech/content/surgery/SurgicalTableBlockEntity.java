@@ -173,6 +173,35 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return true;
 	}
 
+	public boolean cutCubeConnections(Player player, ItemStack shears, InteractionHand hand, int cubeId,
+		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		if (!initializeOrMatchTopology(observedCubeCount, observedSeams) || !validPresentCube(cubeId))
+			return false;
+
+		List<Integer> updatedOrder = new java.util.ArrayList<>(cutOrder);
+		int cutCount = 0;
+		for (int seamId = 0; seamId < seams.size(); seamId++) {
+			if (cutSeams.get(seamId))
+				continue;
+			SurgicalAssembly.Seam seam = seams.get(seamId);
+			if (seam.first() != cubeId && seam.second() != cubeId
+				|| !validPresentCube(seam.first()) || !validPresentCube(seam.second()))
+				continue;
+			cutSeams.set(seamId);
+			updatedOrder.add(seamId);
+			cutCount++;
+		}
+		if (cutCount == 0)
+			return false;
+
+		cutOrder = SurgicalAssembly.normalizeCutOrder(updatedOrder, cutSeams, seams.size());
+		shears.hurtAndBreak(cutCount, player, LivingEntity.getSlotForHand(hand));
+		setChangedAndSync();
+		if (level != null)
+			level.playSound(null, worldPosition, SoundEvents.SHEEP_SHEAR, SoundSource.BLOCKS, 0.8f, 1.15f);
+		return true;
+	}
+
 	public boolean packComponent(Player player, ItemStack boxes, int cubeId, int observedCubeCount,
 		List<SurgicalAssembly.Seam> observedSeams) {
 		if (!initializeOrMatchTopology(observedCubeCount, observedSeams) || !validPresentCube(cubeId)

@@ -11,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
+import com.nobodiiiii.createbiotech.content.cardboardbox.LargeCardboardBoxItem;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
@@ -46,18 +47,23 @@ import net.neoforged.neoforge.event.level.LevelEvent;
 
 @EventBusSubscriber(modid = CreateBiotech.MOD_ID, value = Dist.CLIENT)
 public final class SurgicalTableClientHandler {
-	private static final int HIGHLIGHT_COLOR = PonderPalette.BLUE.getColor();
+	private static final int SEAM_HIGHLIGHT_COLOR = PonderPalette.RED.getColor();
+	private static final int CUBE_HIGHLIGHT_COLOR = PonderPalette.BLUE.getColor();
 	private static final float HIGHLIGHT_LINE_WIDTH = 1.0f / 32.0f;
 	private static final double MIN_SELECTION_THRESHOLD = 2.0d / 16.0d;
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
 	private static final List<Object> SEAM_OUTLINE_SLOTS = new ArrayList<>();
+	private static final List<Object> CUBE_OUTLINE_SLOTS = new ArrayList<>();
 	private static final Map<BlockPos, TableGeometry> TABLES = new HashMap<>();
-	private static int highlightedEdgeCount;
+	private static int highlightedSeamEdgeCount;
+	private static int highlightedCubeEdgeCount;
 	@Nullable
 	private static Selection seamSelection;
 	@Nullable
 	private static Selection cubeSelection;
+	@Nullable
+	private static Selection componentSelection;
 
 	private SurgicalTableClientHandler() {}
 
@@ -171,13 +177,22 @@ public final class SurgicalTableClientHandler {
 		boolean holdingShears = player.getMainHandItem().is(Items.SHEARS)
 			|| player.getOffhandItem().is(Items.SHEARS);
 		boolean holdingEmptyBox = isEmptyBox(player.getMainHandItem()) || isEmptyBox(player.getOffhandItem());
+		boolean holdingEmptyLargeBox = isEmptyLargeBox(player.getMainHandItem())
+			|| isEmptyLargeBox(player.getOffhandItem());
+		boolean highlightingDirectConnections = holdingShears && player.isShiftKeyDown();
 		Ray ray = playerRay(player);
 		CubeHit cubeHit = holdingShears || holdingEmptyBox
 			? findNearestCubeHit(player, level, ray) : null;
-		seamSelection = holdingShears ? findSeamSelection(player, level, ray, cubeHit) : null;
+		seamSelection = holdingShears && !highlightingDirectConnections
+			? findSeamSelection(player, level, ray, cubeHit) : null;
 		cubeSelection = holdingEmptyBox ? findCubeSelection(cubeHit) : null;
-		if (seamSelection != null)
-			highlightSeam(seamSelection);
+		componentSelection = highlightingDirectConnections
+			? findDirectConnectionSelection(cubeHit)
+			: !holdingShears && holdingEmptyLargeBox ? findConnectedComponentSelection(cubeHit) : null;
+		if (componentSelection != null)
+			highlightSelection(componentSelection);
+		else if (seamSelection != null)
+			highlightSelection(seamSelection);
 		else
 			clearSeamHighlight();
 	}
@@ -201,9 +216,16 @@ public final class SurgicalTableClientHandler {
 		Ray ray = playerRay(minecraft.player);
 		CubeHit cubeHit = findNearestCubeHit(minecraft.player, level, ray);
 		if (held.is(Items.SHEARS)) {
-			action = SurgicalTableInteractionPacket.Action.CUT;
-			selected = findSeamSelection(minecraft.player, level, ray, cubeHit);
-			seamSelection = selected;
+			if (minecraft.player.isShiftKeyDown()) {
+				action = SurgicalTableInteractionPacket.Action.CUT_CUBE_CONNECTIONS;
+				selected = findDirectConnectionCutSelection(cubeHit);
+				componentSelection = selected;
+				seamSelection = null;
+			} else {
+				action = SurgicalTableInteractionPacket.Action.CUT;
+				selected = findSeamSelection(minecraft.player, level, ray, cubeHit);
+				seamSelection = selected;
+			}
 		} else if (isEmptyBox(held)) {
 			action = SurgicalTableInteractionPacket.Action.PACK;
 			selected = findCubeSelection(cubeHit);
@@ -226,7 +248,8 @@ public final class SurgicalTableClientHandler {
 		BlockPos target = event.getTarget().getBlockPos();
 		ClientLevel level = Minecraft.getInstance().level;
 		if (level != null && (belongsToSelectionPlane(level, target, seamSelection)
-			|| belongsToSelectionPlane(level, target, cubeSelection)))
+			|| belongsToSelectionPlane(level, target, cubeSelection)
+			|| belongsToSelectionPlane(level, target, componentSelection)))
 			event.setCanceled(true);
 	}
 
@@ -272,7 +295,7 @@ public final class SurgicalTableClientHandler {
 				continue;
 			bestScore = score;
 			best = new Selection(cubeHit.tablePos, seamId, geometry.observedCubeCount,
-				geometry.seams, contact.edges());
+				geometry.seams, contact.edges(), geometry.cubeEdges(seam));
 		}
 		return best;
 	}
@@ -304,7 +327,7 @@ public final class SurgicalTableClientHandler {
 					continue;
 				bestDistance = distance;
 				best = new Selection(tablePos, seamId, geometry.observedCubeCount,
-					geometry.seams, contact.edges());
+					geometry.seams, contact.edges(), geometry.cubeEdges(seam));
 			}
 		}
 		return best;
@@ -330,7 +353,27 @@ public final class SurgicalTableClientHandler {
 	@Nullable
 	private static Selection findCubeSelection(@Nullable CubeHit hit) {
 		return hit == null ? null : new Selection(hit.tablePos, hit.cubeId,
-			hit.geometry.observedCubeCount, hit.geometry.seams, List.of());
+			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(), List.of());
+	}
+
+	@Nullable
+	private static Selection findConnectedComponentSelection(@Nullable CubeHit hit) {
+		return hit == null ? null : new Selection(hit.tablePos, hit.cubeId,
+			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(),
+			hit.geometry.connectedCubeEdges(hit.cubeId));
+	}
+
+	@Nullable
+	private static Selection findDirectConnectionSelection(@Nullable CubeHit hit) {
+		return hit == null ? null : new Selection(hit.tablePos, hit.cubeId,
+			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(),
+			hit.geometry.directConnectionCubeEdges(hit.cubeId));
+	}
+
+	@Nullable
+	private static Selection findDirectConnectionCutSelection(@Nullable CubeHit hit) {
+		return hit == null || !hit.geometry.hasUncutConnection(hit.cubeId)
+			? null : findDirectConnectionSelection(hit);
 	}
 
 	@Nullable
@@ -502,37 +545,51 @@ public final class SurgicalTableClientHandler {
 		return point.distanceTo(start.add(segment.scale(amount)));
 	}
 
-	private static void highlightSeam(Selection selection) {
-		int edgeCount = selection.edges.size();
-		if (edgeCount < 3)
-			return;
-		while (SEAM_OUTLINE_SLOTS.size() < edgeCount)
-			SEAM_OUTLINE_SLOTS.add(new Object());
+	private static void highlightSelection(Selection selection) {
+		highlightedSeamEdgeCount = highlightEdges(SEAM_OUTLINE_SLOTS, selection.edges,
+			highlightedSeamEdgeCount, SEAM_HIGHLIGHT_COLOR);
+		highlightedCubeEdgeCount = highlightEdges(CUBE_OUTLINE_SLOTS, selection.cubeEdges,
+			highlightedCubeEdgeCount, CUBE_HIGHLIGHT_COLOR);
+	}
+
+	private static int highlightEdges(List<Object> slots, List<SurgicalClientTopology.Edge> edges,
+		int previousCount, int color) {
+		int edgeCount = edges.size();
+		while (slots.size() < edgeCount)
+			slots.add(new Object());
 		for (int edge = 0; edge < edgeCount; edge++)
 			Outliner.getInstance()
-				.showLine(SEAM_OUTLINE_SLOTS.get(edge), selection.edges.get(edge).start(),
-					selection.edges.get(edge).end())
+				.showLine(slots.get(edge), edges.get(edge).start(), edges.get(edge).end())
 				.lineWidth(HIGHLIGHT_LINE_WIDTH)
 				.disableLineNormals()
-				.colored(HIGHLIGHT_COLOR);
-		for (int edge = edgeCount; edge < highlightedEdgeCount; edge++)
-			Outliner.getInstance().remove(SEAM_OUTLINE_SLOTS.get(edge));
-		highlightedEdgeCount = edgeCount;
+				.colored(color);
+		for (int edge = edgeCount; edge < previousCount; edge++)
+			Outliner.getInstance().remove(slots.get(edge));
+		return edgeCount;
 	}
 
 	private static void clearSeamHighlight() {
-		for (int edge = 0; edge < highlightedEdgeCount; edge++)
+		for (int edge = 0; edge < highlightedSeamEdgeCount; edge++)
 			Outliner.getInstance().remove(SEAM_OUTLINE_SLOTS.get(edge));
-		highlightedEdgeCount = 0;
+		for (int edge = 0; edge < highlightedCubeEdgeCount; edge++)
+			Outliner.getInstance().remove(CUBE_OUTLINE_SLOTS.get(edge));
+		highlightedSeamEdgeCount = 0;
+		highlightedCubeEdgeCount = 0;
 	}
 
 	private static boolean isEmptyBox(ItemStack stack) {
 		return CapturedEntityBoxItem.isBox(stack) && !CapturedEntityBoxItem.hasCapturedEntity(stack);
 	}
 
+	private static boolean isEmptyLargeBox(ItemStack stack) {
+		return stack.getItem() instanceof LargeCardboardBoxItem
+			&& !CapturedEntityBoxItem.hasCapturedEntity(stack);
+	}
+
 	private static void clearSelections() {
 		seamSelection = null;
 		cubeSelection = null;
+		componentSelection = null;
 		clearSeamHighlight();
 	}
 
@@ -542,6 +599,7 @@ public final class SurgicalTableClientHandler {
 		private final int observedCubeCount;
 		private final List<SurgicalModelRenderContext.CubeGeometry> baseCubes;
 		private List<SurgicalModelRenderContext.CubeGeometry> cubes;
+		private Map<Integer, SurgicalModelRenderContext.CubeGeometry> cubesById;
 		private List<SurgicalAssembly.Seam> seams;
 		private Map<SurgicalAssembly.Seam, Integer> seamIds;
 		private List<SurgicalClientTopology.Contact> baseContacts;
@@ -553,6 +611,8 @@ public final class SurgicalTableClientHandler {
 		private BitSet presentCubes = new BitSet();
 		private BitSet cutSeams = new BitSet();
 		private Map<Integer, Vec3> offsets = Map.of();
+		private final Map<Integer, List<SurgicalClientTopology.Edge>> connectedCubeEdgeCache = new HashMap<>();
+		private final Map<Integer, List<SurgicalClientTopology.Edge>> directCubeEdgeCache = new HashMap<>();
 		private int renderRevision = Integer.MIN_VALUE;
 		private long lastSeenTick;
 
@@ -566,6 +626,7 @@ public final class SurgicalTableClientHandler {
 			this.observedCubeCount = observedCubeCount;
 			this.baseCubes = List.copyOf(cubes);
 			this.cubes = this.baseCubes;
+			this.cubesById = indexCubes(this.cubes);
 			this.seams = List.copyOf(seams);
 			this.seamIds = seamIds(this.seams);
 			this.baseContacts = List.copyOf(contacts);
@@ -602,6 +663,9 @@ public final class SurgicalTableClientHandler {
 			offsets = SurgicalClientTopology.componentOffsets(observedCubeCount, presentCubes, seams,
 				cutSeams, baseCubes, table.getCutOrderForRender(), tableCenter);
 			cubes = translateCubes(baseCubes, offsets);
+			cubesById = indexCubes(cubes);
+			connectedCubeEdgeCache.clear();
+			directCubeEdgeCache.clear();
 			contacts = translateContacts(baseContacts, offsets);
 			contactsByCube = contactsByCube(observedCubeCount, contacts);
 			updateRenderBounds(table, cubes);
@@ -659,6 +723,87 @@ public final class SurgicalTableClientHandler {
 
 		private List<SurgicalClientTopology.Contact> contactsFor(int cubeId) {
 			return cubeId >= 0 && cubeId < contactsByCube.size() ? contactsByCube.get(cubeId) : List.of();
+		}
+
+		private boolean hasUncutConnection(int cubeId) {
+			for (SurgicalClientTopology.Contact contact : contactsFor(cubeId)) {
+				SurgicalAssembly.Seam seam = contact.seam();
+				Integer seamId = seamIds.get(seam);
+				if (seamId != null && !cutSeams.get(seamId)
+					&& presentCubes.get(seam.first()) && presentCubes.get(seam.second()))
+					return true;
+			}
+			return false;
+		}
+
+		private List<SurgicalClientTopology.Edge> cubeEdges(SurgicalAssembly.Seam seam) {
+			List<SurgicalClientTopology.Edge> edges = new ArrayList<>(24);
+			SurgicalModelRenderContext.CubeGeometry first = cubesById.get(seam.first());
+			SurgicalModelRenderContext.CubeGeometry second = cubesById.get(seam.second());
+			if (first != null)
+				edges.addAll(SurgicalClientTopology.cubeEdges(first));
+			if (second != null)
+				edges.addAll(SurgicalClientTopology.cubeEdges(second));
+			return List.copyOf(edges);
+		}
+
+		private List<SurgicalClientTopology.Edge> connectedCubeEdges(int cubeId) {
+			List<SurgicalClientTopology.Edge> cached = connectedCubeEdgeCache.get(cubeId);
+			if (cached != null)
+				return cached;
+
+			BitSet component = SurgicalAssembly.componentContaining(observedCubeCount, presentCubes,
+				seams, cutSeams, cubeId);
+			List<SurgicalClientTopology.Edge> edges = new ArrayList<>(component.cardinality() * 12);
+			for (int connected = component.nextSetBit(0); connected >= 0;
+				connected = component.nextSetBit(connected + 1)) {
+				SurgicalModelRenderContext.CubeGeometry cube = cubesById.get(connected);
+				if (cube != null)
+					edges.addAll(SurgicalClientTopology.cubeEdges(cube));
+			}
+			List<SurgicalClientTopology.Edge> result = List.copyOf(edges);
+			for (int connected = component.nextSetBit(0); connected >= 0;
+				connected = component.nextSetBit(connected + 1))
+				connectedCubeEdgeCache.put(connected, result);
+			return result;
+		}
+
+		private List<SurgicalClientTopology.Edge> directConnectionCubeEdges(int cubeId) {
+			List<SurgicalClientTopology.Edge> cached = directCubeEdgeCache.get(cubeId);
+			if (cached != null)
+				return cached;
+
+			BitSet directCubes = new BitSet(observedCubeCount);
+			if (presentCubes.get(cubeId))
+				directCubes.set(cubeId);
+			for (SurgicalClientTopology.Contact contact : contactsFor(cubeId)) {
+				SurgicalAssembly.Seam seam = contact.seam();
+				Integer seamId = seamIds.get(seam);
+				if (seamId == null || cutSeams.get(seamId)
+					|| !presentCubes.get(seam.first()) || !presentCubes.get(seam.second()))
+					continue;
+				directCubes.set(seam.first());
+				directCubes.set(seam.second());
+			}
+
+			List<SurgicalClientTopology.Edge> edges = new ArrayList<>(directCubes.cardinality() * 12);
+			for (int direct = directCubes.nextSetBit(0); direct >= 0;
+				direct = directCubes.nextSetBit(direct + 1)) {
+				SurgicalModelRenderContext.CubeGeometry cube = cubesById.get(direct);
+				if (cube != null)
+					edges.addAll(SurgicalClientTopology.cubeEdges(cube));
+			}
+			List<SurgicalClientTopology.Edge> result = List.copyOf(edges);
+			directCubeEdgeCache.put(cubeId, result);
+			return result;
+		}
+
+		private static Map<Integer, SurgicalModelRenderContext.CubeGeometry> indexCubes(
+			List<SurgicalModelRenderContext.CubeGeometry> cubes) {
+			Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId = new HashMap<>();
+			for (SurgicalModelRenderContext.CubeGeometry cube : cubes)
+				byId.putIfAbsent(cube.cubeId(), cube);
+			return Map.copyOf(byId);
 		}
 
 		private static List<SurgicalModelRenderContext.CubeGeometry> translateCubes(
@@ -722,7 +867,8 @@ public final class SurgicalTableClientHandler {
 	}
 
 	private record Selection(BlockPos tablePos, int targetId, int observedCubeCount,
-		List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges) {}
+		List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
+		List<SurgicalClientTopology.Edge> cubeEdges) {}
 
 	private record Ray(Vec3 start, Vec3 end) {}
 

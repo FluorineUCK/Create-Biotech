@@ -17,7 +17,10 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.platform.NativeImage;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
+import com.nobodiiiii.createbiotech.mixin.client.CompositeRenderStateAccessor;
+import com.nobodiiiii.createbiotech.mixin.client.CompositeRenderTypeAccessor;
 import com.nobodiiiii.createbiotech.mixin.client.ModelPartAccessor;
+import com.nobodiiiii.createbiotech.mixin.client.TextureStateShardAccessor;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 
 import net.minecraft.client.Minecraft;
@@ -142,21 +145,41 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		return true;
 	}
 
+	/** Tracks the texture associated with each consumer returned to an entity RenderLayer. */
+	public static MultiBufferSource trackRenderLayerBuffer(MultiBufferSource buffer) {
+		if (!SurgicalModelRenderContext.isRenderLayerActive())
+			return buffer;
+		return renderType -> {
+			VertexConsumer consumer = buffer.getBuffer(renderType);
+			SurgicalModelRenderContext.recordRenderLayerConsumer(consumer, renderTypeTexture(renderType));
+			return consumer;
+		};
+	}
+
 	/**
 	 * Optional entry point used by the pseudo-mixin for Lionfish API's AdvancedModelBox.
 	 * Any incompatibility falls back to the original Lionfish renderer instead of escaping
 	 * into the render loop.
 	 */
-	public static boolean interceptLionfishModelPart(Object part, PoseStack poseStack, int packedLight, int overlay) {
+	public static boolean interceptLionfishModelPart(Object part, PoseStack poseStack, VertexConsumer consumer,
+		int packedLight, int overlay, int color) {
 		if (INTERNAL_RENDER_DEPTH.get() > 0)
 			return false;
 
 		RenderContext context = currentContext();
-		if (context == null)
+		boolean originalLayer = context == null && SurgicalModelRenderContext.isRenderLayerActive();
+		if (context == null && !originalLayer)
 			return false;
 
 		try {
 			if (!isSupportedLionfishTree(part))
+				return false;
+			if (originalLayer) {
+				inferLionfishLayerOwner(part, consumer);
+				renderOriginalLionfishLayerPartRecursive(part, poseStack, consumer, packedLight, overlay, color);
+				return true;
+			}
+			if (context == null)
 				return false;
 			if (context.mode == RenderMode.SKIP_MODEL_PARTS)
 				return true;
@@ -167,10 +190,121 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			renderLionfishPartRecursive(part, poseStack, context, packedLight, overlay, RenderPass.INNER);
 			return true;
 		} catch (RuntimeException | LinkageError e) {
-			context.deferredLionfishParts().clear();
+			if (context != null)
+				context.deferredLionfishParts().clear();
 			LionfishModelPartCompat.disable(e);
 			return false;
 		}
+	}
+
+	private static void inferLionfishLayerOwner(Object layerRoot, VertexConsumer consumer) {
+		Object sourceModel = SurgicalModelRenderContext.currentRenderLayerSourceModel();
+		if (sourceModel == null)
+			return;
+		Object layerModel = LionfishModelPartCompat.model(layerRoot);
+		if (layerModel == null || layerModel == sourceModel || layerModel.getClass() != sourceModel.getClass())
+			return;
+		if (LionfishModelPartCompat.root(layerModel) != layerRoot)
+			return;
+
+		Object sourceRoot = LionfishModelPartCompat.root(sourceModel);
+		if (!LionfishModelPartCompat.supports(sourceRoot) || !lionfishTreesMatch(sourceRoot, layerRoot))
+			return;
+		ResourceLocation texture = SurgicalModelRenderContext.currentRenderLayerTexture(consumer);
+		NativeImage image = texture == null ? null : textureImage(texture);
+		if (image == null || !image.format().hasAlpha())
+			return;
+
+		List<List<Object>> visibleSourceChains = new ArrayList<>();
+		collectVisibleLionfishSourceChains(sourceRoot, layerRoot, image, new ArrayList<>(), visibleSourceChains);
+		if (visibleSourceChains.isEmpty())
+			return;
+
+		List<Object> commonChain = new ArrayList<>(visibleSourceChains.getFirst());
+		for (int chainIndex = 1; chainIndex < visibleSourceChains.size() && !commonChain.isEmpty(); chainIndex++) {
+			List<Object> chain = visibleSourceChains.get(chainIndex);
+			int commonLength = Math.min(commonChain.size(), chain.size());
+			int partIndex = 0;
+			while (partIndex < commonLength && commonChain.get(partIndex) == chain.get(partIndex))
+				partIndex++;
+			commonChain.subList(partIndex, commonChain.size()).clear();
+		}
+
+		// The visible subtree itself is the attachment. Its nearest registered external
+		// ancestor is the logical source part that should carry the whole independent model.
+		for (int partIndex = commonChain.size() - 2; partIndex >= 0; partIndex--) {
+			for (Object sourceCube : lionfishElements(LionfishModelPartCompat.cubes(commonChain.get(partIndex)))) {
+				if (SurgicalModelRenderContext.registeredCubeId(sourceCube) == null)
+					continue;
+				SurgicalModelRenderContext.bindCurrentRenderLayerToSourceCube(sourceCube);
+				return;
+			}
+		}
+	}
+
+	private static boolean lionfishTreesMatch(Object sourcePart, Object layerPart) {
+		List<Object> sourceCubes = lionfishElements(LionfishModelPartCompat.cubes(sourcePart));
+		List<Object> layerCubes = lionfishElements(LionfishModelPartCompat.cubes(layerPart));
+		if (sourceCubes.size() != layerCubes.size())
+			return false;
+		for (int cubeIndex = 0; cubeIndex < sourceCubes.size(); cubeIndex++) {
+			if (!sameBounds(LionfishModelPartCompat.bounds(sourceCubes.get(cubeIndex)),
+				LionfishModelPartCompat.bounds(layerCubes.get(cubeIndex))))
+				return false;
+		}
+
+		List<Object> sourceChildren = lionfishElements(LionfishModelPartCompat.children(sourcePart));
+		List<Object> layerChildren = lionfishElements(LionfishModelPartCompat.children(layerPart));
+		if (sourceChildren.size() != layerChildren.size())
+			return false;
+		for (int childIndex = 0; childIndex < sourceChildren.size(); childIndex++) {
+			if (!LionfishModelPartCompat.supports(sourceChildren.get(childIndex))
+				|| !LionfishModelPartCompat.supports(layerChildren.get(childIndex))
+				|| !lionfishTreesMatch(sourceChildren.get(childIndex), layerChildren.get(childIndex)))
+				return false;
+		}
+		return true;
+	}
+
+	private static boolean sameBounds(LionfishModelPartCompat.CubeBounds first,
+		LionfishModelPartCompat.CubeBounds second) {
+		return Math.abs(first.minX() - second.minX()) <= 1.0e-4f
+			&& Math.abs(first.minY() - second.minY()) <= 1.0e-4f
+			&& Math.abs(first.minZ() - second.minZ()) <= 1.0e-4f
+			&& Math.abs(first.maxX() - second.maxX()) <= 1.0e-4f
+			&& Math.abs(first.maxY() - second.maxY()) <= 1.0e-4f
+			&& Math.abs(first.maxZ() - second.maxZ()) <= 1.0e-4f;
+	}
+
+	private static void collectVisibleLionfishSourceChains(Object sourcePart, Object layerPart, NativeImage image,
+		List<Object> sourceChain, List<List<Object>> visibleSourceChains) {
+		sourceChain.add(sourcePart);
+		try {
+			if (!LionfishModelPartCompat.isVisible(layerPart))
+				return;
+			for (Object layerCube : LionfishModelPartCompat.cubes(layerPart)) {
+				if (LionfishModelPartCompat.cubeHasVisiblePixels(layerCube, image)) {
+					visibleSourceChains.add(List.copyOf(sourceChain));
+					break;
+				}
+			}
+
+			List<Object> sourceChildren = lionfishElements(LionfishModelPartCompat.children(sourcePart));
+			List<Object> layerChildren = lionfishElements(LionfishModelPartCompat.children(layerPart));
+			for (int childIndex = 0; childIndex < sourceChildren.size(); childIndex++) {
+				collectVisibleLionfishSourceChains(sourceChildren.get(childIndex), layerChildren.get(childIndex), image,
+					sourceChain, visibleSourceChains);
+			}
+		} finally {
+			sourceChain.remove(sourceChain.size() - 1);
+		}
+	}
+
+	private static List<Object> lionfishElements(Iterable<?> elements) {
+		List<Object> result = new ArrayList<>();
+		for (Object element : elements)
+			result.add(element);
+		return result;
 	}
 
 	public static void renderDeferredOuterParts() {
@@ -231,6 +365,40 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			}
 			for (Object child : LionfishModelPartCompat.children(part))
 				renderLionfishPartRecursive(child, poseStack, context, packedLight, overlay, pass);
+		} finally {
+			poseStack.popPose();
+		}
+	}
+
+	private static void renderOriginalLionfishLayerPartRecursive(Object part, PoseStack poseStack,
+		VertexConsumer consumer, int packedLight, int overlay, int color) {
+		if (!LionfishModelPartCompat.isVisible(part))
+			return;
+
+		poseStack.pushPose();
+		try {
+			LionfishModelPartCompat.translateAndRotate(part, poseStack);
+			for (Object cube : LionfishModelPartCompat.cubes(part)) {
+				poseStack.pushPose();
+				try {
+					if (!SurgicalModelRenderContext.prepareOriginalLayerCube(cube, poseStack))
+						continue;
+					LionfishModelPartCompat.compileCube(cube, poseStack.last(), consumer, packedLight, overlay,
+						colorComponent(color, 16), colorComponent(color, 8), colorComponent(color, 0),
+						colorComponent(color, 24), 0.0f);
+				} finally {
+					poseStack.popPose();
+				}
+			}
+
+			if (!LionfishModelPartCompat.scaleChildren(part)) {
+				poseStack.scale(
+					1.0f / Math.max(LionfishModelPartCompat.xScale(part), 1.0e-4f),
+					1.0f / Math.max(LionfishModelPartCompat.yScale(part), 1.0e-4f),
+					1.0f / Math.max(LionfishModelPartCompat.zScale(part), 1.0e-4f));
+			}
+			for (Object child : LionfishModelPartCompat.children(part))
+				renderOriginalLionfishLayerPartRecursive(child, poseStack, consumer, packedLight, overlay, color);
 		} finally {
 			poseStack.popPose();
 		}
@@ -705,6 +873,20 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			| (Math.round(red * 255.0f) << 16)
 			| (Math.round(green * 255.0f) << 8)
 			| Math.round(blue * 255.0f);
+	}
+
+	private static float colorComponent(int color, int shift) {
+		return (color >>> shift & 0xff) / 255.0f;
+	}
+
+	private static ResourceLocation renderTypeTexture(RenderType renderType) {
+		if (!(renderType instanceof CompositeRenderTypeAccessor compositeAccessor))
+			return null;
+		RenderType.CompositeState state = compositeAccessor.createBiotech$getState();
+		CompositeRenderStateAccessor stateAccessor = (CompositeRenderStateAccessor) (Object) state;
+		Object textureState = stateAccessor.createBiotech$getTextureState();
+		TextureStateShardAccessor textureAccessor = (TextureStateShardAccessor) textureState;
+		return textureAccessor.createBiotech$getTexture().orElse(null);
 	}
 
 	private static ReflectionAccess reflectionAccess() {

@@ -24,7 +24,7 @@ public abstract class LionfishAdvancedModelBoxMixin {
 		int packedLight, int overlay, int color, CallbackInfo ci) {
 		try {
 			if (SlimeMimicRenderLayer.interceptLionfishModelPart(
-				(Object) this, poseStack, packedLight, overlay))
+				(Object) this, poseStack, consumer, packedLight, overlay, color))
 				ci.cancel();
 		} catch (RuntimeException | LinkageError ignored) {
 			// Lionfish is optional. API drift falls through to its original renderer.

@@ -472,6 +472,28 @@ public final class SurgicalClientTopology {
 		return total.scale(1.0d / cube.corners().size());
 	}
 
+	public static List<Edge> cubeEdges(SurgicalModelRenderContext.CubeGeometry cube) {
+		List<Edge> edges = new ArrayList<>(12);
+		for (int[] face : CUBE_FACES) {
+			for (int vertex = 0; vertex < face.length; vertex++) {
+				Edge candidate = new Edge(cube.corners().get(face[vertex]),
+					cube.corners().get(face[(vertex + 1) % face.length]));
+				if (candidate.start().distanceToSqr(candidate.end()) <= DEGENERATE_EPSILON)
+					continue;
+				boolean duplicate = false;
+				for (Edge edge : edges) {
+					if (edge.sameUndirected(candidate)) {
+						duplicate = true;
+						break;
+					}
+				}
+				if (!duplicate)
+					edges.add(candidate);
+			}
+		}
+		return List.copyOf(edges);
+	}
+
 	private static Vec3 componentCenter(BitSet component,
 		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId) {
 		return componentCenter(component, byId, Map.of());

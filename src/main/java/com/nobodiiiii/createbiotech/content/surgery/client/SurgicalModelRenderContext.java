@@ -9,9 +9,11 @@ import java.util.List;
 import java.util.Map;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.mixin.client.ModelPartAccessor;
 
 import net.minecraft.client.model.geom.ModelPart;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.phys.Vec3;
 
 import org.jetbrains.annotations.Nullable;
@@ -47,10 +49,10 @@ public final class SurgicalModelRenderContext {
 	 * owner for the entire layer, preventing that model from being repeated on every separated
 	 * component.
 	 */
-	public static void beginRenderLayer() {
+	public static void beginRenderLayer(Object sourceModel) {
 		Context context = current();
 		if (context != null)
-			context.beginRenderLayer();
+			context.beginRenderLayer(sourceModel);
 	}
 
 	public static void endRenderLayer() {
@@ -76,6 +78,48 @@ public final class SurgicalModelRenderContext {
 				return true;
 		}
 		return false;
+	}
+
+	/** Whether rendering is currently inside a vanilla entity RenderLayer. */
+	public static boolean isRenderLayerActive() {
+		Context context = current();
+		return context != null && context.isRenderLayerActive();
+	}
+
+	public static void recordRenderLayerConsumer(VertexConsumer consumer, @Nullable ResourceLocation texture) {
+		Context context = current();
+		if (context != null)
+			context.recordRenderLayerConsumer(consumer, texture);
+	}
+
+	@Nullable
+	public static Object currentRenderLayerSourceModel() {
+		Context context = current();
+		return context == null ? null : context.currentRenderLayerSourceModel();
+	}
+
+	@Nullable
+	public static ResourceLocation currentRenderLayerTexture(VertexConsumer consumer) {
+		Context context = current();
+		return context == null ? null : context.currentRenderLayerTexture(consumer);
+	}
+
+	/**
+	 * Applies an existing source owner to one original-model cube without registering that cube
+	 * in the surgical topology. Model-library bridges use this for separately rendered models.
+	 */
+	public static boolean prepareOriginalLayerCube(Object cube, PoseStack poseStack) {
+		Context context = current();
+		if (context == null)
+			return true;
+
+		Integer cubeId = context.ownerForOriginalLayerCube(cube);
+		if (cubeId == null)
+			return true;
+		if (cubeId < 0 || !context.isPresent(cubeId))
+			return false;
+		context.applyOffset(cubeId, poseStack);
+		return true;
 	}
 
 	/** Called only after the existing texture-visibility check accepted the cube. */
@@ -200,7 +244,7 @@ public final class SurgicalModelRenderContext {
 		private static final int NO_LAYER_OWNER = -1;
 
 		private final IdentityHashMap<Object, Integer> cubeIds = new IdentityHashMap<>();
-		private final Deque<Integer> renderLayerOwners = new ArrayDeque<>();
+		private final Deque<RenderLayerState> renderLayers = new ArrayDeque<>();
 		private int observedCubeCount;
 		private final int expectedCubeCount;
 		private final BitSet presentCubes;
@@ -236,25 +280,48 @@ public final class SurgicalModelRenderContext {
 			return cubeIds.get(cube);
 		}
 
-		private void beginRenderLayer() {
+		private void beginRenderLayer(Object sourceModel) {
 			// Never choose from presentCubes: that would select a different owner for each
 			// separated render and make the independent model appear on every component again.
-			renderLayerOwners.push(observedCubeCount > 0 ? 0 : NO_LAYER_OWNER);
+			renderLayers.push(new RenderLayerState(sourceModel,
+				observedCubeCount > 0 ? 0 : NO_LAYER_OWNER));
 		}
 
 		private void endRenderLayer() {
-			if (!renderLayerOwners.isEmpty())
-				renderLayerOwners.pop();
+			if (!renderLayers.isEmpty())
+				renderLayers.pop();
+		}
+
+		private boolean isRenderLayerActive() {
+			return !renderLayers.isEmpty();
+		}
+
+		private void recordRenderLayerConsumer(VertexConsumer consumer, @Nullable ResourceLocation texture) {
+			RenderLayerState layer = renderLayers.peek();
+			if (layer != null)
+				layer.recordConsumer(consumer, texture);
+		}
+
+		@Nullable
+		private Object currentRenderLayerSourceModel() {
+			RenderLayerState layer = renderLayers.peek();
+			return layer == null ? null : layer.sourceModel;
+		}
+
+		@Nullable
+		private ResourceLocation currentRenderLayerTexture(VertexConsumer consumer) {
+			RenderLayerState layer = renderLayers.peek();
+			return layer == null ? null : layer.texture(consumer);
 		}
 
 		private boolean bindCurrentRenderLayerTo(Object sourceCube) {
-			if (renderLayerOwners.isEmpty())
+			RenderLayerState layer = renderLayers.peek();
+			if (layer == null)
 				return false;
 			Integer cubeId = registeredIdFor(sourceCube);
 			if (cubeId == null)
 				return false;
-			renderLayerOwners.pop();
-			renderLayerOwners.push(cubeId);
+			layer.ownerCubeId = cubeId;
 			return true;
 		}
 
@@ -263,7 +330,8 @@ public final class SurgicalModelRenderContext {
 			Integer registered = registeredIdFor(cube);
 			if (registered != null)
 				return registered;
-			return renderLayerOwners.peek();
+			RenderLayerState layer = renderLayers.peek();
+			return layer == null ? null : layer.ownerCubeId;
 		}
 
 		private void associate(Object cube, int ownerCubeId) {
@@ -323,5 +391,31 @@ public final class SurgicalModelRenderContext {
 			return new Snapshot(observedCubeCount, geometry);
 		}
 
+	}
+
+	private static final class RenderLayerState {
+		private final Object sourceModel;
+		private final IdentityHashMap<VertexConsumer, ResourceLocation> texturesByConsumer = new IdentityHashMap<>();
+		private int ownerCubeId;
+		@Nullable
+		private ResourceLocation lastTexture;
+
+		private RenderLayerState(Object sourceModel, int ownerCubeId) {
+			this.sourceModel = sourceModel;
+			this.ownerCubeId = ownerCubeId;
+		}
+
+		private void recordConsumer(VertexConsumer consumer, @Nullable ResourceLocation texture) {
+			lastTexture = texture;
+			if (texture == null)
+				texturesByConsumer.remove(consumer);
+			else
+				texturesByConsumer.put(consumer, texture);
+		}
+
+		@Nullable
+		private ResourceLocation texture(VertexConsumer consumer) {
+			return texturesByConsumer.getOrDefault(consumer, lastTexture);
+		}
 	}
 }

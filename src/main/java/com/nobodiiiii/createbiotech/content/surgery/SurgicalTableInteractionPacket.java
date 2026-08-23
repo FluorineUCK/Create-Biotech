@@ -63,6 +63,10 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 				&& !com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.hasCapturedEntity(held))
 				table.packComponent(player, held, targetId, observedCubeCount, seams);
 		}
+		case CUT_CUBE_CONNECTIONS -> {
+			if (targetId < observedCubeCount && held.is(Items.SHEARS))
+				table.cutCubeConnections(player, held, hand, targetId, observedCubeCount, seams);
+		}
 		}
 	}
 
@@ -78,6 +82,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 
 	public enum Action {
 		CUT,
-		PACK
+		PACK,
+		CUT_CUBE_CONNECTIONS
 	}
 }

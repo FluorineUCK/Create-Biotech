@@ -67,9 +67,10 @@ public abstract class LivingEntityRendererMixin {
 	private void createBiotech$bindIndependentLayerModel(RenderLayer<?, ?> layer, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight, Entity entity, float limbSwing, float limbSwingAmount,
 		float partialTick, float ageInTicks, float netHeadYaw, float headPitch, Operation<Void> original) {
-		SurgicalModelRenderContext.beginRenderLayer();
+		SurgicalModelRenderContext.beginRenderLayer(layer.getParentModel());
 		try {
-			original.call(layer, poseStack, buffer, packedLight, entity, limbSwing, limbSwingAmount,
+			MultiBufferSource trackedBuffer = SlimeMimicRenderLayer.trackRenderLayerBuffer(buffer);
+			original.call(layer, poseStack, trackedBuffer, packedLight, entity, limbSwing, limbSwingAmount,
 				partialTick, ageInTicks, netHeadYaw, headPitch);
 		} finally {
 			SurgicalModelRenderContext.endRenderLayer();

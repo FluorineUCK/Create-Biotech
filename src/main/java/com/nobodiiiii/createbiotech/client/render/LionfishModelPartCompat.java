@@ -31,6 +31,8 @@ final class LionfishModelPartCompat {
 		"com.github.L_Ender.lionfishapi.client.model.tools.AdvancedModelBox";
 	private static final String BASIC_MODEL_PART =
 		"com.github.L_Ender.lionfishapi.client.model.tools.BasicModelPart";
+	private static final String BASIC_ENTITY_MODEL =
+		"com.github.L_Ender.lionfishapi.client.model.tools.BasicEntityModel";
 	private static final String MODEL_BOX =
 		"com.github.L_Ender.lionfishapi.client.model.tools.LionfishModelRenderUtils$ModelBox";
 	private static final String TEXTURED_QUAD =
@@ -59,6 +61,14 @@ final class LionfishModelPartCompat {
 
 	static Iterable<?> children(Object part) {
 		return iterable(read(accessRequired(part).childModels(), part), "childModels");
+	}
+
+	static Object model(Object part) {
+		return invoke(accessRequired(part).getModel(), part);
+	}
+
+	static Object root(Object model) {
+		return invoke(accessRequired(model).root(), model);
 	}
 
 	static void translateAndRotate(Object part, PoseStack poseStack) {
@@ -283,6 +293,14 @@ final class LionfishModelPartCompat {
 		}
 	}
 
+	private static Object invoke(Method method, Object target) {
+		try {
+			return method.invoke(target);
+		} catch (IllegalAccessException | InvocationTargetException e) {
+			throw new IllegalStateException("Failed to invoke Lionfish method " + method.getName(), e);
+		}
+	}
+
 	private static Class<?> classForName(String name, ClassLoader loader) {
 		try {
 			return Class.forName(name, false, loader);
@@ -315,11 +333,13 @@ final class LionfishModelPartCompat {
 
 	private record Access(Class<?> advancedModelBox, Field cubeList, Field childModels, Field showModel,
 		Field scaleChildren, Field xScale, Field yScale, Field zScale, Method translateAndRotate,
+		Method getModel, Method root,
 		Field quads, Field vertices, Field normal, Field position, Field textureU, Field textureV) {
 
 		private static Access create(ClassLoader loader) {
 			Class<?> advancedModelBox = classForName(ADVANCED_MODEL_BOX, loader);
 			Class<?> basicModelPart = classForName(BASIC_MODEL_PART, loader);
+			Class<?> basicEntityModel = classForName(BASIC_ENTITY_MODEL, loader);
 			Class<?> modelBox = classForName(MODEL_BOX, loader);
 			Class<?> texturedQuad = classForName(TEXTURED_QUAD, loader);
 			Class<?> positionTextureVertex = classForName(POSITION_TEXTURE_VERTEX, loader);
@@ -333,6 +353,8 @@ final class LionfishModelPartCompat {
 				field(basicModelPart, "yScale"),
 				field(basicModelPart, "zScale"),
 				method(advancedModelBox, "translateAndRotate", PoseStack.class),
+				method(advancedModelBox, "getModel"),
+				method(basicEntityModel, "root"),
 				field(modelBox, "quads"),
 				field(texturedQuad, "vertexPositions"),
 				field(texturedQuad, "normal"),
