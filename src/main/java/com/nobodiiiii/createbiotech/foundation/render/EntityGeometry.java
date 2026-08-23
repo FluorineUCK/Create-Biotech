@@ -84,10 +84,20 @@ public final class EntityGeometry {
 	 * excluded so optional attachments cannot decide the entity's physical orientation.
 	 */
 	public static Collector measureBaseModelWithFallback(LivingEntity entity, Collector collector) {
+		return measureBaseModelWithFallback(entity, collector, () -> measureInto(entity, collector));
+	}
+
+	/**
+	 * Measures a caller-supplied render pass while suppressing {@code RenderLayer} geometry.
+	 * This variant is used when the primary model needs additional render-time filtering or
+	 * transforms that cannot be expressed by rendering the entity directly.
+	 */
+	public static Collector measureBaseModelWithFallback(LivingEntity entity, Collector collector,
+		Runnable renderPass) {
 		collector.reset();
 		beginBaseModelMeasurement();
 		try {
-			measureInto(entity, collector);
+			renderPass.run();
 		} finally {
 			endBaseModelMeasurement();
 		}
