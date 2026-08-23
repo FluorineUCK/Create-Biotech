@@ -169,6 +169,13 @@ public final class SurgicalSubject {
 		return occupiedFootprints;
 	}
 
+	public boolean containsFootprint(BitSet cubes, SurgicalTableLayout.Footprint footprint) {
+		if (cubes == null || footprint == null)
+			return false;
+		int root = footprint.componentRoot();
+		return root == -1 ? cubes.equals(presentCubes) : root >= 0 && cubes.get(root);
+	}
+
 	public List<SurgicalGlueJoint> glueJoints() {
 		return glueJoints;
 	}
@@ -256,6 +263,8 @@ public final class SurgicalSubject {
 				translated.put(cube, offset);
 		}
 		componentOffsets = Map.copyOf(translated);
+		if (Math.abs(delta.x) <= 1.0e-12d && Math.abs(delta.z) <= 1.0e-12d)
+			return;
 		java.util.Set<Integer> movedRoots = new java.util.HashSet<>();
 		for (BitSet nativeComponent : SurgicalAssembly.components(cubeCount, component, seams, cutSeams))
 			movedRoots.add(nativeComponent.nextSetBit(0));
@@ -264,6 +273,22 @@ public final class SurgicalSubject {
 				footprint.minZ() + delta.z, footprint.maxX() + delta.x, footprint.maxZ() + delta.z,
 				SurgicalTableLayout.UNSNAPPED, SurgicalTableLayout.UNSNAPPED)
 			: footprint).toList();
+	}
+
+	void applyComponentOffsets(BitSet component, Map<Integer, Vec3> offsets) {
+		if (offsets.size() != component.cardinality())
+			throw new IllegalArgumentException("Incomplete surgical component offsets");
+		Map<Integer, Vec3> updated = new HashMap<>(componentOffsets);
+		for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+			Vec3 offset = offsets.get(cube);
+			if (offset == null)
+				throw new IllegalArgumentException("Missing surgical component offset");
+			if (offset.lengthSqr() <= 1.0e-24d)
+				updated.remove(cube);
+			else
+				updated.put(cube, offset);
+		}
+		componentOffsets = Map.copyOf(updated);
 	}
 
 	void addGlueJoint(SurgicalGlueJoint joint) {
@@ -295,7 +320,7 @@ public final class SurgicalSubject {
 				extractedOffsets.put(cube, offset);
 		}
 		List<SurgicalTableLayout.Footprint> extractedFootprints = occupiedFootprints.stream()
-			.filter(footprint -> selected.get(footprint.componentRoot())).toList();
+			.filter(footprint -> containsFootprint(selected, footprint)).toList();
 		SurgicalSubject result = new SurgicalSubject(extractedId, profile, placementFacing, layPose,
 			cubeCount, selected, seams, cutSeams, cutOrder, originOffsetX, originOffsetZ,
 			extractedOffsets, extractedFootprints);

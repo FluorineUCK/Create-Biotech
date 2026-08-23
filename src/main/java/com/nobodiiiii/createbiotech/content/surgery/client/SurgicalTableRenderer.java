@@ -75,14 +75,15 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		boolean collectGeometry = SurgicalTableClientHandler.needsGeometryUpdate(table, subject);
 		BitSet present = storedCount > 0
 			? SurgicalTableClientHandler.presentCubesFor(table, subject, storedCount) : EMPTY_CUBES;
-		Map<Integer, Vec3> offsets = collectGeometry ? Map.of()
-			: SurgicalTableClientHandler.offsetsFor(table, subject);
 		Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-		SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(preview,
-			storedCount, present, offsets, poseStack, buffer, packedLight, 0.0f, 0.0f, collectGeometry, camera,
-			projectSourceGeometry);
-		poseStack.popPose();
-		if (collectGeometry)
+		if (collectGeometry) {
+			SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.captureGeometry(preview,
+				storedCount, present, poseStack, packedLight, 0.0f, 0.0f, camera, projectSourceGeometry);
 			SurgicalTableClientHandler.updateGeometry(table, subject, snapshot);
+		}
+		Map<Integer, Vec3> offsets = SurgicalTableClientHandler.offsetsFor(table, subject);
+		SurgicalSourceModelRenderer.render(preview, storedCount, present, offsets, poseStack, buffer,
+			packedLight, 0.0f, 0.0f, false, camera, projectSourceGeometry);
+		poseStack.popPose();
 	}
 }

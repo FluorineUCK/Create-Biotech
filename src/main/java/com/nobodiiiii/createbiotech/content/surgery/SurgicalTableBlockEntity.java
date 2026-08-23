@@ -419,19 +419,22 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	public boolean glueComponents(Player player, ItemStack glue, InteractionHand hand,
 		int firstSubjectId, int firstCubeId, int secondSubjectId, int secondCubeId,
-		SurgicalLayPose targetPose, List<SurgicalTableGluePacket.Move> moves,
+		SurgicalLayPose targetPose, double groundLiftY, List<SurgicalTableGluePacket.Move> moves,
+		List<SurgicalTableGluePacket.AnchorMove> anchorMoves,
 		SurgicalTablePlane.Plane plane) {
 		SurgicalSubject first = getSubject(firstSubjectId);
 		SurgicalSubject second = getSubject(secondSubjectId);
 		if (first == null || second == null || !first.validPresentCube(firstCubeId)
 			|| !second.validPresentCube(secondCubeId) || targetPose == null
-			|| !targetPose.equals(second.layPose()) || !plane.valid())
+			|| !targetPose.equals(second.layPose()) || !plane.valid()
+			|| !validGlueLift(groundLiftY))
 			return false;
 
 		ComponentGroup moving = gluedGroup(first, firstCubeId);
 		ComponentGroup anchored = gluedGroup(second, secondCubeId);
 		Map<UUID, ValidatedGlueMove> validated = validateGlueMoves(moving, anchored, moves, plane);
-		if (moving.intersects(anchored) || validated == null)
+		Map<UUID, Map<Integer, Vec3>> validatedAnchors = validateGlueAnchors(anchored, anchorMoves);
+		if (moving.intersects(anchored) || validated == null || validatedAnchors == null)
 			return false;
 
 		Set<SurgicalGlueJoint> existingJoints = allGlueJoints();
@@ -450,6 +453,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			}
 			moved.applyGlueMove(second.placementFacing(), targetPose, move.offsets,
 				move.layout.footprints());
+		}
+		for (Map.Entry<UUID, Map<Integer, Vec3>> entry : validatedAnchors.entrySet()) {
+			SurgicalSubject anchoredSubject = getSubjectByPersistentId(entry.getKey());
+			BitSet selected = anchored.components.get(entry.getKey());
+			if (anchoredSubject != null && selected != null)
+				anchoredSubject.applyComponentOffsets(selected, entry.getValue());
 		}
 
 		List<SurgicalGlueJoint> remappedJoints = existingJoints.stream()
@@ -472,6 +481,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			level.playSound(null, worldPosition, SoundEvents.SLIME_BLOCK_PLACE, SoundSource.BLOCKS, 0.5f, 0.9f);
 		}
 		return true;
+	}
+
+	private static boolean validGlueLift(double liftY) {
+		return Double.isFinite(liftY) && liftY >= 0.0d
+			&& liftY <= SurgicalTablePlane.MAX_TILES + 2.0d;
 	}
 
 	@Nullable
@@ -508,6 +522,36 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			&& subjects.size() <= MAX_SUBJECTS - requiredSplits ? Map.copyOf(validated) : null;
 	}
 
+	@Nullable
+	private Map<UUID, Map<Integer, Vec3>> validateGlueAnchors(ComponentGroup anchored,
+		List<SurgicalTableGluePacket.AnchorMove> moves) {
+		if (moves == null || moves.size() != anchored.components.size())
+			return null;
+		Map<UUID, Map<Integer, Vec3>> validated = new HashMap<>();
+		for (SurgicalTableGluePacket.AnchorMove move : moves) {
+			SurgicalSubject subject = getSubject(move.subjectId());
+			if (subject == null || validated.containsKey(subject.persistentId()))
+				return null;
+			BitSet selected = anchored.components.get(subject.persistentId());
+			if (selected == null || selected.isEmpty())
+				return null;
+			Map<Integer, Vec3> offsets = new HashMap<>();
+			for (SurgicalTableGluePacket.CubeTranslation translation : move.translations()) {
+				Vec3 existing = subject.componentOffsets.getOrDefault(translation.cubeId(), Vec3.ZERO);
+				if (!translation.valid() || !selected.get(translation.cubeId())
+					|| Math.abs(translation.offset().x - existing.x) > 1.0e-6d
+					|| Math.abs(translation.offset().z - existing.z) > 1.0e-6d
+					|| offsets.putIfAbsent(translation.cubeId(), translation.offset()) != null)
+					return null;
+			}
+			if (offsets.size() != selected.cardinality()
+				|| !componentYTranslationsMatch(subject, selected, offsets))
+				return null;
+			validated.put(subject.persistentId(), Map.copyOf(offsets));
+		}
+		return validated.keySet().equals(anchored.components.keySet()) ? Map.copyOf(validated) : null;
+	}
+
 	private static boolean layoutMatchesTranslations(SurgicalTableLayout.Proposal layout,
 		Map<Integer, Vec3> offsets) {
 		if (layout.offsets().size() != offsets.size())
@@ -542,8 +586,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			BitSet moved = moving.components.get(subject.persistentId());
 			BitSet fixed = anchored.components.get(subject.persistentId());
 			for (SurgicalTableLayout.Footprint footprint : subject.occupiedFootprints())
-				if ((moved == null || !moved.get(footprint.componentRoot()))
-					&& (fixed == null || !fixed.get(footprint.componentRoot())))
+				if (!subject.containsFootprint(moved, footprint)
+					&& !subject.containsFootprint(fixed, footprint))
 					obstacles.add(footprint);
 		}
 		return List.copyOf(obstacles);
@@ -694,7 +738,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				return false;
 			BitSet moved = moving.components.get(subject.persistentId());
 			for (SurgicalTableLayout.Footprint footprint : subject.occupiedFootprints()) {
-				if (moved == null || !moved.get(footprint.componentRoot())) {
+				if (!subject.containsFootprint(moved, footprint)) {
 					obstacles.add(footprint);
 					continue;
 				}
