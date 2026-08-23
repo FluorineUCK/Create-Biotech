@@ -36,6 +36,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private static final String SEAMS_TAG = "Seams";
 	private static final String CUT_SEAMS_TAG = "CutSeams";
 	private static final String LAST_CUT_SEAM_TAG = "LastCutSeam";
+	private static final String CUT_ORDER_TAG = "CutOrder";
 
 	@Nullable
 	private MimicProfile profile;
@@ -43,8 +44,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private BitSet presentCubes = new BitSet();
 	private List<SurgicalAssembly.Seam> seams = List.of();
 	private BitSet cutSeams = new BitSet();
-	private int lastCutSeam = -1;
+	private List<Integer> cutOrder = List.of();
 	private int clientRenderRevision;
+	@Nullable
+	private AABB clientRenderBounds;
 
 	public SurgicalTableBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.SURGICAL_TABLE.get(), pos, state);
@@ -97,12 +100,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return (BitSet) cutSeams.clone();
 	}
 
-	public int getLastCutSeamForRender() {
-		return lastCutSeam;
+	public List<Integer> getCutOrderForRender() {
+		return cutOrder;
 	}
 
 	public int getClientRenderRevision() {
 		return clientRenderRevision;
+	}
+
+	public void setClientRenderBounds(AABB bounds) {
+		clientRenderBounds = bounds;
 	}
 
 	public boolean isSeamCut(int seamId) {
@@ -125,7 +132,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			presentCubes = assembly.presentCubes();
 			seams = assembly.seams();
 			cutSeams = assembly.cutSeams();
-			lastCutSeam = -1;
+			cutOrder = assembly.cutOrder();
 		} else if (captured instanceof LivingEntity living && SlimeMimicHandler.isSlimeMimic(living)) {
 			MimicProfile capturedProfile = MimicProfile.capture(living);
 			if (capturedProfile == null)
@@ -135,10 +142,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			presentCubes.clear();
 			seams = List.of();
 			cutSeams.clear();
-			lastCutSeam = -1;
+			cutOrder = List.of();
 		} else {
 			return false;
 		}
+		clientRenderBounds = null;
 		CapturedEntityBoxHelper.clearCapturedEntity(box);
 		setChangedAndSync();
 		level.playSound(null, worldPosition, SoundEvents.WOOL_PLACE, SoundSource.BLOCKS, 0.8f, 0.9f);
@@ -155,7 +163,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 
 		cutSeams.set(seamId);
-		lastCutSeam = seamId;
+		List<Integer> updatedOrder = new java.util.ArrayList<>(cutOrder);
+		updatedOrder.add(seamId);
+		cutOrder = SurgicalAssembly.normalizeCutOrder(updatedOrder, cutSeams, seams.size());
 		shears.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
 		setChangedAndSync();
 		if (level != null)
@@ -173,7 +183,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (component.isEmpty() || profile == null)
 			return false;
 
-		SurgicalAssembly assembly = SurgicalAssembly.create(profile, cubeCount, component, seams, cutSeams);
+		SurgicalAssembly assembly = SurgicalAssembly.create(profile, cubeCount, component, seams, cutSeams,
+			cutOrder);
 		if (assembly == null || level == null)
 			return false;
 		SlimeBionicEntity bionic = CBEntityTypes.SLIME_BIONIC.get().create(level);
@@ -204,7 +215,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		presentCubes.clear();
 		presentCubes.set(0, cubeCount);
 		cutSeams.clear();
-		lastCutSeam = -1;
+		cutOrder = List.of();
+		clientRenderBounds = null;
 		return true;
 	}
 
@@ -218,7 +230,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		presentCubes.clear();
 		seams = List.of();
 		cutSeams.clear();
-		lastCutSeam = -1;
+		cutOrder = List.of();
 	}
 
 	private void setChangedAndSync() {
@@ -236,8 +248,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			tag.putIntArray(SEAMS_TAG, SurgicalAssembly.encodeSeams(seams));
 			if (!cutSeams.isEmpty())
 				tag.putLongArray(CUT_SEAMS_TAG, cutSeams.toLongArray());
-			if (lastCutSeam >= 0 && lastCutSeam < seams.size() && cutSeams.get(lastCutSeam))
-				tag.putInt(LAST_CUT_SEAM_TAG, lastCutSeam);
+			if (!cutOrder.isEmpty())
+				tag.putIntArray(CUT_ORDER_TAG, cutOrder.stream().mapToInt(Integer::intValue).toArray());
 		}
 		super.write(tag, registries, clientPacket);
 	}
@@ -260,24 +272,35 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			? BitSet.valueOf(tag.getLongArray(PRESENT_CUBES_TAG)) : new BitSet();
 		cutSeams = cubeCount > 0 && tag.contains(CUT_SEAMS_TAG, Tag.TAG_LONG_ARRAY)
 			? BitSet.valueOf(tag.getLongArray(CUT_SEAMS_TAG)) : new BitSet();
-		lastCutSeam = cubeCount > 0 && tag.contains(LAST_CUT_SEAM_TAG, Tag.TAG_ANY_NUMERIC)
-			? tag.getInt(LAST_CUT_SEAM_TAG) : -1;
+		List<Integer> loadedCutOrder = new java.util.ArrayList<>();
+		if (cubeCount > 0 && tag.contains(CUT_ORDER_TAG, Tag.TAG_INT_ARRAY)) {
+			for (int seamId : tag.getIntArray(CUT_ORDER_TAG))
+				loadedCutOrder.add(seamId);
+		} else if (cubeCount > 0 && tag.contains(LAST_CUT_SEAM_TAG, Tag.TAG_ANY_NUMERIC)) {
+			int legacyLast = tag.getInt(LAST_CUT_SEAM_TAG);
+			for (int seamId = cutSeams.nextSetBit(0); seamId >= 0; seamId = cutSeams.nextSetBit(seamId + 1))
+				if (seamId != legacyLast)
+					loadedCutOrder.add(seamId);
+			loadedCutOrder.add(legacyLast);
+		}
+		cutOrder = SurgicalAssembly.normalizeCutOrder(loadedCutOrder, cutSeams, seams.size());
 		if (cubeCount > 0) {
 			if (presentCubes.length() > cubeCount)
 				presentCubes.clear(cubeCount, presentCubes.length());
 			if (cutSeams.length() > seams.size())
 				cutSeams.clear(seams.size(), cutSeams.length());
-			if (lastCutSeam < 0 || lastCutSeam >= seams.size() || !cutSeams.get(lastCutSeam))
-				lastCutSeam = -1;
 		} else {
-			lastCutSeam = -1;
+			cutOrder = List.of();
 		}
-		if (clientPacket)
+		if (clientPacket) {
+			clientRenderBounds = null;
 			clientRenderRevision++;
+		}
 	}
 
 	@Override
 	public AABB getRenderBoundingBox() {
-		return new AABB(worldPosition).inflate(8.0d);
+		return clientRenderBounds == null ? new AABB(worldPosition).inflate(8.0d)
+			: clientRenderBounds.minmax(new AABB(worldPosition)).inflate(0.25d);
 	}
 }

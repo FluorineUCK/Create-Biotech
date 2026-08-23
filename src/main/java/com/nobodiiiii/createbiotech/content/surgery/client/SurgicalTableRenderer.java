@@ -4,7 +4,6 @@ import java.util.BitSet;
 import java.util.Map;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
@@ -34,8 +33,7 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 
 		Direction facing = table.getBlockState().getValue(SurgicalTableBlock.FACING);
 		poseStack.pushPose();
-		poseStack.translate(0.5d, 1.01d, 0.5d);
-		poseStack.mulPose(Axis.YP.rotationDegrees(180.0f - facing.toYRot()));
+		SurgicalTablePoseResolver.resolve(table, profile, preview, facing).apply(poseStack);
 
 		int storedCount = table.getCubeCount();
 		boolean collectGeometry = SurgicalTableClientHandler.needsGeometryUpdate(table);

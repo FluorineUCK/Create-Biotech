@@ -19,41 +19,52 @@ import net.minecraft.nbt.Tag;
 public final class SurgicalAssembly {
 	public static final int MAX_CUBES = 1024;
 	public static final int MAX_SEAMS = 4096;
-	private static final int CURRENT_VERSION = 1;
+	private static final int CURRENT_VERSION = 2;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
 	private static final String PRESENT_CUBES_TAG = "PresentCubes";
 	private static final String SEAMS_TAG = "Seams";
 	private static final String CUT_SEAMS_TAG = "CutSeams";
+	private static final String CUT_ORDER_TAG = "CutOrder";
 
 	private final MimicProfile profile;
 	private final int cubeCount;
 	private final BitSet presentCubes;
 	private final List<Seam> seams;
 	private final BitSet cutSeams;
+	private final List<Integer> cutOrder;
 
 	private SurgicalAssembly(MimicProfile profile, int cubeCount, BitSet presentCubes, List<Seam> seams,
-		BitSet cutSeams) {
+		BitSet cutSeams, List<Integer> cutOrder) {
 		this.profile = profile;
 		this.cubeCount = cubeCount;
 		this.presentCubes = normalize(presentCubes, cubeCount);
 		this.seams = List.copyOf(seams);
 		this.cutSeams = normalize(cutSeams, seams.size());
+		this.cutOrder = normalizeCutOrder(cutOrder, this.cutSeams, seams.size());
 	}
 
 	@Nullable
 	public static SurgicalAssembly create(MimicProfile profile, int cubeCount, BitSet presentCubes,
 		List<Seam> seams, BitSet cutSeams) {
+		return create(profile, cubeCount, presentCubes, seams, cutSeams, List.of());
+	}
+
+	@Nullable
+	public static SurgicalAssembly create(MimicProfile profile, int cubeCount, BitSet presentCubes,
+		List<Seam> seams, BitSet cutSeams, List<Integer> cutOrder) {
 		if (profile == null || !validTopology(cubeCount, seams))
 			return null;
-		SurgicalAssembly assembly = new SurgicalAssembly(profile, cubeCount, presentCubes, seams, cutSeams);
+		SurgicalAssembly assembly = new SurgicalAssembly(profile, cubeCount, presentCubes, seams, cutSeams,
+			cutOrder);
 		return assembly.presentCubes.isEmpty() ? null : assembly;
 	}
 
 	@Nullable
 	public static SurgicalAssembly load(CompoundTag tag) {
-		if (tag.getInt(VERSION_TAG) != CURRENT_VERSION
+		int version = tag.getInt(VERSION_TAG);
+		if ((version != 1 && version != CURRENT_VERSION)
 			|| !tag.contains(PROFILE_TAG, Tag.TAG_COMPOUND)
 			|| !tag.contains(CUBE_COUNT_TAG, Tag.TAG_ANY_NUMERIC)
 			|| !tag.contains(PRESENT_CUBES_TAG, Tag.TAG_LONG_ARRAY)
@@ -69,7 +80,9 @@ public final class SurgicalAssembly {
 		BitSet present = BitSet.valueOf(tag.getLongArray(PRESENT_CUBES_TAG));
 		BitSet cut = tag.contains(CUT_SEAMS_TAG, Tag.TAG_LONG_ARRAY)
 			? BitSet.valueOf(tag.getLongArray(CUT_SEAMS_TAG)) : new BitSet();
-		return create(profile, cubeCount, present, seams, cut);
+		List<Integer> cutOrder = version >= 2 && tag.contains(CUT_ORDER_TAG, Tag.TAG_INT_ARRAY)
+			? decodeCutOrder(tag.getIntArray(CUT_ORDER_TAG)) : List.of();
+		return create(profile, cubeCount, present, seams, cut, cutOrder);
 	}
 
 	public CompoundTag save() {
@@ -81,6 +94,8 @@ public final class SurgicalAssembly {
 		tag.putIntArray(SEAMS_TAG, encodeSeams(seams));
 		if (!cutSeams.isEmpty())
 			tag.putLongArray(CUT_SEAMS_TAG, cutSeams.toLongArray());
+		if (!cutOrder.isEmpty())
+			tag.putIntArray(CUT_ORDER_TAG, cutOrder.stream().mapToInt(Integer::intValue).toArray());
 		return tag;
 	}
 
@@ -110,6 +125,10 @@ public final class SurgicalAssembly {
 
 	public BitSet cutSeams() {
 		return (BitSet) cutSeams.clone();
+	}
+
+	public List<Integer> cutOrder() {
+		return cutOrder;
 	}
 
 	public boolean validCubeId(int cubeId) {
@@ -222,6 +241,35 @@ public final class SurgicalAssembly {
 		if (normalized.length() > size)
 			normalized.clear(size, normalized.length());
 		return normalized;
+	}
+
+	public static List<Integer> normalizeCutOrder(List<Integer> input, BitSet cutSeams, int seamCount) {
+		BitSet included = new BitSet(seamCount);
+		List<Integer> normalized = new ArrayList<>();
+		if (input != null) {
+			for (Integer seamId : input) {
+				if (seamId == null || seamId < 0 || seamId >= seamCount
+					|| !cutSeams.get(seamId) || included.get(seamId))
+					continue;
+				included.set(seamId);
+				normalized.add(seamId);
+			}
+		}
+		for (int seamId = cutSeams.nextSetBit(0); seamId >= 0 && seamId < seamCount;
+			seamId = cutSeams.nextSetBit(seamId + 1)) {
+			if (!included.get(seamId))
+				normalized.add(seamId);
+		}
+		return List.copyOf(normalized);
+	}
+
+	private static List<Integer> decodeCutOrder(int[] encoded) {
+		if (encoded == null || encoded.length > MAX_SEAMS)
+			return List.of();
+		List<Integer> decoded = new ArrayList<>(encoded.length);
+		for (int seamId : encoded)
+			decoded.add(seamId);
+		return List.copyOf(decoded);
 	}
 
 	public record Seam(int first, int second) {

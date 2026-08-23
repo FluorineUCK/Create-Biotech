@@ -1,5 +1,8 @@
 package com.nobodiiiii.createbiotech.content.surgery;
 
+import java.util.List;
+import java.util.function.Predicate;
+
 import com.mojang.serialization.MapCodec;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
@@ -8,12 +11,17 @@ import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.simibubi.create.content.equipment.wrench.IWrenchable;
 import com.simibubi.create.foundation.block.IBE;
 
+import net.createmod.catnip.placement.IPlacementHelper;
+import net.createmod.catnip.placement.PlacementHelpers;
+import net.createmod.catnip.placement.PlacementOffset;
+import net.minecraft.MethodsReturnNonnullByDefault;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.context.BlockPlaceContext;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.Level;
@@ -33,6 +41,7 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 	implements IBE<SurgicalTableBlockEntity>, IWrenchable {
 	public static final MapCodec<SurgicalTableBlock> CODEC = simpleCodec(SurgicalTableBlock::new);
 	public static final DirectionProperty FACING = HorizontalDirectionalBlock.FACING;
+	private static final int PLACEMENT_HELPER_ID = PlacementHelpers.register(new PlacementHelper());
 	private static final VoxelShape SHAPE = Shapes.or(
 		box(0, 12, 0, 16, 16, 16),
 		box(1, 0, 1, 4, 12, 4),
@@ -70,17 +79,28 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 		Player player, net.minecraft.world.InteractionHand hand, BlockHitResult hit) {
 		if (CBWrenchHelper.isWrench(stack))
 			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
+		if (!player.isShiftKeyDown() && player.mayBuild()) {
+			IPlacementHelper placementHelper = PlacementHelpers.get(PLACEMENT_HELPER_ID);
+			if (placementHelper.matchesItem(stack))
+				return placementHelper.getOffset(player, level, state, pos, hit)
+					.placeInWorld(level, (BlockItem) stack.getItem(), player, hand, hit);
+		}
 		if (!(stack.getItem() instanceof CapturedEntityBoxItem)
 			|| !CapturedEntityBoxHelper.hasCapturedEntity(stack))
 			return ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 
+		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, pos);
+		if (!plane.valid())
+			return ItemInteractionResult.FAIL;
+		BlockPos targetPos = plane.owner() == null ? pos : plane.owner();
+
 		if (level.isClientSide) {
-			SurgicalTableBlockEntity blockEntity = getBlockEntity(level, pos);
+			SurgicalTableBlockEntity blockEntity = getBlockEntity(level, targetPos);
 			return blockEntity != null && !blockEntity.hasSubject()
 				? ItemInteractionResult.SUCCESS : ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
 		}
 
-		InteractionResult result = onBlockEntityUse(level, pos,
+		InteractionResult result = onBlockEntityUse(level, targetPos,
 			be -> be.tryPlaceSubject(stack) ? InteractionResult.SUCCESS : InteractionResult.PASS);
 		return result.consumesAction() ? ItemInteractionResult.SUCCESS
 			: ItemInteractionResult.PASS_TO_DEFAULT_BLOCK_INTERACTION;
@@ -104,5 +124,35 @@ public class SurgicalTableBlock extends HorizontalDirectionalBlock
 	@Override
 	public BlockEntityType<? extends SurgicalTableBlockEntity> getBlockEntityType() {
 		return CBBlockEntityTypes.SURGICAL_TABLE.get();
+	}
+
+	@MethodsReturnNonnullByDefault
+	private static class PlacementHelper implements IPlacementHelper {
+		@Override
+		public Predicate<ItemStack> getItemPredicate() {
+			return stack -> stack.getItem() instanceof BlockItem blockItem
+				&& blockItem.getBlock() instanceof SurgicalTableBlock;
+		}
+
+		@Override
+		public Predicate<BlockState> getStatePredicate() {
+			return state -> state.getBlock() instanceof SurgicalTableBlock;
+		}
+
+		@Override
+		public PlacementOffset getOffset(Player player, Level level, BlockState state, BlockPos pos,
+			BlockHitResult hit) {
+			Direction facing = state.getValue(FACING);
+			List<Direction> directions = IPlacementHelper.orderedByDistanceExceptAxis(pos, hit.getLocation(),
+				Direction.Axis.Y, direction -> {
+					BlockPos destination = pos.relative(direction);
+					return level.getBlockState(destination).canBeReplaced()
+						&& SurgicalTablePlane.canExtendAt(level, destination, facing);
+				});
+			if (directions.isEmpty())
+				return PlacementOffset.fail();
+			return PlacementOffset.success(pos.relative(directions.getFirst()),
+				placed -> placed.setValue(FACING, facing));
+		}
 	}
 }

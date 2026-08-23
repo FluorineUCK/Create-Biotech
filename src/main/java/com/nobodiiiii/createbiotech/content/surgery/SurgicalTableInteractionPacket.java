@@ -43,7 +43,9 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			return;
 
 		double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1.0d;
-		if (player.distanceToSqr(Vec3.atCenterOf(pos)) > range * range)
+		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(player.level(), pos);
+		if (!plane.valid() || !pos.equals(plane.owner()) || plane.tiles().stream()
+			.noneMatch(tile -> player.distanceToSqr(Vec3.atCenterOf(tile)) <= range * range))
 			return;
 		if (!(player.level().getBlockEntity(pos) instanceof SurgicalTableBlockEntity table)
 			|| !table.hasSubject() || !table.matchesObservedTopology(observedCubeCount, seams))

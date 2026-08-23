@@ -13,6 +13,7 @@ import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
 import com.nobodiiiii.createbiotech.network.CBPackets;
@@ -31,6 +32,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.api.distmarker.Dist;
@@ -133,6 +135,7 @@ public final class SurgicalTableClientHandler {
 
 	public static void clear() {
 		TABLES.clear();
+		SurgicalTablePoseResolver.clear();
 		clearSelections();
 	}
 
@@ -221,9 +224,18 @@ public final class SurgicalTableClientHandler {
 	@SubscribeEvent
 	public static void hideVanillaTableOutline(RenderHighlightEvent.Block event) {
 		BlockPos target = event.getTarget().getBlockPos();
-		if (seamSelection != null && seamSelection.tablePos.equals(target)
-			|| cubeSelection != null && cubeSelection.tablePos.equals(target))
+		ClientLevel level = Minecraft.getInstance().level;
+		if (level != null && (belongsToSelectionPlane(level, target, seamSelection)
+			|| belongsToSelectionPlane(level, target, cubeSelection)))
 			event.setCanceled(true);
+	}
+
+	private static boolean belongsToSelectionPlane(ClientLevel level, BlockPos target,
+		@Nullable Selection selection) {
+		if (selection == null)
+			return false;
+		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, target);
+		return selection.tablePos.equals(plane.owner());
 	}
 
 	@SubscribeEvent
@@ -588,11 +600,34 @@ public final class SurgicalTableClientHandler {
 			cutSeams = table.getCutSeamsForRender();
 			Vec3 tableCenter = Vec3.atBottomCenterOf(table.getBlockPos()).add(0.0d, 1.01d, 0.0d);
 			offsets = SurgicalClientTopology.componentOffsets(observedCubeCount, presentCubes, seams,
-				cutSeams, baseCubes, table.getLastCutSeamForRender(), tableCenter);
+				cutSeams, baseCubes, table.getCutOrderForRender(), tableCenter);
 			cubes = translateCubes(baseCubes, offsets);
 			contacts = translateContacts(baseContacts, offsets);
 			contactsByCube = contactsByCube(observedCubeCount, contacts);
+			updateRenderBounds(table, cubes);
 			renderRevision = revision;
+		}
+
+		private static void updateRenderBounds(SurgicalTableBlockEntity table,
+			List<SurgicalModelRenderContext.CubeGeometry> cubes) {
+			double minX = Double.POSITIVE_INFINITY;
+			double minY = Double.POSITIVE_INFINITY;
+			double minZ = Double.POSITIVE_INFINITY;
+			double maxX = Double.NEGATIVE_INFINITY;
+			double maxY = Double.NEGATIVE_INFINITY;
+			double maxZ = Double.NEGATIVE_INFINITY;
+			for (SurgicalModelRenderContext.CubeGeometry cube : cubes) {
+				for (Vec3 corner : cube.corners()) {
+					minX = Math.min(minX, corner.x);
+					minY = Math.min(minY, corner.y);
+					minZ = Math.min(minZ, corner.z);
+					maxX = Math.max(maxX, corner.x);
+					maxY = Math.max(maxY, corner.y);
+					maxZ = Math.max(maxZ, corner.z);
+				}
+			}
+			if (minX != Double.POSITIVE_INFINITY)
+				table.setClientRenderBounds(new AABB(minX, minY, minZ, maxX, maxY, maxZ));
 		}
 
 		private boolean resolvePendingTopology() {
