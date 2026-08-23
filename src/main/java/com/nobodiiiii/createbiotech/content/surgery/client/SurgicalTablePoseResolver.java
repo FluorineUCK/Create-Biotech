@@ -31,9 +31,13 @@ public final class SurgicalTablePoseResolver {
 
 		EntityGeometry.Collector geometry = EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
 		EntityGeometry.measureWithFallback(preview, geometry);
+		SurgicalPose selected = createPose(geometry, RotationAxis.NONE, facing);
 		SurgicalPose xPose = createPose(geometry, RotationAxis.X, facing);
 		SurgicalPose zPose = createPose(geometry, RotationAxis.Z, facing);
-		SurgicalPose selected = zPose.height + HEIGHT_EPSILON < xPose.height ? zPose : xPose;
+		if (xPose.height + HEIGHT_EPSILON < selected.height)
+			selected = xPose;
+		if (zPose.height + HEIGHT_EPSILON < selected.height)
+			selected = zPose;
 		CACHE.put(owner, new CachedPose(profile, facing, selected));
 		return selected;
 	}
@@ -53,6 +57,8 @@ public final class SurgicalTablePoseResolver {
 	}
 
 	private static int footFacingYaw(RotationAxis axis, Direction facing) {
+		if (axis == RotationAxis.NONE)
+			return 0;
 		Vector3f target = new Vector3f(facing.getStepX(), 0.0f, facing.getStepZ());
 		int bestYaw = 0;
 		float bestDot = Float.NEGATIVE_INFINITY;
@@ -69,21 +75,26 @@ public final class SurgicalTablePoseResolver {
 
 	private static Matrix4f rotation(RotationAxis axis, int yaw) {
 		Matrix4f transform = new Matrix4f().rotateY((float) Math.toRadians(yaw));
-		return axis == RotationAxis.X
-			? transform.rotateX((float) (Math.PI / 2.0d))
-			: transform.rotateZ((float) (Math.PI / 2.0d));
+		return switch (axis) {
+		case NONE -> transform;
+		case X -> transform.rotateX((float) (-Math.PI / 2.0d));
+		case Z -> transform.rotateZ((float) (-Math.PI / 2.0d));
+		};
 	}
 
 	public record SurgicalPose(RotationAxis axis, int yaw, float translateX, float translateY,
 		float translateZ, float height) {
 		public void apply(PoseStack poseStack) {
 			poseStack.translate(translateX, translateY, translateZ);
+			if (axis == RotationAxis.NONE)
+				return;
 			poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
-			poseStack.mulPose((axis == RotationAxis.X ? Axis.XP : Axis.ZP).rotationDegrees(90.0f));
+			poseStack.mulPose((axis == RotationAxis.X ? Axis.XP : Axis.ZP).rotationDegrees(-90.0f));
 		}
 	}
 
 	public enum RotationAxis {
+		NONE,
 		X,
 		Z
 	}

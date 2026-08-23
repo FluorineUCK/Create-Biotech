@@ -14,10 +14,13 @@ import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.client.render.SlimeMimicRenderLayer;
 import com.nobodiiiii.createbiotech.content.buttercat.ButterRotation;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 
 import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
+import net.minecraft.client.renderer.entity.layers.RenderLayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 
 @Mixin(LivingEntityRenderer.class)
@@ -54,6 +57,22 @@ public abstract class LivingEntityRendererMixin {
 			SlimeMimicRenderLayer.renderDeferredOuterParts();
 		} finally {
 			SlimeMimicRenderLayer.endPartInterception();
+		}
+	}
+
+	@WrapOperation(
+		method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
+		at = @At(value = "INVOKE",
+			target = "Lnet/minecraft/client/renderer/entity/layers/RenderLayer;render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/Entity;FFFFFF)V"))
+	private void createBiotech$bindIndependentLayerModel(RenderLayer<?, ?> layer, PoseStack poseStack,
+		MultiBufferSource buffer, int packedLight, Entity entity, float limbSwing, float limbSwingAmount,
+		float partialTick, float ageInTicks, float netHeadYaw, float headPitch, Operation<Void> original) {
+		SurgicalModelRenderContext.beginRenderLayer();
+		try {
+			original.call(layer, poseStack, buffer, packedLight, entity, limbSwing, limbSwingAmount,
+				partialTick, ageInTicks, netHeadYaw, headPitch);
+		} finally {
+			SurgicalModelRenderContext.endRenderLayer();
 		}
 	}
 }

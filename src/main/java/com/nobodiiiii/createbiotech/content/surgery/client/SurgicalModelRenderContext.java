@@ -41,6 +41,43 @@ public final class SurgicalModelRenderContext {
 		return context.snapshot();
 	}
 
+	/**
+	 * Opens the scope of one vanilla {@code RenderLayer}. Cubes already seen in the source model
+	 * retain their individual owners. Cubes from a separately baked model share one stable source
+	 * owner for the entire layer, preventing that model from being repeated on every separated
+	 * component.
+	 */
+	public static void beginRenderLayer() {
+		Context context = current();
+		if (context != null)
+			context.beginRenderLayer();
+	}
+
+	public static void endRenderLayer() {
+		Context context = current();
+		if (context != null)
+			context.endRenderLayer();
+	}
+
+	/**
+	 * Overrides the generic layer owner with a logical source cube selected by a compatibility
+	 * adapter. The cube must already belong to the source model rendered in this context.
+	 */
+	public static boolean bindCurrentRenderLayerToSourceCube(Object sourceCube) {
+		Context context = current();
+		return context != null && context.bindCurrentRenderLayerTo(sourceCube);
+	}
+
+	/** Selects the first registered direct cube of a vanilla model part as the layer owner. */
+	public static boolean bindCurrentRenderLayerToPart(ModelPart sourcePart) {
+		ModelPartAccessor accessor = (ModelPartAccessor) (Object) sourcePart;
+		for (ModelPart.Cube cube : accessor.createBiotech$getCubes()) {
+			if (bindCurrentRenderLayerToSourceCube(cube))
+				return true;
+		}
+		return false;
+	}
+
 	/** Called only after the existing texture-visibility check accepted the cube. */
 	public static boolean prepareCube(ModelPart.Cube cube, PoseStack poseStack, boolean innerPass) {
 		return prepareCube(cube, poseStack, innerPass,
@@ -77,11 +114,13 @@ public final class SurgicalModelRenderContext {
 			return;
 		}
 
-		Integer cubeId = context.registeredIdFor(cube);
+		Integer cubeId = context.ownerForOriginalLayerCube(cube);
 		if (cubeId == null) {
 			draw.run();
 			return;
 		}
+		if (cubeId < 0)
+			return;
 		if (!context.isPresent(cubeId))
 			return;
 
@@ -158,7 +197,10 @@ public final class SurgicalModelRenderContext {
 	}
 
 	private static final class Context {
+		private static final int NO_LAYER_OWNER = -1;
+
 		private final IdentityHashMap<Object, Integer> cubeIds = new IdentityHashMap<>();
+		private final Deque<Integer> renderLayerOwners = new ArrayDeque<>();
 		private int observedCubeCount;
 		private final int expectedCubeCount;
 		private final BitSet presentCubes;
@@ -192,6 +234,36 @@ public final class SurgicalModelRenderContext {
 		@Nullable
 		private Integer registeredIdFor(Object cube) {
 			return cubeIds.get(cube);
+		}
+
+		private void beginRenderLayer() {
+			// Never choose from presentCubes: that would select a different owner for each
+			// separated render and make the independent model appear on every component again.
+			renderLayerOwners.push(observedCubeCount > 0 ? 0 : NO_LAYER_OWNER);
+		}
+
+		private void endRenderLayer() {
+			if (!renderLayerOwners.isEmpty())
+				renderLayerOwners.pop();
+		}
+
+		private boolean bindCurrentRenderLayerTo(Object sourceCube) {
+			if (renderLayerOwners.isEmpty())
+				return false;
+			Integer cubeId = registeredIdFor(sourceCube);
+			if (cubeId == null)
+				return false;
+			renderLayerOwners.pop();
+			renderLayerOwners.push(cubeId);
+			return true;
+		}
+
+		@Nullable
+		private Integer ownerForOriginalLayerCube(Object cube) {
+			Integer registered = registeredIdFor(cube);
+			if (registered != null)
+				return registered;
+			return renderLayerOwners.peek();
 		}
 
 		private void associate(Object cube, int ownerCubeId) {
