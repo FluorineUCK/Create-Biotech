@@ -243,11 +243,13 @@ public final class SurgicalTableClientHandler {
 		Vec3 target = tableSurfaceTarget(playerRay(player), plane.workArea().y() + 1.01d);
 		BlockPos ownerPos = plane.source();
 		Direction placementFacing = player.getDirection();
-		EntityGeometry.Bounds localBounds = source.measure(placementFacing);
-		if (localBounds == null) {
+		boolean projectSourceGeometry = SurgicalTableRenderer.projectsSourceGeometry(level, plane);
+		PlacementGeometry placementGeometry = source.measure(placementFacing, projectSourceGeometry);
+		if (placementGeometry == null) {
 			clearPlacementPreview();
 			return;
 		}
+		EntityGeometry.Bounds localBounds = placementGeometry.bounds();
 		SurgicalModelRenderContext.CubeGeometry renderedBounds = boundsGeometry(localBounds,
 			Vec3.atLowerCornerOf(ownerPos));
 		SurgicalClientTopology.PlacementPlan plan = SurgicalClientTopology.planInitialPlacement(
@@ -257,7 +259,8 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 
-		placementPreview = new PlacementPreview(ownerPos, hand, source, placementFacing, plan);
+		placementPreview = new PlacementPreview(ownerPos, hand, source, placementFacing, plan,
+			placementGeometry.cubeOffsets(), projectSourceGeometry);
 		SurgicalTableLayout.Footprint footprint = plan.proposal().footprints().getFirst();
 		Outliner.getInstance().showAABB(PLACEMENT_OUTLINE_SLOT,
 			new AABB(footprint.minX(), plane.workArea().y() + 1.002d, footprint.minZ(),
@@ -319,9 +322,9 @@ public final class SurgicalTableClientHandler {
 			.apply(poseStack);
 		MultiBufferSource.BufferSource buffer = minecraft.renderBuffers().bufferSource();
 		SurgicalSourceModelRenderer.render(preview, placement.source.cubeCount(), placement.source.presentCubes(),
-			Map.of(), poseStack, buffer,
+			placement.cubeOffsets, poseStack, buffer,
 			LevelRenderer.getLightColor(minecraft.level, placement.ownerPos.above()), 0.0f,
-			AnimationTickHolder.getPartialTicks(), false, camera);
+			AnimationTickHolder.getPartialTicks(), false, camera, placement.projectSourceGeometry);
 		poseStack.popPose();
 		buffer.endBatch();
 	}
@@ -1327,7 +1330,18 @@ public final class SurgicalTableClientHandler {
 
 
 	private record PlacementPreview(BlockPos ownerPos, InteractionHand hand, PlacementSource source,
-		Direction facing, SurgicalClientTopology.PlacementPlan plan) {}
+		Direction facing, SurgicalClientTopology.PlacementPlan plan, Map<Integer, Vec3> cubeOffsets,
+		boolean projectSourceGeometry) {
+		private PlacementPreview {
+			cubeOffsets = Map.copyOf(cubeOffsets);
+		}
+	}
+
+	private record PlacementGeometry(EntityGeometry.Bounds bounds, Map<Integer, Vec3> cubeOffsets) {
+		private PlacementGeometry {
+			cubeOffsets = Map.copyOf(cubeOffsets);
+		}
+	}
 
 	private static final class PlacementSource {
 		private final ItemStack box;
@@ -1338,8 +1352,9 @@ public final class SurgicalTableClientHandler {
 		private LivingEntity preview;
 		@Nullable
 		private Direction measuredFacing;
+		private boolean measuredSourceGeometry;
 		@Nullable
-		private EntityGeometry.Bounds measuredBounds;
+		private PlacementGeometry measuredGeometry;
 
 		private PlacementSource(ItemStack box, MimicProfile profile, @Nullable SurgicalAssembly assembly) {
 			this.box = box;
@@ -1355,23 +1370,49 @@ public final class SurgicalTableClientHandler {
 		}
 
 		@Nullable
-		private EntityGeometry.Bounds measure(Direction facing) {
-			if (measuredBounds != null && measuredFacing == facing)
-				return measuredBounds;
+		private PlacementGeometry measure(Direction facing, boolean projectSourceGeometry) {
+			if (measuredGeometry != null && measuredFacing == facing
+				&& measuredSourceGeometry == projectSourceGeometry)
+				return measuredGeometry;
 			LivingEntity entity = preview();
 			if (entity == null)
 				return null;
+
 			PoseStack poseStack = new PoseStack();
 			SurgicalTablePoseResolver.resolve(this, profile, entity, facing).apply(poseStack);
 			EntityGeometry.Collector sink = EntityGeometry.Collector.boundsOnly();
 			MultiBufferSource measuringBuffer = renderType -> sink;
-			SurgicalSourceModelRenderer.render(entity, cubeCount(), presentCubes(), Map.of(), poseStack,
-				measuringBuffer, LightTexture.FULL_BRIGHT, 0.0f, 0.0f, true, null);
+			SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(entity,
+				cubeCount(), presentCubes(), Map.of(), poseStack, measuringBuffer, LightTexture.FULL_BRIGHT,
+				0.0f, 0.0f, true, null, projectSourceGeometry);
 			if (!sink.hasVertices())
 				return null;
+
+			Map<Integer, Vec3> cubeOffsets = groundedOffsets(snapshot);
+			EntityGeometry.Bounds bounds = sink.bounds();
+			if (!cubeOffsets.isEmpty()) {
+				sink.reset();
+				poseStack = new PoseStack();
+				SurgicalTablePoseResolver.resolve(this, profile, entity, facing).apply(poseStack);
+				SurgicalSourceModelRenderer.render(entity, cubeCount(), presentCubes(), cubeOffsets, poseStack,
+					measuringBuffer, LightTexture.FULL_BRIGHT, 0.0f, 0.0f, false, null,
+					projectSourceGeometry);
+				if (!sink.hasVertices())
+					return null;
+				bounds = sink.bounds();
+			}
 			measuredFacing = facing;
-			measuredBounds = sink.bounds();
-			return measuredBounds;
+			measuredSourceGeometry = projectSourceGeometry;
+			measuredGeometry = new PlacementGeometry(bounds, cubeOffsets);
+			return measuredGeometry;
+		}
+
+		private Map<Integer, Vec3> groundedOffsets(SurgicalModelRenderContext.Snapshot snapshot) {
+			if (assembly == null || snapshot.observedCubeCount() != assembly.cubeCount())
+				return Map.of();
+			return SurgicalClientTopology.groundComponents(assembly.cubeCount(), assembly.presentCubes(),
+				assembly.seams(), assembly.cutSeams(), snapshot.cubes(), Map.of(),
+				1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE);
 		}
 
 		private int cubeCount() {

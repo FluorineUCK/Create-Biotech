@@ -15,6 +15,7 @@ import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.blockentity.BlockEntityRenderer;
 import net.minecraft.client.renderer.blockentity.BlockEntityRendererProvider;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.Vec3;
 
 public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableBlockEntity> {
@@ -36,8 +37,12 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		if (table.getLevel() == null)
 			return false;
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(table.getLevel(), table.getBlockPos());
+		return projectsSourceGeometry(table.getLevel(), plane);
+	}
+
+	static boolean projectsSourceGeometry(Level level, SurgicalTablePlane.Plane plane) {
 		return plane.valid() && plane.tiles().stream()
-			.anyMatch(pos -> table.getLevel().getBlockState(pos).is(CBBlocks.PROJECTION_SURGICAL_TABLE.get()));
+			.anyMatch(pos -> level.getBlockState(pos).is(CBBlocks.PROJECTION_SURGICAL_TABLE.get()));
 	}
 
 	private static void renderSubject(SurgicalTableBlockEntity table, SurgicalSubject subject,
