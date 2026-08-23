@@ -1,0 +1,7 @@
+{
+  "parent": "create_biotech:block/surgical_table",
+  "textures": {
+    "all": "create:block/brass_casing",
+    "particle": "create:block/brass_casing"
+  }
+}

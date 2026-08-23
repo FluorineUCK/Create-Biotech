@@ -84,6 +84,7 @@
   "block.create_biotech.squid_printer": "鱿鱼打印机",
   "block.create_biotech.petri_dish": "史莱姆培养皿",
   "block.create_biotech.surgical_table": "手术台",
+  "block.create_biotech.projection_surgical_table": "投影手术台",
   "item.create_biotech.surgical_table.tooltip.summary": "用于对_拟态生物_的模型进行切分。",
   "item.create_biotech.surgical_table.tooltip.condition1": "使用装有拟态生物的纸箱时",
   "item.create_biotech.surgical_table.tooltip.behaviour1": "在瞄准位置_预览_并以_原比例_平放生物",

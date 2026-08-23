@@ -521,7 +521,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				if (!cubeHasVisiblePixels(cube, context.texture()))
 					continue;
 				poseStack.pushPose();
-				if (SurgicalModelRenderContext.prepareCube(cube, poseStack, false)) {
+				if (SurgicalModelRenderContext.prepareCube(cube, poseStack, true)) {
 					cube.compile(poseStack.last(), context.sourceConsumer(), packedLight, overlay,
 						context.sourceColor());
 				}
@@ -560,7 +560,7 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				LionfishModelPartCompat.CubeBounds bounds = LionfishModelPartCompat.bounds(cube);
 				poseStack.pushPose();
 				try {
-					if (!SurgicalModelRenderContext.prepareCube(cube, poseStack, false,
+					if (!SurgicalModelRenderContext.prepareCube(cube, poseStack, true,
 						bounds.minX(), bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ()))
 						continue;
 					LionfishModelPartCompat.compileCube(cube, poseStack.last(), context.sourceConsumer(),

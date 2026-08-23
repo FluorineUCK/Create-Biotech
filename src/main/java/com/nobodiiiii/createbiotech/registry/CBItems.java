@@ -103,6 +103,10 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> SURGICAL_TABLE = ITEMS.register("surgical_table",
 		() -> new BlockItem(CBBlocks.SURGICAL_TABLE.get(), new Item.Properties()));
 
+	public static final DeferredHolder<Item, Item> PROJECTION_SURGICAL_TABLE =
+		ITEMS.register("projection_surgical_table",
+			() -> new BlockItem(CBBlocks.PROJECTION_SURGICAL_TABLE.get(), new Item.Properties()));
+
 	public static final DeferredHolder<Item, EnchantmentBookCopyItem> ENCHANTMENT_BOOK_COPY =
 		ITEMS.register("enchantment_book_copy", () -> new EnchantmentBookCopyItem(new Item.Properties()));
 

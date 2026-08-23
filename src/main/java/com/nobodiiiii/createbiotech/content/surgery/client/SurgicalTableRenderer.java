@@ -6,7 +6,9 @@ import java.util.Map;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalSubject;
+import com.nobodiiiii.createbiotech.registry.CBBlocks;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.renderer.MultiBufferSource;
@@ -23,12 +25,23 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 	@Override
 	public void render(SurgicalTableBlockEntity table, float partialTick, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight, int packedOverlay) {
+		if (table.getSubjects().isEmpty())
+			return;
+		boolean projectSourceGeometry = projectsSourceGeometry(table);
 		for (SurgicalSubject subject : table.getSubjects())
-			renderSubject(table, subject, poseStack, buffer, packedLight);
+			renderSubject(table, subject, poseStack, buffer, packedLight, projectSourceGeometry);
+	}
+
+	private static boolean projectsSourceGeometry(SurgicalTableBlockEntity table) {
+		if (table.getLevel() == null)
+			return false;
+		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(table.getLevel(), table.getBlockPos());
+		return plane.valid() && plane.tiles().stream()
+			.anyMatch(pos -> table.getLevel().getBlockState(pos).is(CBBlocks.PROJECTION_SURGICAL_TABLE.get()));
 	}
 
 	private static void renderSubject(SurgicalTableBlockEntity table, SurgicalSubject subject,
-		PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+		PoseStack poseStack, MultiBufferSource buffer, int packedLight, boolean projectSourceGeometry) {
 		MimicProfile profile = subject.profile();
 		LivingEntity preview = SurgicalSourceModelRenderer.preview(subject, profile);
 		if (preview == null)
@@ -45,7 +58,8 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 			: SurgicalTableClientHandler.offsetsFor(table, subject);
 		Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
 		SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(preview,
-			storedCount, present, offsets, poseStack, buffer, packedLight, 0.0f, 0.0f, collectGeometry, camera);
+			storedCount, present, offsets, poseStack, buffer, packedLight, 0.0f, 0.0f, collectGeometry, camera,
+			projectSourceGeometry);
 		poseStack.popPose();
 		if (collectGeometry)
 			SurgicalTableClientHandler.updateGeometry(table, subject, snapshot);
