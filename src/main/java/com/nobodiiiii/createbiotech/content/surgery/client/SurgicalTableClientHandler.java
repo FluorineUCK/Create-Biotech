@@ -17,6 +17,7 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.LargeCardboardBoxItem;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalGlueJoint;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLayout;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
@@ -278,7 +279,7 @@ public final class SurgicalTableClientHandler {
 		}
 
 		placementPreview = new PlacementPreview(ownerPos, hand, source, placementFacing, plan,
-			placementGeometry.cubeOffsets(), sourceLayouts, projectSourceGeometry);
+			placementGeometry.cubeOffsets(), placementGeometry.sources(), sourceLayouts, projectSourceGeometry);
 		SurgicalTableLayout.Footprint footprint = plan.proposal().footprints().getFirst();
 		Outliner.getInstance().showAABB(PLACEMENT_OUTLINE_SLOT,
 			new AABB(footprint.minX(), plane.workArea().y() + 1.002d, footprint.minZ(),
@@ -302,12 +303,13 @@ public final class SurgicalTableClientHandler {
 			.add(plan.originOffsetX(), 0.0d, plan.originOffsetZ());
 		List<SurgicalTableLayout.Proposal> layouts = new ArrayList<>(geometry.sources().size());
 		for (SourcePlacementGeometry sourceGeometry : geometry.sources()) {
-			SurgicalAssembly.Source assemblySource = sourceGeometry.source();
+			SurgicalAssembly.PlacedSource placedSource = sourceGeometry.placedSource();
+			SurgicalAssembly.Source assemblySource = placedSource.source();
 			List<SurgicalModelRenderContext.CubeGeometry> worldCubes = translateCubes(
 				sourceGeometry.baseCubes(), placementOffset);
 			SurgicalClientTopology.PlannedLayout planned = SurgicalClientTopology.preserveCompositeLayout(
 				assemblySource.cubeCount(), assemblySource.presentCubes(), assemblySource.seams(),
-				assemblySource.cutSeams(), worldCubes, assemblySource.cubeOffsets(), plane.workArea(), occupied);
+				assemblySource.cutSeams(), worldCubes, sourceGeometry.renderOffsets(), plane.workArea(), occupied);
 			if (planned == null)
 				return null;
 			layouts.add(planned.proposal());
@@ -362,17 +364,19 @@ public final class SurgicalTableClientHandler {
 		int light = LevelRenderer.getLightColor(minecraft.level, placement.ownerPos.above());
 		float partialTicks = AnimationTickHolder.getPartialTicks();
 		if (placement.source.isComposite()) {
-			for (SurgicalAssembly.Source assemblySource : placement.source.assembly.sources()) {
+			for (SourcePlacementGeometry sourceGeometry : placement.sourceGeometries) {
+				SurgicalAssembly.PlacedSource placedSource = sourceGeometry.placedSource();
+				SurgicalAssembly.Source assemblySource = placedSource.source();
 				LivingEntity preview = placement.source.preview(assemblySource.profile());
 				if (preview == null)
 					continue;
 				poseStack.pushPose();
-				poseStack.translate(assemblySource.originOffset().x, assemblySource.originOffset().y,
-					assemblySource.originOffset().z);
+				poseStack.translate(placedSource.originOffset().x, placedSource.originOffset().y,
+					placedSource.originOffset().z);
 				SurgicalTablePoseResolver.resolve(placement.source, assemblySource.profile(), preview,
-					assemblySource.facing()).apply(poseStack);
+					placedSource.facing()).apply(poseStack);
 				SurgicalSourceModelRenderer.render(preview, assemblySource.cubeCount(),
-					assemblySource.presentCubes(), assemblySource.cubeOffsets(), poseStack, buffer, light,
+					assemblySource.presentCubes(), sourceGeometry.renderOffsets(), poseStack, buffer, light,
 					0.0f, partialTicks, false, camera, placement.projectSourceGeometry);
 				poseStack.popPose();
 			}
@@ -565,8 +569,8 @@ public final class SurgicalTableClientHandler {
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, selection.tablePos);
 		if (geometry == null || !plane.valid() || !selection.tablePos.equals(plane.source()))
 			return null;
-		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
-			selection.subjectId);
+		List<SurgicalTableLayout.Footprint> occupied = occupiedOutsideEditingGroup(level, plane,
+			selection.tablePos, selection.subjectId);
 		if (occupied == null)
 			return null;
 		SurgicalClientTopology.PlannedLayout planned = SurgicalClientTopology.currentLayout(
@@ -635,8 +639,8 @@ public final class SurgicalTableClientHandler {
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, selected.tablePos);
 		if (!plane.valid() || !selected.tablePos.equals(plane.source()))
 			return;
-		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
-			selected.subjectId);
+		List<SurgicalTableLayout.Footprint> occupied = occupiedOutsideEditingGroup(level, plane,
+			selected.tablePos, selected.subjectId);
 		if (occupied == null) {
 			showNoSpace(Minecraft.getInstance().player);
 			return;
@@ -680,8 +684,8 @@ public final class SurgicalTableClientHandler {
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, selected.tablePos);
 		if (!plane.valid() || !selected.tablePos.equals(plane.source()))
 			return null;
-		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
-			selected.subjectId);
+		List<SurgicalTableLayout.Footprint> occupied = occupiedOutsideEditingGroup(level, plane,
+			selected.tablePos, selected.subjectId);
 		if (occupied == null)
 			return null;
 		return moving.isEmpty()
@@ -710,8 +714,8 @@ public final class SurgicalTableClientHandler {
 			abortPendingCut();
 			return;
 		}
-		List<SurgicalTableLayout.Footprint> occupied = SurgicalTablePlane.occupiedFootprints(level, plane,
-			pending.subjectId);
+		List<SurgicalTableLayout.Footprint> occupied = occupiedOutsideEditingGroup(level, plane,
+			pending.tablePos, pending.subjectId);
 		if (occupied == null) {
 			showNoSpace(player);
 			abortPendingCut();
@@ -776,6 +780,14 @@ public final class SurgicalTableClientHandler {
 		if (!Double.isFinite(progress) || progress < 0.0d)
 			return ray.end;
 		return ray.start.add(ray.end.subtract(ray.start).scale(progress));
+	}
+
+	@Nullable
+	private static List<SurgicalTableLayout.Footprint> occupiedOutsideEditingGroup(ClientLevel level,
+		SurgicalTablePlane.Plane plane, BlockPos tablePos, int subjectId) {
+		if (!(level.getBlockEntity(tablePos) instanceof SurgicalTableBlockEntity table))
+			return null;
+		return SurgicalTablePlane.occupiedFootprints(level, plane, table.glueConnectedSubjectIds(subjectId));
 	}
 
 	private static SurgicalModelRenderContext.CubeGeometry boundsGeometry(EntityGeometry.Bounds bounds,
@@ -930,15 +942,50 @@ public final class SurgicalTableClientHandler {
 
 	@Nullable
 	private static Selection findDirectConnectionSelection(@Nullable CubeHit hit) {
-		return hit == null ? null : new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
-			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(),
+		if (hit == null)
+			return null;
+		List<SurgicalClientTopology.Edge> edges = new ArrayList<>(
 			hit.geometry.directConnectionCubeEdges(hit.cubeId));
+		SurgicalSubject subject = subjectFor(hit);
+		if (subject != null) {
+			SurgicalGlueJoint.Endpoint endpoint = new SurgicalGlueJoint.Endpoint(subject.persistentId(), hit.cubeId);
+			Minecraft minecraft = Minecraft.getInstance();
+			if (minecraft.level != null
+				&& minecraft.level.getBlockEntity(hit.tablePos) instanceof SurgicalTableBlockEntity table) {
+				for (SurgicalGlueJoint joint : subject.glueJoints()) {
+					SurgicalGlueJoint.Endpoint other = joint.other(endpoint);
+					if (other == null)
+						continue;
+					SurgicalSubject connected = table.getSubjectByPersistentId(other.subjectKey());
+					if (connected == null)
+						continue;
+					TableGeometry connectedGeometry = TABLES.get(new SubjectKey(hit.tablePos, connected.id()));
+					SurgicalModelRenderContext.CubeGeometry connectedCube = connectedGeometry == null
+						? null : connectedGeometry.cubesById.get(other.cubeId());
+					if (connectedCube != null)
+						edges.addAll(SurgicalClientTopology.cubeEdges(connectedCube));
+				}
+			}
+		}
+		return new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
+			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(), List.copyOf(edges));
 	}
 
 	@Nullable
 	private static Selection findDirectConnectionCutSelection(@Nullable CubeHit hit) {
+		SurgicalSubject subject = subjectFor(hit);
 		return hit == null || !hit.geometry.hasUncutConnection(hit.cubeId)
+			&& (subject == null || !subject.hasGlueConnection(hit.cubeId))
 			? null : findDirectConnectionSelection(hit);
+	}
+
+	@Nullable
+	private static SurgicalSubject subjectFor(@Nullable CubeHit hit) {
+		if (hit == null)
+			return null;
+		ClientLevel level = Minecraft.getInstance().level;
+		return level != null && level.getBlockEntity(hit.tablePos) instanceof SurgicalTableBlockEntity table
+			? table.getSubject(hit.geometry.subjectId) : null;
 	}
 
 	@Nullable
@@ -1496,9 +1543,11 @@ public final class SurgicalTableClientHandler {
 
 	private record PlacementPreview(BlockPos ownerPos, InteractionHand hand, PlacementSource source,
 		Direction facing, SurgicalClientTopology.PlacementPlan plan, Map<Integer, Vec3> cubeOffsets,
+		List<SourcePlacementGeometry> sourceGeometries,
 		List<SurgicalTableLayout.Proposal> sourceLayouts, boolean projectSourceGeometry) {
 		private PlacementPreview {
 			cubeOffsets = Map.copyOf(cubeOffsets);
+			sourceGeometries = List.copyOf(sourceGeometries);
 			sourceLayouts = List.copyOf(sourceLayouts);
 		}
 	}
@@ -1511,10 +1560,11 @@ public final class SurgicalTableClientHandler {
 		}
 	}
 
-	private record SourcePlacementGeometry(SurgicalAssembly.Source source,
-		List<SurgicalModelRenderContext.CubeGeometry> baseCubes) {
+	private record SourcePlacementGeometry(SurgicalAssembly.PlacedSource placedSource,
+		List<SurgicalModelRenderContext.CubeGeometry> baseCubes, Map<Integer, Vec3> renderOffsets) {
 		private SourcePlacementGeometry {
 			baseCubes = List.copyOf(baseCubes);
+			renderOffsets = Map.copyOf(renderOffsets);
 		}
 	}
 
@@ -1559,7 +1609,7 @@ public final class SurgicalTableClientHandler {
 				&& measuredSourceGeometry == projectSourceGeometry)
 				return measuredGeometry;
 			if (isComposite()) {
-				measuredGeometry = measureComposite(projectSourceGeometry);
+				measuredGeometry = measureComposite(facing, projectSourceGeometry);
 				measuredFacing = facing;
 				measuredSourceGeometry = projectSourceGeometry;
 				return measuredGeometry;
@@ -1598,7 +1648,7 @@ public final class SurgicalTableClientHandler {
 		}
 
 		@Nullable
-		private PlacementGeometry measureComposite(boolean projectSourceGeometry) {
+		private PlacementGeometry measureComposite(Direction facing, boolean projectSourceGeometry) {
 			if (assembly == null)
 				return null;
 			EntityGeometry.Collector combined = EntityGeometry.Collector.boundsOnly();
@@ -1606,34 +1656,46 @@ public final class SurgicalTableClientHandler {
 			EntityGeometry.Collector discarded = EntityGeometry.Collector.boundsOnly();
 			MultiBufferSource discardedBuffer = renderType -> discarded;
 			List<SourcePlacementGeometry> geometries = new ArrayList<>(assembly.sources().size());
-			for (SurgicalAssembly.Source source : assembly.sources()) {
+			for (SurgicalAssembly.PlacedSource placedSource : assembly.placedSources(facing)) {
+				SurgicalAssembly.Source source = placedSource.source();
 				LivingEntity entity = preview(source.profile());
 				if (entity == null)
 					return null;
-				PoseStack poseStack = sourcePose(source, entity);
+				PoseStack poseStack = sourcePose(placedSource, entity);
 				SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(entity,
 					source.cubeCount(), source.presentCubes(), Map.of(), poseStack, discardedBuffer,
 					LightTexture.FULL_BRIGHT, 0.0f, 0.0f, true, null, projectSourceGeometry);
 				if (snapshot.observedCubeCount() != source.cubeCount()
 					|| snapshot.cubes().size() != source.presentCubes().cardinality())
 					return null;
-				geometries.add(new SourcePlacementGeometry(source, snapshot.cubes()));
+				Map<Integer, Vec3> renderOffsets = groundedOffsets(placedSource, snapshot);
+				geometries.add(new SourcePlacementGeometry(placedSource, snapshot.cubes(), renderOffsets));
 				discarded.reset();
 
-				poseStack = sourcePose(source, entity);
+				poseStack = sourcePose(placedSource, entity);
 				SurgicalSourceModelRenderer.render(entity, source.cubeCount(), source.presentCubes(),
-					source.cubeOffsets(), poseStack, combinedBuffer, LightTexture.FULL_BRIGHT,
+					renderOffsets, poseStack, combinedBuffer, LightTexture.FULL_BRIGHT,
 					0.0f, 0.0f, false, null, projectSourceGeometry);
 			}
 			return combined.hasVertices()
 				? new PlacementGeometry(combined.bounds(), Map.of(), geometries) : null;
 		}
 
-		private PoseStack sourcePose(SurgicalAssembly.Source source, LivingEntity entity) {
+		private PoseStack sourcePose(SurgicalAssembly.PlacedSource placedSource, LivingEntity entity) {
+			SurgicalAssembly.Source source = placedSource.source();
 			PoseStack poseStack = new PoseStack();
-			poseStack.translate(source.originOffset().x, source.originOffset().y, source.originOffset().z);
-			SurgicalTablePoseResolver.resolve(this, source.profile(), entity, source.facing()).apply(poseStack);
+			poseStack.translate(placedSource.originOffset().x, placedSource.originOffset().y,
+				placedSource.originOffset().z);
+			SurgicalTablePoseResolver.resolve(this, source.profile(), entity, placedSource.facing()).apply(poseStack);
 			return poseStack;
+		}
+
+		private Map<Integer, Vec3> groundedOffsets(SurgicalAssembly.PlacedSource placedSource,
+			SurgicalModelRenderContext.Snapshot snapshot) {
+			SurgicalAssembly.Source source = placedSource.source();
+			return SurgicalClientTopology.groundComponents(source.cubeCount(), source.presentCubes(),
+				source.seams(), source.cutSeams(), snapshot.cubes(), placedSource.cubeOffsets(),
+				1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE);
 		}
 
 		private Map<Integer, Vec3> groundedOffsets(SurgicalModelRenderContext.Snapshot snapshot) {

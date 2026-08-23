@@ -88,6 +88,13 @@ public final class SurgicalTablePlane {
 	@Nullable
 	public static List<SurgicalTableLayout.Footprint> occupiedFootprints(Level level, Plane plane,
 		int excludedSubjectId) {
+		return occupiedFootprints(level, plane, excludedSubjectId < 0 ? Set.of() : Set.of(excludedSubjectId));
+	}
+
+	/** Returns persisted footprints outside the supplied logical editing group. */
+	@Nullable
+	public static List<SurgicalTableLayout.Footprint> occupiedFootprints(Level level, Plane plane,
+		Set<Integer> excludedSubjectIds) {
 		if (!plane.valid() || plane.source() == null)
 			return null;
 		SurgicalTableBlockEntity controller = SurgicalTableBlockEntity.controller(level, plane);
@@ -95,7 +102,7 @@ public final class SurgicalTablePlane {
 			return null;
 		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>();
 		for (SurgicalSubject subject : controller.getSubjects()) {
-			if (subject.id() == excludedSubjectId)
+			if (excludedSubjectIds.contains(subject.id()))
 				continue;
 			if (subject.occupiedFootprints().isEmpty())
 				return null;

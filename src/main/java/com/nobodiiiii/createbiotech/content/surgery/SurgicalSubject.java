@@ -161,6 +161,15 @@ public final class SurgicalSubject {
 		return glueJoints;
 	}
 
+	public boolean hasGlueConnection(int cubeId) {
+		if (!validPresentCube(cubeId))
+			return false;
+		for (SurgicalGlueJoint joint : glueJoints)
+			if (joint.touches(persistentId, cubeId))
+				return true;
+		return false;
+	}
+
 	public int clientRenderRevision() {
 		return clientRenderRevision;
 	}
