@@ -32,7 +32,8 @@ public final class SurgicalTableLayout {
 			|| proposal.footprints().size() != 1)
 			return false;
 		Footprint footprint = proposal.footprints().getFirst();
-		return footprint.componentRoot() == -1 && validFootprint(plane.workArea(), footprint, true);
+		return footprint.componentRoot() == -1
+			&& validFootprints(plane.workArea(), List.of(footprint), true);
 	}
 
 	public static boolean validateComponents(SurgicalTablePlane.Plane plane, int cubeCount,
@@ -51,13 +52,14 @@ public final class SurgicalTableLayout {
 		}
 
 		List<BitSet> components = SurgicalAssembly.components(cubeCount, presentCubes, seams, cutSeams);
-		if (proposal.footprints().size() != components.size())
+		if (proposal.footprints().size() != presentCubes.cardinality())
 			return false;
-		Map<Integer, Footprint> footprints = new HashMap<>();
+		Map<Integer, List<Footprint>> footprints = new HashMap<>();
 		for (Footprint footprint : proposal.footprints()) {
-			if (footprint == null || !validFootprint(plane.workArea(), footprint, false)
-				|| footprints.putIfAbsent(footprint.componentRoot(), footprint) != null)
+			if (footprint == null || !validFootprintBounds(plane.workArea(), footprint))
 				return false;
+			footprints.computeIfAbsent(footprint.componentRoot(), ignored -> new java.util.ArrayList<>())
+				.add(footprint);
 		}
 
 		Set<Integer> expectedRoots = new HashSet<>();
@@ -65,7 +67,10 @@ public final class SurgicalTableLayout {
 			int root = component.nextSetBit(0);
 			expectedRoots.add(root);
 			CubeOffset componentOffset = offsets.get(root);
-			if (componentOffset == null || !footprints.containsKey(root))
+			List<Footprint> componentFootprints = footprints.get(root);
+			if (componentOffset == null || componentFootprints == null
+				|| componentFootprints.size() != component.cardinality()
+				|| !validFootprints(plane.workArea(), componentFootprints, false))
 				return false;
 			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
 				CubeOffset offset = offsets.get(cube);
@@ -77,16 +82,17 @@ public final class SurgicalTableLayout {
 		if (!footprints.keySet().equals(expectedRoots))
 			return false;
 
-		List<Footprint> footprintList = proposal.footprints();
-		for (int first = 0; first < footprintList.size(); first++)
-			for (int second = first + 1; second < footprintList.size(); second++)
-				if (footprintList.get(first).overlapsStrictly(footprintList.get(second)))
-					return false;
+		List<Integer> roots = List.copyOf(expectedRoots);
+		for (int firstRoot = 0; firstRoot < roots.size(); firstRoot++)
+			for (int secondRoot = firstRoot + 1; secondRoot < roots.size(); secondRoot++)
+				for (Footprint first : footprints.get(roots.get(firstRoot)))
+					for (Footprint second : footprints.get(roots.get(secondRoot)))
+						if (first.overlapsStrictly(second))
+							return false;
 		return true;
 	}
 
-	private static boolean validFootprint(SurgicalTablePlane.WorkArea area, Footprint footprint,
-		boolean requireSnapped) {
+	private static boolean validFootprintBounds(SurgicalTablePlane.WorkArea area, Footprint footprint) {
 		if (!Double.isFinite(footprint.minX()) || !Double.isFinite(footprint.minZ())
 			|| !Double.isFinite(footprint.maxX()) || !Double.isFinite(footprint.maxZ())
 			|| footprint.maxX() < footprint.minX() || footprint.maxZ() < footprint.minZ()
@@ -94,15 +100,41 @@ public final class SurgicalTableLayout {
 			return false;
 		boolean snappedX = footprint.gridX() != UNSNAPPED;
 		boolean snappedZ = footprint.gridZ() != UNSNAPPED;
-		if (snappedX != snappedZ || requireSnapped && !snappedX)
+		return snappedX == snappedZ;
+	}
+
+	private static boolean validFootprints(SurgicalTablePlane.WorkArea area, List<Footprint> footprints,
+		boolean requireSnapped) {
+		if (footprints.isEmpty())
 			return false;
-		if (!snappedX)
+		Footprint first = footprints.getFirst();
+		if (!validFootprintBounds(area, first))
+			return false;
+		boolean snapped = first.gridX() != UNSNAPPED;
+		if (requireSnapped && !snapped)
+			return false;
+		double minX = first.minX();
+		double minZ = first.minZ();
+		double maxX = first.maxX();
+		double maxZ = first.maxZ();
+		for (int index = 1; index < footprints.size(); index++) {
+			Footprint footprint = footprints.get(index);
+			if (!validFootprintBounds(area, footprint)
+				|| footprint.componentRoot() != first.componentRoot()
+				|| (footprint.gridX() != UNSNAPPED) != snapped
+				|| snapped && (footprint.gridX() != first.gridX() || footprint.gridZ() != first.gridZ()))
+				return false;
+			minX = Math.min(minX, footprint.minX());
+			minZ = Math.min(minZ, footprint.minZ());
+			maxX = Math.max(maxX, footprint.maxX());
+			maxZ = Math.max(maxZ, footprint.maxZ());
+		}
+		if (!snapped)
 			return true;
-		double centerX = (footprint.minX() + footprint.maxX()) * 0.5d;
-		double centerZ = (footprint.minZ() + footprint.maxZ()) * 0.5d;
-		double gridCenterX = gridCenter(footprint.gridX());
-		double gridCenterZ = gridCenter(footprint.gridZ());
-		return Math.abs(centerX - gridCenterX) <= EPSILON && Math.abs(centerZ - gridCenterZ) <= EPSILON
+		double gridCenterX = gridCenter(first.gridX());
+		double gridCenterZ = gridCenter(first.gridZ());
+		return Math.abs((minX + maxX) * 0.5d - gridCenterX) <= EPSILON
+			&& Math.abs((minZ + maxZ) * 0.5d - gridCenterZ) <= EPSILON
 			&& gridCenterX >= area.minX() && gridCenterX < area.maxXExclusive()
 			&& gridCenterZ >= area.minZ() && gridCenterZ < area.maxZExclusive();
 	}

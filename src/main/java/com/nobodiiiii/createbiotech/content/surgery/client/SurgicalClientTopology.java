@@ -603,7 +603,7 @@ public final class SurgicalClientTopology {
 					cell.centerZ() - movingBounds.centerZ());
 				Bounds candidate = movingBounds.translate(delta);
 				if (!fits(workArea, candidate)
-					|| collidesHorizontally(candidate, moving, components, baseBounds, plannedOffsets))
+					|| collidesHorizontally(candidate, moving, components, baseBounds, plannedOffsets, delta))
 					continue;
 				selected = cell;
 				selectedDelta = delta;
@@ -616,18 +616,19 @@ public final class SurgicalClientTopology {
 			snapped.put(moving.nextSetBit(0), selected);
 		}
 
-		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>(components.size());
+		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>(presentCubes.cardinality());
 		for (BitSet component : components) {
 			int root = component.nextSetBit(0);
 			Bounds bounds = unionBounds(component, baseBounds, plannedOffsets);
 			if (bounds == null || !fits(workArea, bounds))
 				return null;
 			GridCell cell = snapped.get(root);
-			footprints.add(footprint(root, bounds, cell));
+			footprints.addAll(footprints(root, component, baseBounds, plannedOffsets, cell));
 		}
 		for (int first = 0; first < footprints.size(); first++)
 			for (int second = first + 1; second < footprints.size(); second++)
-				if (footprints.get(first).overlapsStrictly(footprints.get(second)))
+				if (footprints.get(first).componentRoot() != footprints.get(second).componentRoot()
+					&& footprints.get(first).overlapsStrictly(footprints.get(second)))
 					return null;
 
 		List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(presentCubes.cardinality());
@@ -657,13 +658,29 @@ public final class SurgicalClientTopology {
 	}
 
 	private static boolean collidesHorizontally(Bounds candidate, BitSet moving, List<BitSet> components,
-		Map<Integer, Bounds> baseBounds, Map<Integer, Vec3> offsets) {
+		Map<Integer, Bounds> baseBounds, Map<Integer, Vec3> offsets, Vec3 delta) {
 		for (BitSet component : components) {
 			if (component.equals(moving))
 				continue;
-			Bounds obstacle = unionBounds(component, baseBounds, offsets);
-			if (obstacle != null && candidate.overlapsHorizontally(obstacle))
-				return true;
+			Bounds obstacleEnvelope = unionBounds(component, baseBounds, offsets);
+			if (obstacleEnvelope == null || !candidate.overlapsHorizontally(obstacleEnvelope))
+				continue;
+			for (int movingCube = moving.nextSetBit(0); movingCube >= 0;
+				movingCube = moving.nextSetBit(movingCube + 1)) {
+				Bounds movingBounds = baseBounds.get(movingCube);
+				if (movingBounds == null)
+					continue;
+				movingBounds = movingBounds.translate(offsets.getOrDefault(movingCube, Vec3.ZERO).add(delta));
+				for (int obstacleCube = component.nextSetBit(0); obstacleCube >= 0;
+					obstacleCube = component.nextSetBit(obstacleCube + 1)) {
+					Bounds obstacleBounds = baseBounds.get(obstacleCube);
+					if (obstacleBounds == null)
+						continue;
+					obstacleBounds = obstacleBounds.translate(offsets.getOrDefault(obstacleCube, Vec3.ZERO));
+					if (movingBounds.overlapsHorizontally(obstacleBounds))
+						return true;
+				}
+			}
 		}
 		return false;
 	}
@@ -691,6 +708,17 @@ public final class SurgicalClientTopology {
 		return new SurgicalTableLayout.Footprint(root, bounds.minX, bounds.minZ, bounds.maxX, bounds.maxZ,
 			cell == null ? SurgicalTableLayout.UNSNAPPED : cell.gridX,
 			cell == null ? SurgicalTableLayout.UNSNAPPED : cell.gridZ);
+	}
+
+	private static List<SurgicalTableLayout.Footprint> footprints(int root, BitSet component,
+		Map<Integer, Bounds> baseBounds, Map<Integer, Vec3> offsets, @Nullable GridCell cell) {
+		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>(component.cardinality());
+		for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+			Bounds bounds = baseBounds.get(cube);
+			if (bounds != null)
+				footprints.add(footprint(root, bounds.translate(offsets.getOrDefault(cube, Vec3.ZERO)), cell));
+		}
+		return footprints;
 	}
 
 	public static Vec3 center(SurgicalModelRenderContext.CubeGeometry cube) {
