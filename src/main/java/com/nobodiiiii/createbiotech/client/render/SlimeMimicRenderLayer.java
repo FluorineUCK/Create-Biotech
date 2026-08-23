@@ -238,6 +238,11 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 
 	private static void renderPartRecursive(ModelPart part, PoseStack poseStack, RenderContext context,
 		int packedLight, int overlay, RenderPass pass) {
+		renderPartRecursive(part, poseStack, context, packedLight, overlay, pass, null);
+	}
+
+	private static void renderPartRecursive(ModelPart part, PoseStack poseStack, RenderContext context,
+		int packedLight, int overlay, RenderPass pass, Integer inheritedAnchor) {
 		if (!part.visible)
 			return;
 
@@ -245,14 +250,29 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 		part.translateAndRotate(poseStack);
 
 		ModelPartAccessor accessor = (ModelPartAccessor) (Object) part;
+		Integer partAnchor = inheritedAnchor;
 		if (!part.skipDraw) {
-			for (ModelPart.Cube cube : accessor.createBiotech$getCubes())
+			for (ModelPart.Cube cube : accessor.createBiotech$getCubes()) {
+				if (!cubeHasVisiblePixels(cube, context.texture()))
+					continue;
 				renderCube(cube, poseStack, context, packedLight, overlay, pass);
+				Integer cubeId = SurgicalModelRenderContext.registeredCubeId(cube);
+				if (partAnchor == null && cubeId != null)
+					partAnchor = cubeId;
+			}
+			if (partAnchor != null) {
+				for (ModelPart.Cube cube : accessor.createBiotech$getCubes()) {
+					if (!cubeHasVisiblePixels(cube, context.texture()))
+						SurgicalModelRenderContext.associateLayerCube(cube, partAnchor);
+				}
+			}
 		}
 
+		Integer childAnchor = partAnchor;
 		accessor.createBiotech$getChildren().entrySet().stream()
 			.sorted(Map.Entry.comparingByKey())
-			.forEach(child -> renderPartRecursive(child.getValue(), poseStack, context, packedLight, overlay, pass));
+			.forEach(child -> renderPartRecursive(child.getValue(), poseStack, context, packedLight, overlay, pass,
+				childAnchor));
 
 		poseStack.popPose();
 	}

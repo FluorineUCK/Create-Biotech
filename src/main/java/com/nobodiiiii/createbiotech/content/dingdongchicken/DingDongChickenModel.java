@@ -16,4 +16,8 @@ public class DingDongChickenModel extends ChickenModel<DingDongChickenEntity> {
 	public void translateToBody(PoseStack poseStack) {
 		body.translateAndRotate(poseStack);
 	}
+
+	public ModelPart bodyPart() {
+		return body;
+	}
 }

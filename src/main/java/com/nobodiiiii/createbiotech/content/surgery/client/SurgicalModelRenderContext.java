@@ -9,6 +9,7 @@ import java.util.List;
 import java.util.Map;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.nobodiiiii.createbiotech.mixin.client.ModelPartAccessor;
 
 import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.world.phys.Vec3;
@@ -63,6 +64,78 @@ public final class SurgicalModelRenderContext {
 		return true;
 	}
 
+	/**
+	 * Applies the state of an already-registered source cube to a later vanilla model pass.
+	 * Layers such as villager clothing and warden emissive textures reuse the source model's
+	 * cube instances, so this keeps those pixels on the same separated component without
+	 * admitting layer-only geometry into the surgical topology.
+	 */
+	public static void renderOriginalLayerCube(ModelPart.Cube cube, PoseStack.Pose pose, Runnable draw) {
+		Context context = current();
+		if (context == null) {
+			draw.run();
+			return;
+		}
+
+		Integer cubeId = context.registeredIdFor(cube);
+		if (cubeId == null) {
+			draw.run();
+			return;
+		}
+		if (!context.isPresent(cubeId))
+			return;
+
+		Vec3 offset = context.offsetFor(cubeId);
+		if (offset == null || offset.lengthSqr() < 1.0e-12d) {
+			draw.run();
+			return;
+		}
+
+		Matrix4f poseMatrix = pose.pose();
+		Matrix4f originalPose = new Matrix4f(poseMatrix);
+		try {
+			poseMatrix.translateLocal((float) offset.x, (float) offset.y, (float) offset.z);
+			draw.run();
+		} finally {
+			poseMatrix.set(originalPose);
+		}
+	}
+
+	@Nullable
+	public static Integer registeredCubeId(Object cube) {
+		Context context = current();
+		return context == null ? null : context.registeredIdFor(cube);
+	}
+
+	/** Associates a texture-transparent model cube with the visible source cube that owns it. */
+	public static void associateLayerCube(Object cube, int ownerCubeId) {
+		Context context = current();
+		if (context != null)
+			context.associate(cube, ownerCubeId);
+	}
+
+	/**
+	 * Anchors independently rendered geometry to the first direct source cube of a model
+	 * part. This is intended for explicit adapters, not for discovering arbitrary layers.
+	 */
+	public static boolean prepareAttachment(ModelPart anchor, PoseStack poseStack) {
+		Context context = current();
+		if (context == null)
+			return true;
+
+		ModelPartAccessor accessor = (ModelPartAccessor) (Object) anchor;
+		for (ModelPart.Cube cube : accessor.createBiotech$getCubes()) {
+			Integer cubeId = context.registeredIdFor(cube);
+			if (cubeId == null)
+				continue;
+			if (!context.isPresent(cubeId))
+				return false;
+			context.applyOffset(cubeId, poseStack);
+			return true;
+		}
+		return true;
+	}
+
 	@Nullable
 	private static Context current() {
 		return CONTEXTS.get().peek();
@@ -86,6 +159,7 @@ public final class SurgicalModelRenderContext {
 
 	private static final class Context {
 		private final IdentityHashMap<Object, Integer> cubeIds = new IdentityHashMap<>();
+		private int observedCubeCount;
 		private final int expectedCubeCount;
 		private final BitSet presentCubes;
 		private final Map<Integer, Vec3> cubeOffsets;
@@ -107,7 +181,22 @@ public final class SurgicalModelRenderContext {
 		}
 
 		private int idFor(Object cube) {
-			return cubeIds.computeIfAbsent(cube, ignored -> cubeIds.size());
+			Integer existing = cubeIds.get(cube);
+			if (existing != null)
+				return existing;
+			int cubeId = observedCubeCount++;
+			cubeIds.put(cube, cubeId);
+			return cubeId;
+		}
+
+		@Nullable
+		private Integer registeredIdFor(Object cube) {
+			return cubeIds.get(cube);
+		}
+
+		private void associate(Object cube, int ownerCubeId) {
+			if (ownerCubeId >= 0 && ownerCubeId < observedCubeCount)
+				cubeIds.putIfAbsent(cube, ownerCubeId);
 		}
 
 		private boolean isPresent(int cubeId) {
@@ -115,10 +204,15 @@ public final class SurgicalModelRenderContext {
 		}
 
 		private void applyOffset(int cubeId, PoseStack poseStack) {
-			Vec3 offset = cubeOffsets.get(cubeId);
+			Vec3 offset = offsetFor(cubeId);
 			if (offset == null || offset.lengthSqr() < 1.0e-12d)
 				return;
 			poseStack.last().pose().translateLocal((float) offset.x, (float) offset.y, (float) offset.z);
+		}
+
+		@Nullable
+		private Vec3 offsetFor(int cubeId) {
+			return cubeOffsets.get(cubeId);
 		}
 
 		private void capture(int cubeId, PoseStack poseStack,
@@ -154,7 +248,7 @@ public final class SurgicalModelRenderContext {
 		}
 
 		private Snapshot snapshot() {
-			return new Snapshot(cubeIds.size(), geometry);
+			return new Snapshot(observedCubeCount, geometry);
 		}
 
 	}
