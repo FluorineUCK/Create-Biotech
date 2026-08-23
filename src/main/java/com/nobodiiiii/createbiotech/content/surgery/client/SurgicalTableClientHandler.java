@@ -586,8 +586,9 @@ public final class SurgicalTableClientHandler {
 			}
 			presentCubes = table.getPresentCubesForRender(observedCubeCount);
 			cutSeams = table.getCutSeamsForRender();
+			Vec3 tableCenter = Vec3.atBottomCenterOf(table.getBlockPos()).add(0.0d, 1.01d, 0.0d);
 			offsets = SurgicalClientTopology.componentOffsets(observedCubeCount, presentCubes, seams,
-				cutSeams, baseCubes);
+				cutSeams, baseCubes, table.getLastCutSeamForRender(), tableCenter);
 			cubes = translateCubes(baseCubes, offsets);
 			contacts = translateContacts(baseContacts, offsets);
 			contactsByCube = contactsByCube(observedCubeCount, contacts);

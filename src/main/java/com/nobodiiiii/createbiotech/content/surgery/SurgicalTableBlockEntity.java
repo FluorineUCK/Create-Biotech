@@ -35,6 +35,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private static final String PRESENT_CUBES_TAG = "PresentCubes";
 	private static final String SEAMS_TAG = "Seams";
 	private static final String CUT_SEAMS_TAG = "CutSeams";
+	private static final String LAST_CUT_SEAM_TAG = "LastCutSeam";
 
 	@Nullable
 	private MimicProfile profile;
@@ -42,6 +43,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private BitSet presentCubes = new BitSet();
 	private List<SurgicalAssembly.Seam> seams = List.of();
 	private BitSet cutSeams = new BitSet();
+	private int lastCutSeam = -1;
 	private int clientRenderRevision;
 
 	public SurgicalTableBlockEntity(BlockPos pos, BlockState state) {
@@ -95,6 +97,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return (BitSet) cutSeams.clone();
 	}
 
+	public int getLastCutSeamForRender() {
+		return lastCutSeam;
+	}
+
 	public int getClientRenderRevision() {
 		return clientRenderRevision;
 	}
@@ -119,6 +125,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			presentCubes = assembly.presentCubes();
 			seams = assembly.seams();
 			cutSeams = assembly.cutSeams();
+			lastCutSeam = -1;
 		} else if (captured instanceof LivingEntity living && SlimeMimicHandler.isSlimeMimic(living)) {
 			MimicProfile capturedProfile = MimicProfile.capture(living);
 			if (capturedProfile == null)
@@ -128,6 +135,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			presentCubes.clear();
 			seams = List.of();
 			cutSeams.clear();
+			lastCutSeam = -1;
 		} else {
 			return false;
 		}
@@ -147,6 +155,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 
 		cutSeams.set(seamId);
+		lastCutSeam = seamId;
 		shears.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
 		setChangedAndSync();
 		if (level != null)
@@ -195,6 +204,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		presentCubes.clear();
 		presentCubes.set(0, cubeCount);
 		cutSeams.clear();
+		lastCutSeam = -1;
 		return true;
 	}
 
@@ -208,6 +218,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		presentCubes.clear();
 		seams = List.of();
 		cutSeams.clear();
+		lastCutSeam = -1;
 	}
 
 	private void setChangedAndSync() {
@@ -225,6 +236,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			tag.putIntArray(SEAMS_TAG, SurgicalAssembly.encodeSeams(seams));
 			if (!cutSeams.isEmpty())
 				tag.putLongArray(CUT_SEAMS_TAG, cutSeams.toLongArray());
+			if (lastCutSeam >= 0 && lastCutSeam < seams.size() && cutSeams.get(lastCutSeam))
+				tag.putInt(LAST_CUT_SEAM_TAG, lastCutSeam);
 		}
 		super.write(tag, registries, clientPacket);
 	}
@@ -247,11 +260,17 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			? BitSet.valueOf(tag.getLongArray(PRESENT_CUBES_TAG)) : new BitSet();
 		cutSeams = cubeCount > 0 && tag.contains(CUT_SEAMS_TAG, Tag.TAG_LONG_ARRAY)
 			? BitSet.valueOf(tag.getLongArray(CUT_SEAMS_TAG)) : new BitSet();
+		lastCutSeam = cubeCount > 0 && tag.contains(LAST_CUT_SEAM_TAG, Tag.TAG_ANY_NUMERIC)
+			? tag.getInt(LAST_CUT_SEAM_TAG) : -1;
 		if (cubeCount > 0) {
 			if (presentCubes.length() > cubeCount)
 				presentCubes.clear(cubeCount, presentCubes.length());
 			if (cutSeams.length() > seams.size())
 				cutSeams.clear(seams.size(), cutSeams.length());
+			if (lastCutSeam < 0 || lastCutSeam >= seams.size() || !cutSeams.get(lastCutSeam))
+				lastCutSeam = -1;
+		} else {
+			lastCutSeam = -1;
 		}
 		if (clientPacket)
 			clientRenderRevision++;

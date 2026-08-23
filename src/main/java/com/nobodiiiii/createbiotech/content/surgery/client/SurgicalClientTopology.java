@@ -284,6 +284,56 @@ public final class SurgicalClientTopology {
 		return Map.copyOf(offsets);
 	}
 
+	/**
+	 * Separates only the farther side of the last severed connection. The moving
+	 * side is selected relative to the table centre, while the separation axis is
+	 * the line through the two cubes that actually shared the severed seam.
+	 */
+	public static Map<Integer, Vec3> componentOffsets(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, int lastCutSeam, Vec3 tableCenter) {
+		if (!SurgicalAssembly.validTopology(cubeCount, seams)
+			|| lastCutSeam < 0 || lastCutSeam >= seams.size() || !cutSeams.get(lastCutSeam))
+			return Map.of();
+
+		SurgicalAssembly.Seam seam = seams.get(lastCutSeam);
+		BitSet firstComponent = SurgicalAssembly.componentContaining(cubeCount, presentCubes,
+			seams, cutSeams, seam.first());
+		BitSet secondComponent = SurgicalAssembly.componentContaining(cubeCount, presentCubes,
+			seams, cutSeams, seam.second());
+		if (firstComponent.isEmpty() || secondComponent.isEmpty() || firstComponent.equals(secondComponent))
+			return Map.of();
+
+		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId = byId(cubes);
+		SurgicalModelRenderContext.CubeGeometry firstCube = byId.get(seam.first());
+		SurgicalModelRenderContext.CubeGeometry secondCube = byId.get(seam.second());
+		if (firstCube == null || secondCube == null)
+			return Map.of();
+
+		Vec3 firstCenter = componentCenter(firstComponent, byId);
+		Vec3 secondCenter = componentCenter(secondComponent, byId);
+		double firstDistance = firstCenter.distanceToSqr(tableCenter);
+		double secondDistance = secondCenter.distanceToSqr(tableCenter);
+		boolean moveFirst = firstDistance > secondDistance;
+		if (Math.abs(firstDistance - secondDistance) < DISTANCE_EPSILON)
+			moveFirst = center(firstCube).distanceToSqr(tableCenter) > center(secondCube).distanceToSqr(tableCenter);
+
+		BitSet movingComponent = moveFirst ? firstComponent : secondComponent;
+		Vec3 direction = moveFirst
+			? center(firstCube).subtract(center(secondCube))
+			: center(secondCube).subtract(center(firstCube));
+		if (direction.lengthSqr() < DISTANCE_EPSILON)
+			direction = (moveFirst ? firstCenter : secondCenter).subtract(tableCenter);
+		if (direction.lengthSqr() < DISTANCE_EPSILON)
+			direction = new Vec3(0.0d, 1.0d, 0.0d);
+
+		Vec3 offset = direction.normalize().scale(COMPONENT_OFFSET);
+		Map<Integer, Vec3> offsets = new HashMap<>();
+		for (int cube = movingComponent.nextSetBit(0); cube >= 0; cube = movingComponent.nextSetBit(cube + 1))
+			offsets.put(cube, offset);
+		return Map.copyOf(offsets);
+	}
+
 	public static Vec3 center(SurgicalModelRenderContext.CubeGeometry cube) {
 		Vec3 total = Vec3.ZERO;
 		for (Vec3 corner : cube.corners())
