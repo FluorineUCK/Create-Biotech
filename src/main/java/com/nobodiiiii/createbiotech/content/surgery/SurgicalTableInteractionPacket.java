@@ -66,7 +66,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 
 	private static List<SurgicalAssembly.Seam> readSeams(FriendlyByteBuf buffer) {
 		int size = buffer.readVarInt();
-		if (size < 0 || size >= SurgicalAssembly.MAX_CUBES)
+		if (size < 0 || size > SurgicalAssembly.MAX_SEAMS)
 			throw new IllegalArgumentException("Invalid surgical seam count " + size);
 		List<SurgicalAssembly.Seam> seams = new ArrayList<>(size);
 		for (int i = 0; i < size; i++)

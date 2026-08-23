@@ -7,6 +7,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.jetbrains.annotations.Nullable;
+
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 
 import net.minecraft.world.phys.Vec3;
@@ -18,102 +20,95 @@ public final class SurgicalClientTopology {
 		{0, 1, 5, 4}, {2, 6, 7, 3},
 		{0, 2, 3, 1}, {4, 5, 7, 6}
 	};
-	private static final int[][] CUBE_EDGES = {
-		{0, 1}, {2, 3}, {4, 5}, {6, 7},
-		{0, 2}, {1, 3}, {4, 6}, {5, 7},
-		{0, 4}, {1, 5}, {2, 6}, {3, 7}
-	};
-	private static final int[][] CUBE_TRIANGLES = {
-		{0, 4, 6}, {0, 6, 2}, {1, 3, 7}, {1, 7, 5},
-		{0, 1, 5}, {0, 5, 4}, {2, 6, 7}, {2, 7, 3},
-		{0, 2, 3}, {0, 3, 1}, {4, 5, 7}, {4, 7, 6}
-	};
 	private static final double COMPONENT_OFFSET = 1.0d / 16.0d;
 	private static final double DISTANCE_EPSILON = 1.0e-9d;
 	private static final double INTERSECTION_EPSILON = 1.0e-12d;
 	private static final double DEGENERATE_EPSILON = 1.0e-18d;
+	private static final double CONTACT_TOLERANCE = 1.0d / 64.0d;
+	private static final double MIN_CONTACT_AREA = 1.0e-8d;
 
 	private SurgicalClientTopology() {}
 
-	public static List<SurgicalAssembly.Seam> buildMinimumSpanningTree(int cubeCount,
+	/** Builds one stable seam for every intersecting or tolerance-adjacent pair of model cubes. */
+	public static ContactTopology buildContactTopology(int cubeCount,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
 		if (!SurgicalAssembly.validCubeCount(cubeCount))
-			return List.of();
+			return ContactTopology.EMPTY;
 		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId = byId(cubes);
 		if (byId.size() != cubeCount)
-			return List.of();
-		if (cubeCount == 1)
-			return List.of();
+			return ContactTopology.EMPTY;
 
-		boolean[] included = new boolean[cubeCount];
-		double[] bestDistance = new double[cubeCount];
-		int[] parent = new int[cubeCount];
-		java.util.Arrays.fill(bestDistance, Double.POSITIVE_INFINITY);
-		java.util.Arrays.fill(parent, -1);
-		bestDistance[0] = 0.0d;
-		List<SurgicalAssembly.Seam> seams = new ArrayList<>(cubeCount - 1);
-
-		for (int step = 0; step < cubeCount; step++) {
-			int next = -1;
-			for (int cube = 0; cube < cubeCount; cube++) {
-				if (included[cube])
+		List<SurgicalAssembly.Seam> seams = new ArrayList<>();
+		List<Contact> contacts = new ArrayList<>();
+		for (int first = 0; first < cubeCount && seams.size() < SurgicalAssembly.MAX_SEAMS; first++) {
+			for (int second = first + 1; second < cubeCount && seams.size() < SurgicalAssembly.MAX_SEAMS; second++) {
+				SurgicalAssembly.Seam seam = SurgicalAssembly.Seam.of(first, second);
+				Contact contact = contactBetween(seam, byId);
+				if (contact == null)
 					continue;
-				if (next < 0 || bestDistance[cube] < bestDistance[next] - DISTANCE_EPSILON
-					|| Math.abs(bestDistance[cube] - bestDistance[next]) <= DISTANCE_EPSILON && cube < next)
-					next = cube;
-			}
-			if (next < 0)
-				return List.of();
-			included[next] = true;
-			if (parent[next] >= 0)
-				seams.add(SurgicalAssembly.Seam.of(parent[next], next));
-
-			for (int candidate = 0; candidate < cubeCount; candidate++) {
-				if (included[candidate])
-					continue;
-				double distance = surfaceDistanceSquared(byId.get(next), byId.get(candidate));
-				if (distance < bestDistance[candidate] - DISTANCE_EPSILON
-					|| Math.abs(distance - bestDistance[candidate]) <= DISTANCE_EPSILON
-						&& (parent[candidate] < 0 || next < parent[candidate])) {
-					bestDistance[candidate] = distance;
-					parent[candidate] = next;
-				}
+				seams.add(seam);
+				contacts.add(contact);
 			}
 		}
-
-		seams.sort(Comparator.comparingInt(SurgicalAssembly.Seam::first)
-			.thenComparingInt(SurgicalAssembly.Seam::second));
-		return List.copyOf(seams);
+		return new ContactTopology(seams, contacts);
 	}
 
-	public static List<Vec3> seamFace(SurgicalAssembly.Seam seam,
+	public static List<Contact> contactsFor(List<SurgicalAssembly.Seam> seams,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
 		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId = byId(cubes);
+		List<Contact> contacts = new ArrayList<>(seams.size());
+		for (SurgicalAssembly.Seam seam : seams) {
+			Contact contact = contactBetween(seam, byId);
+			if (contact != null)
+				contacts.add(contact);
+		}
+		return List.copyOf(contacts);
+	}
+
+	@Nullable
+	public static Contact contactBetween(SurgicalAssembly.Seam seam,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
+		return contactBetween(seam, byId(cubes));
+	}
+
+	@Nullable
+	private static Contact contactBetween(SurgicalAssembly.Seam seam,
+		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId) {
 		SurgicalModelRenderContext.CubeGeometry first = byId.get(seam.first());
 		SurgicalModelRenderContext.CubeGeometry second = byId.get(seam.second());
 		if (first == null || second == null)
-			return List.of();
+			return null;
 
 		SurgicalModelRenderContext.CubeGeometry smaller = volume(first) <= volume(second) ? first : second;
 		SurgicalModelRenderContext.CubeGeometry other = smaller == first ? second : first;
 		Vec3 otherCenter = center(other);
-		List<Vec3> bestFace = List.of();
-		double bestSurfaceDistance = Double.MAX_VALUE;
+		// Clipping an actual transformed face preserves the irregular polygon made by a
+		// rotated cube instead of replacing the joint with an axis-aligned rectangle.
+		List<Plane> otherPlanes = clipPlanes(other);
+		List<Vec3> bestContact = List.of();
 		double bestCenterDistance = Double.MAX_VALUE;
-		for (int[] indices : CUBE_FACES) {
-			List<Vec3> face = List.of(smaller.corners().get(indices[0]), smaller.corners().get(indices[1]),
-				smaller.corners().get(indices[2]), smaller.corners().get(indices[3]));
-			double surfaceDistance = faceSurfaceDistanceSquared(face, other);
-			double centerDistance = faceCenter(face).distanceToSqr(otherCenter);
-			if (surfaceDistance < bestSurfaceDistance - DISTANCE_EPSILON
-				|| Math.abs(surfaceDistance - bestSurfaceDistance) <= DISTANCE_EPSILON
-					&& centerDistance < bestCenterDistance - DISTANCE_EPSILON) {
-				bestSurfaceDistance = surfaceDistance;
-				bestCenterDistance = centerDistance;
-				bestFace = face;
+		double bestArea = 0.0d;
+		for (double tolerance : new double[] {0.0d, CONTACT_TOLERANCE}) {
+			for (int[] indices : CUBE_FACES) {
+				List<Vec3> face = List.of(smaller.corners().get(indices[0]), smaller.corners().get(indices[1]),
+					smaller.corners().get(indices[2]), smaller.corners().get(indices[3]));
+				List<Vec3> contact = clipAgainstPlanes(face, otherPlanes, tolerance);
+				double area = polygonArea(contact);
+				if (area < MIN_CONTACT_AREA)
+					continue;
+				double centerDistance = faceCenter(face).distanceToSqr(otherCenter);
+				if (centerDistance < bestCenterDistance - DISTANCE_EPSILON
+					|| Math.abs(centerDistance - bestCenterDistance) <= DISTANCE_EPSILON
+						&& area > bestArea + MIN_CONTACT_AREA) {
+					bestCenterDistance = centerDistance;
+					bestArea = area;
+					bestContact = contact;
+				}
 			}
+			if (!bestContact.isEmpty())
+				break;
 		}
-		return bestFace;
+		return bestContact.isEmpty() ? null : new Contact(seam, smaller.cubeId(), bestContact);
 	}
 
 	public static Map<Integer, Vec3> componentOffsets(int cubeCount, BitSet presentCubes,
@@ -161,211 +156,119 @@ public final class SurgicalClientTopology {
 		return count == 0 ? Vec3.ZERO : total.scale(1.0d / count);
 	}
 
-	private static double surfaceDistanceSquared(SurgicalModelRenderContext.CubeGeometry first,
-		SurgicalModelRenderContext.CubeGeometry second) {
-		// A center/radius approximation makes most long or rotated model parts overlap and
-		// collapses their edge weights to zero. Compare the actual transformed surfaces so
-		// Prim's tree follows visible joints instead of cube enumeration order.
-		List<Vec3> firstCorners = first.corners();
-		List<Vec3> secondCorners = second.corners();
-
-		for (int[] edge : CUBE_EDGES)
-			for (int[] triangle : CUBE_TRIANGLES)
-				if (segmentIntersectsTriangle(firstCorners.get(edge[0]), firstCorners.get(edge[1]),
-					secondCorners.get(triangle[0]), secondCorners.get(triangle[1]),
-					secondCorners.get(triangle[2]))
-					|| segmentIntersectsTriangle(secondCorners.get(edge[0]), secondCorners.get(edge[1]),
-						firstCorners.get(triangle[0]), firstCorners.get(triangle[1]),
-						firstCorners.get(triangle[2])))
-					return 0.0d;
-
-		double best = Double.MAX_VALUE;
-		for (Vec3 point : firstCorners)
-			for (int[] triangle : CUBE_TRIANGLES)
-				best = Math.min(best, pointTriangleDistanceSquared(point,
-					secondCorners.get(triangle[0]), secondCorners.get(triangle[1]),
-					secondCorners.get(triangle[2])));
-		for (Vec3 point : secondCorners)
-			for (int[] triangle : CUBE_TRIANGLES)
-				best = Math.min(best, pointTriangleDistanceSquared(point,
-					firstCorners.get(triangle[0]), firstCorners.get(triangle[1]),
-					firstCorners.get(triangle[2])));
-		for (int[] firstEdge : CUBE_EDGES)
-			for (int[] secondEdge : CUBE_EDGES)
-				best = Math.min(best, segmentDistanceSquared(firstCorners.get(firstEdge[0]),
-					firstCorners.get(firstEdge[1]), secondCorners.get(secondEdge[0]),
-					secondCorners.get(secondEdge[1])));
-		return best <= DEGENERATE_EPSILON ? 0.0d : best;
-	}
-
-	private static double faceSurfaceDistanceSquared(List<Vec3> face,
-		SurgicalModelRenderContext.CubeGeometry cube) {
-		double best = Double.MAX_VALUE;
-		List<Vec3> corners = cube.corners();
-		for (int half = 0; half < 2; half++) {
-			Vec3 faceA = face.get(0);
-			Vec3 faceB = face.get(half == 0 ? 1 : 2);
-			Vec3 faceC = face.get(half == 0 ? 2 : 3);
-			for (int[] triangle : CUBE_TRIANGLES) {
-				double distance = triangleDistanceSquared(faceA, faceB, faceC,
-					corners.get(triangle[0]), corners.get(triangle[1]), corners.get(triangle[2]));
-				if (distance <= DEGENERATE_EPSILON)
-					return 0.0d;
-				best = Math.min(best, distance);
-			}
-		}
-		return best;
-	}
-
-	private static double triangleDistanceSquared(Vec3 firstA, Vec3 firstB, Vec3 firstC,
-		Vec3 secondA, Vec3 secondB, Vec3 secondC) {
-		Vec3[] first = {firstA, firstB, firstC};
-		Vec3[] second = {secondA, secondB, secondC};
-		for (int edge = 0; edge < 3; edge++) {
-			if (segmentIntersectsTriangle(first[edge], first[(edge + 1) % 3], secondA, secondB, secondC)
-				|| segmentIntersectsTriangle(second[edge], second[(edge + 1) % 3], firstA, firstB, firstC))
-				return 0.0d;
-		}
-
-		double best = Double.MAX_VALUE;
-		for (Vec3 point : first)
-			best = Math.min(best, pointTriangleDistanceSquared(point, secondA, secondB, secondC));
-		for (Vec3 point : second)
-			best = Math.min(best, pointTriangleDistanceSquared(point, firstA, firstB, firstC));
-		for (int firstEdge = 0; firstEdge < 3; firstEdge++)
-			for (int secondEdge = 0; secondEdge < 3; secondEdge++)
-				best = Math.min(best, segmentDistanceSquared(first[firstEdge], first[(firstEdge + 1) % 3],
-					second[secondEdge], second[(secondEdge + 1) % 3]));
-		return best;
-	}
-
-	private static boolean segmentIntersectsTriangle(Vec3 start, Vec3 end, Vec3 a, Vec3 b, Vec3 c) {
-		Vec3 direction = end.subtract(start);
-		Vec3 edgeAB = b.subtract(a);
-		Vec3 edgeAC = c.subtract(a);
-		Vec3 perpendicular = direction.cross(edgeAC);
-		double determinant = edgeAB.dot(perpendicular);
-		if (Math.abs(determinant) <= INTERSECTION_EPSILON)
-			return false;
-
-		double inverse = 1.0d / determinant;
-		Vec3 fromA = start.subtract(a);
-		double u = fromA.dot(perpendicular) * inverse;
-		if (u < -DISTANCE_EPSILON || u > 1.0d + DISTANCE_EPSILON)
-			return false;
-		Vec3 cross = fromA.cross(edgeAB);
-		double v = direction.dot(cross) * inverse;
-		if (v < -DISTANCE_EPSILON || u + v > 1.0d + DISTANCE_EPSILON)
-			return false;
-		double distanceAlongSegment = edgeAC.dot(cross) * inverse;
-		return distanceAlongSegment >= -DISTANCE_EPSILON
-			&& distanceAlongSegment <= 1.0d + DISTANCE_EPSILON;
-	}
-
-	private static double pointTriangleDistanceSquared(Vec3 point, Vec3 a, Vec3 b, Vec3 c) {
-		Vec3 edgeAB = b.subtract(a);
-		Vec3 edgeAC = c.subtract(a);
-		if (edgeAB.cross(edgeAC).lengthSqr() <= DEGENERATE_EPSILON)
-			return Math.min(pointSegmentDistanceSquared(point, a, b),
-				Math.min(pointSegmentDistanceSquared(point, b, c), pointSegmentDistanceSquared(point, c, a)));
-
-		Vec3 fromA = point.subtract(a);
-		double d1 = edgeAB.dot(fromA);
-		double d2 = edgeAC.dot(fromA);
-		if (d1 <= 0.0d && d2 <= 0.0d)
-			return fromA.lengthSqr();
-
-		Vec3 fromB = point.subtract(b);
-		double d3 = edgeAB.dot(fromB);
-		double d4 = edgeAC.dot(fromB);
-		if (d3 >= 0.0d && d4 <= d3)
-			return fromB.lengthSqr();
-
-		double edgeABRegion = d1 * d4 - d3 * d2;
-		if (edgeABRegion <= 0.0d && d1 >= 0.0d && d3 <= 0.0d) {
-			double amount = d1 / (d1 - d3);
-			return point.distanceToSqr(a.add(edgeAB.scale(amount)));
-		}
-
-		Vec3 fromC = point.subtract(c);
-		double d5 = edgeAB.dot(fromC);
-		double d6 = edgeAC.dot(fromC);
-		if (d6 >= 0.0d && d5 <= d6)
-			return fromC.lengthSqr();
-
-		double edgeACRegion = d5 * d2 - d1 * d6;
-		if (edgeACRegion <= 0.0d && d2 >= 0.0d && d6 <= 0.0d) {
-			double amount = d2 / (d2 - d6);
-			return point.distanceToSqr(a.add(edgeAC.scale(amount)));
-		}
-
-		double edgeBCRegion = d3 * d6 - d5 * d4;
-		if (edgeBCRegion <= 0.0d && d4 - d3 >= 0.0d && d5 - d6 >= 0.0d) {
-			double amount = (d4 - d3) / ((d4 - d3) + (d5 - d6));
-			return point.distanceToSqr(b.add(c.subtract(b).scale(amount)));
-		}
-
-		double inverse = 1.0d / (edgeBCRegion + edgeACRegion + edgeABRegion);
-		double v = edgeACRegion * inverse;
-		double w = edgeABRegion * inverse;
-		return point.distanceToSqr(a.add(edgeAB.scale(v)).add(edgeAC.scale(w)));
-	}
-
-	private static double pointSegmentDistanceSquared(Vec3 point, Vec3 start, Vec3 end) {
-		Vec3 segment = end.subtract(start);
-		double lengthSquared = segment.lengthSqr();
-		if (lengthSquared <= DEGENERATE_EPSILON)
-			return point.distanceToSqr(start);
-		double amount = clamp(point.subtract(start).dot(segment) / lengthSquared);
-		return point.distanceToSqr(start.add(segment.scale(amount)));
-	}
-
-	private static double segmentDistanceSquared(Vec3 firstStart, Vec3 firstEnd,
-		Vec3 secondStart, Vec3 secondEnd) {
-		Vec3 firstDirection = firstEnd.subtract(firstStart);
-		Vec3 secondDirection = secondEnd.subtract(secondStart);
-		Vec3 origins = firstStart.subtract(secondStart);
-		double firstLengthSquared = firstDirection.lengthSqr();
-		double secondLengthSquared = secondDirection.lengthSqr();
-		double secondProjection = secondDirection.dot(origins);
-		double firstAmount;
-		double secondAmount;
-
-		if (firstLengthSquared <= DEGENERATE_EPSILON && secondLengthSquared <= DEGENERATE_EPSILON)
-			return firstStart.distanceToSqr(secondStart);
-		if (firstLengthSquared <= DEGENERATE_EPSILON) {
-			firstAmount = 0.0d;
-			secondAmount = clamp(secondProjection / secondLengthSquared);
-		} else {
-			double firstProjection = firstDirection.dot(origins);
-			if (secondLengthSquared <= DEGENERATE_EPSILON) {
-				secondAmount = 0.0d;
-				firstAmount = clamp(-firstProjection / firstLengthSquared);
-			} else {
-				double directionsProjection = firstDirection.dot(secondDirection);
-				double denominator = firstLengthSquared * secondLengthSquared
-					- directionsProjection * directionsProjection;
-				firstAmount = denominator <= DEGENERATE_EPSILON ? 0.0d
-					: clamp((directionsProjection * secondProjection
-						- firstProjection * secondLengthSquared) / denominator);
-				secondAmount = (directionsProjection * firstAmount + secondProjection) / secondLengthSquared;
-				if (secondAmount < 0.0d) {
-					secondAmount = 0.0d;
-					firstAmount = clamp(-firstProjection / firstLengthSquared);
-				} else if (secondAmount > 1.0d) {
-					secondAmount = 1.0d;
-					firstAmount = clamp((directionsProjection - firstProjection) / firstLengthSquared);
+	private static List<Vec3> clipAgainstPlanes(List<Vec3> polygon,
+		List<Plane> planes, double tolerance) {
+		List<Vec3> clipped = List.copyOf(polygon);
+		for (Plane plane : planes) {
+			if (clipped.isEmpty())
+				break;
+			List<Vec3> next = new ArrayList<>();
+			Vec3 previous = clipped.getLast();
+			double previousDistance = plane.signedDistance(previous) - tolerance;
+			boolean previousInside = previousDistance <= INTERSECTION_EPSILON;
+			for (Vec3 current : clipped) {
+				double currentDistance = plane.signedDistance(current) - tolerance;
+				boolean currentInside = currentDistance <= INTERSECTION_EPSILON;
+				if (previousInside != currentInside) {
+					double denominator = previousDistance - currentDistance;
+					if (Math.abs(denominator) > INTERSECTION_EPSILON) {
+						double amount = previousDistance / denominator;
+						next.add(previous.add(current.subtract(previous).scale(amount)));
+					}
 				}
+				if (currentInside)
+					next.add(current);
+				previous = current;
+				previousDistance = currentDistance;
+				previousInside = currentInside;
 			}
+			clipped = simplifyPolygon(next);
 		}
-
-		Vec3 firstClosest = firstStart.add(firstDirection.scale(firstAmount));
-		Vec3 secondClosest = secondStart.add(secondDirection.scale(secondAmount));
-		return firstClosest.distanceToSqr(secondClosest);
+		return List.copyOf(clipped);
 	}
 
-	private static double clamp(double value) {
-		return Math.max(0.0d, Math.min(1.0d, value));
+	private static List<Plane> clipPlanes(SurgicalModelRenderContext.CubeGeometry cube) {
+		List<Vec3> corners = cube.corners();
+		Vec3 cubeCenter = center(cube);
+		List<Plane> planes = new ArrayList<>(6);
+		for (int[] indices : CUBE_FACES) {
+			Vec3 first = corners.get(indices[0]);
+			Vec3 faceCenter = first.add(corners.get(indices[1]))
+				.add(corners.get(indices[2])).add(corners.get(indices[3])).scale(0.25d);
+			Vec3 normal = corners.get(indices[1]).subtract(first)
+				.cross(corners.get(indices[3]).subtract(first));
+			if (normal.lengthSqr() <= DEGENERATE_EPSILON)
+				continue;
+			normal = normal.normalize();
+			if (normal.dot(faceCenter.subtract(cubeCenter)) < 0.0d)
+				normal = normal.scale(-1.0d);
+			planes.add(new Plane(normal, normal.dot(first)));
+		}
+		if (planes.size() == 6)
+			return planes;
+
+		// Zero-thickness model cubes have degenerate side faces. Treat them as a
+		// tolerance-thick oriented box so their visible rectangle can still form a seam.
+		List<Vec3> axes = orthonormalAxes(corners.get(1).subtract(corners.get(0)),
+			corners.get(2).subtract(corners.get(0)), corners.get(4).subtract(corners.get(0)));
+		planes.clear();
+		for (Vec3 axis : axes) {
+			double minimum = Double.POSITIVE_INFINITY;
+			double maximum = Double.NEGATIVE_INFINITY;
+			for (Vec3 corner : corners) {
+				double projection = axis.dot(corner);
+				minimum = Math.min(minimum, projection);
+				maximum = Math.max(maximum, projection);
+			}
+			planes.add(new Plane(axis, maximum));
+			planes.add(new Plane(axis.scale(-1.0d), -minimum));
+		}
+		return planes;
+	}
+
+	private static List<Vec3> orthonormalAxes(Vec3... candidates) {
+		List<Vec3> axes = new ArrayList<>(3);
+		for (Vec3 candidate : candidates) {
+			Vec3 axis = candidate;
+			for (Vec3 existing : axes)
+				axis = axis.subtract(existing.scale(axis.dot(existing)));
+			if (axis.lengthSqr() > DEGENERATE_EPSILON)
+				axes.add(axis.normalize());
+		}
+		if (axes.isEmpty())
+			axes.add(new Vec3(1.0d, 0.0d, 0.0d));
+		if (axes.size() == 1) {
+			Vec3 first = axes.getFirst();
+			Vec3 helper = Math.abs(first.y) < 0.9d ? new Vec3(0.0d, 1.0d, 0.0d)
+				: new Vec3(1.0d, 0.0d, 0.0d);
+			axes.add(first.cross(helper).normalize());
+		}
+		if (axes.size() == 2)
+			axes.add(axes.get(0).cross(axes.get(1)).normalize());
+		return List.copyOf(axes.subList(0, 3));
+	}
+
+	private static List<Vec3> simplifyPolygon(List<Vec3> polygon) {
+		if (polygon.size() < 2)
+			return polygon;
+		List<Vec3> simplified = new ArrayList<>(polygon.size());
+		for (Vec3 point : polygon)
+			if (simplified.isEmpty() || simplified.getLast().distanceToSqr(point) > DEGENERATE_EPSILON)
+				simplified.add(point);
+		if (simplified.size() > 1
+			&& simplified.getFirst().distanceToSqr(simplified.getLast()) <= DEGENERATE_EPSILON)
+			simplified.removeLast();
+		return simplified;
+	}
+
+	private static double polygonArea(List<Vec3> polygon) {
+		if (polygon.size() < 3)
+			return 0.0d;
+		Vec3 origin = polygon.getFirst();
+		double area = 0.0d;
+		for (int i = 1; i + 1 < polygon.size(); i++)
+			area += polygon.get(i).subtract(origin).cross(polygon.get(i + 1).subtract(origin)).length() * 0.5d;
+		return area;
 	}
 
 	private static double volume(SurgicalModelRenderContext.CubeGeometry cube) {
@@ -385,5 +288,28 @@ public final class SurgicalClientTopology {
 		for (SurgicalModelRenderContext.CubeGeometry cube : cubes)
 			result.putIfAbsent(cube.cubeId(), cube);
 		return result;
+	}
+
+	public record ContactTopology(List<SurgicalAssembly.Seam> seams, List<Contact> contacts) {
+		private static final ContactTopology EMPTY = new ContactTopology(List.of(), List.of());
+
+		public ContactTopology {
+			seams = List.copyOf(seams);
+			contacts = List.copyOf(contacts);
+		}
+	}
+
+	public record Contact(SurgicalAssembly.Seam seam, int surfaceCubeId, List<Vec3> polygon) {
+		public Contact {
+			polygon = List.copyOf(polygon);
+			if (polygon.size() < 3)
+				throw new IllegalArgumentException("A surgical contact requires at least three vertices");
+		}
+	}
+
+	private record Plane(Vec3 normal, double maximum) {
+		private double signedDistance(Vec3 point) {
+			return normal.dot(point) - maximum;
+		}
 	}
 }

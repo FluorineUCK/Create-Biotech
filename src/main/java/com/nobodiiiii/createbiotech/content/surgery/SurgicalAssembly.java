@@ -18,6 +18,7 @@ import net.minecraft.nbt.Tag;
 /** Immutable, side-safe cube topology and visible-component state. */
 public final class SurgicalAssembly {
 	public static final int MAX_CUBES = 1024;
+	public static final int MAX_SEAMS = 4096;
 	private static final int CURRENT_VERSION = 1;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
@@ -124,14 +125,12 @@ public final class SurgicalAssembly {
 	}
 
 	public static boolean validTopology(int cubeCount, List<Seam> seams) {
-		if (!validCubeCount(cubeCount) || seams == null || seams.size() != cubeCount - 1)
+		if (!validCubeCount(cubeCount) || seams == null
+			|| seams.size() > Math.min(MAX_SEAMS, cubeCount * (cubeCount - 1) / 2))
 			return false;
 		if (cubeCount == 1)
 			return seams.isEmpty();
 
-		int[] parent = new int[cubeCount];
-		for (int i = 0; i < cubeCount; i++)
-			parent[i] = i;
 		Set<Long> unique = new HashSet<>();
 		for (Seam seam : seams) {
 			if (seam == null || seam.first < 0 || seam.second >= cubeCount || seam.first >= seam.second)
@@ -139,16 +138,7 @@ public final class SurgicalAssembly {
 			long key = ((long) seam.first << 32) | (seam.second & 0xffffffffL);
 			if (!unique.add(key))
 				return false;
-			int firstRoot = find(parent, seam.first);
-			int secondRoot = find(parent, seam.second);
-			if (firstRoot == secondRoot)
-				return false;
-			parent[firstRoot] = secondRoot;
 		}
-		int root = find(parent, 0);
-		for (int i = 1; i < cubeCount; i++)
-			if (find(parent, i) != root)
-				return false;
 		return true;
 	}
 
@@ -201,20 +191,12 @@ public final class SurgicalAssembly {
 
 	@Nullable
 	public static List<Seam> decodeSeams(int[] encoded) {
-		if (encoded == null || (encoded.length & 1) != 0 || encoded.length > (MAX_CUBES - 1) * 2)
+		if (encoded == null || (encoded.length & 1) != 0 || encoded.length > MAX_SEAMS * 2)
 			return null;
 		List<Seam> seams = new ArrayList<>(encoded.length / 2);
 		for (int i = 0; i < encoded.length; i += 2)
 			seams.add(Seam.of(encoded[i], encoded[i + 1]));
 		return List.copyOf(seams);
-	}
-
-	private static int find(int[] parent, int node) {
-		while (parent[node] != node) {
-			parent[node] = parent[parent[node]];
-			node = parent[node];
-		}
-		return node;
 	}
 
 	private static BitSet normalize(BitSet input, int size) {
