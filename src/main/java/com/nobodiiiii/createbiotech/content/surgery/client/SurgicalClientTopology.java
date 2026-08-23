@@ -496,6 +496,51 @@ public final class SurgicalClientTopology {
 		return null;
 	}
 
+	/** Moves a multi-subject glued group as one rigid horizontal unit to the nearest legal slot. */
+	@Nullable
+	public static ConnectedPlacement snapConnectedGroup(List<SurgicalTableLayout.Footprint> movingFootprints,
+		SurgicalTablePlane.WorkArea workArea, double targetX, double targetZ,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
+		if (movingFootprints.isEmpty() || workArea.isEmpty()
+			|| !Double.isFinite(targetX) || !Double.isFinite(targetZ))
+			return null;
+		double minX = Double.POSITIVE_INFINITY;
+		double minZ = Double.POSITIVE_INFINITY;
+		double maxX = Double.NEGATIVE_INFINITY;
+		double maxZ = Double.NEGATIVE_INFINITY;
+		for (SurgicalTableLayout.Footprint footprint : movingFootprints) {
+			if (!SurgicalTableLayout.validStoredFootprint(footprint))
+				return null;
+			minX = Math.min(minX, footprint.minX());
+			minZ = Math.min(minZ, footprint.minZ());
+			maxX = Math.max(maxX, footprint.maxX());
+			maxZ = Math.max(maxZ, footprint.maxZ());
+		}
+		double centerX = (minX + maxX) * 0.5d;
+		double centerZ = (minZ + maxZ) * 0.5d;
+		for (GridCell cell : orderedCells(workArea, targetX, targetZ)) {
+			double deltaX = cell.centerX() - centerX;
+			double deltaZ = cell.centerZ() - centerZ;
+			if (!workArea.contains(minX + deltaX, minZ + deltaZ,
+				maxX + deltaX, maxZ + deltaZ, DISTANCE_EPSILON))
+				continue;
+			boolean blocked = false;
+			for (SurgicalTableLayout.Footprint footprint : movingFootprints) {
+				SurgicalTableLayout.Footprint placed = new SurgicalTableLayout.Footprint(
+					footprint.componentRoot(), footprint.minX() + deltaX, footprint.minZ() + deltaZ,
+					footprint.maxX() + deltaX, footprint.maxZ() + deltaZ,
+					SurgicalTableLayout.UNSNAPPED, SurgicalTableLayout.UNSNAPPED);
+				if (overlapsAny(placed, occupiedFootprints)) {
+					blocked = true;
+					break;
+				}
+			}
+			if (!blocked)
+				return new ConnectedPlacement(new Vec3(deltaX, 0.0d, deltaZ));
+		}
+		return null;
+	}
+
 	/** Builds a proposal for a cut that does not create a new detached component. */
 	@Nullable
 	public static PlannedLayout currentLayout(int cubeCount, BitSet presentCubes,
@@ -1048,6 +1093,8 @@ public final class SurgicalClientTopology {
 
 	public record PlacementPlan(double originOffsetX, double originOffsetZ,
 		SurgicalTableLayout.Proposal proposal) {}
+
+	public record ConnectedPlacement(Vec3 delta) {}
 
 	public record PlannedLayout(Map<Integer, Vec3> offsets, SurgicalTableLayout.Proposal proposal) {
 		public PlannedLayout {

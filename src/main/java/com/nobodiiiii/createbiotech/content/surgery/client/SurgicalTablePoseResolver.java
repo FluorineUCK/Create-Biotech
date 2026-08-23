@@ -6,6 +6,8 @@ import java.util.WeakHashMap;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose.RotationAxis;
 import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 
 import net.minecraft.core.Direction;
@@ -46,9 +48,14 @@ public final class SurgicalTablePoseResolver {
 		// centers everything that will actually be drawn in that already-selected orientation.
 		EntityGeometry.Collector renderedGeometry = EntityGeometry.Collector.caching(MAX_MEASURED_VERTICES);
 		EntityGeometry.measureWithFallback(preview, renderedGeometry);
-		selected = createPose(renderedGeometry, selected.axis, facing);
+		selected = createPose(renderedGeometry, selected.layPose.axis(), facing);
 		ownerPoses.put(key, selected);
 		return selected;
+	}
+
+	/** Uses an already recorded pose verbatim instead of choosing a new recumbent frame. */
+	public static SurgicalPose resolve(SurgicalLayPose pose) {
+		return new SurgicalPose(pose, 0.0f);
 	}
 
 	public static void clear() {
@@ -60,9 +67,9 @@ public final class SurgicalTablePoseResolver {
 		int yaw = Math.floorMod(facingYaw(axis, facing) + 180, 360);
 		Matrix4f rotation = rotation(axis, yaw);
 		EntityGeometry.Bounds bounds = geometry.transformBounds(rotation);
-		return new SurgicalPose(axis, yaw,
+		return new SurgicalPose(new SurgicalLayPose(axis, yaw, new net.minecraft.world.phys.Vec3(
 			0.5f - bounds.centerX(), 1.0f + TABLE_CLEARANCE - bounds.minY(),
-			0.5f - bounds.centerZ(), bounds.sizeY());
+			0.5f - bounds.centerZ())), bounds.sizeY());
 	}
 
 	private static int facingYaw(RotationAxis axis, Direction facing) {
@@ -91,20 +98,27 @@ public final class SurgicalTablePoseResolver {
 		};
 	}
 
-	public record SurgicalPose(RotationAxis axis, int yaw, float translateX, float translateY,
-		float translateZ, float height) {
+	public record SurgicalPose(SurgicalLayPose layPose, float height) {
 		public void apply(PoseStack poseStack) {
-			poseStack.translate(translateX, translateY, translateZ);
-			poseStack.mulPose(Axis.YP.rotationDegrees(yaw));
-			if (axis != RotationAxis.NONE)
-				poseStack.mulPose((axis == RotationAxis.X ? Axis.XP : Axis.ZP).rotationDegrees(-90.0f));
+			SurgicalTablePoseResolver.apply(poseStack, layPose);
 		}
 	}
 
-	public enum RotationAxis {
-		NONE,
-		X,
-		Z
+	public static void apply(PoseStack poseStack, SurgicalLayPose pose) {
+		poseStack.translate(pose.translation().x, pose.translation().y, pose.translation().z);
+		applyRotation(poseStack, pose);
+	}
+
+	public static void applyRotation(PoseStack poseStack, SurgicalLayPose pose) {
+		poseStack.mulPose(Axis.YP.rotationDegrees(pose.yaw()));
+		if (pose.axis() != RotationAxis.NONE)
+			poseStack.mulPose((pose.axis() == RotationAxis.X ? Axis.XP : Axis.ZP).rotationDegrees(-90.0f));
+	}
+
+	public static void applyInverseRotation(PoseStack poseStack, SurgicalLayPose pose) {
+		if (pose.axis() != RotationAxis.NONE)
+			poseStack.mulPose((pose.axis() == RotationAxis.X ? Axis.XP : Axis.ZP).rotationDegrees(90.0f));
+		poseStack.mulPose(Axis.YP.rotationDegrees(-pose.yaw()));
 	}
 
 	private record PoseKey(MimicProfile profile, Direction facing) {}

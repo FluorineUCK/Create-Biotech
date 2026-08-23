@@ -17,10 +17,12 @@ import net.minecraft.world.phys.Vec3;
 
 /** Server-validated placement data for both ordinary and laid-out multi-source bodies. */
 public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
-	 double originOffsetX, double originOffsetZ, SurgicalTableLayout.Proposal envelope,
+	 double originOffsetX, double originOffsetZ, SurgicalLayPose layPose,
+	 SurgicalTableLayout.Proposal envelope,
 	 List<SurgicalTableLayout.Proposal> sourceLayouts) {
 
 	public SurgicalTablePlacementPacket {
+		layPose = layPose == null ? SurgicalLayPose.IDENTITY : layPose;
 		envelope = envelope == null ? SurgicalTableLayout.Proposal.EMPTY : envelope;
 		sourceLayouts = sourceLayouts == null ? List.of() : List.copyOf(sourceLayouts);
 		if (sourceLayouts.size() > SurgicalAssembly.MAX_SOURCES)
@@ -29,7 +31,7 @@ public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
 
 	public SurgicalTablePlacementPacket(FriendlyByteBuf buffer) {
 		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), buffer.readDouble(),
-			buffer.readDouble(), readLayout(buffer), readSourceLayouts(buffer));
+			buffer.readDouble(), SurgicalLayPose.read(buffer), readLayout(buffer), readSourceLayouts(buffer));
 	}
 
 	public void write(FriendlyByteBuf buffer) {
@@ -37,6 +39,7 @@ public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
 		buffer.writeEnum(hand);
 		buffer.writeDouble(originOffsetX);
 		buffer.writeDouble(originOffsetZ);
+		layPose.write(buffer);
 		writeLayout(buffer, envelope);
 		buffer.writeVarInt(sourceLayouts.size());
 		for (SurgicalTableLayout.Proposal sourceLayout : sourceLayouts)
@@ -56,7 +59,7 @@ public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
 		if (table == null || !(held.getItem() instanceof CapturedEntityBoxItem)
 			|| !CapturedEntityBoxHelper.hasCapturedEntity(held))
 			return;
-		if (!table.tryPlaceSubject(held, plane, player.getDirection(), originOffsetX, originOffsetZ,
+		if (!table.tryPlaceSubject(held, plane, player.getDirection(), layPose, originOffsetX, originOffsetZ,
 			envelope, sourceLayouts))
 			player.displayClientMessage(Component.translatable(
 				"message.create_biotech.surgical_table.no_space"), true);

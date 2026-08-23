@@ -55,6 +55,14 @@ public final class SurgicalTableLayout {
 			occupiedFootprints, assemblyEnvelope, true);
 	}
 
+	/** Validates exact glue-preview placement while allowing the already-glued native components to overlap. */
+	public static boolean validateGlueComponents(SurgicalTablePlane.Plane plane, int cubeCount,
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
+		List<Footprint> occupiedFootprints) {
+		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
+			occupiedFootprints, null, true);
+	}
+
 	private static boolean validateComponents(SurgicalTablePlane.Plane plane, int cubeCount,
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
 		List<Footprint> occupiedFootprints, Footprint assemblyEnvelope, boolean allowComponentOverlap) {

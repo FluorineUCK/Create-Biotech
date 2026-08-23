@@ -49,7 +49,7 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 			renderSubject(table, subject, poseStack, buffer, packedLight, projectSourceGeometry);
 	}
 
-	private static boolean projectsSourceGeometry(SurgicalTableBlockEntity table) {
+	static boolean projectsSourceGeometry(SurgicalTableBlockEntity table) {
 		if (table.getLevel() == null)
 			return false;
 		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(table.getLevel(), table.getBlockPos());
@@ -70,7 +70,7 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 
 		poseStack.pushPose();
 		poseStack.translate(subject.originOffsetX(), 0.0d, subject.originOffsetZ());
-		SurgicalTablePoseResolver.resolve(subject, profile, preview, subject.placementFacing()).apply(poseStack);
+		SurgicalTablePoseResolver.resolve(subject.layPose()).apply(poseStack);
 		int storedCount = subject.cubeCount();
 		boolean collectGeometry = SurgicalTableClientHandler.needsGeometryUpdate(table, subject);
 		BitSet present = storedCount > 0

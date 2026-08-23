@@ -78,7 +78,8 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		if (placement) {
 			if (held.getItem() instanceof com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper.hasCapturedEntity(held)
-				&& !table.tryPlaceSubject(held, plane, player.getDirection(), originOffsetX, originOffsetZ, layout))
+				&& !table.tryPlaceSubject(held, plane, player.getDirection(), SurgicalLayPose.IDENTITY,
+					originOffsetX, originOffsetZ, layout))
 				noSpace(player);
 			return;
 		}
@@ -94,8 +95,10 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			}
 		}
 		case CUT_GLUE -> {
-			if (held.is(Items.SHEARS))
-				table.cutGlueJoint(player, held, hand, subjectId, targetId, observedCubeCount, seams);
+			if (held.is(Items.SHEARS)
+				&& !table.cutGlueJoint(player, held, hand, subjectId, targetId, observedCubeCount, seams,
+					plane, originOffsetX, originOffsetZ))
+				noSpace(player);
 		}
 		case PACK -> {
 			if (targetId < observedCubeCount

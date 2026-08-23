@@ -25,7 +25,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_CUBES = 1024;
 	public static final int MAX_SEAMS = 4096;
 	public static final int MAX_SOURCES = 256;
-	private static final int CURRENT_VERSION = 4;
+	private static final int CURRENT_VERSION = 5;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -37,7 +37,14 @@ public final class SurgicalAssembly {
 	private static final String JOINTS_TAG = "GlueJoints";
 	private static final String PRESERVE_LAYOUT_TAG = "PreserveLayout";
 	private static final String LAYOUT_FACING_TAG = "LayoutFacing";
+	private static final String LAYOUT_LAY_POSE_TAG = "LayoutLayPose";
 	private static final String FACING_TAG = "Facing";
+	private static final String LAY_POSE_TAG = "LayPose";
+	private static final String POSE_AXIS_TAG = "Axis";
+	private static final String POSE_YAW_TAG = "Yaw";
+	private static final String POSE_X_TAG = "TranslateX";
+	private static final String POSE_Y_TAG = "TranslateY";
+	private static final String POSE_Z_TAG = "TranslateZ";
 	private static final String ORIGIN_X_TAG = "OriginX";
 	private static final String ORIGIN_Y_TAG = "OriginY";
 	private static final String ORIGIN_Z_TAG = "OriginZ";
@@ -54,13 +61,15 @@ public final class SurgicalAssembly {
 	private final List<Joint> joints;
 	private final boolean preserveLayout;
 	private final Direction layoutFacing;
+	private final SurgicalLayPose layoutLayPose;
 
 	private SurgicalAssembly(List<Source> sources, List<Joint> joints, boolean preserveLayout,
-		Direction layoutFacing) {
+		Direction layoutFacing, SurgicalLayPose layoutLayPose) {
 		this.sources = List.copyOf(sources);
 		this.joints = List.copyOf(joints);
 		this.preserveLayout = preserveLayout;
 		this.layoutFacing = horizontal(layoutFacing);
+		this.layoutLayPose = layoutLayPose == null ? SurgicalLayPose.IDENTITY : layoutLayPose;
 	}
 
 	@Nullable
@@ -73,19 +82,26 @@ public final class SurgicalAssembly {
 	public static SurgicalAssembly create(MimicProfile profile, int cubeCount, BitSet presentCubes,
 		List<Seam> seams, BitSet cutSeams, List<Integer> cutOrder) {
 		Source source = Source.create(profile, cubeCount, presentCubes, seams, cutSeams, cutOrder,
-			Direction.NORTH, Vec3.ZERO, Map.of());
+			Direction.NORTH, SurgicalLayPose.IDENTITY, Vec3.ZERO, Map.of());
 		return source == null ? null
-			: new SurgicalAssembly(List.of(source), List.of(), false, Direction.NORTH);
+			: new SurgicalAssembly(List.of(source), List.of(), false, Direction.NORTH,
+				SurgicalLayPose.IDENTITY);
 	}
 
 	@Nullable
 	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints) {
-		return createComposite(sources, joints, inferLayoutFacing(sources));
+		return createComposite(sources, joints, inferLayoutFacing(sources), inferLayoutLayPose(sources));
 	}
 
 	@Nullable
 	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints,
 		Direction layoutFacing) {
+		return createComposite(sources, joints, layoutFacing, inferLayoutLayPose(sources));
+	}
+
+	@Nullable
+	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints,
+		Direction layoutFacing, SurgicalLayPose layoutLayPose) {
 		if (sources == null || sources.isEmpty() || sources.size() > MAX_SOURCES || joints == null
 			|| joints.size() > MAX_SEAMS)
 			return null;
@@ -107,7 +123,7 @@ public final class SurgicalAssembly {
 				return null;
 			frozenJoints.add(normalized);
 		}
-		return new SurgicalAssembly(frozenSources, frozenJoints, true, layoutFacing);
+		return new SurgicalAssembly(frozenSources, frozenJoints, true, layoutFacing, layoutLayPose);
 	}
 
 	@Nullable
@@ -115,7 +131,8 @@ public final class SurgicalAssembly {
 		int version = tag.getInt(VERSION_TAG);
 		if (version == 1 || version == 2)
 			return loadLegacy(tag, version);
-		if ((version != 3 && version != CURRENT_VERSION) || !tag.contains(SOURCES_TAG, Tag.TAG_LIST))
+		if ((version != 3 && version != 4 && version != CURRENT_VERSION)
+			|| !tag.contains(SOURCES_TAG, Tag.TAG_LIST))
 			return null;
 
 		ListTag encodedSources = tag.getList(SOURCES_TAG, Tag.TAG_COMPOUND);
@@ -142,11 +159,14 @@ public final class SurgicalAssembly {
 		}
 		Direction layoutFacing = version >= 4 && tag.contains(LAYOUT_FACING_TAG, Tag.TAG_ANY_NUMERIC)
 			? Direction.from3DDataValue(tag.getInt(LAYOUT_FACING_TAG)) : inferLayoutFacing(sources);
-		SurgicalAssembly assembly = createComposite(sources, joints, layoutFacing);
+		SurgicalLayPose layoutLayPose = version >= 5 && tag.contains(LAYOUT_LAY_POSE_TAG, Tag.TAG_COMPOUND)
+			? readLayPose(tag.getCompound(LAYOUT_LAY_POSE_TAG)) : inferLayoutLayPose(sources);
+		SurgicalAssembly assembly = createComposite(sources, joints, layoutFacing, layoutLayPose);
 		if (assembly == null)
 			return null;
 		return tag.getBoolean(PRESERVE_LAYOUT_TAG) ? assembly
-			: new SurgicalAssembly(assembly.sources, assembly.joints, false, assembly.layoutFacing);
+			: new SurgicalAssembly(assembly.sources, assembly.joints, false, assembly.layoutFacing,
+				assembly.layoutLayPose);
 	}
 
 	@Nullable
@@ -191,6 +211,7 @@ public final class SurgicalAssembly {
 		if (preserveLayout)
 			tag.putBoolean(PRESERVE_LAYOUT_TAG, true);
 		tag.putInt(LAYOUT_FACING_TAG, layoutFacing.get3DDataValue());
+		tag.put(LAYOUT_LAY_POSE_TAG, writeLayPose(layoutLayPose));
 		return tag;
 	}
 
@@ -198,6 +219,11 @@ public final class SurgicalAssembly {
 	public List<Joint> joints() { return joints; }
 	public boolean preservesLayout() { return preserveLayout; }
 	public Direction layoutFacing() { return layoutFacing; }
+	public SurgicalLayPose layoutLayPose() { return layoutLayPose; }
+
+	public SurgicalLayPose placedLayPose(Direction placementFacing) {
+		return layoutLayPose.rotateClockwise(clockwiseTurns(layoutFacing, horizontal(placementFacing)));
+	}
 
 	/** Rotates every stored source from the packed layout frame into a new table-facing frame. */
 	public List<PlacedSource> placedSources(Direction placementFacing) {
@@ -208,6 +234,7 @@ public final class SurgicalAssembly {
 			for (Map.Entry<Integer, Vec3> entry : source.cubeOffsets.entrySet())
 				offsets.put(entry.getKey(), rotateClockwise(entry.getValue(), turns));
 			placed.add(new PlacedSource(source, rotateClockwise(source.facing, turns),
+				source.layPose.rotateClockwise(turns),
 				rotateClockwise(source.originOffset, turns), offsets));
 		}
 		return List.copyOf(placed);
@@ -369,11 +396,13 @@ public final class SurgicalAssembly {
 		private final BitSet cutSeams;
 		private final List<Integer> cutOrder;
 		private final Direction facing;
+		private final SurgicalLayPose layPose;
 		private final Vec3 originOffset;
 		private final Map<Integer, Vec3> cubeOffsets;
 
 		private Source(MimicProfile profile, int cubeCount, BitSet presentCubes, List<Seam> seams,
-			BitSet cutSeams, List<Integer> cutOrder, Direction facing, Vec3 originOffset,
+			BitSet cutSeams, List<Integer> cutOrder, Direction facing, SurgicalLayPose layPose,
+			Vec3 originOffset,
 			Map<Integer, Vec3> cubeOffsets) {
 			this.profile = profile;
 			this.cubeCount = cubeCount;
@@ -382,6 +411,7 @@ public final class SurgicalAssembly {
 			this.cutSeams = normalize(cutSeams, seams.size());
 			this.cutOrder = normalizeCutOrder(cutOrder, this.cutSeams, seams.size());
 			this.facing = facing != null && facing.getAxis().isHorizontal() ? facing : Direction.NORTH;
+			this.layPose = layPose == null ? SurgicalLayPose.IDENTITY : layPose;
 			this.originOffset = originOffset;
 			this.cubeOffsets = Map.copyOf(cubeOffsets);
 		}
@@ -389,7 +419,7 @@ public final class SurgicalAssembly {
 		@Nullable
 		public static Source create(MimicProfile profile, int cubeCount, BitSet presentCubes,
 			List<Seam> seams, BitSet cutSeams, List<Integer> cutOrder, Direction facing,
-			Vec3 originOffset, Map<Integer, Vec3> cubeOffsets) {
+			SurgicalLayPose layPose, Vec3 originOffset, Map<Integer, Vec3> cubeOffsets) {
 			if (profile == null || presentCubes == null || seams == null || cutSeams == null
 				|| cubeOffsets == null || cubeOffsets.size() > cubeCount)
 				return null;
@@ -401,13 +431,14 @@ public final class SurgicalAssembly {
 			}
 			Map<Integer, Vec3> sanitized = sanitizeOffsets(cubeOffsets, cubeCount, presentCubes);
 			Source source = new Source(profile, cubeCount, presentCubes, seams, cutSeams, cutOrder, facing,
+				layPose,
 				originOffset == null ? Vec3.ZERO : originOffset, sanitized);
 			return source.valid() ? source : null;
 		}
 
 		private boolean valid() {
 			if (profile == null || !validTopology(cubeCount, seams) || presentCubes.isEmpty()
-				|| !finiteVector(originOffset))
+				|| layPose == null || !layPose.valid() || !finiteVector(originOffset))
 				return false;
 			for (Map.Entry<Integer, Vec3> entry : cubeOffsets.entrySet())
 				if (entry.getKey() == null || !containsCube(entry.getKey()) || !finiteVector(entry.getValue()))
@@ -416,7 +447,7 @@ public final class SurgicalAssembly {
 		}
 
 		private Source copy() {
-			return new Source(profile, cubeCount, presentCubes, seams, cutSeams, cutOrder, facing,
+			return new Source(profile, cubeCount, presentCubes, seams, cutSeams, cutOrder, facing, layPose,
 				originOffset, cubeOffsets);
 		}
 
@@ -427,6 +458,7 @@ public final class SurgicalAssembly {
 		public BitSet cutSeams() { return (BitSet) cutSeams.clone(); }
 		public List<Integer> cutOrder() { return cutOrder; }
 		public Direction facing() { return facing; }
+		public SurgicalLayPose layPose() { return layPose; }
 		public Vec3 originOffset() { return originOffset; }
 		public Map<Integer, Vec3> cubeOffsets() { return cubeOffsets; }
 		public boolean containsCube(int cubeId) { return validCubeId(cubeId) && presentCubes.get(cubeId); }
@@ -446,6 +478,7 @@ public final class SurgicalAssembly {
 			if (!cutOrder.isEmpty())
 				tag.putIntArray(CUT_ORDER_TAG, cutOrder.stream().mapToInt(Integer::intValue).toArray());
 			tag.putInt(FACING_TAG, facing.get3DDataValue());
+			tag.put(LAY_POSE_TAG, writeLayPose(layPose));
 			if (!originOffset.equals(Vec3.ZERO)) {
 				tag.putDouble(ORIGIN_X_TAG, originOffset.x);
 				tag.putDouble(ORIGIN_Y_TAG, originOffset.y);
@@ -473,20 +506,23 @@ public final class SurgicalAssembly {
 			List<Integer> order = tag.contains(CUT_ORDER_TAG, Tag.TAG_INT_ARRAY)
 				? decodeCutOrder(tag.getIntArray(CUT_ORDER_TAG)) : List.of();
 			Direction facing = Direction.from3DDataValue(tag.getInt(FACING_TAG));
+			SurgicalLayPose layPose = tag.contains(LAY_POSE_TAG, Tag.TAG_COMPOUND)
+				? readLayPose(tag.getCompound(LAY_POSE_TAG)) : SurgicalLayPose.IDENTITY;
 			Vec3 origin = new Vec3(tag.getDouble(ORIGIN_X_TAG), tag.getDouble(ORIGIN_Y_TAG),
 				tag.getDouble(ORIGIN_Z_TAG));
-			return create(profile, cubeCount, present, seams, cuts, order, facing, origin,
+			return create(profile, cubeCount, present, seams, cuts, order, facing, layPose, origin,
 				readOffsets(tag, cubeCount, present));
 		}
 	}
 
 	/** One immutable source after rotating the packed layout to the placing player's direction. */
-	public record PlacedSource(Source source, Direction facing, Vec3 originOffset,
+	public record PlacedSource(Source source, Direction facing, SurgicalLayPose layPose, Vec3 originOffset,
 		Map<Integer, Vec3> cubeOffsets) {
 		public PlacedSource {
 			if (source == null)
 				throw new IllegalArgumentException("A placed surgical source requires source data");
 			facing = horizontal(facing);
+			layPose = layPose == null ? SurgicalLayPose.IDENTITY : layPose;
 			originOffset = originOffset == null ? Vec3.ZERO : originOffset;
 			cubeOffsets = Map.copyOf(cubeOffsets);
 		}
@@ -520,6 +556,28 @@ public final class SurgicalAssembly {
 			&& Math.abs(value.z) <= SurgicalTablePlane.MAX_TILES + 2.0d;
 	}
 
+	private static CompoundTag writeLayPose(SurgicalLayPose pose) {
+		CompoundTag tag = new CompoundTag();
+		tag.putInt(POSE_AXIS_TAG, pose.axis().ordinal());
+		tag.putInt(POSE_YAW_TAG, pose.yaw());
+		tag.putDouble(POSE_X_TAG, pose.translation().x);
+		tag.putDouble(POSE_Y_TAG, pose.translation().y);
+		tag.putDouble(POSE_Z_TAG, pose.translation().z);
+		return tag;
+	}
+
+	private static SurgicalLayPose readLayPose(CompoundTag tag) {
+		int axis = tag.getInt(POSE_AXIS_TAG);
+		if (axis < 0 || axis >= SurgicalLayPose.RotationAxis.values().length)
+			return SurgicalLayPose.IDENTITY;
+		try {
+			return new SurgicalLayPose(SurgicalLayPose.RotationAxis.values()[axis], tag.getInt(POSE_YAW_TAG),
+				new Vec3(tag.getDouble(POSE_X_TAG), tag.getDouble(POSE_Y_TAG), tag.getDouble(POSE_Z_TAG)));
+		} catch (IllegalArgumentException ignored) {
+			return SurgicalLayPose.IDENTITY;
+		}
+	}
+
 	private static Direction inferLayoutFacing(List<Source> sources) {
 		if (sources == null || sources.isEmpty())
 			return Direction.NORTH;
@@ -535,6 +593,23 @@ public final class SurgicalAssembly {
 			}
 		}
 		return nearestOrigin == null ? Direction.NORTH : horizontal(nearestOrigin.facing);
+	}
+
+	private static SurgicalLayPose inferLayoutLayPose(List<Source> sources) {
+		if (sources == null || sources.isEmpty())
+			return SurgicalLayPose.IDENTITY;
+		Source nearestOrigin = null;
+		double nearestDistance = Double.POSITIVE_INFINITY;
+		for (Source candidate : sources) {
+			if (candidate == null)
+				continue;
+			double distance = horizontalDistanceSqr(candidate.originOffset);
+			if (distance < nearestDistance) {
+				nearestOrigin = candidate;
+				nearestDistance = distance;
+			}
+		}
+		return nearestOrigin == null ? SurgicalLayPose.IDENTITY : nearestOrigin.layPose;
 	}
 
 	private static double horizontalDistanceSqr(Vec3 vector) {

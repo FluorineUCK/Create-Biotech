@@ -15,9 +15,18 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 /** Server-validated second click for gluing two surgical components at exact hit points. */
-public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoint first, Endpoint second) {
+public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoint first, Endpoint second,
+	SurgicalLayPose targetPose, List<Move> moves) {
+	public SurgicalTableGluePacket {
+		targetPose = targetPose == null ? SurgicalLayPose.IDENTITY : targetPose;
+		moves = moves == null ? List.of() : List.copyOf(moves);
+		if (moves.size() > SurgicalAssembly.MAX_SOURCES)
+			throw new IllegalArgumentException("Too many surgical glue moves");
+	}
+
 	public SurgicalTableGluePacket(FriendlyByteBuf buffer) {
-		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), Endpoint.read(buffer), Endpoint.read(buffer));
+		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), Endpoint.read(buffer), Endpoint.read(buffer),
+			SurgicalLayPose.read(buffer), readMoves(buffer));
 	}
 
 	public void write(FriendlyByteBuf buffer) {
@@ -25,6 +34,10 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 		buffer.writeEnum(hand);
 		first.write(buffer);
 		second.write(buffer);
+		targetPose.write(buffer);
+		buffer.writeVarInt(moves.size());
+		for (Move move : moves)
+			move.write(buffer);
 	}
 
 	public void handle(ServerPlayer player) {
@@ -46,14 +59,72 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 			return;
 		SurgicalSubject firstSubject = table.getSubject(first.subjectId);
 		SurgicalSubject secondSubject = table.getSubject(second.subjectId);
-		if (firstSubject == null || secondSubject == null
+		if (firstSubject == null || secondSubject == null || !targetPose.equals(secondSubject.layPose())
 			|| !firstSubject.initializeOrMatchTopology(first.observedCubeCount, first.seams)
 			|| !secondSubject.initializeOrMatchTopology(second.observedCubeCount, second.seams)
 			|| !table.prepareGlueLayout(firstSubject, plane, first.layout)
 			|| firstSubject != secondSubject && !table.prepareGlueLayout(secondSubject, plane, second.layout))
 			return;
 		table.glueComponents(player, held, hand, first.subjectId, first.cubeId,
-			second.subjectId, second.cubeId, first.hit.subtract(second.hit), plane);
+			second.subjectId, second.cubeId, targetPose, moves, plane);
+	}
+
+	private static List<Move> readMoves(FriendlyByteBuf buffer) {
+		int count = buffer.readVarInt();
+		if (count < 0 || count > SurgicalAssembly.MAX_SOURCES)
+			throw new IllegalArgumentException("Invalid surgical glue move count " + count);
+		List<Move> moves = new ArrayList<>(count);
+		int translations = 0;
+		for (int index = 0; index < count; index++) {
+			Move move = Move.read(buffer);
+			translations += move.translations.size();
+			if (translations > SurgicalAssembly.MAX_CUBES)
+				throw new IllegalArgumentException("Oversized surgical glue move");
+			moves.add(move);
+		}
+		return List.copyOf(moves);
+	}
+
+	public record Move(int subjectId, List<CubeTranslation> translations,
+		SurgicalTableLayout.Proposal layout) {
+		public Move {
+			translations = List.copyOf(translations);
+			layout = layout == null ? SurgicalTableLayout.Proposal.EMPTY : layout;
+		}
+
+		private void write(FriendlyByteBuf buffer) {
+			buffer.writeVarInt(subjectId);
+			buffer.writeVarInt(translations.size());
+			for (CubeTranslation translation : translations) {
+				buffer.writeVarInt(translation.cubeId);
+				buffer.writeDouble(translation.offset.x);
+				buffer.writeDouble(translation.offset.y);
+				buffer.writeDouble(translation.offset.z);
+			}
+			Endpoint.writeLayout(buffer, layout);
+		}
+
+		private static Move read(FriendlyByteBuf buffer) {
+			int subjectId = buffer.readVarInt();
+			int count = buffer.readVarInt();
+			if (count < 0 || count > SurgicalAssembly.MAX_CUBES)
+				throw new IllegalArgumentException("Invalid surgical glue translation count " + count);
+			List<CubeTranslation> translations = new ArrayList<>(count);
+			for (int index = 0; index < count; index++)
+				translations.add(new CubeTranslation(buffer.readVarInt(),
+					new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble())));
+			return new Move(subjectId, translations, Endpoint.readLayout(buffer));
+		}
+	}
+
+	public record CubeTranslation(int cubeId, Vec3 offset) {
+		public boolean valid() {
+			double bound = SurgicalTablePlane.MAX_TILES + 2.0d;
+			return cubeId >= 0 && offset != null && Double.isFinite(offset.x)
+				&& Double.isFinite(offset.y) && Double.isFinite(offset.z)
+				&& Math.abs(offset.x) <= bound && Math.abs(offset.y) <= bound
+				&& Math.abs(offset.z) <= bound;
+		}
 	}
 
 	private boolean hitOnPlane(Vec3 localHit, SurgicalTablePlane.Plane plane) {
