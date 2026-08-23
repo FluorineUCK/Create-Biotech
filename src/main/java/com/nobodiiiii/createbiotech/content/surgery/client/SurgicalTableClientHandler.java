@@ -1,6 +1,8 @@
 package com.nobodiiiii.createbiotech.content.surgery.client;
 
+import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.concurrent.CompletableFuture;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -9,6 +11,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
+import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
@@ -21,6 +24,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.item.ItemStack;
@@ -45,6 +49,7 @@ public final class SurgicalTableClientHandler {
 	private static final float HIGHLIGHT_LINE_WIDTH = 1.0f / 32.0f;
 	private static final double MIN_SELECTION_THRESHOLD = 2.0d / 16.0d;
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
+	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
 	private static final Object[] SEAM_OUTLINE_SLOTS = {
 		new Object(), new Object(), new Object(), new Object(),
 		new Object(), new Object(), new Object(), new Object(),
@@ -60,41 +65,76 @@ public final class SurgicalTableClientHandler {
 
 	private SurgicalTableClientHandler() {}
 
+	/** Returns true only when the immutable source-model geometry has to be captured again. */
+	public static boolean needsGeometryUpdate(SurgicalTableBlockEntity table) {
+		if (table.getLevel() == null || table.getProfile() == null)
+			return false;
+		TableGeometry geometry = TABLES.get(table.getBlockPos());
+		if (geometry == null)
+			return true;
+		if (!geometry.matchesModel(table)) {
+			TABLES.remove(table.getBlockPos());
+			return true;
+		}
+		geometry.refresh(table);
+		return false;
+	}
+
 	public static void updateGeometry(SurgicalTableBlockEntity table,
 		SurgicalModelRenderContext.Snapshot snapshot) {
-		if (table.getLevel() == null || snapshot.observedCubeCount() <= 0)
+		MimicProfile profile = table.getProfile();
+		if (table.getLevel() == null || profile == null || snapshot.observedCubeCount() <= 0)
 			return;
 		int cubeCount = snapshot.observedCubeCount();
-		Object profileIdentity = table.getProfile();
-		TableGeometry previous = TABLES.get(table.getBlockPos());
 		List<SurgicalAssembly.Seam> seams;
 		List<SurgicalClientTopology.Contact> contacts;
+		CompletableFuture<SurgicalClientTopology.ContactTopology> pendingTopology = null;
 		if (table.getCubeCount() == cubeCount) {
 			seams = table.getSeams();
-			contacts = SurgicalClientTopology.contactsFor(seams, snapshot.cubes());
-		} else if (previous != null && previous.profileIdentity == profileIdentity
-			&& previous.observedCubeCount == cubeCount) {
-			seams = previous.seams;
-			contacts = SurgicalClientTopology.contactsFor(seams, snapshot.cubes());
+			if (cubeCount > ASYNC_TOPOLOGY_CUBE_THRESHOLD) {
+				List<SurgicalAssembly.Seam> frozenSeams = List.copyOf(seams);
+				List<SurgicalModelRenderContext.CubeGeometry> frozenCubes = List.copyOf(snapshot.cubes());
+				contacts = List.of();
+				pendingTopology = CompletableFuture.supplyAsync(() ->
+					new SurgicalClientTopology.ContactTopology(frozenSeams,
+						SurgicalClientTopology.contactsFor(frozenSeams, frozenCubes)));
+			} else {
+				contacts = SurgicalClientTopology.contactsFor(seams, snapshot.cubes());
+			}
 		} else {
-			SurgicalClientTopology.ContactTopology topology =
-				SurgicalClientTopology.buildContactTopology(cubeCount, snapshot.cubes());
-			seams = topology.seams();
-			contacts = topology.contacts();
+			if (cubeCount > ASYNC_TOPOLOGY_CUBE_THRESHOLD) {
+				List<SurgicalModelRenderContext.CubeGeometry> frozenCubes = List.copyOf(snapshot.cubes());
+				seams = List.of();
+				contacts = List.of();
+				pendingTopology = CompletableFuture.supplyAsync(() ->
+					SurgicalClientTopology.buildContactTopology(cubeCount, frozenCubes));
+			} else {
+				SurgicalClientTopology.ContactTopology topology =
+					SurgicalClientTopology.buildContactTopology(cubeCount, snapshot.cubes());
+				seams = topology.seams();
+				contacts = topology.contacts();
+			}
 		}
-		BitSet present = table.getPresentCubesForRender(cubeCount);
-		BitSet cutSeams = table.getCutSeamsForRender();
-		Map<Integer, Vec3> offsets = SurgicalClientTopology.componentOffsets(cubeCount, present, seams,
-			cutSeams, snapshot.cubes());
-		TABLES.put(table.getBlockPos(), new TableGeometry(profileIdentity, cubeCount, snapshot.cubes(), seams,
-			seamIds(seams), contacts, present, cutSeams, offsets, table.getLevel().getGameTime()));
+		Direction facing = table.getBlockState().getValue(com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock.FACING);
+		TableGeometry geometry = new TableGeometry(profile, facing, cubeCount, snapshot.cubes(), seams, contacts,
+			pendingTopology, table.getLevel().getGameTime());
+		geometry.refresh(table);
+		TABLES.put(table.getBlockPos(), geometry);
 	}
 
 	public static Map<Integer, Vec3> offsetsFor(SurgicalTableBlockEntity table) {
 		TableGeometry geometry = TABLES.get(table.getBlockPos());
-		if (geometry == null || !table.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
+		if (geometry == null || !geometry.matchesModel(table))
 			return Map.of();
+		geometry.markSeen(table);
 		return geometry.offsets;
+	}
+
+	public static BitSet presentCubesFor(SurgicalTableBlockEntity table, int observedCubeCount) {
+		TableGeometry geometry = TABLES.get(table.getBlockPos());
+		if (geometry != null && geometry.observedCubeCount == observedCubeCount && geometry.matchesModel(table))
+			return geometry.presentCubes;
+		return table.getPresentCubesForRender(observedCubeCount);
 	}
 
 	public static void clear() {
@@ -134,8 +174,10 @@ public final class SurgicalTableClientHandler {
 		boolean holdingShears = player.getMainHandItem().is(Items.SHEARS)
 			|| player.getOffhandItem().is(Items.SHEARS);
 		boolean holdingEmptyBox = isEmptyBox(player.getMainHandItem()) || isEmptyBox(player.getOffhandItem());
-		seamSelection = holdingShears ? findSeamSelection(player, level) : null;
-		cubeSelection = holdingEmptyBox ? findCubeSelection(player, level) : null;
+		CubeHit cubeHit = holdingShears || holdingEmptyBox
+			? findNearestCubeHit(player, level, playerRay(player)) : null;
+		seamSelection = holdingShears ? findSeamSelection(cubeHit) : null;
+		cubeSelection = holdingEmptyBox ? findCubeSelection(cubeHit) : null;
 		if (seamSelection != null)
 			highlightSeam(seamSelection);
 		else
@@ -158,13 +200,14 @@ public final class SurgicalTableClientHandler {
 			return;
 		SurgicalTableInteractionPacket.Action action;
 		Selection selected;
+		CubeHit cubeHit = findNearestCubeHit(minecraft.player, level, playerRay(minecraft.player));
 		if (held.is(Items.SHEARS)) {
 			action = SurgicalTableInteractionPacket.Action.CUT;
-			selected = findSeamSelection(minecraft.player, level);
+			selected = findSeamSelection(cubeHit);
 			seamSelection = selected;
 		} else if (isEmptyBox(held)) {
 			action = SurgicalTableInteractionPacket.Action.PACK;
-			selected = findCubeSelection(minecraft.player, level);
+			selected = findCubeSelection(cubeHit);
 			cubeSelection = selected;
 		} else {
 			return;
@@ -196,9 +239,7 @@ public final class SurgicalTableClientHandler {
 	}
 
 	@Nullable
-	private static Selection findSeamSelection(LocalPlayer player, ClientLevel level) {
-		Ray ray = playerRay(player);
-		CubeHit cubeHit = findNearestCubeHit(player, level, ray);
+	private static Selection findSeamSelection(@Nullable CubeHit cubeHit) {
 		if (cubeHit == null)
 			return null;
 
@@ -206,7 +247,7 @@ public final class SurgicalTableClientHandler {
 		Selection best = null;
 		double bestScore = Double.MAX_VALUE;
 		double threshold = selectionThreshold(Math.sqrt(cubeHit.distanceSqr));
-		for (SurgicalClientTopology.Contact contact : geometry.contacts) {
+		for (SurgicalClientTopology.Contact contact : geometry.contactsFor(cubeHit.cubeId)) {
 			SurgicalAssembly.Seam seam = contact.seam();
 			if (seam.first() != cubeHit.cubeId && seam.second() != cubeHit.cubeId)
 				continue;
@@ -225,9 +266,7 @@ public final class SurgicalTableClientHandler {
 	}
 
 	@Nullable
-	private static Selection findCubeSelection(LocalPlayer player, ClientLevel level) {
-		Ray ray = playerRay(player);
-		CubeHit hit = findNearestCubeHit(player, level, ray);
+	private static Selection findCubeSelection(@Nullable CubeHit hit) {
 		return hit == null ? null : new Selection(hit.tablePos, hit.cubeId,
 			hit.geometry.observedCubeCount, hit.geometry.seams, List.of());
 	}
@@ -241,14 +280,14 @@ public final class SurgicalTableClientHandler {
 			if (!(level.getBlockEntity(pos) instanceof SurgicalTableBlockEntity table) || !table.hasSubject())
 				continue;
 			TableGeometry geometry = entry.getValue();
-			if (!table.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
+			if (!geometry.topologyReady()
+				|| !table.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
 				continue;
 			for (SurgicalModelRenderContext.CubeGeometry cube : geometry.cubes) {
 				if (!geometry.presentCubes.get(cube.cubeId()))
 					continue;
 				for (int[] faceIndices : SurgicalClientTopology.CUBE_FACES) {
-					List<Vec3> face = face(cube, faceIndices);
-					Vec3 hit = intersectQuad(ray.start, ray.end, face);
+					Vec3 hit = intersectQuad(ray.start, ray.end, cube, faceIndices);
 					if (hit == null)
 						continue;
 					double distance = ray.start.distanceToSqr(hit);
@@ -268,11 +307,6 @@ public final class SurgicalTableClientHandler {
 		return new Ray(start, start.add(player.getViewVector(1.0f).scale(range)));
 	}
 
-	private static List<Vec3> face(SurgicalModelRenderContext.CubeGeometry cube, int[] indices) {
-		return List.of(cube.corners().get(indices[0]), cube.corners().get(indices[1]),
-			cube.corners().get(indices[2]), cube.corners().get(indices[3]));
-	}
-
 	private static Map<SurgicalAssembly.Seam, Integer> seamIds(List<SurgicalAssembly.Seam> seams) {
 		Map<SurgicalAssembly.Seam, Integer> result = new HashMap<>();
 		for (int seamId = 0; seamId < seams.size(); seamId++)
@@ -289,20 +323,22 @@ public final class SurgicalTableClientHandler {
 	}
 
 	@Nullable
-	private static Vec3 intersectQuad(Vec3 start, Vec3 end, List<Vec3> face) {
-		Vec3 edgeU = face.get(1).subtract(face.get(0));
-		Vec3 edgeV = face.get(3).subtract(face.get(0));
+	private static Vec3 intersectQuad(Vec3 start, Vec3 end,
+		SurgicalModelRenderContext.CubeGeometry cube, int[] indices) {
+		Vec3 first = cube.corners().get(indices[0]);
+		Vec3 edgeU = cube.corners().get(indices[1]).subtract(first);
+		Vec3 edgeV = cube.corners().get(indices[3]).subtract(first);
 		Vec3 normal = edgeU.cross(edgeV);
 		Vec3 ray = end.subtract(start);
 		double denominator = normal.dot(ray);
 		if (Math.abs(denominator) < 1.0e-9d)
 			return null;
-		double t = normal.dot(face.get(0).subtract(start)) / denominator;
+		double t = normal.dot(first.subtract(start)) / denominator;
 		if (t < 0.0d || t > 1.0d)
 			return null;
 
 		Vec3 hit = start.add(ray.scale(t));
-		Vec3 relative = hit.subtract(face.get(0));
+		Vec3 relative = hit.subtract(first);
 		double uu = edgeU.dot(edgeU);
 		double uv = edgeU.dot(edgeV);
 		double vv = edgeV.dot(edgeV);
@@ -405,18 +441,158 @@ public final class SurgicalTableClientHandler {
 		clearSeamHighlight();
 	}
 
-	private record TableGeometry(Object profileIdentity, int observedCubeCount,
-		List<SurgicalModelRenderContext.CubeGeometry> cubes, List<SurgicalAssembly.Seam> seams,
-		Map<SurgicalAssembly.Seam, Integer> seamIds, List<SurgicalClientTopology.Contact> contacts,
-		BitSet presentCubes, BitSet cutSeams, Map<Integer, Vec3> offsets, long lastSeenTick) {
-		private TableGeometry {
-			cubes = List.copyOf(cubes);
-			seams = List.copyOf(seams);
-			seamIds = Map.copyOf(seamIds);
-			contacts = List.copyOf(contacts);
-			presentCubes = (BitSet) presentCubes.clone();
-			cutSeams = (BitSet) cutSeams.clone();
-			offsets = Map.copyOf(offsets);
+	private static final class TableGeometry {
+		private final MimicProfile profile;
+		private final Direction facing;
+		private final int observedCubeCount;
+		private final List<SurgicalModelRenderContext.CubeGeometry> baseCubes;
+		private List<SurgicalModelRenderContext.CubeGeometry> cubes;
+		private List<SurgicalAssembly.Seam> seams;
+		private Map<SurgicalAssembly.Seam, Integer> seamIds;
+		private List<SurgicalClientTopology.Contact> baseContacts;
+		private List<List<SurgicalClientTopology.Contact>> contactsByCube;
+		@Nullable
+		private CompletableFuture<SurgicalClientTopology.ContactTopology> pendingTopology;
+		private boolean topologyAvailable;
+		private BitSet presentCubes = new BitSet();
+		private BitSet cutSeams = new BitSet();
+		private Map<Integer, Vec3> offsets = Map.of();
+		private int renderRevision = Integer.MIN_VALUE;
+		private long lastSeenTick;
+
+		private TableGeometry(MimicProfile profile, Direction facing, int observedCubeCount,
+			List<SurgicalModelRenderContext.CubeGeometry> cubes, List<SurgicalAssembly.Seam> seams,
+			List<SurgicalClientTopology.Contact> contacts,
+			@Nullable CompletableFuture<SurgicalClientTopology.ContactTopology> pendingTopology,
+			long lastSeenTick) {
+			this.profile = profile;
+			this.facing = facing;
+			this.observedCubeCount = observedCubeCount;
+			this.baseCubes = List.copyOf(cubes);
+			this.cubes = this.baseCubes;
+			this.seams = List.copyOf(seams);
+			this.seamIds = seamIds(this.seams);
+			this.baseContacts = List.copyOf(contacts);
+			this.contactsByCube = contactsByCube(observedCubeCount, this.baseContacts);
+			this.pendingTopology = pendingTopology;
+			this.topologyAvailable = pendingTopology == null;
+			this.lastSeenTick = lastSeenTick;
+		}
+
+		private boolean matchesModel(SurgicalTableBlockEntity table) {
+			MimicProfile currentProfile = table.getProfile();
+			return currentProfile != null && profile.equals(currentProfile)
+				&& table.getBlockState().getValue(
+					com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock.FACING) == facing
+				&& (table.getCubeCount() == 0 || table.getCubeCount() == observedCubeCount);
+		}
+
+		private void refresh(SurgicalTableBlockEntity table) {
+			markSeen(table);
+			boolean topologyChanged = resolvePendingTopology();
+			int revision = table.getClientRenderRevision();
+			if (revision == renderRevision && !topologyChanged)
+				return;
+
+			if (table.getCubeCount() == observedCubeCount && !seams.equals(table.getSeams())) {
+				seams = List.copyOf(table.getSeams());
+				seamIds = seamIds(seams);
+				baseContacts = SurgicalClientTopology.contactsFor(seams, baseCubes);
+			}
+			presentCubes = table.getPresentCubesForRender(observedCubeCount);
+			cutSeams = table.getCutSeamsForRender();
+			offsets = SurgicalClientTopology.componentOffsets(observedCubeCount, presentCubes, seams,
+				cutSeams, baseCubes);
+			cubes = translateCubes(baseCubes, offsets);
+			List<SurgicalClientTopology.Contact> contacts = translateContacts(baseContacts, offsets);
+			contactsByCube = contactsByCube(observedCubeCount, contacts);
+			renderRevision = revision;
+		}
+
+		private boolean resolvePendingTopology() {
+			if (pendingTopology == null || !pendingTopology.isDone())
+				return false;
+			SurgicalClientTopology.ContactTopology topology;
+			try {
+				topology = pendingTopology.join();
+			} catch (RuntimeException exception) {
+				pendingTopology = null;
+				return false;
+			}
+			pendingTopology = null;
+			seams = topology.seams();
+			seamIds = seamIds(seams);
+			baseContacts = topology.contacts();
+			topologyAvailable = true;
+			return true;
+		}
+
+		private boolean topologyReady() {
+			return pendingTopology == null && topologyAvailable;
+		}
+
+		private void markSeen(SurgicalTableBlockEntity table) {
+			if (table.getLevel() != null)
+				lastSeenTick = table.getLevel().getGameTime();
+		}
+
+		private List<SurgicalClientTopology.Contact> contactsFor(int cubeId) {
+			return cubeId >= 0 && cubeId < contactsByCube.size() ? contactsByCube.get(cubeId) : List.of();
+		}
+
+		private static List<SurgicalModelRenderContext.CubeGeometry> translateCubes(
+			List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> offsets) {
+			if (offsets.isEmpty())
+				return cubes;
+			List<SurgicalModelRenderContext.CubeGeometry> translated = new ArrayList<>(cubes.size());
+			for (SurgicalModelRenderContext.CubeGeometry cube : cubes) {
+				Vec3 offset = offsets.get(cube.cubeId());
+				if (offset == null) {
+					translated.add(cube);
+					continue;
+				}
+				List<Vec3> corners = new ArrayList<>(cube.corners().size());
+				for (Vec3 corner : cube.corners())
+					corners.add(corner.add(offset));
+				translated.add(new SurgicalModelRenderContext.CubeGeometry(cube.cubeId(), corners));
+			}
+			return List.copyOf(translated);
+		}
+
+		private static List<SurgicalClientTopology.Contact> translateContacts(
+			List<SurgicalClientTopology.Contact> contacts, Map<Integer, Vec3> offsets) {
+			if (offsets.isEmpty())
+				return contacts;
+			List<SurgicalClientTopology.Contact> translated = new ArrayList<>(contacts.size());
+			for (SurgicalClientTopology.Contact contact : contacts) {
+				Vec3 offset = offsets.get(contact.surfaceCubeId());
+				if (offset == null) {
+					translated.add(contact);
+					continue;
+				}
+				List<Vec3> polygon = new ArrayList<>(contact.polygon().size());
+				for (Vec3 point : contact.polygon())
+					polygon.add(point.add(offset));
+				translated.add(new SurgicalClientTopology.Contact(contact.seam(), contact.surfaceCubeId(), polygon));
+			}
+			return List.copyOf(translated);
+		}
+
+		private static List<List<SurgicalClientTopology.Contact>> contactsByCube(int cubeCount,
+			List<SurgicalClientTopology.Contact> contacts) {
+			List<List<SurgicalClientTopology.Contact>> byCube = new ArrayList<>(cubeCount);
+			for (int cube = 0; cube < cubeCount; cube++)
+				byCube.add(new ArrayList<>());
+			for (SurgicalClientTopology.Contact contact : contacts) {
+				SurgicalAssembly.Seam seam = contact.seam();
+				if (seam.first() >= 0 && seam.first() < cubeCount)
+					byCube.get(seam.first()).add(contact);
+				if (seam.second() >= 0 && seam.second() < cubeCount)
+					byCube.get(seam.second()).add(contact);
+			}
+			for (int cube = 0; cube < cubeCount; cube++)
+				byCube.set(cube, List.copyOf(byCube.get(cube)));
+			return List.copyOf(byCube);
 		}
 	}
 

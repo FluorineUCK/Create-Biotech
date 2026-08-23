@@ -20,6 +20,10 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private static final String ASSEMBLY_TAG = "SurgicalAssembly";
 	private static final EntityDataAccessor<CompoundTag> ASSEMBLY = SynchedEntityData.defineId(
 		SlimeBionicEntity.class, EntityDataSerializers.COMPOUND_TAG);
+	@Nullable
+	private CompoundTag cachedAssemblyData;
+	@Nullable
+	private SurgicalAssembly cachedAssembly;
 
 	public SlimeBionicEntity(EntityType<? extends SlimeBionicEntity> type, Level level) {
 		super(type, level);
@@ -46,12 +50,20 @@ public class SlimeBionicEntity extends PathfinderMob {
 	}
 
 	public void setAssembly(SurgicalAssembly assembly) {
-		entityData.set(ASSEMBLY, assembly.save());
+		CompoundTag encoded = assembly.save();
+		entityData.set(ASSEMBLY, encoded);
+		cachedAssemblyData = encoded;
+		cachedAssembly = assembly;
 	}
 
 	@Nullable
 	public SurgicalAssembly getAssembly() {
-		return SurgicalAssembly.load(entityData.get(ASSEMBLY));
+		CompoundTag encoded = entityData.get(ASSEMBLY);
+		if (encoded != cachedAssemblyData) {
+			cachedAssemblyData = encoded;
+			cachedAssembly = SurgicalAssembly.load(encoded);
+		}
+		return cachedAssembly;
 	}
 
 	@Override

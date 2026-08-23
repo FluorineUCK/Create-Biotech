@@ -18,6 +18,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableBlockEntity> {
+	private static final BitSet EMPTY_CUBES = new BitSet();
+
 	public SurgicalTableRenderer(BlockEntityRendererProvider.Context context) {}
 
 	@Override
@@ -38,14 +40,18 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		poseStack.mulPose(Axis.XP.rotationDegrees(90.0f));
 
 		int storedCount = table.getCubeCount();
-		int selectionCount = storedCount > 0 ? storedCount : com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly.MAX_CUBES;
-		BitSet present = table.getPresentCubesForRender(selectionCount);
-		Map<Integer, Vec3> offsets = SurgicalTableClientHandler.offsetsFor(table);
+		boolean collectGeometry = SurgicalTableClientHandler.needsGeometryUpdate(table);
+		BitSet present = storedCount > 0
+			? SurgicalTableClientHandler.presentCubesFor(table, storedCount) : EMPTY_CUBES;
+		// Geometry is always captured in the unseparated base pose. Derived, offset
+		// interaction geometry is rebuilt only when a cut/present state revision arrives.
+		Map<Integer, Vec3> offsets = collectGeometry ? Map.of() : SurgicalTableClientHandler.offsetsFor(table);
 		Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-		SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(table, profile,
-			storedCount, present, offsets, poseStack, buffer, packedLight, 0.0f, 0.0f, true, camera);
+		SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(preview,
+			storedCount, present, offsets, poseStack, buffer, packedLight, 0.0f, 0.0f, collectGeometry, camera);
 		poseStack.popPose();
 
-		SurgicalTableClientHandler.updateGeometry(table, snapshot);
+		if (collectGeometry)
+			SurgicalTableClientHandler.updateGeometry(table, snapshot);
 	}
 }

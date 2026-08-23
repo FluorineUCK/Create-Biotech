@@ -13,7 +13,6 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderer;
-import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
@@ -29,15 +28,14 @@ public final class SurgicalSourceModelRenderer {
 		if (level == null)
 			return null;
 
-		CompoundTag fingerprint = profile.save();
 		CachedPreview cached = PREVIEWS.get(owner);
-		if (cached != null && cached.level == level && cached.fingerprint.equals(fingerprint))
+		if (cached != null && cached.level == level && cached.profile.equals(profile))
 			return cached.entity;
 
 		LivingEntity entity = profile.createPreviewEntity(level);
 		if (entity == null)
 			return null;
-		PREVIEWS.put(owner, new CachedPreview(level, fingerprint, entity));
+		PREVIEWS.put(owner, new CachedPreview(level, profile, entity));
 		return entity;
 	}
 
@@ -47,7 +45,13 @@ public final class SurgicalSourceModelRenderer {
 		LivingEntity preview = preview(owner, profile);
 		if (preview == null)
 			return new SurgicalModelRenderContext.Snapshot(0, java.util.List.of());
+		return render(preview, cubeCount, presentCubes, cubeOffsets, poseStack, buffer, packedLight, yaw, partialTick,
+			collectGeometry, cameraPosition);
+	}
 
+	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
+		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition) {
 		preview.setYRot(yaw);
 		preview.yRotO = yaw;
 		preview.yBodyRot = yaw;
@@ -75,5 +79,5 @@ public final class SurgicalSourceModelRenderer {
 		PREVIEWS.clear();
 	}
 
-	private record CachedPreview(ClientLevel level, CompoundTag fingerprint, LivingEntity entity) {}
+	private record CachedPreview(ClientLevel level, MimicProfile profile, LivingEntity entity) {}
 }

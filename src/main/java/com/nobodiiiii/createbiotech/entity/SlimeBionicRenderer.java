@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.entity;
 
+import java.util.BitSet;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -18,7 +19,7 @@ import net.minecraft.world.phys.Vec3;
 public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	private static final ResourceLocation SLIME_TEXTURE =
 		ResourceLocation.withDefaultNamespace("textures/entity/slime/slime.png");
-	private static final Map<SlimeBionicEntity, Map<Integer, Vec3>> OFFSETS = new WeakHashMap<>();
+	private static final Map<SlimeBionicEntity, CachedGeometry> GEOMETRY = new WeakHashMap<>();
 
 	public SlimeBionicRenderer(EntityRendererProvider.Context context) {
 		super(context);
@@ -26,7 +27,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	}
 
 	public static void clearCache() {
-		OFFSETS.clear();
+		GEOMETRY.clear();
 	}
 
 	@Override
@@ -35,15 +36,23 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		SurgicalAssembly assembly = entity.getAssembly();
 		if (assembly != null) {
 			poseStack.pushPose();
-			Map<Integer, Vec3> offsets = OFFSETS.getOrDefault(entity, Map.of());
+			CachedGeometry cached = GEOMETRY.get(entity);
+			boolean collectGeometry = cached == null || cached.assembly != assembly
+				|| Float.floatToIntBits(cached.yaw) != Float.floatToIntBits(yaw);
+			BitSet presentCubes = cached != null && cached.assembly == assembly
+				? cached.presentCubes : assembly.presentCubes();
+			Map<Integer, Vec3> offsets = collectGeometry ? Map.of() : cached.offsets;
 			SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(entity,
-				assembly.profile(), assembly.cubeCount(), assembly.presentCubes(), offsets, poseStack, buffer,
-				packedLight, yaw, partialTick, true, null);
+				assembly.profile(), assembly.cubeCount(), presentCubes, offsets, poseStack, buffer,
+				packedLight, yaw, partialTick, collectGeometry, null);
 			poseStack.popPose();
-			OFFSETS.put(entity, SurgicalClientTopology.componentOffsets(assembly.cubeCount(),
-				assembly.presentCubes(), assembly.seams(), assembly.cutSeams(), snapshot.cubes()));
+			if (collectGeometry) {
+				Map<Integer, Vec3> computedOffsets = SurgicalClientTopology.componentOffsets(assembly.cubeCount(),
+					presentCubes, assembly.seams(), assembly.cutSeams(), snapshot.cubes());
+				GEOMETRY.put(entity, new CachedGeometry(assembly, yaw, presentCubes, computedOffsets));
+			}
 		} else {
-			OFFSETS.remove(entity);
+			GEOMETRY.remove(entity);
 		}
 		super.render(entity, yaw, partialTick, poseStack, buffer, packedLight);
 	}
@@ -51,5 +60,13 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	@Override
 	public ResourceLocation getTextureLocation(SlimeBionicEntity entity) {
 		return SLIME_TEXTURE;
+	}
+
+	private record CachedGeometry(SurgicalAssembly assembly, float yaw, BitSet presentCubes,
+		Map<Integer, Vec3> offsets) {
+		private CachedGeometry {
+			presentCubes = (BitSet) presentCubes.clone();
+			offsets = Map.copyOf(offsets);
+		}
 	}
 }

@@ -144,21 +144,20 @@ public final class SurgicalAssembly {
 
 	public static BitSet componentContaining(int cubeCount, BitSet presentCubes, List<Seam> seams,
 		BitSet cutSeams, int startCube) {
-		BitSet component = new BitSet(cubeCount);
 		if (startCube < 0 || startCube >= cubeCount || !presentCubes.get(startCube))
-			return component;
+			return new BitSet(cubeCount);
+		return floodComponent(cubeCount, startCube, adjacency(cubeCount, presentCubes, seams, cutSeams));
+	}
 
+	private static BitSet floodComponent(int cubeCount, int startCube, List<List<Integer>> adjacency) {
+		BitSet component = new BitSet(cubeCount);
 		ArrayDeque<Integer> queue = new ArrayDeque<>();
 		component.set(startCube);
 		queue.add(startCube);
 		while (!queue.isEmpty()) {
 			int current = queue.removeFirst();
-			for (int seamId = 0; seamId < seams.size(); seamId++) {
-				if (cutSeams.get(seamId))
-					continue;
-				Seam seam = seams.get(seamId);
-				int next = seam.first == current ? seam.second : seam.second == current ? seam.first : -1;
-				if (next < 0 || !presentCubes.get(next) || component.get(next))
+			for (int next : adjacency.get(current)) {
+				if (component.get(next))
 					continue;
 				component.set(next);
 				queue.addLast(next);
@@ -170,14 +169,33 @@ public final class SurgicalAssembly {
 	public static List<BitSet> components(int cubeCount, BitSet presentCubes, List<Seam> seams, BitSet cutSeams) {
 		List<BitSet> result = new ArrayList<>();
 		BitSet unvisited = normalize(presentCubes, cubeCount);
+		List<List<Integer>> adjacency = adjacency(cubeCount, unvisited, seams, cutSeams);
 		for (int cube = unvisited.nextSetBit(0); cube >= 0; cube = unvisited.nextSetBit(0)) {
-			BitSet component = componentContaining(cubeCount, presentCubes, seams, cutSeams, cube);
+			BitSet component = floodComponent(cubeCount, cube, adjacency);
 			result.add(component);
 			unvisited.andNot(component);
 		}
 		result.sort(Comparator.<BitSet>comparingInt(BitSet::cardinality).reversed()
 			.thenComparingInt(bits -> bits.nextSetBit(0)));
 		return result;
+	}
+
+	private static List<List<Integer>> adjacency(int cubeCount, BitSet presentCubes, List<Seam> seams,
+		BitSet cutSeams) {
+		List<List<Integer>> adjacency = new ArrayList<>(cubeCount);
+		for (int cube = 0; cube < cubeCount; cube++)
+			adjacency.add(new ArrayList<>());
+		for (int seamId = 0; seamId < seams.size(); seamId++) {
+			if (cutSeams.get(seamId))
+				continue;
+			Seam seam = seams.get(seamId);
+			if (seam.first < 0 || seam.second < 0 || seam.first >= cubeCount || seam.second >= cubeCount
+				|| !presentCubes.get(seam.first) || !presentCubes.get(seam.second))
+				continue;
+			adjacency.get(seam.first).add(seam.second);
+			adjacency.get(seam.second).add(seam.first);
+		}
+		return adjacency;
 	}
 
 	public static int[] encodeSeams(List<Seam> seams) {

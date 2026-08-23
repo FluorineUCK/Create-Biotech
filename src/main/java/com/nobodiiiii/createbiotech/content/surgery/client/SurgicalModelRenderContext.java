@@ -98,8 +98,10 @@ public final class SurgicalModelRenderContext {
 		private Context(int expectedCubeCount, BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
 			boolean collectGeometry, @Nullable Vec3 cameraPosition) {
 			this.expectedCubeCount = expectedCubeCount;
-			this.presentCubes = (BitSet) presentCubes.clone();
-			this.cubeOffsets = Map.copyOf(cubeOffsets);
+			// A context cannot escape its synchronous render call. The caller-owned values
+			// remain unchanged until end(), so copying them on every frame only creates garbage.
+			this.presentCubes = presentCubes;
+			this.cubeOffsets = cubeOffsets;
 			this.collectGeometry = collectGeometry;
 			this.cameraPosition = cameraPosition;
 		}

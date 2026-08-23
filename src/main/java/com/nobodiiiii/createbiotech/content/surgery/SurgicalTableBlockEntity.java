@@ -42,6 +42,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private BitSet presentCubes = new BitSet();
 	private List<SurgicalAssembly.Seam> seams = List.of();
 	private BitSet cutSeams = new BitSet();
+	private int clientRenderRevision;
 
 	public SurgicalTableBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.SURGICAL_TABLE.get(), pos, state);
@@ -92,6 +93,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	public BitSet getCutSeamsForRender() {
 		return (BitSet) cutSeams.clone();
+	}
+
+	public int getClientRenderRevision() {
+		return clientRenderRevision;
 	}
 
 	public boolean isSeamCut(int seamId) {
@@ -248,6 +253,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (cutSeams.length() > seams.size())
 				cutSeams.clear(seams.size(), cutSeams.length());
 		}
+		if (clientPacket)
+			clientRenderRevision++;
 	}
 
 	@Override

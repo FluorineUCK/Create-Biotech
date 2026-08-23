@@ -4,6 +4,7 @@ import static java.util.Map.entry;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 import org.jetbrains.annotations.Nullable;
@@ -123,6 +124,22 @@ public final class MimicProfile {
 
 	public ResourceLocation entityTypeId() {
 		return entityTypeId;
+	}
+
+	@Override
+	public boolean equals(Object other) {
+		if (this == other)
+			return true;
+		if (!(other instanceof MimicProfile profile))
+			return false;
+		return entityTypeId.equals(profile.entityTypeId)
+			&& stableData.equals(profile.stableData)
+			&& Objects.equals(baby, profile.baby);
+	}
+
+	@Override
+	public int hashCode() {
+		return Objects.hash(entityTypeId, stableData, baby);
 	}
 
 	/**

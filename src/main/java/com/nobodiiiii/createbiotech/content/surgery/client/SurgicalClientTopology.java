@@ -26,6 +26,7 @@ public final class SurgicalClientTopology {
 	private static final double DEGENERATE_EPSILON = 1.0e-18d;
 	private static final double CONTACT_TOLERANCE = 1.0d / 64.0d;
 	private static final double MIN_CONTACT_AREA = 1.0e-8d;
+	private static final double[] CONTACT_TOLERANCES = {0.0d, CONTACT_TOLERANCE};
 
 	private SurgicalClientTopology() {}
 
@@ -34,14 +35,39 @@ public final class SurgicalClientTopology {
 		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
 		if (!SurgicalAssembly.validCubeCount(cubeCount))
 			return ContactTopology.EMPTY;
-		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId = byId(cubes);
+		Map<Integer, PreparedCube> byId = preparedById(cubes);
 		if (byId.size() != cubeCount)
 			return ContactTopology.EMPTY;
+
+		// Broad-phase sweep avoids clipping every possible pair. Large models usually
+		// contain many distant decorative cubes, so only AABBs close enough to touch
+		// advance to the comparatively expensive oriented-face clipping below.
+		List<PreparedCube> sweep = new ArrayList<>(byId.values());
+		sweep.sort(Comparator.comparingDouble((PreparedCube cube) -> cube.bounds.minX)
+			.thenComparingInt(cube -> cube.geometry.cubeId()));
+		List<BitSet> candidates = new ArrayList<>(cubeCount);
+		for (int cube = 0; cube < cubeCount; cube++)
+			candidates.add(new BitSet(cubeCount));
+		for (int firstIndex = 0; firstIndex < sweep.size(); firstIndex++) {
+			PreparedCube first = sweep.get(firstIndex);
+			for (int secondIndex = firstIndex + 1; secondIndex < sweep.size(); secondIndex++) {
+				PreparedCube second = sweep.get(secondIndex);
+				if (second.bounds.minX > first.bounds.maxX + CONTACT_TOLERANCE)
+					break;
+				if (!first.bounds.overlapsWithin(second.bounds, CONTACT_TOLERANCE))
+					continue;
+				int lower = Math.min(first.geometry.cubeId(), second.geometry.cubeId());
+				int upper = Math.max(first.geometry.cubeId(), second.geometry.cubeId());
+				candidates.get(lower).set(upper);
+			}
+		}
 
 		List<SurgicalAssembly.Seam> seams = new ArrayList<>();
 		List<Contact> contacts = new ArrayList<>();
 		for (int first = 0; first < cubeCount && seams.size() < SurgicalAssembly.MAX_SEAMS; first++) {
-			for (int second = first + 1; second < cubeCount && seams.size() < SurgicalAssembly.MAX_SEAMS; second++) {
+			for (int second = candidates.get(first).nextSetBit(first + 1);
+				second >= 0 && seams.size() < SurgicalAssembly.MAX_SEAMS;
+				second = candidates.get(first).nextSetBit(second + 1)) {
 				SurgicalAssembly.Seam seam = SurgicalAssembly.Seam.of(first, second);
 				Contact contact = contactBetween(seam, byId);
 				if (contact == null)
@@ -55,7 +81,7 @@ public final class SurgicalClientTopology {
 
 	public static List<Contact> contactsFor(List<SurgicalAssembly.Seam> seams,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
-		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId = byId(cubes);
+		Map<Integer, PreparedCube> byId = preparedById(cubes);
 		List<Contact> contacts = new ArrayList<>(seams.size());
 		for (SurgicalAssembly.Seam seam : seams) {
 			Contact contact = contactBetween(seam, byId);
@@ -68,35 +94,34 @@ public final class SurgicalClientTopology {
 	@Nullable
 	public static Contact contactBetween(SurgicalAssembly.Seam seam,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
-		return contactBetween(seam, byId(cubes));
+		return contactBetween(seam, preparedById(cubes));
 	}
 
 	@Nullable
 	private static Contact contactBetween(SurgicalAssembly.Seam seam,
-		Map<Integer, SurgicalModelRenderContext.CubeGeometry> byId) {
-		SurgicalModelRenderContext.CubeGeometry first = byId.get(seam.first());
-		SurgicalModelRenderContext.CubeGeometry second = byId.get(seam.second());
+		Map<Integer, PreparedCube> byId) {
+		PreparedCube first = byId.get(seam.first());
+		PreparedCube second = byId.get(seam.second());
 		if (first == null || second == null)
 			return null;
 
-		SurgicalModelRenderContext.CubeGeometry smaller = volume(first) <= volume(second) ? first : second;
-		SurgicalModelRenderContext.CubeGeometry other = smaller == first ? second : first;
-		Vec3 otherCenter = center(other);
+		PreparedCube smaller = first.volume <= second.volume ? first : second;
+		PreparedCube other = smaller == first ? second : first;
 		// Clipping an actual transformed face preserves the irregular polygon made by a
 		// rotated cube instead of replacing the joint with an axis-aligned rectangle.
-		List<Plane> otherPlanes = clipPlanes(other);
 		List<Vec3> bestContact = List.of();
 		double bestCenterDistance = Double.MAX_VALUE;
 		double bestArea = 0.0d;
-		for (double tolerance : new double[] {0.0d, CONTACT_TOLERANCE}) {
+		for (double tolerance : CONTACT_TOLERANCES) {
 			for (int[] indices : CUBE_FACES) {
-				List<Vec3> face = List.of(smaller.corners().get(indices[0]), smaller.corners().get(indices[1]),
-					smaller.corners().get(indices[2]), smaller.corners().get(indices[3]));
-				List<Vec3> contact = clipAgainstPlanes(face, otherPlanes, tolerance);
+				List<Vec3> face = List.of(smaller.geometry.corners().get(indices[0]),
+					smaller.geometry.corners().get(indices[1]), smaller.geometry.corners().get(indices[2]),
+					smaller.geometry.corners().get(indices[3]));
+				List<Vec3> contact = clipAgainstPlanes(face, other.planes, tolerance);
 				double area = polygonArea(contact);
 				if (area < MIN_CONTACT_AREA)
 					continue;
-				double centerDistance = faceCenter(face).distanceToSqr(otherCenter);
+				double centerDistance = faceCenter(face).distanceToSqr(other.center);
 				if (centerDistance < bestCenterDistance - DISTANCE_EPSILON
 					|| Math.abs(centerDistance - bestCenterDistance) <= DISTANCE_EPSILON
 						&& area > bestArea + MIN_CONTACT_AREA) {
@@ -108,7 +133,7 @@ public final class SurgicalClientTopology {
 			if (!bestContact.isEmpty())
 				break;
 		}
-		return bestContact.isEmpty() ? null : new Contact(seam, smaller.cubeId(), bestContact);
+		return bestContact.isEmpty() ? null : new Contact(seam, smaller.geometry.cubeId(), bestContact);
 	}
 
 	public static Map<Integer, Vec3> componentOffsets(int cubeCount, BitSet presentCubes,
@@ -290,6 +315,14 @@ public final class SurgicalClientTopology {
 		return result;
 	}
 
+	private static Map<Integer, PreparedCube> preparedById(
+		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
+		Map<Integer, PreparedCube> result = new HashMap<>();
+		for (SurgicalModelRenderContext.CubeGeometry cube : cubes)
+			result.computeIfAbsent(cube.cubeId(), ignored -> PreparedCube.of(cube));
+		return result;
+	}
+
 	public record ContactTopology(List<SurgicalAssembly.Seam> seams, List<Contact> contacts) {
 		private static final ContactTopology EMPTY = new ContactTopology(List.of(), List.of());
 
@@ -304,6 +337,41 @@ public final class SurgicalClientTopology {
 			polygon = List.copyOf(polygon);
 			if (polygon.size() < 3)
 				throw new IllegalArgumentException("A surgical contact requires at least three vertices");
+		}
+	}
+
+	private record PreparedCube(SurgicalModelRenderContext.CubeGeometry geometry, Vec3 center,
+		double volume, List<Plane> planes, Bounds bounds) {
+		private static PreparedCube of(SurgicalModelRenderContext.CubeGeometry geometry) {
+			return new PreparedCube(geometry, SurgicalClientTopology.center(geometry),
+				SurgicalClientTopology.volume(geometry),
+				List.copyOf(clipPlanes(geometry)), Bounds.of(geometry));
+		}
+	}
+
+	private record Bounds(double minX, double minY, double minZ, double maxX, double maxY, double maxZ) {
+		private static Bounds of(SurgicalModelRenderContext.CubeGeometry geometry) {
+			double minX = Double.POSITIVE_INFINITY;
+			double minY = Double.POSITIVE_INFINITY;
+			double minZ = Double.POSITIVE_INFINITY;
+			double maxX = Double.NEGATIVE_INFINITY;
+			double maxY = Double.NEGATIVE_INFINITY;
+			double maxZ = Double.NEGATIVE_INFINITY;
+			for (Vec3 corner : geometry.corners()) {
+				minX = Math.min(minX, corner.x);
+				minY = Math.min(minY, corner.y);
+				minZ = Math.min(minZ, corner.z);
+				maxX = Math.max(maxX, corner.x);
+				maxY = Math.max(maxY, corner.y);
+				maxZ = Math.max(maxZ, corner.z);
+			}
+			return new Bounds(minX, minY, minZ, maxX, maxY, maxZ);
+		}
+
+		private boolean overlapsWithin(Bounds other, double tolerance) {
+			return minX <= other.maxX + tolerance && maxX + tolerance >= other.minX
+				&& minY <= other.maxY + tolerance && maxY + tolerance >= other.minY
+				&& minZ <= other.maxZ + tolerance && maxZ + tolerance >= other.minZ;
 		}
 	}
 
