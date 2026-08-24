@@ -41,7 +41,7 @@ public final class SurgicalTableLayout {
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
 		List<Footprint> occupiedFootprints) {
 		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
-			occupiedFootprints, null, false);
+			occupiedFootprints, null, false, false);
 	}
 
 	/**
@@ -52,7 +52,7 @@ public final class SurgicalTableLayout {
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
 		List<Footprint> occupiedFootprints, Footprint assemblyEnvelope) {
 		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
-			occupiedFootprints, assemblyEnvelope, true);
+			occupiedFootprints, assemblyEnvelope, true, false);
 	}
 
 	/** Validates exact glue-preview placement while allowing the already-glued native components to overlap. */
@@ -60,12 +60,21 @@ public final class SurgicalTableLayout {
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
 		List<Footprint> occupiedFootprints) {
 		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
-			occupiedFootprints, null, true);
+			occupiedFootprints, null, true, false);
+	}
+
+	/** Validates a smart-glue rigid-body preview whose rotation can give each cube a distinct offset. */
+	public static boolean validateEditedGlueComponents(SurgicalTablePlane.Plane plane, int cubeCount,
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
+		List<Footprint> occupiedFootprints) {
+		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
+			occupiedFootprints, null, true, true);
 	}
 
 	private static boolean validateComponents(SurgicalTablePlane.Plane plane, int cubeCount,
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
-		List<Footprint> occupiedFootprints, Footprint assemblyEnvelope, boolean allowComponentOverlap) {
+		List<Footprint> occupiedFootprints, Footprint assemblyEnvelope, boolean allowComponentOverlap,
+		boolean allowPerCubeOffsets) {
 		if (!plane.valid() || plane.workArea().isEmpty()
 			|| !SurgicalAssembly.validTopology(cubeCount, seams)
 			|| proposal.offsets().size() != presentCubes.cardinality())
@@ -103,8 +112,9 @@ public final class SurgicalTableLayout {
 				return false;
 			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
 				CubeOffset offset = offsets.get(cube);
-				if (offset == null || Math.abs(offset.x() - componentOffset.x()) > EPSILON
-					|| Math.abs(offset.z() - componentOffset.z()) > EPSILON)
+				if (offset == null || !allowPerCubeOffsets
+					&& (Math.abs(offset.x() - componentOffset.x()) > EPSILON
+						|| Math.abs(offset.z() - componentOffset.z()) > EPSILON))
 					return false;
 			}
 		}

@@ -210,13 +210,15 @@ public final class SurgicalTableClientHandler {
 			? geometry.presentCubes : subject.presentCubesForRender(observedCubeCount);
 		if (gluePreview == null || !gluePreview.ownerPos.equals(table.getBlockPos()))
 			return present;
-		for (GlueSubjectPreview moved : gluePreview.subjects)
-			if (moved.subjectId == subject.id()) {
-				BitSet visible = (BitSet) present.clone();
-				visible.andNot(moved.cubes);
-				return visible;
-			}
-		return present;
+		BitSet visible = null;
+		for (GlueSubjectPreview moved : gluePreview.subjects) {
+			if (moved.subjectId != subject.id())
+				continue;
+			if (visible == null)
+				visible = (BitSet) present.clone();
+			visible.andNot(moved.cubes);
+		}
+		return visible == null ? present : visible;
 	}
 
 	public static void clear() {
@@ -565,7 +567,8 @@ public final class SurgicalTableClientHandler {
 			seamSelection = null;
 			cubeSelection = null;
 			componentSelection = null;
-			clearSeamHighlight();
+			if (!highlightGluePreview())
+				clearSeamHighlight();
 			showGlueEditPrompt(player, level);
 			refreshGlueEditGuide(player, level, glueEditor);
 			return;
@@ -625,6 +628,8 @@ public final class SurgicalTableClientHandler {
 	}
 
 	private static void refreshCurrentSelectionHighlight() {
+		if (highlightGluePreview())
+			return;
 		if (componentSelection != null)
 			highlightSelection(componentSelection);
 		else if (seamSelection != null)
@@ -633,6 +638,25 @@ public final class SurgicalTableClientHandler {
 			highlightSelection(cubeSelection);
 		else
 			clearSeamHighlight();
+	}
+
+	private static boolean highlightGluePreview() {
+		if (gluePreview == null)
+			return false;
+		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
+		for (GlueSubjectPreview subject : gluePreview.subjects) {
+			for (int cubeId = subject.cubes.nextSetBit(0); cubeId >= 0;
+				cubeId = subject.cubes.nextSetBit(cubeId + 1)) {
+				SurgicalModelRenderContext.CubeGeometry cube = previewCube(subject, cubeId);
+				if (cube != null)
+					edges.addAll(SurgicalClientTopology.cubeEdges(cube));
+			}
+		}
+		if (edges.isEmpty())
+			return false;
+		SEAM_OUTLINE.clear();
+		CUBE_OUTLINE.show(edges, CUBE_HIGHLIGHT_COLOR);
+		return true;
 	}
 
 	@SubscribeEvent(priority = EventPriority.HIGH)
@@ -793,8 +817,6 @@ public final class SurgicalTableClientHandler {
 			firstEndpoint, secondEndpoint, preview.targetPose, preview.groundLiftY,
 			preview.moves, preview.anchorMoves));
 		AllSoundEvents.SLIME_ADDED.playAt(level, BlockPos.containing(hit.location), 0.5f, 0.95f, false);
-		player.displayClientMessage(Component.translatable(
-			"message.create_biotech.surgical_table.glue_success"), true);
 		clearPendingGlue();
 		return true;
 	}
@@ -810,8 +832,6 @@ public final class SurgicalTableClientHandler {
 			editor.first, editor.second, preview.targetPose, preview.groundLiftY,
 			preview.moves, preview.anchorMoves));
 		AllSoundEvents.SLIME_ADDED.playAt(level, BlockPos.containing(preview.targetHit), 0.5f, 0.95f, false);
-		player.displayClientMessage(Component.translatable(
-			"message.create_biotech.surgical_table.glue_success"), true);
 		clearPendingGlue();
 	}
 
@@ -860,6 +880,7 @@ public final class SurgicalTableClientHandler {
 		glueEditor = null;
 		lastGlueEditPromptTick = Long.MIN_VALUE;
 		GLUE_EDIT_OUTLINE.clear();
+		CUBE_OUTLINE.clear();
 	}
 
 	private static void showGlueEditPrompt(LocalPlayer player, ClientLevel level) {

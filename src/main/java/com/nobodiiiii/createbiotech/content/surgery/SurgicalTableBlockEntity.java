@@ -17,6 +17,7 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
+import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueItem;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
@@ -501,7 +502,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 		ComponentGroup moving = gluedGroup(first, firstCubeId);
 		ComponentGroup anchored = gluedGroup(second, secondCubeId);
-		Map<UUID, ValidatedGlueMove> validated = validateGlueMoves(moving, anchored, moves, plane);
+		boolean editedTransforms = glue.getItem() instanceof SmartSuperGlueItem;
+		Map<UUID, ValidatedGlueMove> validated = validateGlueMoves(moving, anchored, moves, plane,
+			editedTransforms);
 		Map<UUID, Map<Integer, Vec3>> validatedAnchors = validateGlueAnchors(anchored, anchorMoves);
 		if (moving.intersects(anchored) || validated == null || validatedAnchors == null)
 			return false;
@@ -559,7 +562,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	@Nullable
 	private Map<UUID, ValidatedGlueMove> validateGlueMoves(ComponentGroup moving, ComponentGroup anchored,
-		List<SurgicalTableGluePacket.Move> moves, SurgicalTablePlane.Plane plane) {
+		List<SurgicalTableGluePacket.Move> moves, SurgicalTablePlane.Plane plane,
+		boolean allowPerCubeOffsets) {
 		if (moves == null || moves.size() != moving.components.size())
 			return null;
 		int requiredSplits = 0;
@@ -581,10 +585,13 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 					return null;
 			if (offsets.size() != selected.cardinality()
 				|| !layoutMatchesTranslations(move.layout(), offsets)
-				|| !componentYTranslationsMatch(subject, selected, offsets)
+				|| !allowPerCubeOffsets && !componentYTranslationsMatch(subject, selected, offsets)
 				|| !componentRotationsMatch(subject, selected, rotations)
-				|| !SurgicalTableLayout.validateGlueComponents(plane, subject.cubeCount, selected,
-					subject.seams, subject.cutSeams, move.layout(), obstacles))
+				|| !(allowPerCubeOffsets
+					? SurgicalTableLayout.validateEditedGlueComponents(plane, subject.cubeCount, selected,
+						subject.seams, subject.cutSeams, move.layout(), obstacles)
+					: SurgicalTableLayout.validateGlueComponents(plane, subject.cubeCount, selected,
+						subject.seams, subject.cutSeams, move.layout(), obstacles)))
 				return null;
 			if (!selected.equals(subject.presentCubes))
 				requiredSplits++;

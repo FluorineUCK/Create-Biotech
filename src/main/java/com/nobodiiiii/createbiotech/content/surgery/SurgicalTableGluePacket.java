@@ -7,6 +7,7 @@ import com.simibubi.create.content.contraptions.glue.SuperGlueItem;
 
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.ai.attributes.Attributes;
@@ -69,8 +70,10 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 			|| !table.prepareGlueLayout(firstSubject, plane, first.layout)
 			|| firstSubject != secondSubject && !table.prepareGlueLayout(secondSubject, plane, second.layout))
 			return;
-		table.glueComponents(player, held, hand, first.subjectId, first.cubeId,
-			second.subjectId, second.cubeId, targetPose, groundLiftY, moves, anchorMoves, plane);
+		if (table.glueComponents(player, held, hand, first.subjectId, first.cubeId,
+			second.subjectId, second.cubeId, targetPose, groundLiftY, moves, anchorMoves, plane))
+			player.displayClientMessage(Component.translatable(
+				"message.create_biotech.surgical_table.glue_success"), true);
 	}
 
 	private boolean validGroundLift() {
