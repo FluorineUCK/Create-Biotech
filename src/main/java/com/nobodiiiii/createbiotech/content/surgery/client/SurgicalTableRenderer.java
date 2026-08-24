@@ -7,6 +7,7 @@ import java.util.WeakHashMap;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalSubject;
@@ -96,10 +97,13 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		}
 		Map<Integer, Vec3> offsets = SurgicalTableClientHandler.offsetsFor(table, subject);
 		CachedSubjectRender cached = SUBJECT_RENDER_CACHE.get(subject);
-		if (cached == null || !cached.key().matches(preview, storedCount, present, offsets, packedLight,
-			projectSourceGeometry)) {
-			MeshKey key = new MeshKey(preview, storedCount, present, offsets, packedLight, projectSourceGeometry);
-			cached = bakeSubject(key, preview, storedCount, present, offsets, packedLight, projectSourceGeometry);
+		if (cached == null || !cached.key().matches(preview, subject.layPose(), storedCount, present,
+			offsets, packedLight, projectSourceGeometry)) {
+			MeshKey key = new MeshKey(preview, subject.layPose(), storedCount, present, offsets,
+				packedLight, projectSourceGeometry);
+			Map<Integer, Vec3> meshOffsets = modelSpaceOffsets(subject, offsets);
+			cached = bakeSubject(key, preview, storedCount, present, meshOffsets, packedLight,
+				projectSourceGeometry);
 			SUBJECT_RENDER_CACHE.put(subject, cached);
 		}
 		if (cached.mesh() != null)
@@ -108,6 +112,22 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 			SurgicalSourceModelRenderer.render(preview, storedCount, present, offsets, poseStack, buffer,
 				packedLight, 0.0f, 0.0f, false, camera, projectSourceGeometry);
 		poseStack.popPose();
+	}
+
+	/**
+	 * Component offsets are stored and used by selection topology in the table frame.
+	 * A cached mesh, however, is baked before the subject's recumbent pose and receives
+	 * that pose only when replayed. Convert vectors into model space first so replaying
+	 * the mesh applies the pose exactly once instead of rotating the offsets a second time.
+	 */
+	private static Map<Integer, Vec3> modelSpaceOffsets(SurgicalSubject subject,
+		Map<Integer, Vec3> tableOffsets) {
+		if (tableOffsets.isEmpty())
+			return tableOffsets;
+		Map<Integer, Vec3> converted = new java.util.HashMap<>(tableOffsets.size());
+		tableOffsets.forEach((cube, offset) ->
+			converted.put(cube, subject.layPose().inverseRotate(offset)));
+		return Map.copyOf(converted);
 	}
 
 	private static CachedSubjectRender bakeSubject(MeshKey key, LivingEntity preview, int storedCount,
@@ -128,16 +148,18 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		SUBJECT_RENDER_CACHE.clear();
 	}
 
-	private record MeshKey(LivingEntity preview, int cubeCount, BitSet presentCubes,
+	private record MeshKey(LivingEntity preview, SurgicalLayPose layPose, int cubeCount, BitSet presentCubes,
 		Map<Integer, Vec3> offsets, int packedLight, boolean projectSourceGeometry) {
 		private MeshKey {
 			presentCubes = (BitSet) presentCubes.clone();
 			offsets = Map.copyOf(offsets);
 		}
 
-		private boolean matches(LivingEntity currentPreview, int currentCubeCount, BitSet currentPresentCubes,
-			Map<Integer, Vec3> currentOffsets, int currentPackedLight, boolean currentProjectSourceGeometry) {
-			return preview == currentPreview && cubeCount == currentCubeCount && presentCubes.equals(currentPresentCubes)
+		private boolean matches(LivingEntity currentPreview, SurgicalLayPose currentLayPose,
+			int currentCubeCount, BitSet currentPresentCubes, Map<Integer, Vec3> currentOffsets,
+			int currentPackedLight, boolean currentProjectSourceGeometry) {
+			return preview == currentPreview && layPose.equals(currentLayPose)
+				&& cubeCount == currentCubeCount && presentCubes.equals(currentPresentCubes)
 				&& offsets.equals(currentOffsets) && packedLight == currentPackedLight
 				&& projectSourceGeometry == currentProjectSourceGeometry;
 		}
