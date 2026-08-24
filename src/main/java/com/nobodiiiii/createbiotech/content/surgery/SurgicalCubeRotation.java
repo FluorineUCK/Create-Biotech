@@ -37,12 +37,17 @@ public record SurgicalCubeRotation(double x, double y, double z, double w) {
 	public static SurgicalCubeRotation around(Direction direction, double degrees) {
 		if (direction == null || !Double.isFinite(degrees))
 			return IDENTITY;
+		return around(Vec3.atLowerCornerOf(direction.getNormal()), degrees);
+	}
+
+	public static SurgicalCubeRotation around(Vec3 axis, double degrees) {
+		if (axis == null || !Double.isFinite(degrees) || axis.lengthSqr() < MIN_LENGTH_SQUARED)
+			return IDENTITY;
+		Vec3 normalizedAxis = axis.normalize();
 		double radians = Math.toRadians(degrees) * 0.5d;
-		double scale = Math.sin(radians) * direction.getAxisDirection().getStep();
-		double axisX = direction.getAxis() == Direction.Axis.X ? scale : 0.0d;
-		double axisY = direction.getAxis() == Direction.Axis.Y ? scale : 0.0d;
-		double axisZ = direction.getAxis() == Direction.Axis.Z ? scale : 0.0d;
-		return new SurgicalCubeRotation(axisX, axisY, axisZ, Math.cos(radians));
+		double scale = Math.sin(radians);
+		return new SurgicalCubeRotation(normalizedAxis.x * scale, normalizedAxis.y * scale,
+			normalizedAxis.z * scale, Math.cos(radians));
 	}
 
 	/** Applies this rotation and then {@code next}, both in table/world axes. */

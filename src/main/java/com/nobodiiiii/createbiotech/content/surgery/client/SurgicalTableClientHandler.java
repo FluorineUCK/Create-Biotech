@@ -78,10 +78,13 @@ public final class SurgicalTableClientHandler {
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
 	private static final double GLUE_EDIT_TRANSLATION_STEP = 1.0d / 16.0d;
 	private static final double GLUE_EDIT_ROTATION_STEP = 15.0d;
+	private static final int GLUE_EDIT_CIRCLE_SEGMENTS = 32;
+	private static final double GLUE_EDIT_GUIDE_MARGIN = 1.0d / 16.0d;
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
 	private static final InteractionHand[] HANDS = { InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND };
 	private static final OutlineState SEAM_OUTLINE = new OutlineState();
 	private static final OutlineState CUBE_OUTLINE = new OutlineState();
+	private static final OutlineState GLUE_EDIT_OUTLINE = new OutlineState();
 	private static final Object PLACEMENT_OUTLINE_SLOT = new Object();
 	private static final Map<SubjectKey, TableGeometry> TABLES = new HashMap<>();
 	private static long lastPlacementOutlineTick = Long.MIN_VALUE;
@@ -230,6 +233,7 @@ public final class SurgicalTableClientHandler {
 		lastSelectionRay = null;
 		lastSelectionPendingGlue = null;
 		SurgicalTablePoseResolver.clear();
+		GLUE_EDIT_OUTLINE.clear();
 		clearSelections();
 	}
 
@@ -245,6 +249,7 @@ public final class SurgicalTableClientHandler {
 			gluePreview = null;
 			glueEditor = null;
 			lastGlueEditPromptTick = Long.MIN_VALUE;
+			GLUE_EDIT_OUTLINE.clear();
 			clearPlacementPreview();
 			clearSelections();
 			return;
@@ -272,6 +277,7 @@ public final class SurgicalTableClientHandler {
 				clearPendingGlue();
 			} else {
 				showGlueEditPrompt(player, level);
+				refreshGlueEditGuide(player, level, glueEditor);
 			}
 		}
 	}
@@ -561,6 +567,7 @@ public final class SurgicalTableClientHandler {
 			componentSelection = null;
 			clearSeamHighlight();
 			showGlueEditPrompt(player, level);
+			refreshGlueEditGuide(player, level, glueEditor);
 			return;
 		}
 
@@ -734,7 +741,7 @@ public final class SurgicalTableClientHandler {
 			return false;
 		Vec3 localHit = hit.location.subtract(Vec3.atLowerCornerOf(hit.tablePos));
 		if (pendingGlue == null) {
-			pendingGlue = new PendingGlue(selected, localHit, hand);
+			pendingGlue = new PendingGlue(selected, localHit, hand, hit.faceIndex);
 			componentSelection = findConnectedComponentSelection(hit);
 			player.displayClientMessage(Component.translatable(
 				"message.create_biotech.surgical_table.glue_first"), true);
@@ -763,10 +770,22 @@ public final class SurgicalTableClientHandler {
 		SurgicalTableGluePacket.Endpoint firstEndpoint = glueEndpoint(first.selection, first.hit, firstLayout);
 		SurgicalTableGluePacket.Endpoint secondEndpoint = glueEndpoint(selected, localHit, secondLayout);
 		if (isSmartGlue(player.getItemInHand(hand))) {
+			SurgicalModelRenderContext.CubeGeometry editCube = previewCube(preview.subjects,
+				firstEndpoint.subjectId(), firstEndpoint.cubeId());
+			Vec3 editAxis = cubeFaceAxis(editCube, first.faceIndex);
+			Vec3 axisCenter = editCube == null ? null : cubeCenter(editCube);
+			Vec3 faceCenter = cubeFaceCenter(editCube, first.faceIndex);
+			if (editAxis == null || axisCenter == null || faceCenter == null
+				|| !glueEndpointsActuallyIntersect(preview.subjects, firstEndpoint, secondEndpoint)) {
+				clearPendingGlue();
+				showNoSpace(player);
+				return true;
+			}
 			gluePreview = preview;
 			glueEditor = new GlueEditor(hand, firstEndpoint, secondEndpoint, preview,
-				preview.targetHit.add(0.0d, preview.groundLiftY, 0.0d));
+				axisCenter, faceCenter, editAxis, glueEditGuideRadius(editCube, axisCenter, editAxis));
 			showGlueEditPrompt(player, level);
+			refreshGlueEditGuide(player, level, glueEditor);
 			AllSoundEvents.SLIME_ADDED.playAt(level, BlockPos.containing(hit.location), 0.5f, 0.9f, false);
 			return true;
 		}
@@ -782,6 +801,11 @@ public final class SurgicalTableClientHandler {
 
 	private static void confirmGlue(LocalPlayer player, ClientLevel level, GlueEditor editor) {
 		GluePreview preview = editor.preview;
+		if (!glueEndpointsActuallyIntersect(preview.subjects, editor.first, editor.second)) {
+			clearPendingGlue();
+			showNoSpace(player);
+			return;
+		}
 		CBPackets.sendToServer(new SurgicalTableGluePacket(preview.ownerPos, editor.hand,
 			editor.first, editor.second, preview.targetPose, preview.groundLiftY,
 			preview.moves, preview.anchorMoves));
@@ -805,25 +829,28 @@ public final class SurgicalTableClientHandler {
 		double scroll = event.getScrollDeltaY();
 		if (Math.abs(scroll) <= 1.0e-9d)
 			return;
-		Vec3 look = player.getLookAngle();
-		Direction direction = Direction.getNearest((float) look.x, (float) look.y, (float) look.z);
-		if (scroll < 0.0d)
-			direction = direction.getOpposite();
+		if (!updateGlueEditAxis(player, level, glueEditor)) {
+			GLUE_EDIT_OUTLINE.clear();
+			showGlueEditPrompt(player, level);
+			event.setCanceled(true);
+			return;
+		}
+		Vec3 editDirection = scroll < 0.0d ? glueEditor.axis.scale(-1.0d) : glueEditor.axis;
 		Vec3 translation = Vec3.ZERO;
 		SurgicalCubeRotation rotation = SurgicalCubeRotation.IDENTITY;
 		if (player.isShiftKeyDown())
-			rotation = SurgicalCubeRotation.around(direction, GLUE_EDIT_ROTATION_STEP);
+			rotation = SurgicalCubeRotation.around(editDirection, GLUE_EDIT_ROTATION_STEP);
 		else
-			translation = Vec3.atLowerCornerOf(direction.getNormal()).scale(GLUE_EDIT_TRANSLATION_STEP);
+			translation = editDirection.scale(GLUE_EDIT_TRANSLATION_STEP);
 		GluePreview adjusted = adjustGluePreview(level, glueEditor, translation, rotation);
 		if (adjusted != null) {
 			glueEditor.preview = adjusted;
-			glueEditor.pivot = glueEditor.pivot.add(translation);
 			gluePreview = adjusted;
-			AllSoundEvents.SCROLL_VALUE.playAt(level, BlockPos.containing(glueEditor.pivot),
+			AllSoundEvents.SCROLL_VALUE.playAt(level, BlockPos.containing(glueEditor.axisCenter),
 				0.35f, player.isShiftKeyDown() ? 0.85f : 1.0f, false);
 		}
 		showGlueEditPrompt(player, level);
+		refreshGlueEditGuide(player, level, glueEditor);
 		event.setCanceled(true);
 	}
 
@@ -832,6 +859,7 @@ public final class SurgicalTableClientHandler {
 		gluePreview = null;
 		glueEditor = null;
 		lastGlueEditPromptTick = Long.MIN_VALUE;
+		GLUE_EDIT_OUTLINE.clear();
 	}
 
 	private static void showGlueEditPrompt(LocalPlayer player, ClientLevel level) {
@@ -841,6 +869,205 @@ public final class SurgicalTableClientHandler {
 		player.displayClientMessage(Component.translatable(
 			"message.create_biotech.surgical_table.smart_glue_edit"), true);
 		lastGlueEditPromptTick = tick;
+	}
+
+	private static void refreshGlueEditGuide(LocalPlayer player, ClientLevel level, GlueEditor editor) {
+		if (!updateGlueEditAxis(player, level, editor)) {
+			GLUE_EDIT_OUTLINE.clear();
+			return;
+		}
+		GLUE_EDIT_OUTLINE.show(glueEditGuideEdges(editor, player.isShiftKeyDown()), CUBE_HIGHLIGHT_COLOR);
+	}
+
+	private static boolean updateGlueEditAxis(LocalPlayer player, ClientLevel level, GlueEditor editor) {
+		GluePreviewCubeHit hit = findNearestGluePreviewHit(player, level, editor);
+		Vec3 axis = mappedOriginalFaceNormal(hit);
+		if (hit == null || axis == null)
+			return false;
+		editor.axis = axis;
+		editor.axisCenter = cubeCenter(hit.geometry);
+		Vec3 faceCenter = cubeFaceCenter(hit.geometry, hit.faceIndex);
+		if (faceCenter == null)
+			return false;
+		editor.faceCenter = faceCenter;
+		editor.guideRadius = glueEditGuideRadius(hit.geometry, editor.axisCenter, axis);
+		return true;
+	}
+
+	@Nullable
+	private static GluePreviewCubeHit findNearestGluePreviewHit(LocalPlayer player, ClientLevel level,
+		GlueEditor editor) {
+		GluePreview preview = editor.preview;
+		Ray ray = playerRay(player);
+		GluePreviewCubeHit best = null;
+		double bestDistance = Double.MAX_VALUE;
+		GlueSubjectPreview subject = previewSubject(preview.subjects,
+			editor.first.subjectId(), editor.first.cubeId());
+		SurgicalModelRenderContext.CubeGeometry cube = subject == null ? null
+			: previewCube(subject, editor.first.cubeId());
+		if (subject == null || cube == null || !rayIntersectsBounds(ray, cubeBounds(cube), 1.0e-6d))
+			return null;
+		for (int faceIndex = 0; faceIndex < SurgicalClientTopology.CUBE_FACES.length; faceIndex++) {
+			Vec3 location = intersectQuad(ray.start, ray.end, cube,
+				SurgicalClientTopology.CUBE_FACES[faceIndex]);
+			if (location == null)
+				continue;
+			double distance = ray.start.distanceToSqr(location);
+			if (distance >= bestDistance)
+				continue;
+			bestDistance = distance;
+			best = new GluePreviewCubeHit(subject, cube, editor.first.cubeId(), faceIndex, location);
+		}
+		return best != null && isOccluded(level, player, ray.start, best.location, preview.ownerPos)
+			? null : best;
+	}
+
+	private static List<SurgicalClientTopology.Edge> glueEditGuideEdges(GlueEditor editor, boolean rotating) {
+		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
+		Vec3 axis = editor.axis;
+		Vec3 center = editor.axisCenter;
+		Vec3 axisU = perpendicularAxis(axis);
+		Vec3 axisV = axis.cross(axisU).normalize();
+		double radius = editor.guideRadius;
+		if (!rotating) {
+			double faceDistance = Math.max(0.0d, editor.faceCenter.subtract(center).dot(axis));
+			double length = Math.max(faceDistance + 0.25d, radius * 1.25d);
+			double headLength = Math.min(0.25d, length * 0.3d);
+			double headRadius = headLength * 0.55d;
+			Vec3 end = center.add(axis.scale(length));
+			Vec3 headBase = end.subtract(axis.scale(headLength));
+			edges.add(new SurgicalClientTopology.Edge(center, end));
+			edges.add(new SurgicalClientTopology.Edge(end, headBase.add(axisU.scale(headRadius))));
+			edges.add(new SurgicalClientTopology.Edge(end, headBase.subtract(axisU.scale(headRadius))));
+			edges.add(new SurgicalClientTopology.Edge(end, headBase.add(axisV.scale(headRadius))));
+			edges.add(new SurgicalClientTopology.Edge(end, headBase.subtract(axisV.scale(headRadius))));
+			return List.copyOf(edges);
+		}
+
+		double axisLength = Math.max(0.5d, radius * 1.15d);
+		edges.add(new SurgicalClientTopology.Edge(center.subtract(axis.scale(axisLength)),
+			center.add(axis.scale(axisLength))));
+		Vec3 previous = center.add(axisU.scale(radius));
+		for (int segment = 1; segment <= GLUE_EDIT_CIRCLE_SEGMENTS; segment++) {
+			double angle = Math.PI * 2.0d * segment / GLUE_EDIT_CIRCLE_SEGMENTS;
+			Vec3 current = center.add(axisU.scale(Math.cos(angle) * radius))
+				.add(axisV.scale(Math.sin(angle) * radius));
+			edges.add(new SurgicalClientTopology.Edge(previous, current));
+			previous = current;
+		}
+		return List.copyOf(edges);
+	}
+
+	private static Vec3 perpendicularAxis(Vec3 axis) {
+		Vec3 helper = Math.abs(axis.y) < 0.9d ? new Vec3(0.0d, 1.0d, 0.0d)
+			: new Vec3(1.0d, 0.0d, 0.0d);
+		return axis.cross(helper).normalize();
+	}
+
+	@Nullable
+	private static Vec3 mappedOriginalFaceNormal(@Nullable GluePreviewCubeHit hit) {
+		if (hit == null)
+			return null;
+		SurgicalModelRenderContext.CubeGeometry base = cubeById(hit.subject.baseCubes, hit.cubeId);
+		Vec3 original = cubeFaceAxis(base, hit.faceIndex);
+		if (original == null)
+			return null;
+		SurgicalCubeRotation rotation = hit.subject.rotations
+			.getOrDefault(hit.cubeId, SurgicalCubeRotation.IDENTITY);
+		Vec3 mapped = rotation.rotate(original).normalize();
+		Vec3 visible = cubeFaceAxis(hit.geometry, hit.faceIndex);
+		if (visible == null)
+			return mapped;
+		if (mapped.dot(visible) < 0.0d)
+			mapped = mapped.scale(-1.0d);
+		return mapped.dot(visible) >= 1.0d - 1.0e-8d ? mapped : visible;
+	}
+
+	@Nullable
+	private static Vec3 cubeFaceAxis(@Nullable SurgicalModelRenderContext.CubeGeometry cube, int faceIndex) {
+		if (cube == null || faceIndex < 0 || faceIndex >= SurgicalClientTopology.CUBE_FACES.length)
+			return null;
+		Vec3 faceCenter = cubeFaceCenter(cube, faceIndex);
+		Vec3 axis = faceCenter == null ? Vec3.ZERO : faceCenter.subtract(cubeCenter(cube));
+		if (axis.lengthSqr() <= 1.0e-18d)
+			return null;
+		return axis.normalize();
+	}
+
+	@Nullable
+	private static Vec3 cubeFaceCenter(@Nullable SurgicalModelRenderContext.CubeGeometry cube, int faceIndex) {
+		if (cube == null || faceIndex < 0 || faceIndex >= SurgicalClientTopology.CUBE_FACES.length)
+			return null;
+		int[] face = SurgicalClientTopology.CUBE_FACES[faceIndex];
+		List<Vec3> corners = cube.corners();
+		return corners.get(face[0]).add(corners.get(face[1])).add(corners.get(face[2]))
+			.add(corners.get(face[3])).scale(0.25d);
+	}
+
+	private static double glueEditGuideRadius(SurgicalModelRenderContext.CubeGeometry cube,
+		Vec3 center, Vec3 axis) {
+		double radius = 0.0d;
+		for (Vec3 corner : cube.corners()) {
+			Vec3 relative = corner.subtract(center);
+			Vec3 radial = relative.subtract(axis.scale(relative.dot(axis)));
+			radius = Math.max(radius, radial.length());
+		}
+		return Math.max(0.25d, radius + GLUE_EDIT_GUIDE_MARGIN);
+	}
+
+	private static boolean glueEndpointsActuallyIntersect(List<GlueSubjectPreview> previews,
+		SurgicalTableGluePacket.Endpoint first, SurgicalTableGluePacket.Endpoint second) {
+		SurgicalModelRenderContext.CubeGeometry firstCube = previewCube(previews,
+			first.subjectId(), first.cubeId());
+		SurgicalModelRenderContext.CubeGeometry secondCube = previewCube(previews,
+			second.subjectId(), second.cubeId());
+		return SurgicalClientTopology.cubesActuallyIntersect(firstCube, secondCube);
+	}
+
+	@Nullable
+	private static SurgicalModelRenderContext.CubeGeometry previewCube(List<GlueSubjectPreview> previews,
+		int subjectId, int cubeId) {
+		GlueSubjectPreview preview = previewSubject(previews, subjectId, cubeId);
+		return preview == null ? null : previewCube(preview, cubeId);
+	}
+
+	@Nullable
+	private static GlueSubjectPreview previewSubject(List<GlueSubjectPreview> previews,
+		int subjectId, int cubeId) {
+		for (GlueSubjectPreview preview : previews)
+			if (preview.subjectId == subjectId && preview.cubes.get(cubeId))
+				return preview;
+		return null;
+	}
+
+	@Nullable
+	private static SurgicalModelRenderContext.CubeGeometry previewCube(GlueSubjectPreview preview, int cubeId) {
+		return preview.transformedCubes.get(cubeId);
+	}
+
+	@Nullable
+	private static SurgicalModelRenderContext.CubeGeometry transformedPreviewCube(
+		List<SurgicalModelRenderContext.CubeGeometry> baseCubes, Map<Integer, Vec3> offsets,
+		Map<Integer, SurgicalCubeRotation> rotations, int cubeId) {
+		SurgicalModelRenderContext.CubeGeometry base = cubeById(baseCubes, cubeId);
+		if (base == null)
+			return null;
+		SurgicalCubeRotation rotation = rotations
+			.getOrDefault(cubeId, SurgicalCubeRotation.IDENTITY);
+		Vec3 offset = offsets.getOrDefault(cubeId, Vec3.ZERO);
+		Vec3 center = cubeCenter(base);
+		return new SurgicalModelRenderContext.CubeGeometry(cubeId, base.corners().stream()
+			.map(corner -> center.add(rotation.rotate(corner.subtract(center))).add(offset)).toList());
+	}
+
+	private static AABB cubeBounds(SurgicalModelRenderContext.CubeGeometry cube) {
+		Vec3 first = cube.corners().getFirst();
+		AABB bounds = new AABB(first, first);
+		for (int corner = 1; corner < cube.corners().size(); corner++) {
+			Vec3 point = cube.corners().get(corner);
+			bounds = bounds.minmax(new AABB(point, point));
+		}
+		return bounds;
 	}
 
 	private static SurgicalTableGluePacket.Endpoint glueEndpoint(Selection selection, Vec3 hit,
@@ -1006,7 +1233,8 @@ public final class SurgicalTableClientHandler {
 		SurgicalCubeRotation deltaRotation) {
 		GluePreview current = editor.preview;
 		if (!(level.getBlockEntity(current.ownerPos) instanceof SurgicalTableBlockEntity table)
-			|| table.clientDataRevision() != current.tableRevision)
+			|| table.clientDataRevision() != current.tableRevision
+			|| !glueEndpointsActuallyIntersect(current.subjects, editor.first, editor.second))
 			return null;
 		List<GlueSubjectPreview> previews = new ArrayList<>(current.subjects.size());
 		List<SurgicalTableGluePacket.Move> moves = new ArrayList<>(current.moves.size());
@@ -1033,7 +1261,8 @@ public final class SurgicalTableClientHandler {
 				if (!deltaRotation.isIdentity()) {
 					Vec3 baseCenter = cubeCenter(base);
 					Vec3 currentCenter = baseCenter.add(oldOffset);
-					Vec3 rotatedCenter = editor.pivot.add(deltaRotation.rotate(currentCenter.subtract(editor.pivot)));
+					Vec3 rotatedCenter = editor.axisCenter.add(
+						deltaRotation.rotate(currentCenter.subtract(editor.axisCenter)));
 					newOffset = rotatedCenter.subtract(baseCenter);
 					newRotation = oldRotation.then(deltaRotation);
 				}
@@ -1065,6 +1294,8 @@ public final class SurgicalTableClientHandler {
 				preview.baseCubes, planned.offsets(), rotations, true));
 		}
 		if (moves.size() != current.moves.size())
+			return null;
+		if (!glueEndpointsActuallyIntersect(previews, editor.first, editor.second))
 			return null;
 		return new GluePreview(current.request, current.ownerPos, current.targetSubjectId, current.targetCubeId,
 			current.targetHit, current.tableRevision, current.targetPose, current.groundLiftY,
@@ -1890,7 +2121,8 @@ public final class SurgicalTableClientHandler {
 					continue;
 				if (!rayIntersectsBounds(ray, target.bounds, 1.0e-6d))
 					continue;
-				for (int[] faceIndices : SurgicalClientTopology.CUBE_FACES) {
+				for (int faceIndex = 0; faceIndex < SurgicalClientTopology.CUBE_FACES.length; faceIndex++) {
+					int[] faceIndices = SurgicalClientTopology.CUBE_FACES[faceIndex];
 					Vec3 hit = intersectQuad(ray.start, ray.end, cube, faceIndices);
 					if (hit == null)
 						continue;
@@ -1898,7 +2130,7 @@ public final class SurgicalTableClientHandler {
 					if (distance >= bestDistance)
 						continue;
 					bestDistance = distance;
-					best = new CubeHit(pos, geometry, cube.cubeId(), hit);
+					best = new CubeHit(pos, geometry, cube.cubeId(), faceIndex, hit);
 				}
 			}
 		}
@@ -2545,7 +2777,10 @@ public final class SurgicalTableClientHandler {
 
 	private record Ray(Vec3 start, Vec3 end) {}
 
-	private record CubeHit(BlockPos tablePos, TableGeometry geometry, int cubeId, Vec3 location) {}
+	private record CubeHit(BlockPos tablePos, TableGeometry geometry, int cubeId, int faceIndex, Vec3 location) {}
+
+	private record GluePreviewCubeHit(GlueSubjectPreview subject,
+		SurgicalModelRenderContext.CubeGeometry geometry, int cubeId, int faceIndex, Vec3 location) {}
 
 	private record CubeTarget(SurgicalModelRenderContext.CubeGeometry geometry, AABB bounds) {}
 
@@ -2805,7 +3040,7 @@ public final class SurgicalTableClientHandler {
 	private record FootprintGroups(List<SurgicalTableLayout.Footprint> moving,
 		List<SurgicalTableLayout.Footprint> occupied) {}
 
-	private record PendingGlue(Selection selection, Vec3 hit, InteractionHand hand) {}
+	private record PendingGlue(Selection selection, Vec3 hit, InteractionHand hand, int faceIndex) {}
 
 	private record GluePlanningSubject(SurgicalSubject subject, BitSet cubes,
 		List<SurgicalModelRenderContext.CubeGeometry> baseTarget,
@@ -2819,14 +3054,34 @@ public final class SurgicalTableClientHandler {
 		}
 	}
 
-	private record GlueSubjectPreview(int subjectId, BitSet cubes, SurgicalLayPose pose,
-		List<SurgicalModelRenderContext.CubeGeometry> baseCubes, Map<Integer, Vec3> offsets,
-		Map<Integer, SurgicalCubeRotation> rotations, boolean editable) {
-		private GlueSubjectPreview {
-			cubes = (BitSet) cubes.clone();
-			baseCubes = List.copyOf(baseCubes);
-			offsets = Map.copyOf(offsets);
-			rotations = Map.copyOf(rotations);
+	private static final class GlueSubjectPreview {
+		private final int subjectId;
+		private final BitSet cubes;
+		private final SurgicalLayPose pose;
+		private final List<SurgicalModelRenderContext.CubeGeometry> baseCubes;
+		private final Map<Integer, Vec3> offsets;
+		private final Map<Integer, SurgicalCubeRotation> rotations;
+		private final boolean editable;
+		private final Map<Integer, SurgicalModelRenderContext.CubeGeometry> transformedCubes;
+
+		private GlueSubjectPreview(int subjectId, BitSet cubes, SurgicalLayPose pose,
+			List<SurgicalModelRenderContext.CubeGeometry> baseCubes, Map<Integer, Vec3> offsets,
+			Map<Integer, SurgicalCubeRotation> rotations, boolean editable) {
+			this.subjectId = subjectId;
+			this.cubes = (BitSet) cubes.clone();
+			this.pose = pose;
+			this.baseCubes = List.copyOf(baseCubes);
+			this.offsets = Map.copyOf(offsets);
+			this.rotations = Map.copyOf(rotations);
+			this.editable = editable;
+			Map<Integer, SurgicalModelRenderContext.CubeGeometry> transformed = new HashMap<>();
+			for (int cube = this.cubes.nextSetBit(0); cube >= 0; cube = this.cubes.nextSetBit(cube + 1)) {
+				SurgicalModelRenderContext.CubeGeometry geometry = transformedPreviewCube(
+					this.baseCubes, this.offsets, this.rotations, cube);
+				if (geometry != null)
+					transformed.put(cube, geometry);
+			}
+			this.transformedCubes = Map.copyOf(transformed);
 		}
 	}
 
@@ -2853,16 +3108,23 @@ public final class SurgicalTableClientHandler {
 		private final InteractionHand hand;
 		private final SurgicalTableGluePacket.Endpoint first;
 		private final SurgicalTableGluePacket.Endpoint second;
+		private Vec3 axis;
+		private double guideRadius;
 		private GluePreview preview;
-		private Vec3 pivot;
+		private Vec3 axisCenter;
+		private Vec3 faceCenter;
 
 		private GlueEditor(InteractionHand hand, SurgicalTableGluePacket.Endpoint first,
-			SurgicalTableGluePacket.Endpoint second, GluePreview preview, Vec3 pivot) {
+			SurgicalTableGluePacket.Endpoint second, GluePreview preview, Vec3 axisCenter,
+			Vec3 faceCenter, Vec3 axis, double guideRadius) {
 			this.hand = hand;
 			this.first = first;
 			this.second = second;
 			this.preview = preview;
-			this.pivot = pivot;
+			this.axisCenter = axisCenter;
+			this.faceCenter = faceCenter;
+			this.axis = axis.normalize();
+			this.guideRadius = guideRadius;
 		}
 	}
 }

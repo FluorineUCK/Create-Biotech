@@ -107,6 +107,21 @@ public final class SurgicalClientTopology {
 		return contactBetween(seam, preparedById(cubes));
 	}
 
+	/** True only for a real shared convex solid or face, without the seam builder's adjacency tolerance. */
+	public static boolean cubesActuallyIntersect(SurgicalModelRenderContext.CubeGeometry firstGeometry,
+		SurgicalModelRenderContext.CubeGeometry secondGeometry) {
+		if (firstGeometry == null || secondGeometry == null)
+			return false;
+		PreparedCube first = PreparedCube.of(firstGeometry);
+		PreparedCube second = PreparedCube.of(secondGeometry);
+		if (!first.bounds.overlapsWithin(second.bounds, POLYHEDRON_EPSILON))
+			return false;
+		List<Plane> intersectionPlanes = new ArrayList<>(first.planes.size() + second.planes.size());
+		intersectionPlanes.addAll(first.planes);
+		intersectionPlanes.addAll(second.planes);
+		return !convexIntersectionFaces(intersectionPlanes).isEmpty();
+	}
+
 	@Nullable
 	private static Contact contactBetween(SurgicalAssembly.Seam seam,
 		Map<Integer, PreparedCube> byId) {
