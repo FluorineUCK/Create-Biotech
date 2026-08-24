@@ -75,20 +75,19 @@ public final class SurgicalSourceModelRenderer {
 		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition,
 		boolean renderSourceGeometry) {
 		preparePreview(preview, yaw);
-		SurgicalCapturedRenderPlan plan = plan(preview, yaw, partialTick, packedLight);
+		SurgicalCapturedRenderPlan plan = plan(preview, yaw, partialTick);
 		return plan.render(poseStack, buffer, packedLight, cubeCount, presentCubes, cubeOffsets,
 			collectGeometry, cameraPosition, renderSourceGeometry);
 	}
 
-	private static SurgicalCapturedRenderPlan plan(LivingEntity preview, float yaw, float partialTick,
-		int packedLight) {
+	private static SurgicalCapturedRenderPlan plan(LivingEntity preview, float yaw, float partialTick) {
 		EntityRenderer<LivingEntity> renderer = renderer(preview);
 		MimicProfile profile = PREVIEW_PROFILES.get(preview);
 		if (profile != null) {
 			RenderPlanKey key = new RenderPlanKey(profile, renderer, Float.floatToIntBits(yaw));
 			SurgicalCapturedRenderPlan plan = RENDER_PLANS.get(key);
 			if (plan == null) {
-				plan = SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick, packedLight);
+				plan = SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick);
 				RENDER_PLANS.put(key, plan);
 			}
 			return plan;
@@ -98,7 +97,7 @@ public final class SurgicalSourceModelRenderer {
 		if (cached == null || cached.renderer != renderer
 			|| Float.floatToIntBits(cached.yaw) != Float.floatToIntBits(yaw)) {
 			SurgicalCapturedRenderPlan plan =
-				SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick, packedLight);
+				SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick);
 			cached = new CachedRenderPlan(renderer, yaw, plan);
 			FALLBACK_RENDER_PLANS.put(preview, cached);
 		}
@@ -110,7 +109,7 @@ public final class SurgicalSourceModelRenderer {
 		BitSet presentCubes, PoseStack poseStack, int packedLight, float yaw, float partialTick,
 		@Nullable Vec3 cameraPosition, boolean renderSourceGeometry) {
 		preparePreview(preview, yaw);
-		return plan(preview, yaw, partialTick, packedLight)
+		return plan(preview, yaw, partialTick)
 			.snapshot(poseStack, cubeCount, presentCubes, Map.of(), cameraPosition);
 	}
 

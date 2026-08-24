@@ -73,7 +73,6 @@ public final class SurgicalTableClientHandler {
 	private static final int SEAM_HIGHLIGHT_COLOR = PonderPalette.RED.getColor();
 	private static final int CUBE_HIGHLIGHT_COLOR = PonderPalette.BLUE.getColor();
 	private static final float HIGHLIGHT_LINE_WIDTH = 1.0f / 32.0f;
-	private static final double MIN_SELECTION_THRESHOLD = 2.0d / 16.0d;
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
 	private static final InteractionHand[] HANDS = { InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND };
@@ -1378,8 +1377,7 @@ public final class SurgicalTableClientHandler {
 
 		TableGeometry geometry = cubeHit.geometry;
 		Selection best = null;
-		double bestScore = Double.MAX_VALUE;
-		double threshold = selectionThreshold(Math.sqrt(cubeHit.distanceSqr));
+		double bestDistance = Double.MAX_VALUE;
 		for (SurgicalClientTopology.Contact contact : geometry.contactsFor(cubeHit.cubeId)) {
 			SurgicalAssembly.Seam seam = contact.seam();
 			if (seam.first() != cubeHit.cubeId && seam.second() != cubeHit.cubeId)
@@ -1388,10 +1386,10 @@ public final class SurgicalTableClientHandler {
 			if (seamId == null || geometry.cutSeams.get(seamId)
 				|| !geometry.presentCubes.get(seam.first()) || !geometry.presentCubes.get(seam.second()))
 				continue;
-			double score = pointToContactDistance(cubeHit.location, contact) / threshold;
-			if (score > 1.0d || score >= bestScore)
+			double distance = pointToContactDistance(cubeHit.location, contact);
+			if (distance >= bestDistance)
 				continue;
-			bestScore = score;
+			bestDistance = distance;
 			best = new Selection(cubeHit.tablePos, geometry.subjectId, seamId, geometry.observedCubeCount,
 				geometry.seams, contact.edges(), geometry.cubeEdges(seam));
 		}
@@ -1654,7 +1652,7 @@ public final class SurgicalTableClientHandler {
 					if (distance >= bestDistance)
 						continue;
 					bestDistance = distance;
-					best = new CubeHit(pos, geometry, cube.cubeId(), hit, distance);
+					best = new CubeHit(pos, geometry, cube.cubeId(), hit);
 				}
 			}
 		}
@@ -1809,10 +1807,6 @@ public final class SurgicalTableClientHandler {
 			return null;
 		Vec3 hit = start.add(direction.scale(amount));
 		return insideConvexPolygon(hit, polygon, normal) ? hit : null;
-	}
-
-	private static double selectionThreshold(double distance) {
-		return Math.max(MIN_SELECTION_THRESHOLD, Math.min(MAX_SELECTION_THRESHOLD, distance * 0.015d));
 	}
 
 	private static double pointToContactDistance(Vec3 point, SurgicalClientTopology.Contact contact) {
@@ -2301,8 +2295,7 @@ public final class SurgicalTableClientHandler {
 
 	private record Ray(Vec3 start, Vec3 end) {}
 
-	private record CubeHit(BlockPos tablePos, TableGeometry geometry, int cubeId,
-		Vec3 location, double distanceSqr) {}
+	private record CubeHit(BlockPos tablePos, TableGeometry geometry, int cubeId, Vec3 location) {}
 
 	private record CubeTarget(SurgicalModelRenderContext.CubeGeometry geometry, AABB bounds) {}
 
@@ -2447,7 +2440,11 @@ public final class SurgicalTableClientHandler {
 				if (snapshot.observedCubeCount() != source.cubeCount()
 					|| snapshot.cubes().size() != source.presentCubes().cardinality())
 					return null;
-				Map<Integer, Vec3> renderOffsets = groundedOffsets(placedSource, snapshot);
+				// A composite assembly promises to preserve its packed layout. In particular, keep
+				// the saved vertical component offsets: the server restores these exact values when
+				// the sources become table subjects, so grounding them again here would make the
+				// placement preview disagree with the confirmed result.
+				Map<Integer, Vec3> renderOffsets = placedSource.cubeOffsets();
 				geometries.add(new SourcePlacementGeometry(placedSource, snapshot.cubes(), renderOffsets));
 				discarded.reset();
 
@@ -2467,14 +2464,6 @@ public final class SurgicalTableClientHandler {
 				placedSource.originOffset().z);
 			SurgicalTablePoseResolver.resolve(placedSource.layPose()).apply(poseStack);
 			return poseStack;
-		}
-
-		private Map<Integer, Vec3> groundedOffsets(SurgicalAssembly.PlacedSource placedSource,
-			SurgicalModelRenderContext.Snapshot snapshot) {
-			SurgicalAssembly.Source source = placedSource.source();
-			return SurgicalClientTopology.groundComponents(source.cubeCount(), source.presentCubes(),
-				source.seams(), source.cutSeams(), snapshot.cubes(), placedSource.cubeOffsets(),
-				1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE);
 		}
 
 		private Map<Integer, Vec3> groundedOffsets(SurgicalModelRenderContext.Snapshot snapshot) {

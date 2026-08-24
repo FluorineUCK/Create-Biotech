@@ -54,6 +54,10 @@ public final class SurgicalCapturedRenderPlan {
 		ResourceLocation.withDefaultNamespace("textures/entity/slime/slime.png");
 	private static final RenderType INNER_RENDER_TYPE = RenderType.entityCutoutNoCull(SLIME_TEXTURE);
 	private static final RenderType OUTER_RENDER_TYPE = RenderType.entityTranslucent(SLIME_TEXTURE);
+	// Record with a recognizable non-full-bright value so ambient lighting cannot be mistaken for
+	// an emissive layer. Vanilla supplies full block light for burning entities; capturing that
+	// value directly would otherwise make every recorded vertex permanently glow.
+	private static final int CAPTURE_LIGHT = LightTexture.pack(7, 11);
 	private static final float SLIME_CENTER_Y = 20.0f / 16.0f;
 	private static final float THIN_EDGE = 0.05f / 16.0f;
 	private static final float OVERLAY_EXPANSION_MAX = 1.1f / 16.0f;
@@ -77,11 +81,11 @@ public final class SurgicalCapturedRenderPlan {
 	}
 
 	static SurgicalCapturedRenderPlan capture(EntityRenderer<LivingEntity> renderer, LivingEntity preview,
-		float yaw, float partialTick, int packedLight) {
+		float yaw, float partialTick) {
 		RecordingBuffer recording = new RecordingBuffer();
 		PoseStack neutralPose = new PoseStack();
 		try {
-			renderer.render(preview, yaw, partialTick, neutralPose, recording, packedLight);
+			renderer.render(preview, yaw, partialTick, neutralPose, recording, CAPTURE_LIGHT);
 		} finally {
 			recording.finish();
 		}
@@ -101,7 +105,7 @@ public final class SurgicalCapturedRenderPlan {
 			|| entity.isInvisible())
 			return false;
 		SurgicalCapturedRenderPlan frame = capture((EntityRenderer<LivingEntity>) renderer, entity,
-			yaw, partialTick, packedLight);
+			yaw, partialTick);
 		frame.render(poseStack, buffer, packedLight, 0, ALL_COMPONENTS, NO_OFFSETS,
 			false, null, false);
 		return true;
