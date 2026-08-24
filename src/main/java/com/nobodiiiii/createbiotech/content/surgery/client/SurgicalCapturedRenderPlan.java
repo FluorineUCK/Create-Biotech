@@ -131,6 +131,13 @@ public final class SurgicalCapturedRenderPlan {
 			for (Component component : components)
 				if (!component.preserveSource && isPresent(component.id, expectedCubeCount, presentCubes))
 					component.renderSlime(poseStack, buffer, packedLight, cubeOffsets.get(component.id), true);
+			// Villager professions, emissive eyes and similar layers intentionally redraw the
+			// same model cube with another material. Keep those pixels attached to the one
+			// surgical component instead of admitting duplicate topology or discarding them.
+			for (Component component : components)
+				if (!component.preserveSource && isPresent(component.id, expectedCubeCount, presentCubes))
+					component.renderSurfaceOverlays(poseStack, buffer, packedLight,
+						cubeOffsets.get(component.id));
 		}
 
 		// Lines, text, beams and genuinely non-cuboid meshes are visual effects rather than
@@ -195,8 +202,9 @@ public final class SurgicalCapturedRenderPlan {
 					matches.add(builder);
 				}
 				builder.captureStreams.set(stream.id);
+				builder.observeMaterial(stream.renderType);
 				if (hasVisibleQuad(stream.renderType, candidateVertices))
-					builder.batches.add(new SourceBatch(stream.renderType, List.copyOf(candidateVertices)));
+					builder.addVisibleBatch(stream.renderType, candidateVertices);
 				cursor += 24;
 			}
 
@@ -618,16 +626,31 @@ public final class SurgicalCapturedRenderPlan {
 		private final int order;
 		private final RecoveredCuboid cuboid;
 		private final List<SourceBatch> batches = new ArrayList<>();
+		private final List<SourceBatch> surfaceOverlays = new ArrayList<>();
 		private final BitSet captureStreams = new BitSet();
+		@Nullable
+		private RenderType primaryRenderType;
 
 		private ComponentBuilder(int order, RecoveredCuboid cuboid) {
 			this.order = order;
 			this.cuboid = cuboid;
 		}
 
+		private void observeMaterial(RenderType renderType) {
+			if (primaryRenderType == null)
+				primaryRenderType = renderType;
+		}
+
+		private void addVisibleBatch(RenderType renderType, List<CapturedVertex> vertices) {
+			SourceBatch batch = new SourceBatch(renderType, List.copyOf(vertices));
+			batches.add(batch);
+			if (primaryRenderType != renderType)
+				surfaceOverlays.add(batch);
+		}
+
 		private Component build(int id, boolean preserveSource) {
 			return new Component(id, cuboid.corners, cuboid.a, cuboid.b, cuboid.c,
-				preserveSource, List.copyOf(batches));
+				preserveSource, List.copyOf(batches), List.copyOf(surfaceOverlays));
 		}
 	}
 
@@ -668,9 +691,10 @@ public final class SurgicalCapturedRenderPlan {
 		private final Vector3f c;
 		private final boolean preserveSource;
 		private final List<SourceBatch> batches;
+		private final List<SourceBatch> surfaceOverlays;
 
 		private Component(int id, List<Vector3f> corners, Vector3f a, Vector3f b, Vector3f c,
-			boolean preserveSource, List<SourceBatch> batches) {
+			boolean preserveSource, List<SourceBatch> batches, List<SourceBatch> surfaceOverlays) {
 			this.id = id;
 			this.corners = corners.stream().map(Vector3f::new).toList();
 			this.a = new Vector3f(a);
@@ -678,11 +702,18 @@ public final class SurgicalCapturedRenderPlan {
 			this.c = new Vector3f(c);
 			this.preserveSource = preserveSource;
 			this.batches = batches;
+			this.surfaceOverlays = surfaceOverlays;
 		}
 
 		private void renderSource(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 			@Nullable Vec3 offset) {
 			for (SourceBatch batch : batches)
+				batch.render(poseStack, buffer, packedLight, offset);
+		}
+
+		private void renderSurfaceOverlays(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+			@Nullable Vec3 offset) {
+			for (SourceBatch batch : surfaceOverlays)
 				batch.render(poseStack, buffer, packedLight, offset);
 		}
 

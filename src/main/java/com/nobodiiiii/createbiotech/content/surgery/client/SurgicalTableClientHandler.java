@@ -212,7 +212,6 @@ public final class SurgicalTableClientHandler {
 		geometryGeneration++;
 		lastSelectionRay = null;
 		lastSelectionPendingGlue = null;
-		SurgicalTableRenderer.clearCache();
 		SurgicalTablePoseResolver.clear();
 		clearSelections();
 	}

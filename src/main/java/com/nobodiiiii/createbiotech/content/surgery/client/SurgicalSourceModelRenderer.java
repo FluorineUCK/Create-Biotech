@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.surgery.client;
 
 import java.util.BitSet;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -17,8 +18,17 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 public final class SurgicalSourceModelRenderer {
+	private static final int MAX_RENDER_PLANS = 512;
 	private static final Map<Object, Map<MimicProfile, CachedPreview>> PREVIEWS = new WeakHashMap<>();
-	private static final Map<LivingEntity, CachedRenderPlan> RENDER_PLANS = new WeakHashMap<>();
+	private static final Map<LivingEntity, MimicProfile> PREVIEW_PROFILES = new WeakHashMap<>();
+	private static final Map<RenderPlanKey, SurgicalCapturedRenderPlan> RENDER_PLANS =
+		new LinkedHashMap<>(64, 0.75f, true) {
+			@Override
+			protected boolean removeEldestEntry(Map.Entry<RenderPlanKey, SurgicalCapturedRenderPlan> eldest) {
+				return size() > MAX_RENDER_PLANS;
+			}
+		};
+	private static final Map<LivingEntity, CachedRenderPlan> FALLBACK_RENDER_PLANS = new WeakHashMap<>();
 
 	private SurgicalSourceModelRenderer() {}
 
@@ -39,6 +49,7 @@ public final class SurgicalSourceModelRenderer {
 		if (entity == null)
 			return null;
 		ownerPreviews.put(profile, new CachedPreview(level, profile, entity));
+		PREVIEW_PROFILES.put(entity, profile);
 		return entity;
 	}
 
@@ -72,13 +83,24 @@ public final class SurgicalSourceModelRenderer {
 	private static SurgicalCapturedRenderPlan plan(LivingEntity preview, float yaw, float partialTick,
 		int packedLight) {
 		EntityRenderer<LivingEntity> renderer = renderer(preview);
-		CachedRenderPlan cached = RENDER_PLANS.get(preview);
+		MimicProfile profile = PREVIEW_PROFILES.get(preview);
+		if (profile != null) {
+			RenderPlanKey key = new RenderPlanKey(profile, renderer, Float.floatToIntBits(yaw));
+			SurgicalCapturedRenderPlan plan = RENDER_PLANS.get(key);
+			if (plan == null) {
+				plan = SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick, packedLight);
+				RENDER_PLANS.put(key, plan);
+			}
+			return plan;
+		}
+
+		CachedRenderPlan cached = FALLBACK_RENDER_PLANS.get(preview);
 		if (cached == null || cached.renderer != renderer
 			|| Float.floatToIntBits(cached.yaw) != Float.floatToIntBits(yaw)) {
 			SurgicalCapturedRenderPlan plan =
 				SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick, packedLight);
 			cached = new CachedRenderPlan(renderer, yaw, plan);
-			RENDER_PLANS.put(preview, cached);
+			FALLBACK_RENDER_PLANS.put(preview, cached);
 		}
 		return cached.plan;
 	}
@@ -111,11 +133,15 @@ public final class SurgicalSourceModelRenderer {
 
 	public static void clear() {
 		PREVIEWS.clear();
+		PREVIEW_PROFILES.clear();
 		RENDER_PLANS.clear();
+		FALLBACK_RENDER_PLANS.clear();
 		SurgicalCapturedRenderPlan.clearResources();
 	}
 
 	private record CachedPreview(ClientLevel level, MimicProfile profile, LivingEntity entity) {}
+
+	private record RenderPlanKey(MimicProfile profile, EntityRenderer<LivingEntity> renderer, int yawBits) {}
 
 	private record CachedRenderPlan(EntityRenderer<LivingEntity> renderer, float yaw,
 		SurgicalCapturedRenderPlan plan) {}

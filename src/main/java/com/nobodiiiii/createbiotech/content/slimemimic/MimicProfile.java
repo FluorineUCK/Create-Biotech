@@ -20,15 +20,16 @@ import net.minecraft.world.entity.Mob;
 import net.minecraft.world.level.Level;
 
 /**
- * A deliberately small snapshot of stable biological and appearance data.
- * Identity, inventory, ownership, AI memories, health and other gameplay state
- * are never copied into the profile.
+ * Stable biological data plus an immutable render-only snapshot. Gameplay entities
+ * receive only the small stable-data whitelist; preview entities may additionally load
+ * the sanitized snapshot so paper boxes and surgical parts retain their exact appearance.
  */
 public final class MimicProfile {
-	private static final int CURRENT_VERSION = 1;
+	private static final int CURRENT_VERSION = 2;
 	private static final String VERSION_TAG = "Version";
 	private static final String ENTITY_TYPE_TAG = "EntityType";
 	private static final String STABLE_DATA_TAG = "StableData";
+	private static final String PREVIEW_DATA_TAG = "PreviewData";
 	private static final String BABY_TAG = "Baby";
 	private static final String ATTRIBUTES_TAG = "attributes";
 	private static final String VILLAGER_DATA_TAG = "VillagerData";
@@ -60,12 +61,15 @@ public final class MimicProfile {
 
 	private final ResourceLocation entityTypeId;
 	private final CompoundTag stableData;
+	private final CompoundTag previewData;
 	@Nullable
 	private final Boolean baby;
 
-	private MimicProfile(ResourceLocation entityTypeId, CompoundTag stableData, @Nullable Boolean baby) {
+	private MimicProfile(ResourceLocation entityTypeId, CompoundTag stableData, CompoundTag previewData,
+		@Nullable Boolean baby) {
 		this.entityTypeId = entityTypeId;
 		this.stableData = stableData.copy();
+		this.previewData = previewData.copy();
 		this.baby = baby;
 	}
 
@@ -90,12 +94,14 @@ public final class MimicProfile {
 			copyVillagerType(completeData, stableData);
 
 		Boolean baby = entity instanceof Mob && !(entity instanceof AgeableMob) ? entity.isBaby() : null;
-		return new MimicProfile(entityTypeId, stableData, baby);
+		return new MimicProfile(entityTypeId, stableData, sanitizePreviewData(completeData), baby);
 	}
 
 	@Nullable
 	public static MimicProfile load(CompoundTag tag) {
-		if (tag.getInt(VERSION_TAG) != CURRENT_VERSION || !tag.contains(ENTITY_TYPE_TAG, Tag.TAG_STRING))
+		int version = tag.getInt(VERSION_TAG);
+		if ((version != 1 && version != CURRENT_VERSION)
+			|| !tag.contains(ENTITY_TYPE_TAG, Tag.TAG_STRING))
 			return null;
 
 		ResourceLocation entityTypeId = ResourceLocation.tryParse(tag.getString(ENTITY_TYPE_TAG));
@@ -107,8 +113,10 @@ public final class MimicProfile {
 		EntityType<?> entityType = BuiltInRegistries.ENTITY_TYPE.getOptional(entityTypeId)
 			.orElse(null);
 		CompoundTag stableData = sanitizeSavedData(entityType, savedStableData);
+		CompoundTag previewData = version >= 2 && tag.contains(PREVIEW_DATA_TAG, Tag.TAG_COMPOUND)
+			? sanitizePreviewData(tag.getCompound(PREVIEW_DATA_TAG)) : new CompoundTag();
 		Boolean baby = tag.contains(BABY_TAG, Tag.TAG_BYTE) ? tag.getBoolean(BABY_TAG) : null;
-		return new MimicProfile(entityTypeId, stableData, baby);
+		return new MimicProfile(entityTypeId, stableData, previewData, baby);
 	}
 
 	public CompoundTag save() {
@@ -117,6 +125,8 @@ public final class MimicProfile {
 		tag.putString(ENTITY_TYPE_TAG, entityTypeId.toString());
 		if (!stableData.isEmpty())
 			tag.put(STABLE_DATA_TAG, stableData.copy());
+		if (!previewData.isEmpty())
+			tag.put(PREVIEW_DATA_TAG, previewData.copy());
 		if (baby != null)
 			tag.putBoolean(BABY_TAG, baby);
 		return tag;
@@ -134,12 +144,13 @@ public final class MimicProfile {
 			return false;
 		return entityTypeId.equals(profile.entityTypeId)
 			&& stableData.equals(profile.stableData)
+			&& previewData.equals(profile.previewData)
 			&& Objects.equals(baby, profile.baby);
 	}
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(entityTypeId, stableData, baby);
+		return Objects.hash(entityTypeId, stableData, previewData, baby);
 	}
 
 	/**
@@ -158,6 +169,11 @@ public final class MimicProfile {
 		if (!(created instanceof LivingEntity living))
 			return null;
 
+		if (!previewData.isEmpty()) {
+			UUID previewUuid = living.getUUID();
+			living.load(previewData.copy());
+			living.setUUID(previewUuid);
+		}
 		apply(living);
 		SlimeMimicHandler.setSlimeMimic(living, true);
 		living.setYRot(0.0f);
@@ -209,12 +225,10 @@ public final class MimicProfile {
 	private static void copyVillagerType(CompoundTag source, CompoundTag target) {
 		if (!source.contains(VILLAGER_DATA_TAG, Tag.TAG_COMPOUND))
 			return;
-
 		CompoundTag sourceVillagerData = source.getCompound(VILLAGER_DATA_TAG);
 		Tag villagerType = sourceVillagerData.get(VILLAGER_TYPE_TAG);
 		if (villagerType == null)
 			return;
-
 		CompoundTag stableVillagerData = new CompoundTag();
 		stableVillagerData.put(VILLAGER_TYPE_TAG, villagerType.copy());
 		target.put(VILLAGER_DATA_TAG, stableVillagerData);
@@ -235,5 +249,15 @@ public final class MimicProfile {
 		if (entityType == EntityType.VILLAGER || entityType == EntityType.ZOMBIE_VILLAGER)
 			copyVillagerType(savedData, sanitizedData);
 		return sanitizedData;
+	}
+
+	private static CompoundTag sanitizePreviewData(CompoundTag source) {
+		CompoundTag preview = source.copy();
+		for (String field : List.of("UUID", "Pos", "Motion", "Rotation", "FallDistance", "Fire", "Air",
+			"OnGround", "Invulnerable", "PortalCooldown", "Passengers", "Leash", "Health",
+			"AbsorptionAmount", "HurtTime", "DeathTime", "HurtByTimestamp", "Brain", "attributes",
+			"Attributes", "SleepingX", "SleepingY", "SleepingZ"))
+			preview.remove(field);
+		return preview;
 	}
 }
