@@ -27,6 +27,7 @@ import net.neoforged.neoforge.client.event.RenderLivingEvent;
 import net.neoforged.neoforge.client.event.RenderPlayerEvent;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
+import net.neoforged.neoforge.event.level.LevelEvent;
 
 import com.mojang.blaze3d.vertex.VertexConsumer;
 
@@ -164,26 +165,9 @@ public class ShulkerTeleporterClientEvents {
 
 	private static ShulkerTeleporterBlockEntity findRelevantTeleporter(LivingEntity entity, float partialTick) {
 		Level level = entity.level();
-		ShulkerTeleporterBlockEntity[] best = new ShulkerTeleporterBlockEntity[1];
-		float[] bestProgress = new float[1];
-		SubLevelCompat.forEachIncludingEntitySpace(level, entity.position(), entity, (subLevel, center) -> {
-			ShulkerTeleporterBlockEntity candidate = findRelevantTeleporter(level, entity, center, partialTick);
-			if (candidate == null)
-				return;
-			float progress = candidate.getClosingProgress(partialTick);
-			if (best[0] == null || progress > bestProgress[0]) {
-				best[0] = candidate;
-				bestProgress[0] = progress;
-			}
-		});
-		return best[0];
-	}
-
-	private static ShulkerTeleporterBlockEntity findRelevantTeleporter(Level level, LivingEntity entity,
-		BlockPos center, float partialTick) {
 		ShulkerTeleporterBlockEntity best = null;
 		float bestProgress = 0.0f;
-		for (BlockPos pos : BlockPos.betweenClosed(center.offset(-1, -1, -1), center.offset(1, 4, 1))) {
+		for (BlockPos pos : ShulkerTeleporterBlockEntity.activeClientTeleporters(level)) {
 			BlockEntity blockEntity = level.getBlockEntity(pos);
 			if (!(blockEntity instanceof ShulkerTeleporterBlockEntity teleporter))
 				continue;
@@ -198,6 +182,12 @@ public class ShulkerTeleporterClientEvents {
 			}
 		}
 		return best;
+	}
+
+	@SubscribeEvent
+	public static void clearActiveTeleporters(LevelEvent.Unload event) {
+		if (event.getLevel() instanceof Level level && level.isClientSide())
+			ShulkerTeleporterBlockEntity.clearActiveClientTeleporters(level);
 	}
 
 	private static class YClippingVertexConsumer implements VertexConsumer {

@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.surgery.client;
 import java.util.BitSet;
 import java.util.List;
 import java.util.Map;
+import java.util.WeakHashMap;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
@@ -22,6 +23,7 @@ import net.minecraft.world.phys.Vec3;
 
 public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableBlockEntity> {
 	private static final BitSet EMPTY_CUBES = new BitSet();
+	private static final Map<SurgicalSubject, CachedSubjectRender> SUBJECT_RENDER_CACHE = new WeakHashMap<>();
 
 	public SurgicalTableRenderer(BlockEntityRendererProvider.Context context) {}
 
@@ -93,8 +95,53 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 			SurgicalTableClientHandler.updateGeometry(table, subject, snapshot);
 		}
 		Map<Integer, Vec3> offsets = SurgicalTableClientHandler.offsetsFor(table, subject);
-		SurgicalSourceModelRenderer.render(preview, storedCount, present, offsets, poseStack, buffer,
-			packedLight, 0.0f, 0.0f, false, camera, projectSourceGeometry);
+		CachedSubjectRender cached = SUBJECT_RENDER_CACHE.get(subject);
+		if (cached == null || !cached.key().matches(preview, storedCount, present, offsets, packedLight,
+			projectSourceGeometry)) {
+			MeshKey key = new MeshKey(preview, storedCount, present, offsets, packedLight, projectSourceGeometry);
+			cached = bakeSubject(key, preview, storedCount, present, offsets, packedLight, projectSourceGeometry);
+			SUBJECT_RENDER_CACHE.put(subject, cached);
+		}
+		if (cached.mesh() != null)
+			cached.mesh().render(poseStack, buffer);
+		else
+			SurgicalSourceModelRenderer.render(preview, storedCount, present, offsets, poseStack, buffer,
+				packedLight, 0.0f, 0.0f, false, camera, projectSourceGeometry);
 		poseStack.popPose();
 	}
+
+	private static CachedSubjectRender bakeSubject(MeshKey key, LivingEntity preview, int storedCount,
+		BitSet present, Map<Integer, Vec3> offsets, int packedLight, boolean projectSourceGeometry) {
+		SurgicalTableRenderMesh.Builder builder = SurgicalTableRenderMesh.builder();
+		try {
+			SurgicalSourceModelRenderer.render(preview, storedCount, present, offsets, new PoseStack(), builder,
+				packedLight, 0.0f, 0.0f, false, null, projectSourceGeometry);
+			return new CachedSubjectRender(key, builder.build());
+		} catch (RuntimeException | LinkageError ignored) {
+			// A non-standard renderer may require Minecraft's concrete buffer implementation.
+			// Remember the unsupported key and retain the original direct-render path.
+			return new CachedSubjectRender(key, null);
+		}
+	}
+
+	public static void clearCache() {
+		SUBJECT_RENDER_CACHE.clear();
+	}
+
+	private record MeshKey(LivingEntity preview, int cubeCount, BitSet presentCubes,
+		Map<Integer, Vec3> offsets, int packedLight, boolean projectSourceGeometry) {
+		private MeshKey {
+			presentCubes = (BitSet) presentCubes.clone();
+			offsets = Map.copyOf(offsets);
+		}
+
+		private boolean matches(LivingEntity currentPreview, int currentCubeCount, BitSet currentPresentCubes,
+			Map<Integer, Vec3> currentOffsets, int currentPackedLight, boolean currentProjectSourceGeometry) {
+			return preview == currentPreview && cubeCount == currentCubeCount && presentCubes.equals(currentPresentCubes)
+				&& offsets.equals(currentOffsets) && packedLight == currentPackedLight
+				&& projectSourceGeometry == currentProjectSourceGeometry;
+		}
+	}
+
+	private record CachedSubjectRender(MeshKey key, SurgicalTableRenderMesh mesh) {}
 }

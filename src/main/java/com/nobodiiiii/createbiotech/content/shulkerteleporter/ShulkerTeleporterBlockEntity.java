@@ -12,6 +12,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+import java.util.WeakHashMap;
 
 import javax.annotation.Nullable;
 
@@ -66,6 +67,7 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	public static final int MAX_CANDIDATE_ADDRESSES = 64;
 	private static final AABB TELEPORT_TRIGGER_AREA = new AABB(1.0d / 16.0d, 0.0d, 1.0d / 16.0d,
 		15.0d / 16.0d, 0.25d, 15.0d / 16.0d);
+	private static final Map<Level, Set<BlockPos>> CLIENT_ACTIVE_TELEPORTERS = new WeakHashMap<>();
 
 	private String ownAddress = "";
 	private String targetAddress = "";
@@ -103,6 +105,7 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 				closingTicks = Math.min(CLOSE_TICKS, closingTicks + animationStep);
 			else if (!closing && closingTicks > 0)
 				closingTicks = Math.max(0, closingTicks - animationStep);
+			updateClientActiveRegistration();
 			return;
 		}
 
@@ -265,13 +268,21 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 	public void onLoad() {
 		super.onLoad();
 		registerAddress();
+		updateClientActiveRegistration();
 	}
 
 	@Override
 	public void onChunkUnloaded() {
+		unregisterClientActiveTeleporter();
 		if (registeredLocation != null && registeredLocation.subLevelId() != null)
 			unregisterAddress();
 		super.onChunkUnloaded();
+	}
+
+	@Override
+	public void invalidate() {
+		unregisterClientActiveTeleporter();
+		super.invalidate();
 	}
 
 	@Override
@@ -303,6 +314,38 @@ public class ShulkerTeleporterBlockEntity extends KineticBlockEntity implements 
 		previousClosingTicks = closingTicks;
 		sealedHoldTicks = Mth.clamp(tag.getInt("SealedHoldTicks"), 0, SEALED_HOLD_TICKS);
 		closing = tag.getBoolean("Closing");
+		updateClientActiveRegistration();
+	}
+
+	static Iterable<BlockPos> activeClientTeleporters(Level level) {
+		Set<BlockPos> positions = CLIENT_ACTIVE_TELEPORTERS.get(level);
+		return positions == null ? List.of() : positions;
+	}
+
+	static void clearActiveClientTeleporters(Level level) {
+		CLIENT_ACTIVE_TELEPORTERS.remove(level);
+	}
+
+	private void updateClientActiveRegistration() {
+		if (level == null || !level.isClientSide)
+			return;
+		if (closingTicks > 0.0f || previousClosingTicks > 0.0f) {
+			CLIENT_ACTIVE_TELEPORTERS.computeIfAbsent(level, ignored -> new java.util.HashSet<>())
+				.add(worldPosition.immutable());
+			return;
+		}
+		unregisterClientActiveTeleporter();
+	}
+
+	private void unregisterClientActiveTeleporter() {
+		if (level == null || !level.isClientSide)
+			return;
+		Set<BlockPos> positions = CLIENT_ACTIVE_TELEPORTERS.get(level);
+		if (positions == null)
+			return;
+		positions.remove(worldPosition);
+		if (positions.isEmpty())
+			CLIENT_ACTIVE_TELEPORTERS.remove(level);
 	}
 
 	static String normalizeAddress(String address) {

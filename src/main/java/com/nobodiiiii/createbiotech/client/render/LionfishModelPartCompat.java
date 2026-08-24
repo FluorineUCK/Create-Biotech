@@ -3,6 +3,10 @@ package com.nobodiiiii.createbiotech.client.render;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
 
 import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -43,6 +47,11 @@ final class LionfishModelPartCompat {
 	private static volatile Access access;
 	private static volatile boolean accessResolved;
 	private static volatile boolean disabled;
+	private static final Map<Object, List<?>> CUBES = new IdentityHashMap<>();
+	private static final Map<Object, List<?>> CHILDREN = new IdentityHashMap<>();
+	private static final Map<Object, Object> MODELS = new IdentityHashMap<>();
+	private static final Map<Object, Object> ROOTS = new IdentityHashMap<>();
+	private static final Map<Object, CubeData> CUBE_DATA = new IdentityHashMap<>();
 
 	private LionfishModelPartCompat() {}
 
@@ -55,20 +64,22 @@ final class LionfishModelPartCompat {
 		return readBoolean(accessRequired(part).showModel(), part);
 	}
 
-	static Iterable<?> cubes(Object part) {
-		return iterable(read(accessRequired(part).cubeList(), part), "cubeList");
+	static List<?> cubes(Object part) {
+		return CUBES.computeIfAbsent(part,
+			ignored -> immutableElements(read(accessRequired(part).cubeList(), part), "cubeList"));
 	}
 
-	static Iterable<?> children(Object part) {
-		return iterable(read(accessRequired(part).childModels(), part), "childModels");
+	static List<?> children(Object part) {
+		return CHILDREN.computeIfAbsent(part,
+			ignored -> immutableElements(read(accessRequired(part).childModels(), part), "childModels"));
 	}
 
 	static Object model(Object part) {
-		return invoke(accessRequired(part).getModel(), part);
+		return MODELS.computeIfAbsent(part, ignored -> invoke(accessRequired(part).getModel(), part));
 	}
 
 	static Object root(Object model) {
-		return invoke(accessRequired(model).root(), model);
+		return ROOTS.computeIfAbsent(model, ignored -> invoke(accessRequired(model).root(), model));
 	}
 
 	static void translateAndRotate(Object part, PoseStack poseStack) {
@@ -92,44 +103,21 @@ final class LionfishModelPartCompat {
 	}
 
 	static CubeBounds bounds(Object cube) {
-		Access resolved = accessRequired(cube);
-		float minX = Float.POSITIVE_INFINITY;
-		float minY = Float.POSITIVE_INFINITY;
-		float minZ = Float.POSITIVE_INFINITY;
-		float maxX = Float.NEGATIVE_INFINITY;
-		float maxY = Float.NEGATIVE_INFINITY;
-		float maxZ = Float.NEGATIVE_INFINITY;
-
-		for (Object quad : objectArray(read(resolved.quads(), cube), "quads")) {
-			for (Object vertex : objectArray(read(resolved.vertices(), quad), "vertexPositions")) {
-				Vector3f position = position(resolved, vertex);
-				minX = Math.min(minX, position.x());
-				minY = Math.min(minY, position.y());
-				minZ = Math.min(minZ, position.z());
-				maxX = Math.max(maxX, position.x());
-				maxY = Math.max(maxY, position.y());
-				maxZ = Math.max(maxZ, position.z());
-			}
-		}
-
-		if (!Float.isFinite(minX) || !Float.isFinite(maxX))
-			throw new IllegalStateException("Lionfish cube has no vertices");
-		return new CubeBounds(minX, minY, minZ, maxX, maxY, maxZ);
+		return cubeData(cube).bounds();
 	}
 
 	static boolean cubeHasVisiblePixels(Object cube, NativeImage image) {
 		if (!image.format().hasAlpha())
 			return true;
 
-		Access resolved = accessRequired(cube);
-		for (Object quad : objectArray(read(resolved.quads(), cube), "quads")) {
+		for (QuadData quad : cubeData(cube).quads()) {
 			float minU = Float.POSITIVE_INFINITY;
 			float minV = Float.POSITIVE_INFINITY;
 			float maxU = Float.NEGATIVE_INFINITY;
 			float maxV = Float.NEGATIVE_INFINITY;
-			for (Object vertex : objectArray(read(resolved.vertices(), quad), "vertexPositions")) {
-				float u = readFloat(resolved.textureU(), vertex);
-				float v = readFloat(resolved.textureV(), vertex);
+			for (VertexData vertex : quad.vertices()) {
+				float u = vertex.u();
+				float v = vertex.v();
 				minU = Math.min(minU, u);
 				minV = Math.min(minV, v);
 				maxU = Math.max(maxU, u);
@@ -143,13 +131,12 @@ final class LionfishModelPartCompat {
 
 	static void compileCube(Object cube, PoseStack.Pose pose, VertexConsumer consumer, int packedLight,
 		int overlay, float red, float green, float blue, float alpha, float normalOffset) {
-		Access resolved = accessRequired(cube);
 		Matrix4f poseMatrix = pose.pose();
 		Matrix3f normalMatrix = pose.normal();
 
-		for (Object quad : objectArray(read(resolved.quads(), cube), "quads")) {
+		for (QuadData quad : cubeData(cube).quads()) {
 			Vector3f transformedNormal = normalMatrix.transform(
-				new Vector3f((Vector3f) read(resolved.normal(), quad)), new Vector3f());
+				new Vector3f(quad.normalX(), quad.normalY(), quad.normalZ()), new Vector3f());
 			if (transformedNormal.lengthSquared() > 1.0e-7f)
 				transformedNormal.normalize();
 			else
@@ -158,19 +145,18 @@ final class LionfishModelPartCompat {
 			float normalX = transformedNormal.x();
 			float normalY = transformedNormal.y();
 			float normalZ = transformedNormal.z();
-			for (Object vertex : objectArray(read(resolved.vertices(), quad), "vertexPositions")) {
-				Vector3f localPosition = position(resolved, vertex);
+			for (VertexData vertex : quad.vertices()) {
 				Vector4f transformedPosition = poseMatrix.transform(new Vector4f(
-					localPosition.x() / 16.0f,
-					localPosition.y() / 16.0f,
-					localPosition.z() / 16.0f,
+					vertex.x() / 16.0f,
+					vertex.y() / 16.0f,
+					vertex.z() / 16.0f,
 					1.0f));
 				consumer.addVertex(
 						transformedPosition.x() + normalX * normalOffset,
 						transformedPosition.y() + normalY * normalOffset,
 						transformedPosition.z() + normalZ * normalOffset)
 					.setColor(red, green, blue, alpha)
-					.setUv(readFloat(resolved.textureU(), vertex), readFloat(resolved.textureV(), vertex))
+					.setUv(vertex.u(), vertex.v())
 					.setOverlay(overlay)
 					.setLight(packedLight)
 					.setNormal(normalX, normalY, normalZ);
@@ -185,7 +171,16 @@ final class LionfishModelPartCompat {
 			access = null;
 			accessResolved = true;
 			disabled = true;
+			clearCaches();
 		}
+	}
+
+	static void clearCaches() {
+		CUBES.clear();
+		CHILDREN.clear();
+		MODELS.clear();
+		ROOTS.clear();
+		CUBE_DATA.clear();
 	}
 
 	private static Access accessRequired(Object instance) {
@@ -243,14 +238,51 @@ final class LionfishModelPartCompat {
 		return Math.max(0, Math.min(value, maxExclusive - 1));
 	}
 
-	private static Vector3f position(Access resolved, Object vertex) {
-		return (Vector3f) read(resolved.position(), vertex);
+	private static List<?> immutableElements(Object value, String name) {
+		if (value instanceof Iterable<?> iterable) {
+			List<Object> elements = new ArrayList<>();
+			for (Object element : iterable)
+				elements.add(element);
+			return List.copyOf(elements);
+		}
+		throw new IllegalStateException("Lionfish " + name + " is not iterable");
 	}
 
-	private static Iterable<?> iterable(Object value, String name) {
-		if (value instanceof Iterable<?> iterable)
-			return iterable;
-		throw new IllegalStateException("Lionfish " + name + " is not iterable");
+	private static CubeData cubeData(Object cube) {
+		return CUBE_DATA.computeIfAbsent(cube, LionfishModelPartCompat::readCubeData);
+	}
+
+	private static CubeData readCubeData(Object cube) {
+		Access resolved = accessRequired(cube);
+		Object[] sourceQuads = objectArray(read(resolved.quads(), cube), "quads");
+		List<QuadData> quads = new ArrayList<>(sourceQuads.length);
+		float minX = Float.POSITIVE_INFINITY;
+		float minY = Float.POSITIVE_INFINITY;
+		float minZ = Float.POSITIVE_INFINITY;
+		float maxX = Float.NEGATIVE_INFINITY;
+		float maxY = Float.NEGATIVE_INFINITY;
+		float maxZ = Float.NEGATIVE_INFINITY;
+		for (Object sourceQuad : sourceQuads) {
+			Object[] sourceVertices = objectArray(read(resolved.vertices(), sourceQuad), "vertexPositions");
+			List<VertexData> vertices = new ArrayList<>(sourceVertices.length);
+			for (Object sourceVertex : sourceVertices) {
+				Vector3f position = (Vector3f) read(resolved.position(), sourceVertex);
+				VertexData vertex = new VertexData(position.x(), position.y(), position.z(),
+					readFloat(resolved.textureU(), sourceVertex), readFloat(resolved.textureV(), sourceVertex));
+				vertices.add(vertex);
+				minX = Math.min(minX, vertex.x());
+				minY = Math.min(minY, vertex.y());
+				minZ = Math.min(minZ, vertex.z());
+				maxX = Math.max(maxX, vertex.x());
+				maxY = Math.max(maxY, vertex.y());
+				maxZ = Math.max(maxZ, vertex.z());
+			}
+			Vector3f normal = (Vector3f) read(resolved.normal(), sourceQuad);
+			quads.add(new QuadData(List.copyOf(vertices), normal.x(), normal.y(), normal.z()));
+		}
+		if (!Float.isFinite(minX) || !Float.isFinite(maxX))
+			throw new IllegalStateException("Lionfish cube has no vertices");
+		return new CubeData(List.copyOf(quads), new CubeBounds(minX, minY, minZ, maxX, maxY, maxZ));
 	}
 
 	private static Object[] objectArray(Object value, String name) {
@@ -330,6 +362,9 @@ final class LionfishModelPartCompat {
 	}
 
 	record CubeBounds(float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {}
+	private record VertexData(float x, float y, float z, float u, float v) {}
+	private record QuadData(List<VertexData> vertices, float normalX, float normalY, float normalZ) {}
+	private record CubeData(List<QuadData> quads, CubeBounds bounds) {}
 
 	private record Access(Class<?> advancedModelBox, Field cubeList, Field childModels, Field showModel,
 		Field scaleChildren, Field xScale, Field yScale, Field zScale, Method translateAndRotate,

@@ -72,12 +72,16 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	private static final Map<ResourceLocation, NativeImage> TEXTURE_IMAGE_CACHE = new HashMap<>();
 	private static final Map<ResourceLocation, IdentityHashMap<Object, Boolean>> CUBE_VISIBILITY_CACHE =
 		new HashMap<>();
+	private static final IdentityHashMap<Object, Boolean> SUPPORTED_LIONFISH_TREES = new IdentityHashMap<>();
+	private static final IdentityHashMap<Object, IdentityHashMap<Object, Map<ResourceLocation, LionfishLayerPlan>>>
+		LIONFISH_LAYER_PLANS = new IdentityHashMap<>();
 	private static volatile ReflectionAccess reflectionAccess;
 	private static volatile boolean reflectionAccessResolved;
 	private static volatile boolean reflectionAccessDisabled;
 
 	private static ModelPart innerCube;
 	private static ModelPart outerCube;
+	private static int activeRenderContextCount;
 
 	public SlimeMimicRenderLayer(RenderLayerParent<T, M> renderer) {
 		super(renderer);
@@ -126,13 +130,17 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 
 	public static void endPartInterception() {
 		Deque<RenderContext> contexts = RENDER_CONTEXTS.get();
-		if (!contexts.isEmpty())
+		if (!contexts.isEmpty()) {
 			contexts.pop();
+			activeRenderContextCount = Math.max(0, activeRenderContextCount - 1);
+		}
 		if (contexts.isEmpty())
 			RENDER_CONTEXTS.remove();
 	}
 
 	public static boolean interceptModelPart(ModelPart part, PoseStack poseStack, int packedLight, int overlay) {
+		if (activeRenderContextCount == 0)
+			return false;
 		if (INTERNAL_RENDER_DEPTH.get() > 0)
 			return false;
 
@@ -172,6 +180,8 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	 */
 	public static boolean interceptLionfishModelPart(Object part, PoseStack poseStack, VertexConsumer consumer,
 		int packedLight, int overlay, int color) {
+		if (activeRenderContextCount == 0 && !SurgicalModelRenderContext.isActive())
+			return false;
 		if (INTERNAL_RENDER_DEPTH.get() > 0)
 			return false;
 
@@ -221,43 +231,38 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			return;
 
 		Object sourceRoot = LionfishModelPartCompat.root(sourceModel);
-		if (!LionfishModelPartCompat.supports(sourceRoot) || !lionfishTreesMatch(sourceRoot, layerRoot))
+		if (!LionfishModelPartCompat.supports(sourceRoot))
 			return;
 		ResourceLocation texture = SurgicalModelRenderContext.currentRenderLayerTexture(consumer);
-		NativeImage image = texture == null ? null : textureImage(texture);
-		if (image == null || !image.format().hasAlpha())
+		if (texture == null)
 			return;
-
-		List<List<Object>> visibleSourceChains = new ArrayList<>();
-		collectVisibleLionfishSourceChains(sourceRoot, layerRoot, image, new ArrayList<>(), visibleSourceChains);
-		if (visibleSourceChains.isEmpty())
-			return;
-
-		List<Object> commonChain = new ArrayList<>(visibleSourceChains.getFirst());
-		for (int chainIndex = 1; chainIndex < visibleSourceChains.size() && !commonChain.isEmpty(); chainIndex++) {
-			List<Object> chain = visibleSourceChains.get(chainIndex);
-			int commonLength = Math.min(commonChain.size(), chain.size());
-			int partIndex = 0;
-			while (partIndex < commonLength && commonChain.get(partIndex) == chain.get(partIndex))
-				partIndex++;
-			commonChain.subList(partIndex, commonChain.size()).clear();
-		}
-
-		// The visible subtree itself is the attachment. Its nearest registered external
-		// ancestor is the logical source part that should carry the whole independent model.
-		for (int partIndex = commonChain.size() - 2; partIndex >= 0; partIndex--) {
-			for (Object sourceCube : lionfishElements(LionfishModelPartCompat.cubes(commonChain.get(partIndex)))) {
-				if (SurgicalModelRenderContext.registeredCubeId(sourceCube) == null)
-					continue;
-				SurgicalModelRenderContext.bindCurrentRenderLayerToSourceCube(sourceCube);
-				return;
-			}
-		}
+		Object sourceCube = lionfishLayerPlan(sourceRoot, layerRoot, texture).resolveSourceCube();
+		if (sourceCube != null)
+			SurgicalModelRenderContext.bindCurrentRenderLayerToSourceCube(sourceCube);
 	}
 
-	private static boolean lionfishTreesMatch(Object sourcePart, Object layerPart) {
-		List<Object> sourceCubes = lionfishElements(LionfishModelPartCompat.cubes(sourcePart));
-		List<Object> layerCubes = lionfishElements(LionfishModelPartCompat.cubes(layerPart));
+	private static LionfishLayerPlan lionfishLayerPlan(Object sourceRoot, Object layerRoot, ResourceLocation texture) {
+		IdentityHashMap<Object, Map<ResourceLocation, LionfishLayerPlan>> byLayer = LIONFISH_LAYER_PLANS
+			.computeIfAbsent(sourceRoot, ignored -> new IdentityHashMap<>());
+		Map<ResourceLocation, LionfishLayerPlan> byTexture = byLayer.computeIfAbsent(layerRoot,
+			ignored -> new HashMap<>());
+		return byTexture.computeIfAbsent(texture, ignored -> buildLionfishLayerPlan(sourceRoot, layerRoot, texture));
+	}
+
+	private static LionfishLayerPlan buildLionfishLayerPlan(Object sourceRoot, Object layerRoot,
+		ResourceLocation texture) {
+		NativeImage image = textureImage(texture);
+		if (image == null || !image.format().hasAlpha())
+			return LionfishLayerPlan.EMPTY;
+		List<LionfishLayerPart> parts = new ArrayList<>();
+		boolean matched = collectLionfishLayerPlan(sourceRoot, layerRoot, texture, new ArrayList<>(), -1, parts);
+		return matched ? new LionfishLayerPlan(List.copyOf(parts)) : LionfishLayerPlan.EMPTY;
+	}
+
+	private static boolean collectLionfishLayerPlan(Object sourcePart, Object layerPart, ResourceLocation texture,
+		List<Object> sourceChain, int parentIndex, List<LionfishLayerPart> parts) {
+		List<?> sourceCubes = LionfishModelPartCompat.cubes(sourcePart);
+		List<?> layerCubes = LionfishModelPartCompat.cubes(layerPart);
 		if (sourceCubes.size() != layerCubes.size())
 			return false;
 		for (int cubeIndex = 0; cubeIndex < sourceCubes.size(); cubeIndex++) {
@@ -266,17 +271,37 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 				return false;
 		}
 
-		List<Object> sourceChildren = lionfishElements(LionfishModelPartCompat.children(sourcePart));
-		List<Object> layerChildren = lionfishElements(LionfishModelPartCompat.children(layerPart));
+		boolean contributes = false;
+		for (Object layerCube : layerCubes)
+			if (lionfishCubeHasVisiblePixels(layerCube, texture)) {
+				contributes = true;
+				break;
+			}
+
+		sourceChain.add(sourcePart);
+		int partIndex = parts.size();
+		parts.add(new LionfishLayerPart(layerPart, parentIndex,
+			contributes ? sourceChain.toArray(Object[]::new) : null));
+		List<?> sourceChildren = LionfishModelPartCompat.children(sourcePart);
+		List<?> layerChildren = LionfishModelPartCompat.children(layerPart);
 		if (sourceChildren.size() != layerChildren.size())
-			return false;
+			return removeIncompletePlan(sourceChain, parts, partIndex);
 		for (int childIndex = 0; childIndex < sourceChildren.size(); childIndex++) {
 			if (!LionfishModelPartCompat.supports(sourceChildren.get(childIndex))
 				|| !LionfishModelPartCompat.supports(layerChildren.get(childIndex))
-				|| !lionfishTreesMatch(sourceChildren.get(childIndex), layerChildren.get(childIndex)))
-				return false;
+				|| !collectLionfishLayerPlan(sourceChildren.get(childIndex), layerChildren.get(childIndex), texture,
+					sourceChain, partIndex, parts))
+				return removeIncompletePlan(sourceChain, parts, partIndex);
 		}
+		sourceChain.remove(sourceChain.size() - 1);
 		return true;
+	}
+
+	private static boolean removeIncompletePlan(List<Object> sourceChain, List<LionfishLayerPart> parts,
+		int firstPartIndex) {
+		sourceChain.remove(sourceChain.size() - 1);
+		parts.subList(firstPartIndex, parts.size()).clear();
+		return false;
 	}
 
 	private static boolean sameBounds(LionfishModelPartCompat.CubeBounds first,
@@ -287,37 +312,6 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			&& Math.abs(first.maxX() - second.maxX()) <= 1.0e-4f
 			&& Math.abs(first.maxY() - second.maxY()) <= 1.0e-4f
 			&& Math.abs(first.maxZ() - second.maxZ()) <= 1.0e-4f;
-	}
-
-	private static void collectVisibleLionfishSourceChains(Object sourcePart, Object layerPart, NativeImage image,
-		List<Object> sourceChain, List<List<Object>> visibleSourceChains) {
-		sourceChain.add(sourcePart);
-		try {
-			if (!LionfishModelPartCompat.isVisible(layerPart))
-				return;
-			for (Object layerCube : LionfishModelPartCompat.cubes(layerPart)) {
-				if (LionfishModelPartCompat.cubeHasVisiblePixels(layerCube, image)) {
-					visibleSourceChains.add(List.copyOf(sourceChain));
-					break;
-				}
-			}
-
-			List<Object> sourceChildren = lionfishElements(LionfishModelPartCompat.children(sourcePart));
-			List<Object> layerChildren = lionfishElements(LionfishModelPartCompat.children(layerPart));
-			for (int childIndex = 0; childIndex < sourceChildren.size(); childIndex++) {
-				collectVisibleLionfishSourceChains(sourceChildren.get(childIndex), layerChildren.get(childIndex), image,
-					sourceChain, visibleSourceChains);
-			}
-		} finally {
-			sourceChain.remove(sourceChain.size() - 1);
-		}
-	}
-
-	private static List<Object> lionfishElements(Iterable<?> elements) {
-		List<Object> result = new ArrayList<>();
-		for (Object element : elements)
-			result.add(element);
-		return result;
 	}
 
 	public static void renderDeferredOuterParts() {
@@ -350,13 +344,18 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	}
 
 	private static boolean isSupportedLionfishTree(Object part) {
-		if (!LionfishModelPartCompat.supports(part))
-			return false;
-		for (Object child : LionfishModelPartCompat.children(part)) {
-			if (!isSupportedLionfishTree(child))
-				return false;
-		}
-		return true;
+		Boolean cached = SUPPORTED_LIONFISH_TREES.get(part);
+		if (cached != null)
+			return cached;
+		boolean supported = LionfishModelPartCompat.supports(part);
+		if (supported)
+			for (Object child : LionfishModelPartCompat.children(part))
+				if (!isSupportedLionfishTree(child)) {
+					supported = false;
+					break;
+				}
+		SUPPORTED_LIONFISH_TREES.put(part, supported);
+		return supported;
 	}
 
 	private static void renderLionfishPartRecursive(Object part, PoseStack poseStack, RenderContext context,
@@ -726,11 +725,15 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 			image.close();
 		TEXTURE_IMAGE_CACHE.clear();
 		CUBE_VISIBILITY_CACHE.clear();
+		SUPPORTED_LIONFISH_TREES.clear();
+		LIONFISH_LAYER_PLANS.clear();
+		LionfishModelPartCompat.clearCaches();
 	}
 
 	private static void pushContext(RenderContext context) {
 		RENDER_CONTEXTS.get()
 			.push(context);
+		activeRenderContextCount++;
 	}
 
 	private static RenderContext currentContext() {
@@ -800,6 +803,52 @@ public class SlimeMimicRenderLayer<T extends LivingEntity, M extends EntityModel
 	}
 
 	private record DeferredLionfishPart(Object part, Matrix4f pose, Matrix3f normal, int packedLight, int overlay) {
+	}
+
+	private record LionfishLayerPart(Object layerPart, int parentIndex, Object[] sourceChain) {
+	}
+
+	private record LionfishLayerPlan(List<LionfishLayerPart> parts) {
+		private static final LionfishLayerPlan EMPTY = new LionfishLayerPlan(List.of());
+
+		private Object resolveSourceCube() {
+			if (parts.isEmpty())
+				return null;
+
+			boolean[] visibleParts = new boolean[parts.size()];
+			Object[] commonChain = null;
+			int commonLength = 0;
+			for (int partIndex = 0; partIndex < parts.size(); partIndex++) {
+				LionfishLayerPart part = parts.get(partIndex);
+				boolean parentVisible = part.parentIndex() < 0 || visibleParts[part.parentIndex()];
+				boolean visible = parentVisible && LionfishModelPartCompat.isVisible(part.layerPart());
+				visibleParts[partIndex] = visible;
+				Object[] sourceChain = part.sourceChain();
+				if (!visible || sourceChain == null)
+					continue;
+
+				if (commonChain == null) {
+					commonChain = sourceChain;
+					commonLength = sourceChain.length;
+					continue;
+				}
+				commonLength = Math.min(commonLength, sourceChain.length);
+				int chainIndex = 0;
+				while (chainIndex < commonLength && commonChain[chainIndex] == sourceChain[chainIndex])
+					chainIndex++;
+				commonLength = chainIndex;
+			}
+
+			if (commonChain == null)
+				return null;
+			// The visible layer subtree is an attachment. Its nearest registered
+			// external ancestor owns the independent render layer.
+			for (int partIndex = commonLength - 2; partIndex >= 0; partIndex--)
+				for (Object sourceCube : LionfishModelPartCompat.cubes(commonChain[partIndex]))
+					if (SurgicalModelRenderContext.registeredCubeId(sourceCube) != null)
+						return sourceCube;
+			return null;
+		}
 	}
 
 	private static boolean cubeHasVisiblePixels(ModelPart.Cube cube, ResourceLocation texture) {
