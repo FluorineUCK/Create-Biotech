@@ -31,6 +31,7 @@
 | 测试、诊断与开发者体验 | 已完成 | [06-testing-diagnostics-developer-experience.zh-CN.md](06-testing-diagnostics-developer-experience.zh-CN.md) |
 | 综合路线图 | 已完成 | [07-priority-roadmap.zh-CN.md](07-priority-roadmap.zh-CN.md) |
 | 史莱姆传送带 Create 兼容差异与修复方案 | 已完成 | [09-slime-belt-create-parity-audit-and-fix-plan.zh-CN.md](09-slime-belt-create-parity-audit-and-fix-plan.zh-CN.md) |
+| 新手术台系统性能审计与优化 | 已完成 | [11-surgical-table-performance.zh-CN.md](11-surgical-table-performance.zh-CN.md) |
 
 ## 审计基准
 

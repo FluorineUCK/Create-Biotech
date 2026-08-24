@@ -23,6 +23,11 @@ import org.joml.Vector3f;
 /** Client-only filter and geometry collector around the existing slime-mimic cube renderer. */
 public final class SurgicalModelRenderContext {
 	private static final ThreadLocal<Deque<Context>> CONTEXTS = ThreadLocal.withInitial(ArrayDeque::new);
+	/**
+	 * Render hooks also run for every ordinary living entity. Keep their no-surgery path to one
+	 * volatile read instead of touching a ThreadLocal (or allocating a forwarding lambda) per cube.
+	 */
+	private static volatile int activeContextCount;
 
 	private SurgicalModelRenderContext() {}
 
@@ -35,8 +40,17 @@ public final class SurgicalModelRenderContext {
 	public static void begin(PoseStack poseStack, int expectedCubeCount, BitSet presentCubes,
 		Map<Integer, Vec3> cubeOffsets, boolean collectGeometry, @Nullable Vec3 cameraPosition,
 		boolean renderSourceGeometry) {
-		CONTEXTS.get().push(new Context(expectedCubeCount, presentCubes, cubeOffsets,
-			collectGeometry, cameraPosition, renderSourceGeometry));
+		begin(poseStack, expectedCubeCount, presentCubes, cubeOffsets, collectGeometry, cameraPosition,
+			renderSourceGeometry, new CubeIdCache());
+	}
+
+	static void begin(PoseStack poseStack, int expectedCubeCount, BitSet presentCubes,
+		Map<Integer, Vec3> cubeOffsets, boolean collectGeometry, @Nullable Vec3 cameraPosition,
+		boolean renderSourceGeometry, CubeIdCache cubeIds) {
+		Context context = new Context(expectedCubeCount, presentCubes, cubeOffsets,
+			collectGeometry, cameraPosition, renderSourceGeometry, cubeIds);
+		CONTEXTS.get().push(context);
+		activeContextCount++;
 	}
 
 	public static Snapshot end() {
@@ -44,9 +58,13 @@ public final class SurgicalModelRenderContext {
 		if (contexts.isEmpty())
 			return Snapshot.EMPTY;
 		Context context = contexts.pop();
-		if (contexts.isEmpty())
-			CONTEXTS.remove();
+		activeContextCount = Math.max(0, activeContextCount - 1);
 		return context.snapshot();
+	}
+
+	/** Fast guard for mixins placed on global entity-rendering hot paths. */
+	public static boolean isActive() {
+		return activeContextCount > 0;
 	}
 
 	/**
@@ -255,8 +273,9 @@ public final class SurgicalModelRenderContext {
 	private static final class Context {
 		private static final int NO_LAYER_OWNER = -1;
 
-		private final IdentityHashMap<Object, Integer> cubeIds = new IdentityHashMap<>();
-		private final Deque<RenderLayerState> renderLayers = new ArrayDeque<>();
+		private final CubeIdCache cubeIds;
+		@Nullable
+		private Deque<RenderLayerState> renderLayers;
 		private int observedCubeCount;
 		private final int expectedCubeCount;
 		private final BitSet presentCubes;
@@ -265,11 +284,14 @@ public final class SurgicalModelRenderContext {
 		private final boolean renderSourceGeometry;
 		@Nullable
 		private final Vec3 cameraPosition;
-		private final List<CubeGeometry> geometry = new ArrayList<>();
-		private final BitSet capturedGeometry = new BitSet();
+		@Nullable
+		private final List<CubeGeometry> geometry;
+		@Nullable
+		private final BitSet capturedGeometry;
 
 		private Context(int expectedCubeCount, BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
-			boolean collectGeometry, @Nullable Vec3 cameraPosition, boolean renderSourceGeometry) {
+			boolean collectGeometry, @Nullable Vec3 cameraPosition, boolean renderSourceGeometry,
+			CubeIdCache cubeIds) {
 			this.expectedCubeCount = expectedCubeCount;
 			// A context cannot escape its synchronous render call. The caller-owned values
 			// remain unchanged until end(), so copying them on every frame only creates garbage.
@@ -278,14 +300,14 @@ public final class SurgicalModelRenderContext {
 			this.collectGeometry = collectGeometry;
 			this.cameraPosition = cameraPosition;
 			this.renderSourceGeometry = renderSourceGeometry;
+			this.cubeIds = cubeIds;
+			geometry = collectGeometry ? new ArrayList<>() : null;
+			capturedGeometry = collectGeometry ? new BitSet() : null;
 		}
 
 		private int idFor(Object cube) {
-			Integer existing = cubeIds.get(cube);
-			if (existing != null)
-				return existing;
-			int cubeId = observedCubeCount++;
-			cubeIds.put(cube, cubeId);
+			int cubeId = cubeIds.idFor(cube);
+			observedCubeCount = Math.max(observedCubeCount, cubeId + 1);
 			return cubeId;
 		}
 
@@ -297,39 +319,41 @@ public final class SurgicalModelRenderContext {
 		private void beginRenderLayer(Object sourceModel) {
 			// Never choose from presentCubes: that would select a different owner for each
 			// separated render and make the independent model appear on every component again.
+			if (renderLayers == null)
+				renderLayers = new ArrayDeque<>();
 			renderLayers.push(new RenderLayerState(sourceModel,
 				observedCubeCount > 0 ? 0 : NO_LAYER_OWNER));
 		}
 
 		private void endRenderLayer() {
-			if (!renderLayers.isEmpty())
+			if (renderLayers != null && !renderLayers.isEmpty())
 				renderLayers.pop();
 		}
 
 		private boolean isRenderLayerActive() {
-			return !renderLayers.isEmpty();
+			return renderLayers != null && !renderLayers.isEmpty();
 		}
 
 		private void recordRenderLayerConsumer(VertexConsumer consumer, @Nullable ResourceLocation texture) {
-			RenderLayerState layer = renderLayers.peek();
+			RenderLayerState layer = renderLayers == null ? null : renderLayers.peek();
 			if (layer != null)
 				layer.recordConsumer(consumer, texture);
 		}
 
 		@Nullable
 		private Object currentRenderLayerSourceModel() {
-			RenderLayerState layer = renderLayers.peek();
+			RenderLayerState layer = renderLayers == null ? null : renderLayers.peek();
 			return layer == null ? null : layer.sourceModel;
 		}
 
 		@Nullable
 		private ResourceLocation currentRenderLayerTexture(VertexConsumer consumer) {
-			RenderLayerState layer = renderLayers.peek();
+			RenderLayerState layer = renderLayers == null ? null : renderLayers.peek();
 			return layer == null ? null : layer.texture(consumer);
 		}
 
 		private boolean bindCurrentRenderLayerTo(Object sourceCube) {
-			RenderLayerState layer = renderLayers.peek();
+			RenderLayerState layer = renderLayers == null ? null : renderLayers.peek();
 			if (layer == null)
 				return false;
 			Integer cubeId = registeredIdFor(sourceCube);
@@ -344,13 +368,13 @@ public final class SurgicalModelRenderContext {
 			Integer registered = registeredIdFor(cube);
 			if (registered != null)
 				return registered;
-			RenderLayerState layer = renderLayers.peek();
+			RenderLayerState layer = renderLayers == null ? null : renderLayers.peek();
 			return layer == null ? null : layer.ownerCubeId;
 		}
 
 		private void associate(Object cube, int ownerCubeId) {
 			if (ownerCubeId >= 0 && ownerCubeId < observedCubeCount)
-				cubeIds.putIfAbsent(cube, ownerCubeId);
+				cubeIds.associate(cube, ownerCubeId);
 		}
 
 		private boolean isPresent(int cubeId) {
@@ -371,6 +395,8 @@ public final class SurgicalModelRenderContext {
 
 		private void capture(int cubeId, PoseStack poseStack,
 			float minX, float minY, float minZ, float maxX, float maxY, float maxZ) {
+			if (capturedGeometry == null || geometry == null)
+				return;
 			if (capturedGeometry.get(cubeId))
 				return;
 			capturedGeometry.set(cubeId);
@@ -402,9 +428,33 @@ public final class SurgicalModelRenderContext {
 		}
 
 		private Snapshot snapshot() {
-			return new Snapshot(observedCubeCount, geometry);
+			return new Snapshot(observedCubeCount, geometry == null ? List.of() : geometry);
 		}
 
+	}
+
+	/** Stable source/layer cube ids reused by repeated renders of the same preview model. */
+	static final class CubeIdCache {
+		private final IdentityHashMap<Object, Integer> ids = new IdentityHashMap<>();
+		private int nextId;
+
+		private int idFor(Object cube) {
+			Integer existing = ids.get(cube);
+			if (existing != null)
+				return existing;
+			int cubeId = nextId++;
+			ids.put(cube, cubeId);
+			return cubeId;
+		}
+
+		@Nullable
+		private Integer get(Object cube) {
+			return ids.get(cube);
+		}
+
+		private void associate(Object cube, int ownerCubeId) {
+			ids.putIfAbsent(cube, ownerCubeId);
+		}
 	}
 
 	private static final class RenderLayerState {

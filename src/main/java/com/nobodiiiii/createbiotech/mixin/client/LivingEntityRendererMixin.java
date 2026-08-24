@@ -70,6 +70,11 @@ public abstract class LivingEntityRendererMixin {
 		float partialTick, float ageInTicks, float netHeadYaw, float headPitch, Operation<Void> original) {
 		if (EntityGeometry.isBaseModelMeasurement())
 			return;
+		if (!SurgicalModelRenderContext.isActive()) {
+			original.call(layer, poseStack, buffer, packedLight, entity, limbSwing, limbSwingAmount,
+				partialTick, ageInTicks, netHeadYaw, headPitch);
+			return;
+		}
 		SurgicalModelRenderContext.beginRenderLayer(layer.getParentModel());
 		try {
 			MultiBufferSource trackedBuffer = SlimeMimicRenderLayer.trackRenderLayerBuffer(buffer);

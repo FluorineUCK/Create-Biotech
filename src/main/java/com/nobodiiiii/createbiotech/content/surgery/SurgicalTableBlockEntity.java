@@ -3,6 +3,7 @@ package com.nobodiiiii.createbiotech.content.surgery;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.HashMap;
 import java.util.List;
@@ -18,6 +19,7 @@ import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
+import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
 import com.simibubi.create.foundation.blockEntity.SmartBlockEntity;
 import com.simibubi.create.foundation.blockEntity.behaviour.BlockEntityBehaviour;
@@ -46,12 +48,22 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private static final String SUBJECTS_TAG = "SurgicalSubjects";
 	private static final String NEXT_SUBJECT_ID_TAG = "NextSubjectId";
 	private static final String LEGACY_PROFILE_TAG = "MimicProfile";
+	private static final int CLIENT_PLANE_CACHE_TICKS = 5;
 
-	private List<SurgicalSubject> subjects = new ArrayList<>();
+	private final List<SurgicalSubject> subjects = new ArrayList<>();
+	private final List<SurgicalSubject> subjectsView = Collections.unmodifiableList(subjects);
+	private final Map<Integer, SurgicalSubject> subjectsById = new HashMap<>();
+	private final Map<UUID, SurgicalSubject> subjectsByPersistentId = new HashMap<>();
 	private int nextSubjectId;
 	private int clientDataRevision;
 	@Nullable
 	private AABB clientRenderBounds;
+	@Nullable
+	private SurgicalTablePlane.Plane clientPlane;
+	@Nullable
+	private AABB clientPlaneBounds;
+	private boolean clientProjectsSourceGeometry;
+	private long clientPlaneCacheUntil = Long.MIN_VALUE;
 
 	public SurgicalTableBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.SURGICAL_TABLE.get(), pos, state);
@@ -75,31 +87,88 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	public boolean hasSubject(int subjectId) {
-		return getSubject(subjectId) != null;
+		return subjectsById.containsKey(subjectId);
 	}
 
 	public List<SurgicalSubject> getSubjects() {
-		return List.copyOf(subjects);
+		return subjectsView;
+	}
+
+	/**
+	 * Client render/input code asks for the same connected plane several times per frame. A short
+	 * cache keeps topology changes responsive while collapsing those BFS scans to at most four per
+	 * second for each actively used controller.
+	 */
+	@Nullable
+	public SurgicalTablePlane.Plane getClientPlane() {
+		if (level == null)
+			return null;
+		if (!level.isClientSide)
+			return SurgicalTablePlane.scan(level, worldPosition);
+		long now = level.getGameTime();
+		if (clientPlane == null || now >= clientPlaneCacheUntil) {
+			clientPlane = SurgicalTablePlane.scan(level, worldPosition);
+			clientPlaneCacheUntil = now + CLIENT_PLANE_CACHE_TICKS;
+			clientPlaneBounds = new AABB(worldPosition);
+			clientProjectsSourceGeometry = false;
+			for (BlockPos tablePos : clientPlane.tiles()) {
+				clientPlaneBounds = clientPlaneBounds.minmax(new AABB(tablePos));
+				if (!clientProjectsSourceGeometry
+					&& level.getBlockState(tablePos).is(CBBlocks.PROJECTION_SURGICAL_TABLE.get()))
+					clientProjectsSourceGeometry = true;
+			}
+		}
+		return clientPlane;
+	}
+
+	public boolean clientProjectsSourceGeometry() {
+		getClientPlane();
+		return clientProjectsSourceGeometry;
+	}
+
+	public int clientDataRevision() {
+		return clientDataRevision;
 	}
 
 	@Nullable
 	public SurgicalSubject getSubject(int subjectId) {
-		for (SurgicalSubject subject : subjects)
-			if (subject.id() == subjectId)
-				return subject;
-		return null;
+		return subjectsById.get(subjectId);
 	}
 
 	@Nullable
 	public SurgicalSubject getSubjectByPersistentId(UUID persistentId) {
-		for (SurgicalSubject subject : subjects)
-			if (subject.persistentId().equals(persistentId))
-				return subject;
-		return null;
+		return subjectsByPersistentId.get(persistentId);
+	}
+
+	private void addSubject(SurgicalSubject subject) {
+		subjects.add(subject);
+		subjectsById.put(subject.id(), subject);
+		subjectsByPersistentId.put(subject.persistentId(), subject);
+	}
+
+	private void addSubjects(List<SurgicalSubject> added) {
+		for (SurgicalSubject subject : added)
+			addSubject(subject);
+	}
+
+	private void removeSubject(SurgicalSubject subject) {
+		subjects.remove(subject);
+		subjectsById.remove(subject.id(), subject);
+		subjectsByPersistentId.remove(subject.persistentId(), subject);
+	}
+
+	private void clearSubjects() {
+		subjects.clear();
+		subjectsById.clear();
+		subjectsByPersistentId.clear();
 	}
 
 	public void includeClientRenderBounds(AABB bounds) {
 		clientRenderBounds = clientRenderBounds == null ? bounds : clientRenderBounds.minmax(bounds);
+	}
+
+	public boolean hasMeasuredClientRenderBounds() {
+		return clientRenderBounds != null;
 	}
 
 	public boolean tryPlaceSubject(ItemStack box, SurgicalTablePlane.Plane plane, Direction placementFacing,
@@ -162,7 +231,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalSubject subject = new SurgicalSubject(allocateSubjectId(), profile, placementFacing, layPose, cubeCount,
 			present, seams, cuts, cutOrder, placedOriginOffsetX, placedOriginOffsetZ, java.util.Map.of(),
 			proposal.footprints());
-		subjects.add(subject);
+		addSubject(subject);
 		clientRenderBounds = null;
 		CapturedEntityBoxHelper.clearCapturedEntity(box);
 		setChangedAndSync();
@@ -219,7 +288,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (second != first)
 				second.addGlueJoint(joint);
 		}
-		subjects.addAll(restored);
+		addSubjects(restored);
 		clientRenderBounds = null;
 		CapturedEntityBoxHelper.clearCapturedEntity(box);
 		setChangedAndSync();
@@ -409,7 +478,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				groupedSubject.removeComponent(removed);
 			groupedSubject.removeGlueJoints(groupJoints);
 			if (groupedSubject.isEmpty())
-				subjects.remove(groupedSubject);
+				removeSubject(groupedSubject);
 		}
 		clientRenderBounds = null;
 		setChangedAndSync();
@@ -448,7 +517,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			SurgicalSubject moved = original;
 			if (!selected.equals(original.presentCubes)) {
 				moved = original.extract(allocateSubjectId(), selected);
-				subjects.add(moved);
+				addSubject(moved);
 				extracted.put(original.persistentId(), new ExtractedSubject((BitSet) selected.clone(), moved));
 			}
 			moved.applyGlueMove(second.placementFacing(), targetPose, move.offsets,
@@ -918,14 +987,14 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				subject.setId(allocateSubjectId());
 			else
 				nextSubjectId = Math.max(nextSubjectId, subject.id() + 1);
-			subjects.add(subject);
+			addSubject(subject);
 		}
 		clientRenderBounds = null;
 	}
 
 	private List<SurgicalSubject> detachSubjects() {
-		List<SurgicalSubject> detached = subjects;
-		subjects = new ArrayList<>();
+		List<SurgicalSubject> detached = new ArrayList<>(subjects);
+		clearSubjects();
 		clientRenderBounds = null;
 		return detached;
 	}
@@ -1067,11 +1136,15 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				persistentIds.add(legacy.persistentId());
 			}
 		}
-		subjects = loaded;
+		clearSubjects();
+		addSubjects(loaded);
 		nextSubjectId = Math.max(tag.getInt(NEXT_SUBJECT_ID_TAG),
 			ids.stream().mapToInt(Integer::intValue).max().orElse(-1) + 1);
 		if (clientPacket) {
 			clientRenderBounds = null;
+			clientPlane = null;
+			clientPlaneBounds = null;
+			clientPlaneCacheUntil = Long.MIN_VALUE;
 			clientDataRevision++;
 			for (SurgicalSubject subject : subjects)
 				subject.setClientRenderRevision(clientDataRevision);
@@ -1084,9 +1157,15 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	public AABB getRenderBoundingBox() {
 		AABB bounds = new AABB(worldPosition);
 		if (level != null && hasSubjects()) {
-			SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, worldPosition);
-			for (BlockPos tablePos : plane.tiles())
-				bounds = bounds.minmax(new AABB(tablePos));
+			if (level.isClientSide) {
+				getClientPlane();
+				if (clientPlaneBounds != null)
+					bounds = bounds.minmax(clientPlaneBounds);
+			} else {
+				SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, worldPosition);
+				for (BlockPos tablePos : plane.tiles())
+					bounds = bounds.minmax(new AABB(tablePos));
+			}
 		}
 		if (clientRenderBounds != null)
 			return bounds.minmax(clientRenderBounds).inflate(0.25d);

@@ -1,6 +1,7 @@
 package com.nobodiiiii.createbiotech.content.surgery.client;
 
 import java.util.BitSet;
+import java.util.List;
 import java.util.Map;
 
 import com.mojang.blaze3d.vertex.PoseStack;
@@ -31,29 +32,39 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 
 	@Override
 	public boolean shouldRenderOffScreen(SurgicalTableBlockEntity table) {
-		return table.hasSubjects();
+		// Permit one conservative capture before exact source-model bounds are available. Once
+		// measured, normal frustum culling remains enabled for the rest of this data revision.
+		return table.hasSubjects() && !table.hasMeasuredClientRenderBounds();
 	}
 
 	@Override
 	public boolean shouldRender(SurgicalTableBlockEntity table, Vec3 cameraPosition) {
-		return table.hasSubjects();
+		if (!table.hasSubjects())
+			return false;
+		AABB bounds = table.getRenderBoundingBox();
+		double closestX = Math.max(bounds.minX, Math.min(cameraPosition.x, bounds.maxX));
+		double closestY = Math.max(bounds.minY, Math.min(cameraPosition.y, bounds.maxY));
+		double closestZ = Math.max(bounds.minZ, Math.min(cameraPosition.z, bounds.maxZ));
+		double deltaX = cameraPosition.x - closestX;
+		double deltaY = cameraPosition.y - closestY;
+		double deltaZ = cameraPosition.z - closestZ;
+		double viewDistance = getViewDistance();
+		return deltaX * deltaX + deltaY * deltaY + deltaZ * deltaZ <= viewDistance * viewDistance;
 	}
 
 	@Override
 	public void render(SurgicalTableBlockEntity table, float partialTick, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight, int packedOverlay) {
-		if (table.getSubjects().isEmpty())
+		List<SurgicalSubject> subjects = table.getSubjects();
+		if (subjects.isEmpty())
 			return;
 		boolean projectSourceGeometry = projectsSourceGeometry(table);
-		for (SurgicalSubject subject : table.getSubjects())
+		for (SurgicalSubject subject : subjects)
 			renderSubject(table, subject, poseStack, buffer, packedLight, projectSourceGeometry);
 	}
 
 	static boolean projectsSourceGeometry(SurgicalTableBlockEntity table) {
-		if (table.getLevel() == null)
-			return false;
-		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(table.getLevel(), table.getBlockPos());
-		return projectsSourceGeometry(table.getLevel(), plane);
+		return table.getLevel() != null && table.clientProjectsSourceGeometry();
 	}
 
 	static boolean projectsSourceGeometry(Level level, SurgicalTablePlane.Plane plane) {

@@ -21,6 +21,7 @@ import net.minecraft.world.phys.Vec3;
 
 public final class SurgicalSourceModelRenderer {
 	private static final Map<Object, Map<MimicProfile, CachedPreview>> PREVIEWS = new WeakHashMap<>();
+	private static final Map<LivingEntity, CachedCubeIds> CUBE_IDS = new WeakHashMap<>();
 
 	private SurgicalSourceModelRenderer() {}
 
@@ -108,9 +109,14 @@ public final class SurgicalSourceModelRenderer {
 		boolean renderSourceGeometry) {
 		preparePreview(preview, yaw);
 		EntityRenderer<LivingEntity> renderer = renderer(preview);
+		CachedCubeIds cachedIds = CUBE_IDS.get(preview);
+		if (cachedIds == null || cachedIds.renderer != renderer) {
+			cachedIds = new CachedCubeIds(renderer, new SurgicalModelRenderContext.CubeIdCache());
+			CUBE_IDS.put(preview, cachedIds);
+		}
 
 		SurgicalModelRenderContext.begin(poseStack, cubeCount, presentCubes, cubeOffsets,
-			collectGeometry, cameraPosition, renderSourceGeometry);
+			collectGeometry, cameraPosition, renderSourceGeometry, cachedIds.cubeIds);
 		SurgicalModelRenderContext.Snapshot snapshot;
 		try {
 			renderer.render(preview, yaw, partialTick, poseStack, buffer, packedLight);
@@ -147,7 +153,11 @@ public final class SurgicalSourceModelRenderer {
 
 	public static void clear() {
 		PREVIEWS.clear();
+		CUBE_IDS.clear();
 	}
 
 	private record CachedPreview(ClientLevel level, MimicProfile profile, LivingEntity entity) {}
+
+	private record CachedCubeIds(EntityRenderer<LivingEntity> renderer,
+		SurgicalModelRenderContext.CubeIdCache cubeIds) {}
 }

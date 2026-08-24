@@ -31,6 +31,10 @@ public abstract class ModelPartRenderMixin {
 			target = "Lnet/minecraft/client/model/geom/ModelPart$Cube;compile(Lcom/mojang/blaze3d/vertex/PoseStack$Pose;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"))
 	private void createBiotech$filterSurgicalOriginalLayerCube(ModelPart.Cube cube, PoseStack.Pose pose,
 		VertexConsumer consumer, int packedLight, int overlay, int color, Operation<Void> original) {
+		if (!SurgicalModelRenderContext.isActive()) {
+			original.call(cube, pose, consumer, packedLight, overlay, color);
+			return;
+		}
 		SurgicalModelRenderContext.renderOriginalLayerCube(cube, pose,
 			() -> original.call(cube, pose, consumer, packedLight, overlay, color));
 	}
