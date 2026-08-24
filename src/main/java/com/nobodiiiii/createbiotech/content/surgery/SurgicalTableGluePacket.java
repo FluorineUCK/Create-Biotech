@@ -3,7 +3,6 @@ package com.nobodiiiii.createbiotech.content.surgery;
 import java.util.ArrayList;
 import java.util.List;
 
-import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueItem;
 import com.simibubi.create.content.contraptions.glue.SuperGlueItem;
 
 import net.minecraft.core.BlockPos;
@@ -50,7 +49,7 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 			|| !first.valid() || !second.valid() || !validGroundLift())
 			return;
 		ItemStack held = player.getItemInHand(hand);
-		if (!(held.getItem() instanceof SuperGlueItem) || held.getItem() instanceof SmartSuperGlueItem)
+		if (!(held.getItem() instanceof SuperGlueItem))
 			return;
 
 		double range = player.getAttributeValue(Attributes.BLOCK_INTERACTION_RANGE) + 1.0d;
@@ -126,6 +125,7 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 				buffer.writeDouble(translation.offset.x);
 				buffer.writeDouble(translation.offset.y);
 				buffer.writeDouble(translation.offset.z);
+				translation.rotation.write(buffer);
 			}
 			Endpoint.writeLayout(buffer, layout);
 		}
@@ -138,7 +138,8 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 			List<CubeTranslation> translations = new ArrayList<>(count);
 			for (int index = 0; index < count; index++)
 				translations.add(new CubeTranslation(buffer.readVarInt(),
-					new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble())));
+					new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble()),
+					SurgicalCubeRotation.read(buffer)));
 			return new Move(subjectId, translations, Endpoint.readLayout(buffer));
 		}
 	}
@@ -156,6 +157,7 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 				buffer.writeDouble(translation.offset.x);
 				buffer.writeDouble(translation.offset.y);
 				buffer.writeDouble(translation.offset.z);
+				translation.rotation.write(buffer);
 			}
 		}
 
@@ -167,18 +169,27 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 			List<CubeTranslation> translations = new ArrayList<>(count);
 			for (int index = 0; index < count; index++)
 				translations.add(new CubeTranslation(buffer.readVarInt(),
-					new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble())));
+					new Vec3(buffer.readDouble(), buffer.readDouble(), buffer.readDouble()),
+					SurgicalCubeRotation.read(buffer)));
 			return new AnchorMove(subjectId, translations);
 		}
 	}
 
-	public record CubeTranslation(int cubeId, Vec3 offset) {
+	public record CubeTranslation(int cubeId, Vec3 offset, SurgicalCubeRotation rotation) {
+		public CubeTranslation {
+			rotation = rotation == null ? SurgicalCubeRotation.IDENTITY : rotation;
+		}
+
+		public CubeTranslation(int cubeId, Vec3 offset) {
+			this(cubeId, offset, SurgicalCubeRotation.IDENTITY);
+		}
+
 		public boolean valid() {
 			double bound = SurgicalTablePlane.MAX_TILES + 2.0d;
 			return cubeId >= 0 && offset != null && Double.isFinite(offset.x)
 				&& Double.isFinite(offset.y) && Double.isFinite(offset.z)
 				&& Math.abs(offset.x) <= bound && Math.abs(offset.y) <= bound
-				&& Math.abs(offset.z) <= bound;
+				&& Math.abs(offset.z) <= bound && rotation != null;
 		}
 	}
 

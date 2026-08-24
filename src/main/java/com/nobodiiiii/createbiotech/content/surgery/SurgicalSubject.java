@@ -41,6 +41,9 @@ public final class SurgicalSubject {
 	private static final String OFFSET_X_TAG = "OffsetX";
 	private static final String OFFSET_Y_TAG = "OffsetY";
 	private static final String OFFSET_Z_TAG = "OffsetZ";
+	private static final String ROTATIONS_TAG = "CubeRotations";
+	private static final String ROTATION_CUBE_TAG = "Cube";
+	private static final String ROTATION_VALUE_TAG = "Rotation";
 	private static final String GLUE_JOINTS_TAG = "GlueJoints";
 	private static final String FOOTPRINTS_TAG = "Footprints";
 	private static final String FOOTPRINT_ROOT_TAG = "Root";
@@ -64,6 +67,7 @@ public final class SurgicalSubject {
 	private double originOffsetX;
 	private double originOffsetZ;
 	Map<Integer, Vec3> componentOffsets;
+	Map<Integer, SurgicalCubeRotation> componentRotations;
 	List<SurgicalTableLayout.Footprint> occupiedFootprints;
 	List<SurgicalGlueJoint> glueJoints;
 	private int clientRenderRevision;
@@ -73,13 +77,23 @@ public final class SurgicalSubject {
 		double originOffsetX, double originOffsetZ, Map<Integer, Vec3> componentOffsets,
 		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		this(id, UUID.randomUUID(), profile, placementFacing, layPose, cubeCount, presentCubes, seams, cutSeams, cutOrder,
-			originOffsetX, originOffsetZ, componentOffsets, occupiedFootprints, List.of());
+			originOffsetX, originOffsetZ, componentOffsets, Map.of(), occupiedFootprints, List.of());
+	}
+
+	SurgicalSubject(int id, MimicProfile profile, Direction placementFacing, SurgicalLayPose layPose, int cubeCount,
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, List<Integer> cutOrder,
+		double originOffsetX, double originOffsetZ, Map<Integer, Vec3> componentOffsets,
+		Map<Integer, SurgicalCubeRotation> componentRotations,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
+		this(id, UUID.randomUUID(), profile, placementFacing, layPose, cubeCount, presentCubes, seams, cutSeams, cutOrder,
+			originOffsetX, originOffsetZ, componentOffsets, componentRotations, occupiedFootprints, List.of());
 	}
 
 	SurgicalSubject(int id, UUID persistentId, MimicProfile profile, Direction placementFacing,
 		SurgicalLayPose layPose, int cubeCount,
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, List<Integer> cutOrder,
 		double originOffsetX, double originOffsetZ, Map<Integer, Vec3> componentOffsets,
+		Map<Integer, SurgicalCubeRotation> componentRotations,
 		List<SurgicalTableLayout.Footprint> occupiedFootprints, List<SurgicalGlueJoint> glueJoints) {
 		this.id = id;
 		this.persistentId = persistentId;
@@ -94,6 +108,7 @@ public final class SurgicalSubject {
 		this.originOffsetX = originOffsetX;
 		this.originOffsetZ = originOffsetZ;
 		this.componentOffsets = Map.copyOf(componentOffsets);
+		this.componentRotations = Map.copyOf(componentRotations);
 		this.occupiedFootprints = List.copyOf(occupiedFootprints);
 		this.glueJoints = List.copyOf(glueJoints);
 	}
@@ -163,6 +178,10 @@ public final class SurgicalSubject {
 
 	public Map<Integer, Vec3> componentOffsetsForRender() {
 		return componentOffsets;
+	}
+
+	public Map<Integer, SurgicalCubeRotation> componentRotationsForRender() {
+		return componentRotations;
 	}
 
 	public List<SurgicalTableLayout.Footprint> occupiedFootprints() {
@@ -247,6 +266,12 @@ public final class SurgicalSubject {
 				retainedOffsets.remove(cube);
 			componentOffsets = Map.copyOf(retainedOffsets);
 		}
+		if (!componentRotations.isEmpty()) {
+			Map<Integer, SurgicalCubeRotation> retainedRotations = new HashMap<>(componentRotations);
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
+				retainedRotations.remove(cube);
+			componentRotations = Map.copyOf(retainedRotations);
+		}
 	}
 
 	BitSet componentContaining(int cubeId) {
@@ -314,30 +339,37 @@ public final class SurgicalSubject {
 		if (selected.isEmpty() || selected.equals(presentCubes))
 			throw new IllegalArgumentException("A surgical extraction must be a proper non-empty subset");
 		Map<Integer, Vec3> extractedOffsets = new HashMap<>();
+		Map<Integer, SurgicalCubeRotation> extractedRotations = new HashMap<>();
 		for (int cube = selected.nextSetBit(0); cube >= 0; cube = selected.nextSetBit(cube + 1)) {
 			Vec3 offset = componentOffsets.get(cube);
 			if (offset != null)
 				extractedOffsets.put(cube, offset);
+			SurgicalCubeRotation rotation = componentRotations.get(cube);
+			if (rotation != null)
+				extractedRotations.put(cube, rotation);
 		}
 		List<SurgicalTableLayout.Footprint> extractedFootprints = occupiedFootprints.stream()
 			.filter(footprint -> containsFootprint(selected, footprint)).toList();
 		SurgicalSubject result = new SurgicalSubject(extractedId, profile, placementFacing, layPose,
 			cubeCount, selected, seams, cutSeams, cutOrder, originOffsetX, originOffsetZ,
-			extractedOffsets, extractedFootprints);
+			extractedOffsets, extractedRotations, extractedFootprints);
 		removeComponent(selected);
 		return result;
 	}
 
 	void applyGlueMove(Direction targetFacing, SurgicalLayPose targetPose, Map<Integer, Vec3> offsets,
+		Map<Integer, SurgicalCubeRotation> rotations,
 		List<SurgicalTableLayout.Footprint> footprints) {
-		if (targetPose == null || offsets.size() != presentCubes.cardinality())
+		if (targetPose == null || offsets.size() != presentCubes.cardinality()
+			|| rotations.size() != presentCubes.cardinality())
 			throw new IllegalArgumentException("Incomplete surgical glue move");
 		for (int cube = presentCubes.nextSetBit(0); cube >= 0; cube = presentCubes.nextSetBit(cube + 1))
-			if (!offsets.containsKey(cube))
+			if (!offsets.containsKey(cube) || !rotations.containsKey(cube))
 				throw new IllegalArgumentException("Missing surgical glue cube offset");
 		placementFacing = horizontal(targetFacing);
 		layPose = targetPose;
 		componentOffsets = Map.copyOf(offsets);
+		componentRotations = sanitizeRotations(rotations);
 		occupiedFootprints = List.copyOf(footprints);
 	}
 
@@ -377,6 +409,7 @@ public final class SurgicalSubject {
 			if (!cutOrder.isEmpty())
 				tag.putIntArray(CUT_ORDER_TAG, cutOrder.stream().mapToInt(Integer::intValue).toArray());
 			writeOffsets(tag);
+			writeRotations(tag);
 		}
 		return tag;
 	}
@@ -419,10 +452,11 @@ public final class SurgicalSubject {
 			cuts.clear(seams.size(), cuts.length());
 		List<Integer> cutOrder = readCutOrder(tag, cubeCount, cuts, seams.size());
 		Map<Integer, Vec3> offsets = readOffsets(tag, cubeCount, present);
+		Map<Integer, SurgicalCubeRotation> rotations = readRotations(tag, cubeCount, present);
 		List<SurgicalTableLayout.Footprint> footprints = readFootprints(tag);
 		List<SurgicalGlueJoint> glueJoints = readGlueJoints(tag);
 		return new SurgicalSubject(id, persistentId, profile, facing, layPose, cubeCount, present, seams, cuts, cutOrder,
-			originX, originZ, offsets, footprints, glueJoints);
+			originX, originZ, offsets, rotations, footprints, glueJoints);
 	}
 
 	private static SurgicalLayPose readLayPose(CompoundTag tag) {
@@ -486,6 +520,50 @@ public final class SurgicalSubject {
 				return Map.of();
 		}
 		return Map.copyOf(loaded);
+	}
+
+	private void writeRotations(CompoundTag tag) {
+		if (componentRotations.isEmpty())
+			return;
+		ListTag encoded = new ListTag();
+		for (Map.Entry<Integer, SurgicalCubeRotation> entry : componentRotations.entrySet().stream()
+			.sorted(Map.Entry.comparingByKey()).toList()) {
+			CompoundTag value = new CompoundTag();
+			value.putInt(ROTATION_CUBE_TAG, entry.getKey());
+			value.put(ROTATION_VALUE_TAG, entry.getValue().save());
+			encoded.add(value);
+		}
+		tag.put(ROTATIONS_TAG, encoded);
+	}
+
+	private static Map<Integer, SurgicalCubeRotation> readRotations(CompoundTag tag, int cubeCount,
+		BitSet present) {
+		if (cubeCount <= 0 || !tag.contains(ROTATIONS_TAG, Tag.TAG_LIST))
+			return Map.of();
+		ListTag encoded = tag.getList(ROTATIONS_TAG, Tag.TAG_COMPOUND);
+		if (encoded.size() > cubeCount)
+			return Map.of();
+		Map<Integer, SurgicalCubeRotation> loaded = new HashMap<>();
+		for (int index = 0; index < encoded.size(); index++) {
+			CompoundTag value = encoded.getCompound(index);
+			int cube = value.getInt(ROTATION_CUBE_TAG);
+			SurgicalCubeRotation rotation = value.contains(ROTATION_VALUE_TAG, Tag.TAG_COMPOUND)
+				? SurgicalCubeRotation.load(value.getCompound(ROTATION_VALUE_TAG)) : null;
+			if (cube < 0 || cube >= cubeCount || !present.get(cube) || rotation == null
+				|| loaded.putIfAbsent(cube, rotation) != null)
+				return Map.of();
+		}
+		return sanitizeRotations(loaded);
+	}
+
+	private static Map<Integer, SurgicalCubeRotation> sanitizeRotations(
+		Map<Integer, SurgicalCubeRotation> rotations) {
+		Map<Integer, SurgicalCubeRotation> sanitized = new HashMap<>();
+		rotations.forEach((cube, rotation) -> {
+			if (rotation != null && !rotation.isIdentity())
+				sanitized.put(cube, rotation);
+		});
+		return Map.copyOf(sanitized);
 	}
 
 	private static List<SurgicalGlueJoint> readGlueJoints(CompoundTag tag) {

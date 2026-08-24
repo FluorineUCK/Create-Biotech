@@ -99,6 +99,7 @@
   "message.create_biotech.surgical_table.place_cut": "Right-click to place; Shift+Left-click to cancel the cut",
   "message.create_biotech.surgical_table.glue_first": "First glue point selected; right-click another component or Shift+right-click to cancel",
   "message.create_biotech.surgical_table.glue_success": "The two components have been glued",
+  "message.create_biotech.surgical_table.smart_glue_edit": "Scroll to move; sneak-scroll to adjust tilt; right-click again to finish",
   "create_biotech.recipe.printing": "Printing",
   "item.create_biotech.enchantment_book_copy": "Enchanted Book (Copy)",
   "create_biotech.jei.squid_printer.note.template": "Mark a template enchantment book on the side",

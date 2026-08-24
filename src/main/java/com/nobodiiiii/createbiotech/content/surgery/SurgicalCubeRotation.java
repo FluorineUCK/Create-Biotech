@@ -1,0 +1,136 @@
+package com.nobodiiiii.createbiotech.content.surgery;
+
+import net.minecraft.core.Direction;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.nbt.Tag;
+import net.minecraft.world.phys.Vec3;
+
+/** Immutable normalized quaternion used for one surgical cube's table-space tilt. */
+public record SurgicalCubeRotation(double x, double y, double z, double w) {
+	private static final String X_TAG = "X";
+	private static final String Y_TAG = "Y";
+	private static final String Z_TAG = "Z";
+	private static final String W_TAG = "W";
+	private static final double MIN_LENGTH_SQUARED = 1.0e-12d;
+	private static final double IDENTITY_EPSILON = 1.0e-12d;
+	public static final SurgicalCubeRotation IDENTITY = new SurgicalCubeRotation(0.0d, 0.0d, 0.0d, 1.0d);
+
+	public SurgicalCubeRotation {
+		double lengthSquared = x * x + y * y + z * z + w * w;
+		if (!Double.isFinite(lengthSquared) || lengthSquared < MIN_LENGTH_SQUARED)
+			throw new IllegalArgumentException("Invalid surgical cube rotation");
+		double inverseLength = 1.0d / Math.sqrt(lengthSquared);
+		x *= inverseLength;
+		y *= inverseLength;
+		z *= inverseLength;
+		w *= inverseLength;
+		// q and -q encode the same rotation. Canonicalizing the sign keeps equality and NBT stable.
+		if (w < 0.0d || w == 0.0d && (x < 0.0d || x == 0.0d && (y < 0.0d || y == 0.0d && z < 0.0d))) {
+			x = -x;
+			y = -y;
+			z = -z;
+			w = -w;
+		}
+	}
+
+	public static SurgicalCubeRotation around(Direction direction, double degrees) {
+		if (direction == null || !Double.isFinite(degrees))
+			return IDENTITY;
+		double radians = Math.toRadians(degrees) * 0.5d;
+		double scale = Math.sin(radians) * direction.getAxisDirection().getStep();
+		double axisX = direction.getAxis() == Direction.Axis.X ? scale : 0.0d;
+		double axisY = direction.getAxis() == Direction.Axis.Y ? scale : 0.0d;
+		double axisZ = direction.getAxis() == Direction.Axis.Z ? scale : 0.0d;
+		return new SurgicalCubeRotation(axisX, axisY, axisZ, Math.cos(radians));
+	}
+
+	/** Applies this rotation and then {@code next}, both in table/world axes. */
+	public SurgicalCubeRotation then(SurgicalCubeRotation next) {
+		if (next == null || next.isIdentity())
+			return this;
+		if (isIdentity())
+			return next;
+		return new SurgicalCubeRotation(
+			next.w * x + next.x * w + next.y * z - next.z * y,
+			next.w * y - next.x * z + next.y * w + next.z * x,
+			next.w * z + next.x * y - next.y * x + next.z * w,
+			next.w * w - next.x * x - next.y * y - next.z * z);
+	}
+
+	public Vec3 rotate(Vec3 vector) {
+		if (vector == null || isIdentity())
+			return vector == null ? Vec3.ZERO : vector;
+		Vec3 quaternionVector = new Vec3(x, y, z);
+		Vec3 twiceCross = quaternionVector.cross(vector).scale(2.0d);
+		return vector.add(twiceCross.scale(w)).add(quaternionVector.cross(twiceCross));
+	}
+
+	/** Changes the coordinate frame from one laid source pose to another. */
+	public SurgicalCubeRotation reframe(SurgicalLayPose source, SurgicalLayPose target) {
+		if (isIdentity())
+			return this;
+		Vec3 reframed = source.rotateInto(target, new Vec3(x, y, z));
+		return new SurgicalCubeRotation(reframed.x, reframed.y, reframed.z, w);
+	}
+
+	/** Rotates the stored table-space axes clockwise with a packed assembly. */
+	public SurgicalCubeRotation rotateClockwise(int turns) {
+		Vec3 rotated = new Vec3(x, y, z);
+		for (int step = Math.floorMod(turns, 4); step > 0; step--)
+			rotated = new Vec3(-rotated.z, rotated.y, rotated.x);
+		return new SurgicalCubeRotation(rotated.x, rotated.y, rotated.z, w);
+	}
+
+	/** Converts a table-space rotation back through the supplied laid pose. */
+	public SurgicalCubeRotation inverseRotate(SurgicalLayPose pose) {
+		if (isIdentity())
+			return this;
+		Vec3 rotated = pose.inverseRotate(new Vec3(x, y, z));
+		return new SurgicalCubeRotation(rotated.x, rotated.y, rotated.z, w);
+	}
+
+	public boolean isIdentity() {
+		return Math.abs(x) <= IDENTITY_EPSILON && Math.abs(y) <= IDENTITY_EPSILON
+			&& Math.abs(z) <= IDENTITY_EPSILON && Math.abs(w - 1.0d) <= IDENTITY_EPSILON;
+	}
+
+	public boolean approximatelyEquals(SurgicalCubeRotation other, double epsilon) {
+		return other != null && Math.abs(x - other.x) <= epsilon && Math.abs(y - other.y) <= epsilon
+			&& Math.abs(z - other.z) <= epsilon && Math.abs(w - other.w) <= epsilon;
+	}
+
+	public void write(FriendlyByteBuf buffer) {
+		buffer.writeDouble(x);
+		buffer.writeDouble(y);
+		buffer.writeDouble(z);
+		buffer.writeDouble(w);
+	}
+
+	CompoundTag save() {
+		CompoundTag tag = new CompoundTag();
+		tag.putDouble(X_TAG, x);
+		tag.putDouble(Y_TAG, y);
+		tag.putDouble(Z_TAG, z);
+		tag.putDouble(W_TAG, w);
+		return tag;
+	}
+
+	public static SurgicalCubeRotation load(CompoundTag tag) {
+		if (tag == null || !tag.contains(X_TAG, Tag.TAG_ANY_NUMERIC)
+			|| !tag.contains(Y_TAG, Tag.TAG_ANY_NUMERIC) || !tag.contains(Z_TAG, Tag.TAG_ANY_NUMERIC)
+			|| !tag.contains(W_TAG, Tag.TAG_ANY_NUMERIC))
+			return null;
+		try {
+			return new SurgicalCubeRotation(tag.getDouble(X_TAG), tag.getDouble(Y_TAG),
+				tag.getDouble(Z_TAG), tag.getDouble(W_TAG));
+		} catch (IllegalArgumentException ignored) {
+			return null;
+		}
+	}
+
+	public static SurgicalCubeRotation read(FriendlyByteBuf buffer) {
+		return new SurgicalCubeRotation(buffer.readDouble(), buffer.readDouble(), buffer.readDouble(),
+			buffer.readDouble());
+	}
+}

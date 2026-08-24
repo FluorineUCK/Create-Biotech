@@ -13,6 +13,7 @@ import java.util.Map;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3f;
 import org.joml.Matrix4f;
+import org.joml.Quaternionf;
 import org.joml.Vector3f;
 import org.joml.Vector4f;
 
@@ -21,6 +22,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 import com.nobodiiiii.createbiotech.mixin.client.CompositeRenderStateAccessor;
 import com.nobodiiiii.createbiotech.mixin.client.CompositeRenderTypeAccessor;
@@ -71,6 +73,7 @@ public final class SurgicalCapturedRenderPlan {
 	private static ModelPart outerCube;
 	private static final BitSet ALL_COMPONENTS = new BitSet();
 	private static final Map<Integer, Vec3> NO_OFFSETS = Map.of();
+	private static final Map<Integer, SurgicalCubeRotation> NO_ROTATIONS = Map.of();
 
 	private final List<Component> components;
 	private final List<SourceBatch> extras;
@@ -106,7 +109,7 @@ public final class SurgicalCapturedRenderPlan {
 			return false;
 		SurgicalCapturedRenderPlan frame = capture((EntityRenderer<LivingEntity>) renderer, entity,
 			yaw, partialTick);
-		frame.render(poseStack, buffer, packedLight, 0, ALL_COMPONENTS, NO_OFFSETS,
+		frame.render(poseStack, buffer, packedLight, 0, ALL_COMPONENTS, NO_OFFSETS, NO_ROTATIONS,
 			false, null, false);
 		return true;
 	}
@@ -117,30 +120,35 @@ public final class SurgicalCapturedRenderPlan {
 
 	SurgicalModelRenderContext.Snapshot render(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 		int expectedCubeCount, BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
+		Map<Integer, SurgicalCubeRotation> cubeRotations,
 		boolean collectGeometry, @Nullable Vec3 cameraPosition, boolean renderSourceGeometry) {
 		if (renderSourceGeometry) {
 			for (Component component : components)
 				if (isPresent(component.id, expectedCubeCount, presentCubes))
-					component.renderSource(poseStack, buffer, packedLight, cubeOffsets.get(component.id));
+					component.renderSource(poseStack, buffer, packedLight, cubeOffsets.get(component.id),
+						cubeRotations.get(component.id));
 		} else {
 			for (Component component : components) {
 				if (!isPresent(component.id, expectedCubeCount, presentCubes))
 					continue;
 				if (component.preserveSource)
-					component.renderSource(poseStack, buffer, packedLight, cubeOffsets.get(component.id));
+					component.renderSource(poseStack, buffer, packedLight, cubeOffsets.get(component.id),
+						cubeRotations.get(component.id));
 				else
-					component.renderSlime(poseStack, buffer, packedLight, cubeOffsets.get(component.id), false);
+					component.renderSlime(poseStack, buffer, packedLight, cubeOffsets.get(component.id),
+						cubeRotations.get(component.id), false);
 			}
 			for (Component component : components)
 				if (!component.preserveSource && isPresent(component.id, expectedCubeCount, presentCubes))
-					component.renderSlime(poseStack, buffer, packedLight, cubeOffsets.get(component.id), true);
+					component.renderSlime(poseStack, buffer, packedLight, cubeOffsets.get(component.id),
+						cubeRotations.get(component.id), true);
 			// Villager professions, emissive eyes and similar layers intentionally redraw the
 			// same model cube with another material. Keep those pixels attached to the one
 			// surgical component instead of admitting duplicate topology or discarding them.
 			for (Component component : components)
 				if (!component.preserveSource && isPresent(component.id, expectedCubeCount, presentCubes))
 					component.renderSurfaceOverlays(poseStack, buffer, packedLight,
-						cubeOffsets.get(component.id));
+						cubeOffsets.get(component.id), cubeRotations.get(component.id));
 		}
 
 		// Lines, text, beams and genuinely non-cuboid meshes are visual effects rather than
@@ -150,17 +158,18 @@ public final class SurgicalCapturedRenderPlan {
 
 		if (!collectGeometry)
 			return new SurgicalModelRenderContext.Snapshot(components.size(), List.of());
-		return snapshot(poseStack, expectedCubeCount, presentCubes, cubeOffsets, cameraPosition);
+		return snapshot(poseStack, expectedCubeCount, presentCubes, cubeOffsets, cubeRotations, cameraPosition);
 	}
 
 	SurgicalModelRenderContext.Snapshot snapshot(PoseStack poseStack, int expectedCubeCount,
-		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets, @Nullable Vec3 cameraPosition) {
+		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
+		Map<Integer, SurgicalCubeRotation> cubeRotations, @Nullable Vec3 cameraPosition) {
 		List<SurgicalModelRenderContext.CubeGeometry> geometry = new ArrayList<>(components.size());
 		for (Component component : components) {
 			if (!isPresent(component.id, expectedCubeCount, presentCubes))
 				continue;
 			Vec3 offset = cubeOffsets.get(component.id);
-			geometry.add(component.geometry(poseStack, offset, cameraPosition));
+			geometry.add(component.geometry(poseStack, offset, cubeRotations.get(component.id), cameraPosition));
 		}
 		return new SurgicalModelRenderContext.Snapshot(components.size(), geometry);
 	}
@@ -711,28 +720,35 @@ public final class SurgicalCapturedRenderPlan {
 		}
 
 		private void renderSource(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
-			@Nullable Vec3 offset) {
+			@Nullable Vec3 offset, @Nullable SurgicalCubeRotation rotation) {
 			for (SourceBatch batch : batches)
-				batch.renderSource(poseStack, buffer, packedLight, offset);
+				batch.renderSource(poseStack, buffer, packedLight, offset, rotation, center());
 		}
 
 		private void renderSurfaceOverlays(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
-			@Nullable Vec3 offset) {
+			@Nullable Vec3 offset, @Nullable SurgicalCubeRotation rotation) {
 			for (SourceBatch batch : surfaceOverlays)
-				batch.renderSurfaceOverlay(poseStack, buffer, packedLight, offset);
+				batch.renderSurfaceOverlay(poseStack, buffer, packedLight, offset, rotation, center());
 		}
 
 		private void renderSlime(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
-			@Nullable Vec3 offset, boolean outer) {
+			@Nullable Vec3 offset, @Nullable SurgicalCubeRotation rotation, boolean outer) {
 			PoseStack cubePose = new PoseStack();
-			cubePose.mulPose(new Matrix4f(poseStack.last().pose()));
-			if (offset != null)
-				cubePose.last().pose().translateLocal((float) offset.x, (float) offset.y, (float) offset.z);
+			Matrix4f basePose = new Matrix4f(poseStack.last().pose());
+			Vector3f center = center();
+			Vector3f worldCenter = basePose.transformPosition(center, new Vector3f());
+			Matrix4f transformedPose = new Matrix4f().translation(
+				offset == null ? 0.0f : (float) offset.x,
+				offset == null ? 0.0f : (float) offset.y,
+				offset == null ? 0.0f : (float) offset.z);
+			if (rotation != null && !rotation.isIdentity())
+				transformedPose.translate(worldCenter)
+					.rotate(new Quaternionf((float) rotation.x(), (float) rotation.y(),
+						(float) rotation.z(), (float) rotation.w()))
+					.translate(-worldCenter.x, -worldCenter.y, -worldCenter.z);
+			transformedPose.mul(basePose);
+			cubePose.mulPose(transformedPose);
 
-			Vector3f center = new Vector3f(corners.getFirst())
-				.add(new Vector3f(a).mul(0.5f))
-				.add(new Vector3f(b).mul(0.5f))
-				.add(new Vector3f(c).mul(0.5f));
 			Matrix4f transform = new Matrix4f().identity();
 			transform.m00(2.0f * a.x).m01(2.0f * a.y).m02(2.0f * a.z);
 			transform.m10(2.0f * b.x).m11(2.0f * b.y).m12(2.0f * b.z);
@@ -750,8 +766,10 @@ public final class SurgicalCapturedRenderPlan {
 		}
 
 		private SurgicalModelRenderContext.CubeGeometry geometry(PoseStack poseStack, @Nullable Vec3 offset,
-			@Nullable Vec3 cameraPosition) {
+			@Nullable SurgicalCubeRotation rotation, @Nullable Vec3 cameraPosition) {
 			Matrix4f pose = poseStack.last().pose();
+			Vector3f transformedCenter = pose.transformPosition(center(), new Vector3f());
+			Vec3 worldCenter = new Vec3(transformedCenter.x, transformedCenter.y, transformedCenter.z);
 			double offsetX = offset == null ? 0.0d : offset.x;
 			double offsetY = offset == null ? 0.0d : offset.y;
 			double offsetZ = offset == null ? 0.0d : offset.z;
@@ -761,39 +779,49 @@ public final class SurgicalCapturedRenderPlan {
 			List<Vec3> transformed = new ArrayList<>(8);
 			for (Vector3f corner : corners) {
 				Vector3f point = pose.transformPosition(corner, new Vector3f());
-				transformed.add(new Vec3(point.x + offsetX + cameraX, point.y + offsetY + cameraY,
-					point.z + offsetZ + cameraZ));
+				Vec3 worldPoint = new Vec3(point.x, point.y, point.z);
+				if (rotation != null && !rotation.isIdentity())
+					worldPoint = worldCenter.add(rotation.rotate(worldPoint.subtract(worldCenter)));
+				transformed.add(worldPoint.add(offsetX + cameraX, offsetY + cameraY, offsetZ + cameraZ));
 			}
 			return new SurgicalModelRenderContext.CubeGeometry(id, transformed);
+		}
+
+		private Vector3f center() {
+			return new Vector3f(corners.getFirst())
+				.add(new Vector3f(a).mul(0.5f))
+				.add(new Vector3f(b).mul(0.5f))
+				.add(new Vector3f(c).mul(0.5f));
 		}
 	}
 
 	private record SourceBatch(RenderType renderType, List<CapturedVertex> vertices, boolean surfaceOverlay) {
 		private void render(PoseStack poseStack, MultiBufferSource buffer, int packedLight, @Nullable Vec3 offset) {
-			render(poseStack, buffer, packedLight, offset, renderType);
+			render(poseStack, buffer, packedLight, offset, SurgicalCubeRotation.IDENTITY,
+				new Vector3f(), renderType);
 		}
 
 		private void renderSource(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
-			@Nullable Vec3 offset) {
+			@Nullable Vec3 offset, @Nullable SurgicalCubeRotation rotation, Vector3f center) {
 			if (surfaceOverlay)
-				renderSurfaceOverlay(poseStack, buffer, packedLight, offset);
+				renderSurfaceOverlay(poseStack, buffer, packedLight, offset, rotation, center);
 			else
-				render(poseStack, buffer, packedLight, offset);
+				render(poseStack, buffer, packedLight, offset, rotation, center, renderType);
 		}
 
 		private void renderSurfaceOverlay(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
-			@Nullable Vec3 offset) {
+			@Nullable Vec3 offset, @Nullable SurgicalCubeRotation rotation, Vector3f center) {
 			RenderType offsetRenderType = renderType;
 			ResourceLocation texture = renderTypeTexture(renderType);
 			// Vanilla profession/type layers use this memoized cutout type. Match by identity so
 			// translucent, emissive and other special-material overlays retain their original state.
 			if (texture != null && renderType == RenderType.entityCutoutNoCull(texture))
 				offsetRenderType = RenderType.entityCutoutNoCullZOffset(texture);
-			render(poseStack, buffer, packedLight, offset, offsetRenderType);
+			render(poseStack, buffer, packedLight, offset, rotation, center, offsetRenderType);
 		}
 
 		private void render(PoseStack poseStack, MultiBufferSource buffer, int packedLight, @Nullable Vec3 offset,
-			RenderType effectiveRenderType) {
+			@Nullable SurgicalCubeRotation rotation, Vector3f center, RenderType effectiveRenderType) {
 			VertexConsumer consumer = buffer.getBuffer(effectiveRenderType);
 			Matrix4f pose = poseStack.last().pose();
 			Matrix3f normal = poseStack.last().normal();
@@ -802,11 +830,23 @@ public final class SurgicalCapturedRenderPlan {
 			float offsetZ = offset == null ? 0.0f : (float) offset.z;
 			Vector4f position = new Vector4f();
 			Vector3f transformedNormal = new Vector3f();
+			Vector3f transformedCenter = pose.transformPosition(center, new Vector3f());
+			Vec3 worldCenter = new Vec3(transformedCenter.x, transformedCenter.y, transformedCenter.z);
 			for (CapturedVertex vertex : vertices) {
 				position.set(vertex.x, vertex.y, vertex.z, 1.0f);
 				pose.transform(position);
 				transformedNormal.set(vertex.normalX, vertex.normalY, vertex.normalZ);
 				normal.transform(transformedNormal);
+				if (rotation != null && !rotation.isIdentity()) {
+					Vec3 rotatedPosition = worldCenter.add(rotation.rotate(
+						new Vec3(position.x, position.y, position.z).subtract(worldCenter)));
+					position.set((float) rotatedPosition.x, (float) rotatedPosition.y,
+						(float) rotatedPosition.z, 1.0f);
+					Vec3 rotatedNormal = rotation.rotate(new Vec3(transformedNormal.x,
+						transformedNormal.y, transformedNormal.z));
+					transformedNormal.set((float) rotatedNormal.x, (float) rotatedNormal.y,
+						(float) rotatedNormal.z);
+				}
 				if (transformedNormal.lengthSquared() > 1.0e-8f)
 					transformedNormal.normalize();
 				int capturedLight = packed(vertex.lightU, vertex.lightV);

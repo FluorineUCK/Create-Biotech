@@ -10,6 +10,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalClientTopology;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
@@ -31,6 +32,8 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	private static final Map<SlimeBionicEntity, CompositeCachedGeometry> COMPOSITE_GEOMETRY = new WeakHashMap<>();
 	private static final Map<SurgicalAssembly, Map<SurgicalAssembly.Source, Map<Integer, Vec3>>>
 		UPRIGHT_OFFSETS = new WeakHashMap<>();
+	private static final Map<SurgicalAssembly, Map<SurgicalAssembly.Source, Map<Integer, SurgicalCubeRotation>>>
+		UPRIGHT_ROTATIONS = new WeakHashMap<>();
 
 	public SlimeBionicRenderer(EntityRendererProvider.Context context) {
 		super(context);
@@ -41,6 +44,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		GEOMETRY.clear();
 		COMPOSITE_GEOMETRY.clear();
 		UPRIGHT_OFFSETS.clear();
+		UPRIGHT_ROTATIONS.clear();
 	}
 
 	@Override
@@ -78,6 +82,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 				poseStack.translate(cached.modelOffset.x, cached.modelOffset.y, cached.modelOffset.z);
 			if (preview != null) {
 				SurgicalSourceModelRenderer.render(preview, assembly.cubeCount(), presentCubes, offsets,
+					assembly.cubeRotations(),
 					poseStack, buffer, packedLight, yaw, partialTick, false, null, !slimeForm);
 			}
 			poseStack.popPose();
@@ -141,7 +146,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			if (assembly.preservesLayout())
 				SurgicalTablePoseResolver.resolve(source.layPose()).apply(poseStack);
 			SurgicalSourceModelRenderer.render(preview, source.cubeCount(), source.presentCubes(),
-				uprightOffsets(assembly, source),
+				uprightOffsets(assembly, source), uprightRotations(assembly, source),
 				poseStack, buffer, packedLight, yaw, partialTick, false, null,
 				renderSourceGeometry);
 			poseStack.popPose();
@@ -167,6 +172,24 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		return result;
 	}
 
+	private static Map<Integer, SurgicalCubeRotation> uprightRotations(SurgicalAssembly assembly,
+		SurgicalAssembly.Source source) {
+		Map<SurgicalAssembly.Source, Map<Integer, SurgicalCubeRotation>> assemblyRotations = UPRIGHT_ROTATIONS
+			.computeIfAbsent(assembly, ignored -> new java.util.IdentityHashMap<>());
+		Map<Integer, SurgicalCubeRotation> cached = assemblyRotations.get(source);
+		if (cached != null)
+			return cached;
+		SurgicalLayPose pose = assembly.layoutLayPose();
+		Map<Integer, SurgicalCubeRotation> rotations = source.cubeRotations();
+		if (rotations.isEmpty())
+			return rotations;
+		Map<Integer, SurgicalCubeRotation> transformed = new java.util.HashMap<>();
+		rotations.forEach((cube, rotation) -> transformed.put(cube, rotation.inverseRotate(pose)));
+		Map<Integer, SurgicalCubeRotation> result = Map.copyOf(transformed);
+		assemblyRotations.put(source, result);
+		return result;
+	}
+
 	private static CachedGeometry rebuildGeometry(LivingEntity preview, SurgicalAssembly assembly,
 		float yaw, float partialTick, int packedLight, boolean slimeForm) {
 		if (preview == null)
@@ -183,6 +206,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		MultiBufferSource measuringBuffer = renderType -> bodyGeometry;
 		EntityGeometry.measureBaseModelWithFallback(preview, bodyGeometry, () ->
 			SurgicalSourceModelRenderer.render(preview, assembly.cubeCount(), presentCubes, offsets,
+				assembly.cubeRotations(),
 				new PoseStack(), measuringBuffer, packedLight, yaw, partialTick, false, null, !slimeForm));
 		EntityGeometry.Bounds bounds = bodyGeometry.bounds();
 		Vec3 modelOffset = new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ());

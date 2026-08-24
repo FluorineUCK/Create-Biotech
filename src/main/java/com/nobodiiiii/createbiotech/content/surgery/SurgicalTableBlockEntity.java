@@ -274,7 +274,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				placed.layPose(),
 				source.cubeCount(), source.presentCubes(), source.seams(), source.cutSeams(), source.cutOrder(),
 				placedOriginOffsetX + placed.originOffset().x,
-				placedOriginOffsetZ + placed.originOffset().z, restoredOffsets(placed),
+				placedOriginOffsetZ + placed.originOffset().z, restoredOffsets(placed), placed.cubeRotations(),
 				sourceLayouts.get(sourceId).footprints());
 			restored.add(subject);
 		}
@@ -520,7 +520,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				addSubject(moved);
 				extracted.put(original.persistentId(), new ExtractedSubject((BitSet) selected.clone(), moved));
 			}
-			moved.applyGlueMove(second.placementFacing(), targetPose, move.offsets,
+			moved.applyGlueMove(second.placementFacing(), targetPose, move.offsets, move.rotations,
 				move.layout.footprints());
 		}
 		for (Map.Entry<UUID, Map<Integer, Vec3>> entry : validatedAnchors.entrySet()) {
@@ -573,19 +573,23 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (selected == null || selected.isEmpty())
 				return null;
 			Map<Integer, Vec3> offsets = new HashMap<>();
+			Map<Integer, SurgicalCubeRotation> rotations = new HashMap<>();
 			for (SurgicalTableGluePacket.CubeTranslation translation : move.translations())
 				if (!translation.valid() || !selected.get(translation.cubeId())
-					|| offsets.putIfAbsent(translation.cubeId(), translation.offset()) != null)
+					|| offsets.putIfAbsent(translation.cubeId(), translation.offset()) != null
+					|| rotations.putIfAbsent(translation.cubeId(), translation.rotation()) != null)
 					return null;
 			if (offsets.size() != selected.cardinality()
 				|| !layoutMatchesTranslations(move.layout(), offsets)
 				|| !componentYTranslationsMatch(subject, selected, offsets)
+				|| !componentRotationsMatch(subject, selected, rotations)
 				|| !SurgicalTableLayout.validateGlueComponents(plane, subject.cubeCount, selected,
 					subject.seams, subject.cutSeams, move.layout(), obstacles))
 				return null;
 			if (!selected.equals(subject.presentCubes))
 				requiredSplits++;
-			validated.put(subject.persistentId(), new ValidatedGlueMove(Map.copyOf(offsets), move.layout()));
+			validated.put(subject.persistentId(), new ValidatedGlueMove(Map.copyOf(offsets),
+				Map.copyOf(rotations), move.layout()));
 		}
 		return validated.keySet().equals(moving.components.keySet())
 			&& subjects.size() <= MAX_SUBJECTS - requiredSplits ? Map.copyOf(validated) : null;
@@ -607,9 +611,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			Map<Integer, Vec3> offsets = new HashMap<>();
 			for (SurgicalTableGluePacket.CubeTranslation translation : move.translations()) {
 				Vec3 existing = subject.componentOffsets.getOrDefault(translation.cubeId(), Vec3.ZERO);
+				SurgicalCubeRotation existingRotation = subject.componentRotations.getOrDefault(
+					translation.cubeId(), SurgicalCubeRotation.IDENTITY);
 				if (!translation.valid() || !selected.get(translation.cubeId())
 					|| Math.abs(translation.offset().x - existing.x) > 1.0e-6d
 					|| Math.abs(translation.offset().z - existing.z) > 1.0e-6d
+					|| !translation.rotation().approximatelyEquals(existingRotation, 1.0e-6d)
 					|| offsets.putIfAbsent(translation.cubeId(), translation.offset()) != null)
 					return null;
 			}
@@ -643,6 +650,18 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			double expected = offsets.get(component.nextSetBit(0)).y;
 			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
 				if (Math.abs(offsets.get(cube).y - expected) > 1.0e-6d)
+					return false;
+		}
+		return true;
+	}
+
+	private static boolean componentRotationsMatch(SurgicalSubject subject, BitSet selected,
+		Map<Integer, SurgicalCubeRotation> rotations) {
+		for (BitSet component : SurgicalAssembly.components(subject.cubeCount, selected,
+			subject.seams, subject.cutSeams)) {
+			SurgicalCubeRotation expected = rotations.get(component.nextSetBit(0));
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
+				if (expected == null || !expected.approximatelyEquals(rotations.get(cube), 1.0e-6d))
 					return false;
 		}
 		return true;
@@ -692,6 +711,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	private record ValidatedGlueMove(Map<Integer, Vec3> offsets,
+		Map<Integer, SurgicalCubeRotation> rotations,
 		SurgicalTableLayout.Proposal layout) {}
 
 	private record ExtractedSubject(BitSet cubes, SurgicalSubject subject) {}
@@ -901,16 +921,20 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (included == null || included.isEmpty())
 				continue;
 			Map<Integer, Vec3> offsets = new HashMap<>();
+			Map<Integer, SurgicalCubeRotation> rotations = new HashMap<>();
 			for (int cube = included.nextSetBit(0); cube >= 0; cube = included.nextSetBit(cube + 1)) {
 				Vec3 offset = grouped.componentOffsets.get(cube);
 				if (offset != null)
 					offsets.put(cube, offset);
+				SurgicalCubeRotation rotation = grouped.componentRotations.get(cube);
+				if (rotation != null)
+					rotations.put(cube, rotation);
 			}
 			SurgicalAssembly.Source source = SurgicalAssembly.Source.create(grouped.profile(), grouped.cubeCount,
 				included, grouped.seams, grouped.cutSeams, grouped.cutOrder, grouped.placementFacing(),
 				grouped.layPose(),
 				new Vec3(grouped.originOffsetX() - anchor.originOffsetX(), 0.0d,
-					grouped.originOffsetZ() - anchor.originOffsetZ()), offsets);
+					grouped.originOffsetZ() - anchor.originOffsetZ()), offsets, rotations);
 			if (source == null)
 				return null;
 			sourceIds.put(grouped.persistentId(), sources.size());

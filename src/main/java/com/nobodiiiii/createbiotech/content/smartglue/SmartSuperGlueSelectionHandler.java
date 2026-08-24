@@ -5,6 +5,7 @@ import java.util.Optional;
 import java.util.Set;
 
 import com.google.common.base.Objects;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalTableClientHandler;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.simibubi.create.AllSoundEvents;
 import com.simibubi.create.AllSpecialTextures;
@@ -69,6 +70,10 @@ public class SmartSuperGlueSelectionHandler {
 			selected = null;
 			selectedGroupBlocks = Set.of();
 			selectedGroupAnchorId = -1;
+			return;
+		}
+		if (SurgicalTableClientHandler.shouldOverrideCreateGlue(stack)) {
+			clearPlacementSelection();
 			return;
 		}
 
@@ -178,6 +183,10 @@ public class SmartSuperGlueSelectionHandler {
 		ClientLevel level = mc.level;
 		if (player == null || level == null || !isGlue(player.getMainHandItem()) || !player.mayBuild())
 			return false;
+		if (SurgicalTableClientHandler.shouldOverrideCreateGlue(player.getMainHandItem())) {
+			clearPlacementSelection();
+			return false;
+		}
 
 		if (attack) {
 			if (selected == null || soundSourceForRemoval == null)
@@ -247,6 +256,13 @@ public class SmartSuperGlueSelectionHandler {
 		clusterCooldown = 0;
 		selectedGroupAnchorId = -1;
 		singleSelectionRender = false;
+	}
+
+	private void clearPlacementSelection() {
+		currentCluster = null;
+		firstPos = null;
+		hoveredPos = null;
+		clusterCooldown = 0;
 	}
 
 	private void confirm() {

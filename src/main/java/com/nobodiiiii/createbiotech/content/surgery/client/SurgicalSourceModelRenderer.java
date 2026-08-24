@@ -9,6 +9,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -56,27 +57,52 @@ public final class SurgicalSourceModelRenderer {
 	public static SurgicalModelRenderContext.Snapshot render(Object owner, MimicProfile profile, int cubeCount,
 		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition) {
+		return render(owner, profile, cubeCount, presentCubes, cubeOffsets, Map.of(), poseStack, buffer, packedLight,
+			yaw, partialTick, collectGeometry, cameraPosition);
+	}
+
+	public static SurgicalModelRenderContext.Snapshot render(Object owner, MimicProfile profile, int cubeCount,
+		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
+		Map<Integer, SurgicalCubeRotation> cubeRotations, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition) {
 		LivingEntity preview = preview(owner, profile);
 		if (preview == null)
 			return new SurgicalModelRenderContext.Snapshot(0, java.util.List.of());
-		return render(preview, cubeCount, presentCubes, cubeOffsets, poseStack, buffer, packedLight, yaw, partialTick,
-			collectGeometry, cameraPosition);
+		return render(preview, cubeCount, presentCubes, cubeOffsets, cubeRotations, poseStack, buffer, packedLight,
+			yaw, partialTick, collectGeometry, cameraPosition);
 	}
 
 	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
 		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition) {
-		return render(preview, cubeCount, presentCubes, cubeOffsets, poseStack, buffer, packedLight, yaw,
-			partialTick, collectGeometry, cameraPosition, false);
+		return render(preview, cubeCount, presentCubes, cubeOffsets, Map.of(), poseStack, buffer, packedLight,
+			yaw, partialTick, collectGeometry, cameraPosition, false);
+	}
+
+	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
+		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
+		Map<Integer, SurgicalCubeRotation> cubeRotations, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition) {
+		return render(preview, cubeCount, presentCubes, cubeOffsets, cubeRotations, poseStack, buffer, packedLight,
+			yaw, partialTick, collectGeometry, cameraPosition, false);
 	}
 
 	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
 		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition,
 		boolean renderSourceGeometry) {
+		return render(preview, cubeCount, presentCubes, cubeOffsets, Map.of(), poseStack, buffer, packedLight,
+			yaw, partialTick, collectGeometry, cameraPosition, renderSourceGeometry);
+	}
+
+	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
+		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
+		Map<Integer, SurgicalCubeRotation> cubeRotations, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition,
+		boolean renderSourceGeometry) {
 		preparePreview(preview, yaw);
 		SurgicalCapturedRenderPlan plan = plan(preview, yaw, partialTick);
-		return plan.render(poseStack, buffer, packedLight, cubeCount, presentCubes, cubeOffsets,
+		return plan.render(poseStack, buffer, packedLight, cubeCount, presentCubes, cubeOffsets, cubeRotations,
 			collectGeometry, cameraPosition, renderSourceGeometry);
 	}
 
@@ -110,7 +136,7 @@ public final class SurgicalSourceModelRenderer {
 		@Nullable Vec3 cameraPosition, boolean renderSourceGeometry) {
 		preparePreview(preview, yaw);
 		return plan(preview, yaw, partialTick)
-			.snapshot(poseStack, cubeCount, presentCubes, Map.of(), cameraPosition);
+			.snapshot(poseStack, cubeCount, presentCubes, Map.of(), Map.of(), cameraPosition);
 	}
 
 	private static void preparePreview(LivingEntity preview, float yaw) {

@@ -6,6 +6,7 @@ import java.util.Map;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalSubject;
@@ -93,10 +94,11 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 			SurgicalTableClientHandler.updateGeometry(table, subject, snapshot);
 		}
 		Map<Integer, Vec3> offsets = SurgicalTableClientHandler.offsetsFor(table, subject);
+		Map<Integer, SurgicalCubeRotation> rotations = SurgicalTableClientHandler.rotationsFor(table, subject);
 		// The immutable captured source plan is cached by MimicProfile. Lay pose, grounded Y,
 		// cuts and component offsets remain dynamic table-space state and are applied here
 		// exactly once, matching the pre-mesh-cache coordinate semantics.
-		SurgicalSourceModelRenderer.render(preview, storedCount, present, offsets, poseStack, buffer,
+		SurgicalSourceModelRenderer.render(preview, storedCount, present, offsets, rotations, poseStack, buffer,
 			packedLight, 0.0f, 0.0f, false, camera, projectSourceGeometry);
 		poseStack.popPose();
 	}
