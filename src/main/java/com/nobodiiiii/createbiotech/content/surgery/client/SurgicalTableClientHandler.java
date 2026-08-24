@@ -19,6 +19,7 @@ import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalCombination;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalGlueJoint;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock;
@@ -81,11 +82,16 @@ public final class SurgicalTableClientHandler {
 	private static final double GLUE_EDIT_ROTATION_STEP = 15.0d;
 	private static final int GLUE_EDIT_CIRCLE_SEGMENTS = 32;
 	private static final double GLUE_EDIT_GUIDE_MARGIN = 1.0d / 16.0d;
+	private static final double MODEL_PIXEL_SIZE = 1.0d / 16.0d;
+	private static final double GLUE_POINT_SURFACE_OFFSET = 1.0d / 1024.0d;
+	private static final double GLUE_POINT_CROSS_HALF_LENGTH_PIXELS = 0.3d;
+	private static final double GLUE_POINT_PIXEL_EPSILON = 1.0e-4d;
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
 	private static final InteractionHand[] HANDS = { InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND };
 	private static final OutlineState SEAM_OUTLINE = new OutlineState();
 	private static final OutlineState CUBE_OUTLINE = new OutlineState();
 	private static final OutlineState GLUE_EDIT_OUTLINE = new OutlineState();
+	private static final OutlineState GLUE_POINT_OUTLINE = new OutlineState();
 	private static final Object PLACEMENT_OUTLINE_SLOT = new Object();
 	private static final Map<SubjectKey, TableGeometry> TABLES = new HashMap<>();
 	private static long lastPlacementOutlineTick = Long.MIN_VALUE;
@@ -111,6 +117,8 @@ public final class SurgicalTableClientHandler {
 	private static PendingGlueCut pendingGlueCut;
 	@Nullable
 	private static PendingGlue pendingGlue;
+	@Nullable
+	private static GluePoint hoveredGluePoint;
 	@Nullable
 	private static GluePreview gluePreview;
 	@Nullable
@@ -228,6 +236,7 @@ public final class SurgicalTableClientHandler {
 		pendingCut = null;
 		pendingGlueCut = null;
 		pendingGlue = null;
+		hoveredGluePoint = null;
 		gluePreview = null;
 		glueEditor = null;
 		lastGlueEditPromptTick = Long.MIN_VALUE;
@@ -239,6 +248,7 @@ public final class SurgicalTableClientHandler {
 		lastSelectionPendingGlue = null;
 		SurgicalTablePoseResolver.clear();
 		GLUE_EDIT_OUTLINE.clear();
+		GLUE_POINT_OUTLINE.clear();
 		clearSelections();
 	}
 
@@ -251,10 +261,12 @@ public final class SurgicalTableClientHandler {
 			abortPendingCut();
 			abortPendingGlueCut();
 			pendingGlue = null;
+			hoveredGluePoint = null;
 			gluePreview = null;
 			glueEditor = null;
 			lastGlueEditPromptTick = Long.MIN_VALUE;
 			GLUE_EDIT_OUTLINE.clear();
+			GLUE_POINT_OUTLINE.clear();
 			clearPlacementPreview();
 			clearSelections();
 			return;
@@ -559,14 +571,20 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 		if (pendingCut != null) {
+			hoveredGluePoint = null;
+			GLUE_POINT_OUTLINE.clear();
 			updatePendingCut(player, level);
 			return;
 		}
 		if (pendingGlueCut != null) {
+			hoveredGluePoint = null;
+			GLUE_POINT_OUTLINE.clear();
 			updatePendingGlueCut(player, level);
 			return;
 		}
 		if (glueEditor != null) {
+			hoveredGluePoint = null;
+			GLUE_POINT_OUTLINE.clear();
 			seamSelection = null;
 			cubeSelection = null;
 			componentSelection = null;
@@ -583,8 +601,12 @@ public final class SurgicalTableClientHandler {
 		boolean holdingEmptyLargeBox = isEmptyLargeBox(player.getMainHandItem())
 			|| isEmptyLargeBox(player.getOffhandItem());
 		boolean holdingGlue = isSurgicalGlue(player.getMainHandItem()) || isSurgicalGlue(player.getOffhandItem());
+		boolean holdingHoney = player.getMainHandItem().is(Items.HONEY_BOTTLE)
+			|| player.getOffhandItem().is(Items.HONEY_BOTTLE);
 		boolean highlightingDirectConnections = holdingShears && player.isShiftKeyDown();
-		if (!holdingShears && !holdingEmptyBox && !holdingEmptyLargeBox && !holdingGlue) {
+		if (!holdingShears && !holdingEmptyBox && !holdingEmptyLargeBox && !holdingGlue && !holdingHoney) {
+			hoveredGluePoint = null;
+			GLUE_POINT_OUTLINE.clear();
 			gluePreview = null;
 			seamSelection = null;
 			cubeSelection = null;
@@ -597,7 +619,7 @@ public final class SurgicalTableClientHandler {
 		Ray ray = playerRay(player);
 		int selectionMode = (holdingShears ? 1 : 0) | (holdingEmptyBox ? 2 : 0)
 			| (holdingEmptyLargeBox ? 4 : 0) | (holdingGlue ? 8 : 0)
-			| (highlightingDirectConnections ? 16 : 0);
+			| (highlightingDirectConnections ? 16 : 0) | (holdingHoney ? 32 : 0);
 		if (lastSelectionTick == level.getGameTime() && lastSelectionGeneration == geometryGeneration
 			&& lastSelectionMode == selectionMode && ray.equals(lastSelectionRay)
 			&& pendingGlue == lastSelectionPendingGlue) {
@@ -609,21 +631,25 @@ public final class SurgicalTableClientHandler {
 		lastSelectionMode = selectionMode;
 		lastSelectionRay = ray;
 		lastSelectionPendingGlue = pendingGlue;
-		CubeHit cubeHit = holdingShears || holdingEmptyBox || holdingGlue
+		CubeHit cubeHit = holdingShears || holdingEmptyBox || holdingGlue || holdingHoney
 			? findNearestCubeHit(player, level, ray) : null;
-		if (pendingGlue == null || cubeHit == null) {
+		CubeHit glueHit = holdingGlue ? snapGlueHit(cubeHit) : null;
+		hoveredGluePoint = glueHit == null ? null : glueHit.gluePoint;
+		if (pendingGlue == null || glueHit == null) {
 			gluePreview = null;
 		} else {
-			int revision = level.getBlockEntity(cubeHit.tablePos) instanceof SurgicalTableBlockEntity table
+			int revision = level.getBlockEntity(glueHit.tablePos) instanceof SurgicalTableBlockEntity table
 				? table.clientDataRevision() : Integer.MIN_VALUE;
-			if (gluePreview == null || !gluePreview.matches(pendingGlue, cubeHit, revision))
-				gluePreview = planGluePreview(level, pendingGlue, cubeHit);
+			if (gluePreview == null || !gluePreview.matches(pendingGlue, glueHit, revision))
+				gluePreview = planGluePreview(level, pendingGlue, glueHit);
 		}
 		seamSelection = holdingShears && !highlightingDirectConnections
 			? findSeamSelection(player, level, ray, cubeHit) : null;
 		cubeSelection = holdingEmptyBox ? findConnectedComponentSelection(cubeHit) : null;
-		componentSelection = holdingGlue
+		componentSelection = holdingHoney
 			? findConnectedComponentSelection(cubeHit)
+			: holdingGlue
+			? findConnectedComponentSelection(glueHit)
 			: highlightingDirectConnections
 			? findDirectConnectionSelection(cubeHit)
 			: !holdingShears && holdingEmptyLargeBox ? findConnectedComponentSelection(cubeHit) : null;
@@ -631,6 +657,7 @@ public final class SurgicalTableClientHandler {
 	}
 
 	private static void refreshCurrentSelectionHighlight() {
+		refreshGluePointHighlight();
 		if (highlightGluePreview())
 			return;
 		if (componentSelection != null)
@@ -643,13 +670,45 @@ public final class SurgicalTableClientHandler {
 			clearSeamHighlight();
 	}
 
+	private static void refreshGluePointHighlight() {
+		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
+		if (pendingGlue != null)
+			edges.addAll(pendingGlue.point.markerEdges);
+		if (hoveredGluePoint != null && (pendingGlue == null
+			|| !hoveredGluePoint.markerEdges.equals(pendingGlue.point.markerEdges)))
+			edges.addAll(hoveredGluePoint.markerEdges);
+		if (edges.isEmpty())
+			GLUE_POINT_OUTLINE.clear();
+		else
+			GLUE_POINT_OUTLINE.show(edges, CUBE_HIGHLIGHT_COLOR);
+	}
+
 	private static boolean highlightGluePreview() {
 		if (gluePreview == null)
 			return false;
+		ClientLevel level = Minecraft.getInstance().level;
+		SurgicalTableBlockEntity table = level != null
+			&& level.getBlockEntity(gluePreview.ownerPos) instanceof SurgicalTableBlockEntity found
+			? found : null;
 		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
+		java.util.Set<UUID> collapsed = new java.util.HashSet<>();
 		for (GlueSubjectPreview subject : gluePreview.subjects) {
+			BitSet ordinary = (BitSet) subject.cubes.clone();
+			SurgicalSubject source = table == null ? null : table.getSubject(subject.subjectId);
 			for (int cubeId = subject.cubes.nextSetBit(0); cubeId >= 0;
 				cubeId = subject.cubes.nextSetBit(cubeId + 1)) {
+				SurgicalCombination combination = source == null ? null
+					: source.combinationContaining(cubeId);
+				if (combination == null || !combinationFullyPreviewed(gluePreview.subjects, table, combination))
+					continue;
+				for (SurgicalCombination.Member member : combination.members())
+					if (member.subjectKey().equals(source.persistentId()))
+						ordinary.clear(member.cubeId());
+				if (collapsed.add(combination.id()))
+					edges.addAll(previewCombinationOuterEdges(gluePreview.subjects, table, combination));
+			}
+			for (int cubeId = ordinary.nextSetBit(0); cubeId >= 0;
+				cubeId = ordinary.nextSetBit(cubeId + 1)) {
 				SurgicalModelRenderContext.CubeGeometry cube = previewCube(subject, cubeId);
 				if (cube != null)
 					edges.addAll(SurgicalClientTopology.cubeEdges(cube));
@@ -720,6 +779,13 @@ public final class SurgicalTableClientHandler {
 				seamSelection = null;
 				if (selected == null)
 					return;
+				if (selected.combination) {
+					sendInteraction(selected, hand,
+						SurgicalTableInteractionPacket.Action.DETACH_COMBINATION,
+						SurgicalTableLayout.Proposal.EMPTY);
+					consumeInteraction(event, hand);
+					return;
+				}
 				SurgicalClientTopology.PlannedLayout planned = planBatchCut(level, selected);
 				if (planned == null) {
 					showNoSpace(minecraft.player);
@@ -733,11 +799,22 @@ public final class SurgicalTableClientHandler {
 				seamSelection = selected;
 				if (selected == null)
 					return;
-				if (selected.glueJoint)
+				if (selected.combination)
+					sendInteraction(selected, hand,
+						SurgicalTableInteractionPacket.Action.BREAK_COMBINATION,
+						SurgicalTableLayout.Proposal.EMPTY);
+				else if (selected.glueJoint)
 					beginGlueCut(level, selected, hand);
 				else
 					beginSingleCut(level, selected, hand);
 			}
+		} else if (held.is(Items.HONEY_BOTTLE)) {
+			selected = findConnectedComponentSelection(cubeHit);
+			componentSelection = selected;
+			if (selected == null)
+				return;
+			sendInteraction(selected, hand, SurgicalTableInteractionPacket.Action.COMBINE,
+				SurgicalTableLayout.Proposal.EMPTY);
 		} else if (isEmptyBox(held)) {
 			selected = findConnectedComponentSelection(cubeHit);
 			cubeSelection = selected;
@@ -761,6 +838,7 @@ public final class SurgicalTableClientHandler {
 			confirmGlue(player, level, glueEditor);
 			return true;
 		}
+		hit = snapGlueHit(hit);
 		if (hit == null)
 			return pendingGlue != null;
 		Selection selected = findConnectedComponentSelection(hit);
@@ -768,7 +846,7 @@ public final class SurgicalTableClientHandler {
 			return false;
 		Vec3 localHit = hit.location.subtract(Vec3.atLowerCornerOf(hit.tablePos));
 		if (pendingGlue == null) {
-			pendingGlue = new PendingGlue(selected, localHit, hand, hit.faceIndex);
+			pendingGlue = new PendingGlue(selected, localHit, hand, hit.faceIndex, hit.gluePoint);
 			componentSelection = findConnectedComponentSelection(hit);
 			player.displayClientMessage(Component.translatable(
 				"message.create_biotech.surgical_table.glue_first"), true);
@@ -879,10 +957,12 @@ public final class SurgicalTableClientHandler {
 
 	private static void clearPendingGlue() {
 		pendingGlue = null;
+		hoveredGluePoint = null;
 		gluePreview = null;
 		glueEditor = null;
 		lastGlueEditPromptTick = Long.MIN_VALUE;
 		GLUE_EDIT_OUTLINE.clear();
+		GLUE_POINT_OUTLINE.clear();
 		CUBE_OUTLINE.clear();
 	}
 
@@ -1688,7 +1768,6 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 
-		List<SurgicalClientTopology.Edge> highlighted = new ArrayList<>();
 		for (Map.Entry<Integer, BitSet> entry : pending.movingComponents.entrySet()) {
 			SurgicalSubject subject = table.getSubject(entry.getKey());
 			TableGeometry geometry = TABLES.get(new SubjectKey(pending.tablePos, entry.getKey()));
@@ -1700,9 +1779,14 @@ public final class SurgicalTableClientHandler {
 			Map<Integer, Vec3> offsets = new HashMap<>(geometry.serverOffsets);
 			for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
 				cube = entry.getValue().nextSetBit(cube + 1))
-				offsets.put(cube, offsets.getOrDefault(cube, Vec3.ZERO).add(planned.delta()));
+					offsets.put(cube, offsets.getOrDefault(cube, Vec3.ZERO).add(planned.delta()));
 			geometry.applyPreview(table, Map.copyOf(offsets), geometry.cutSeams, pending.joint);
-			highlighted.addAll(geometry.componentCubeEdges(entry.getValue()));
+		}
+		List<SurgicalClientTopology.Edge> highlighted = connectedSelectionEdges(
+			pending.tablePos, table, pending.movingComponents);
+		if (highlighted == null) {
+			abortPendingGlueCut();
+			return;
 		}
 		pending.planned = planned;
 		pending.lastTargetX = target.x;
@@ -1976,6 +2060,15 @@ public final class SurgicalTableClientHandler {
 	@Nullable
 	private static Selection findSeamSelection(LocalPlayer player, ClientLevel level, Ray ray,
 		@Nullable CubeHit cubeHit) {
+		if (cubeHit != null && level.getBlockEntity(cubeHit.tablePos) instanceof SurgicalTableBlockEntity table) {
+			SurgicalCombination combination = table.combinationContaining(
+				cubeHit.geometry.subjectId, cubeHit.cubeId);
+			if (combination != null) {
+				return table.externalCombinationJoints(combination).isEmpty()
+					? combinationSelection(cubeHit, table, combination)
+					: findCombinationExternalGlueSelection(cubeHit, table, combination);
+			}
+		}
 		Selection directHit = findDirectSeamSelection(player, level, ray);
 		if (directHit != null)
 			return directHit;
@@ -2003,6 +2096,86 @@ public final class SurgicalTableClientHandler {
 		return best != null ? best : findGlueJointSelection(cubeHit);
 	}
 
+	private static Selection combinationSelection(CubeHit hit, SurgicalTableBlockEntity table,
+		SurgicalCombination combination) {
+		return new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
+			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(),
+			combinationOuterEdges(hit.tablePos, table, combination), false, true);
+	}
+
+	@Nullable
+	private static Selection findCombinationExternalGlueSelection(CubeHit hit,
+		SurgicalTableBlockEntity table, SurgicalCombination combination) {
+		Selection best = null;
+		double bestDistance = Double.MAX_VALUE;
+		for (SurgicalGlueJoint joint : table.externalCombinationJoints(combination)) {
+			SurgicalSubject jointSubject = table.getSubjectByPersistentId(joint.first().subjectKey());
+			if (jointSubject == null)
+				continue;
+			int jointId = jointSubject.glueJoints().indexOf(joint);
+			TableGeometry jointGeometry = TABLES.get(new SubjectKey(hit.tablePos, jointSubject.id()));
+			GlueJointSelection candidate = jointId < 0 || jointGeometry == null ? null
+				: glueJointSelection(hit.tablePos, table, jointSubject, jointGeometry, jointId);
+			if (candidate == null) {
+				jointSubject = table.getSubjectByPersistentId(joint.second().subjectKey());
+				if (jointSubject == null)
+					continue;
+				jointId = jointSubject.glueJoints().indexOf(joint);
+				jointGeometry = TABLES.get(new SubjectKey(hit.tablePos, jointSubject.id()));
+				candidate = jointId < 0 || jointGeometry == null ? null
+					: glueJointSelection(hit.tablePos, table, jointSubject, jointGeometry, jointId);
+			}
+			if (candidate == null)
+				continue;
+			double distance = candidate.contact == null
+				? distanceToGlueJoint(hit.location, table, hit.tablePos, joint)
+				: pointToContactDistance(hit.location, candidate.contact);
+			if (distance >= bestDistance)
+				continue;
+			bestDistance = distance;
+			List<SurgicalClientTopology.Edge> routedEdges = new ArrayList<>(
+				combinationOuterEdges(hit.tablePos, table, combination));
+			SurgicalGlueJoint.Endpoint outside = combination.contains(joint.first().subjectKey(),
+				joint.first().cubeId()) ? joint.second() : joint.first();
+			SurgicalSubject outsideSubject = table.getSubjectByPersistentId(outside.subjectKey());
+			SurgicalCombination outsideCombination = outsideSubject == null ? null
+				: outsideSubject.combinationContaining(outside.cubeId());
+			if (outsideCombination != null)
+				routedEdges.addAll(combinationOuterEdges(hit.tablePos, table, outsideCombination));
+			else if (outsideSubject != null) {
+				TableGeometry outsideGeometry = TABLES.get(new SubjectKey(hit.tablePos, outsideSubject.id()));
+				SurgicalModelRenderContext.CubeGeometry outsideCube = outsideGeometry == null ? null
+					: outsideGeometry.cubesById.get(outside.cubeId());
+				if (outsideCube != null)
+					routedEdges.addAll(SurgicalClientTopology.cubeEdges(outsideCube));
+			}
+			Selection selected = candidate.selection;
+			best = new Selection(selected.tablePos, selected.subjectId, selected.targetId,
+				selected.observedCubeCount, selected.seams, selected.edges, List.copyOf(routedEdges), true, false);
+		}
+		return best;
+	}
+
+	private static double distanceToGlueJoint(Vec3 point, SurgicalTableBlockEntity table,
+		BlockPos tablePos, SurgicalGlueJoint joint) {
+		Vec3 first = endpointCubeCenter(table, tablePos, joint.first());
+		Vec3 second = endpointCubeCenter(table, tablePos, joint.second());
+		if (first == null || second == null)
+			return Double.MAX_VALUE;
+		return point.distanceTo(first.add(second).scale(0.5d));
+	}
+
+	@Nullable
+	private static Vec3 endpointCubeCenter(SurgicalTableBlockEntity table, BlockPos tablePos,
+		SurgicalGlueJoint.Endpoint endpoint) {
+		SurgicalSubject subject = table.getSubjectByPersistentId(endpoint.subjectKey());
+		TableGeometry geometry = subject == null ? null
+			: TABLES.get(new SubjectKey(tablePos, subject.id()));
+		SurgicalModelRenderContext.CubeGeometry cube = geometry == null ? null
+			: geometry.cubesById.get(endpoint.cubeId());
+		return cube == null ? null : cubeCenter(cube);
+	}
+
 	@Nullable
 	private static Selection findDirectSeamSelection(LocalPlayer player, ClientLevel level, Ray ray) {
 		Selection best = null;
@@ -2026,6 +2199,7 @@ public final class SurgicalTableClientHandler {
 				SurgicalAssembly.Seam seam = contact.seam();
 				Integer seamId = geometry.seamIds.get(seam);
 				if (seamId == null || geometry.cutSeams.get(seamId)
+					|| table.isInternalCombinationSeam(geometry.subjectId, seam)
 					|| !geometry.presentCubes.get(seam.first()) || !geometry.presentCubes.get(seam.second()))
 					continue;
 				Vec3 hit = intersectContact(ray, contact);
@@ -2041,6 +2215,8 @@ public final class SurgicalTableClientHandler {
 					geometry.seams, contact.edges(), geometry.cubeEdges(seam));
 			}
 			for (int jointId = 0; jointId < subject.glueJoints().size(); jointId++) {
+				if (table.isInternalCombinationJoint(subject.glueJoints().get(jointId)))
+					continue;
 				GlueJointSelection glue = glueJointSelection(tablePos, table, subject, geometry, jointId);
 				if (glue == null || glue.contact == null)
 					continue;
@@ -2072,7 +2248,8 @@ public final class SurgicalTableClientHandler {
 		double bestDistance = Double.MAX_VALUE;
 		for (int jointId = 0; jointId < subject.glueJoints().size(); jointId++) {
 			SurgicalGlueJoint joint = subject.glueJoints().get(jointId);
-			if (!joint.touches(subject.persistentId(), hit.cubeId))
+			if (!joint.touches(subject.persistentId(), hit.cubeId)
+				|| table.isInternalCombinationJoint(joint))
 				continue;
 			GlueJointSelection candidate = glueJointSelection(hit.tablePos, table, subject,
 				hit.geometry, jointId);
@@ -2094,7 +2271,7 @@ public final class SurgicalTableClientHandler {
 		if (jointId < 0 || jointId >= subject.glueJoints().size())
 			return null;
 		SurgicalGlueJoint joint = subject.glueJoints().get(jointId);
-		if (!joint.touches(subject.persistentId()))
+		if (!joint.touches(subject.persistentId()) || table.isInternalCombinationJoint(joint))
 			return null;
 		SurgicalSubject firstSubject = table.getSubjectByPersistentId(joint.first().subjectKey());
 		SurgicalSubject secondSubject = table.getSubjectByPersistentId(joint.second().subjectKey());
@@ -2157,20 +2334,114 @@ public final class SurgicalTableClientHandler {
 			hit.geometry.observedCubeCount, hit.geometry.seams);
 		if (components.isEmpty())
 			return null;
-		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
-		for (Map.Entry<Integer, BitSet> entry : components.entrySet()) {
-			SurgicalSubject subject = table.getSubject(entry.getKey());
-			TableGeometry geometry = TABLES.get(new SubjectKey(hit.tablePos, entry.getKey()));
-			if (subject == null || geometry == null || !geometry.topologyReady()
-				|| !subject.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
-				return null;
-			edges.addAll(geometry.componentCubeEdges(entry.getValue()));
-		}
+		List<SurgicalClientTopology.Edge> edges = connectedSelectionEdges(hit.tablePos, table, components);
+		if (edges == null)
+			return null;
 		Selection selection = new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
 			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(), List.copyOf(edges));
 		connectedSelectionCache = new CubeSelectionCache(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
 			table.clientDataRevision(), hit.geometry.renderRevision, selection);
 		return selection;
+	}
+
+	@Nullable
+	private static List<SurgicalClientTopology.Edge> connectedSelectionEdges(BlockPos tablePos,
+		SurgicalTableBlockEntity table, Map<Integer, BitSet> components) {
+		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
+		java.util.Set<UUID> collapsed = new java.util.HashSet<>();
+		for (Map.Entry<Integer, BitSet> entry : components.entrySet()) {
+			SurgicalSubject subject = table.getSubject(entry.getKey());
+			TableGeometry geometry = TABLES.get(new SubjectKey(tablePos, entry.getKey()));
+			if (subject == null || geometry == null || !geometry.topologyReady()
+				|| !subject.matchesObservedTopology(geometry.observedCubeCount, geometry.seams))
+				return null;
+			BitSet ordinary = (BitSet) entry.getValue().clone();
+			for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
+				cube = entry.getValue().nextSetBit(cube + 1)) {
+				SurgicalCombination combination = subject.combinationContaining(cube);
+				if (combination == null || !combinationFullySelected(table, components, combination))
+					continue;
+				for (SurgicalCombination.Member member : combination.members())
+					if (member.subjectKey().equals(subject.persistentId()))
+						ordinary.clear(member.cubeId());
+				if (collapsed.add(combination.id()))
+					edges.addAll(combinationOuterEdges(tablePos, table, combination));
+			}
+			edges.addAll(geometry.componentCubeEdges(ordinary));
+		}
+		return List.copyOf(edges);
+	}
+
+	private static boolean combinationFullySelected(SurgicalTableBlockEntity table,
+		Map<Integer, BitSet> components, SurgicalCombination combination) {
+		for (SurgicalCombination.Member member : combination.members()) {
+			SurgicalSubject subject = table.getSubjectByPersistentId(member.subjectKey());
+			BitSet selected = subject == null ? null : components.get(subject.id());
+			if (selected == null || !selected.get(member.cubeId()))
+				return false;
+		}
+		return true;
+	}
+
+	private static boolean combinationFullyPreviewed(List<GlueSubjectPreview> previews,
+		@Nullable SurgicalTableBlockEntity table, SurgicalCombination combination) {
+		if (table == null)
+			return false;
+		for (SurgicalCombination.Member member : combination.members()) {
+			SurgicalSubject subject = table.getSubjectByPersistentId(member.subjectKey());
+			if (subject == null || previewSubject(previews, subject.id(), member.cubeId()) == null)
+				return false;
+		}
+		return true;
+	}
+
+	private static List<SurgicalClientTopology.Edge> previewCombinationOuterEdges(
+		List<GlueSubjectPreview> previews, @Nullable SurgicalTableBlockEntity table,
+		SurgicalCombination combination) {
+		if (table == null)
+			return List.of();
+		List<SurgicalModelRenderContext.CubeGeometry> cubes = new ArrayList<>();
+		for (SurgicalCombination.Member member : combination.members()) {
+			SurgicalSubject subject = table.getSubjectByPersistentId(member.subjectKey());
+			SurgicalModelRenderContext.CubeGeometry cube = subject == null ? null
+				: previewCube(previews, subject.id(), member.cubeId());
+			if (cube != null)
+				cubes.add(cube);
+		}
+		return outerEdgesForCubes(cubes);
+	}
+
+	private static List<SurgicalClientTopology.Edge> combinationOuterEdges(BlockPos tablePos,
+		SurgicalTableBlockEntity table, SurgicalCombination combination) {
+		List<SurgicalModelRenderContext.CubeGeometry> cubes = new ArrayList<>();
+		for (SurgicalCombination.Member member : combination.members()) {
+			SurgicalSubject subject = table.getSubjectByPersistentId(member.subjectKey());
+			TableGeometry geometry = subject == null ? null
+				: TABLES.get(new SubjectKey(tablePos, subject.id()));
+			SurgicalModelRenderContext.CubeGeometry cube = geometry == null ? null
+				: geometry.cubesById.get(member.cubeId());
+			if (cube != null)
+				cubes.add(cube);
+		}
+		return outerEdgesForCubes(cubes);
+	}
+
+	private static List<SurgicalClientTopology.Edge> outerEdgesForCubes(
+		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
+		AABB bounds = null;
+		for (SurgicalModelRenderContext.CubeGeometry cube : cubes) {
+			AABB cubeBounds = cubeBounds(cube);
+			bounds = bounds == null ? cubeBounds : bounds.minmax(cubeBounds);
+		}
+		if (bounds == null)
+			return List.of();
+		List<Vec3> corners = new ArrayList<>(8);
+		for (int z = 0; z < 2; z++)
+			for (int y = 0; y < 2; y++)
+				for (int x = 0; x < 2; x++)
+					corners.add(new Vec3(x == 0 ? bounds.minX : bounds.maxX,
+						y == 0 ? bounds.minY : bounds.maxY, z == 0 ? bounds.minZ : bounds.maxZ));
+		return SurgicalClientTopology.cubeEdges(new SurgicalModelRenderContext.CubeGeometry(-1, corners));
 	}
 
 	@Nullable
@@ -2180,6 +2451,10 @@ public final class SurgicalTableClientHandler {
 		ClientLevel level = Minecraft.getInstance().level;
 		SurgicalTableBlockEntity table = level != null
 			&& level.getBlockEntity(hit.tablePos) instanceof SurgicalTableBlockEntity found ? found : null;
+		SurgicalCombination combination = table == null ? null
+			: table.combinationContaining(hit.geometry.subjectId, hit.cubeId);
+		if (combination != null)
+			return combinationSelection(hit, table, combination);
 		if (table != null && directSelectionCache != null
 			&& directSelectionCache.matches(hit, table.clientDataRevision()))
 			return directSelectionCache.selection;
@@ -2214,6 +2489,14 @@ public final class SurgicalTableClientHandler {
 
 	@Nullable
 	private static Selection findDirectConnectionCutSelection(@Nullable CubeHit hit) {
+		ClientLevel level = Minecraft.getInstance().level;
+		SurgicalTableBlockEntity table = hit != null && level != null
+			&& level.getBlockEntity(hit.tablePos) instanceof SurgicalTableBlockEntity found ? found : null;
+		SurgicalCombination combination = table == null ? null
+			: table.combinationContaining(hit.geometry.subjectId, hit.cubeId);
+		if (combination != null)
+			return table.externalCombinationJoints(combination).isEmpty()
+				? null : combinationSelection(hit, table, combination);
 		SurgicalSubject subject = subjectFor(hit);
 		return hit == null || !hit.geometry.hasUncutConnection(hit.cubeId)
 			&& (subject == null || !subject.hasGlueConnection(hit.cubeId))
@@ -2260,11 +2543,106 @@ public final class SurgicalTableClientHandler {
 					if (distance >= bestDistance)
 						continue;
 					bestDistance = distance;
-					best = new CubeHit(pos, geometry, cube.cubeId(), faceIndex, hit);
+					best = new CubeHit(pos, geometry, cube.cubeId(), faceIndex, hit, null);
 				}
 			}
 		}
 		return best != null && isOccluded(level, player, ray.start, best.location, best.tablePos) ? null : best;
+	}
+
+	@Nullable
+	private static CubeHit snapGlueHit(@Nullable CubeHit hit) {
+		if (hit == null || hit.gluePoint != null)
+			return hit;
+		SurgicalModelRenderContext.CubeGeometry cube = hit.geometry.cubesById.get(hit.cubeId);
+		GluePoint point = cube == null ? null : snapGluePoint(cube, hit.faceIndex, hit.location);
+		return point == null ? null : new CubeHit(hit.tablePos, hit.geometry, hit.cubeId,
+			hit.faceIndex, point.location, point);
+	}
+
+	/**
+	 * Divides the selected face into model-pixel cells. Complete 1x1 cells use their
+	 * rectangular boundary; fractional edge cells still remain selectable at their center.
+	 */
+	@Nullable
+	private static GluePoint snapGluePoint(SurgicalModelRenderContext.CubeGeometry cube,
+		int faceIndex, Vec3 rawHit) {
+		if (faceIndex < 0 || faceIndex >= SurgicalClientTopology.CUBE_FACES.length)
+			return null;
+		int[] face = SurgicalClientTopology.CUBE_FACES[faceIndex];
+		Vec3 origin = cube.corners().get(face[0]);
+		Vec3 edgeU = cube.corners().get(face[1]).subtract(origin);
+		Vec3 edgeV = cube.corners().get(face[3]).subtract(origin);
+		double uu = edgeU.dot(edgeU);
+		double uv = edgeU.dot(edgeV);
+		double vv = edgeV.dot(edgeV);
+		double determinant = uu * vv - uv * uv;
+		if (uu <= 1.0e-18d || vv <= 1.0e-18d || Math.abs(determinant) <= 1.0e-18d)
+			return null;
+
+		Vec3 relative = rawHit.subtract(origin);
+		double ru = relative.dot(edgeU);
+		double rv = relative.dot(edgeV);
+		double u = Math.max(0.0d, Math.min(1.0d, (ru * vv - rv * uv) / determinant));
+		double v = Math.max(0.0d, Math.min(1.0d, (rv * uu - ru * uv) / determinant));
+		double pixelsU = normalizedPixelLength(Math.sqrt(uu) / MODEL_PIXEL_SIZE);
+		double pixelsV = normalizedPixelLength(Math.sqrt(vv) / MODEL_PIXEL_SIZE);
+		PixelInterval cellU = pixelInterval(u * pixelsU, pixelsU);
+		PixelInterval cellV = pixelInterval(v * pixelsV, pixelsV);
+		if (cellU == null || cellV == null)
+			return null;
+
+		Vec3 pixelU = edgeU.scale(1.0d / pixelsU);
+		Vec3 pixelV = edgeV.scale(1.0d / pixelsV);
+		Vec3 normal = edgeU.cross(edgeV).normalize();
+		Vec3 center = origin.add(pixelU.scale(cellU.center)).add(pixelV.scale(cellV.center));
+		if (normal.dot(center.subtract(cubeCenter(cube))) < 0.0d)
+			normal = normal.scale(-1.0d);
+		Vec3 surfaceOffset = normal.scale(GLUE_POINT_SURFACE_OFFSET);
+		Vec3 markerCenter = center.add(surfaceOffset);
+		List<SurgicalClientTopology.Edge> marker = new ArrayList<>(4);
+		if (cellU.wholePixel && cellV.wholePixel) {
+			Vec3 first = origin.add(pixelU.scale(cellU.start))
+				.add(pixelV.scale(cellV.start)).add(surfaceOffset);
+			Vec3 second = origin.add(pixelU.scale(cellU.end))
+				.add(pixelV.scale(cellV.start)).add(surfaceOffset);
+			Vec3 third = origin.add(pixelU.scale(cellU.end))
+				.add(pixelV.scale(cellV.end)).add(surfaceOffset);
+			Vec3 fourth = origin.add(pixelU.scale(cellU.start))
+				.add(pixelV.scale(cellV.end)).add(surfaceOffset);
+			marker.add(new SurgicalClientTopology.Edge(first, second));
+			marker.add(new SurgicalClientTopology.Edge(second, third));
+			marker.add(new SurgicalClientTopology.Edge(third, fourth));
+			marker.add(new SurgicalClientTopology.Edge(fourth, first));
+		} else {
+			Vec3 halfU = pixelU.scale(GLUE_POINT_CROSS_HALF_LENGTH_PIXELS);
+			Vec3 halfV = pixelV.scale(GLUE_POINT_CROSS_HALF_LENGTH_PIXELS);
+			marker.add(new SurgicalClientTopology.Edge(markerCenter.subtract(halfU),
+				markerCenter.add(halfU)));
+			marker.add(new SurgicalClientTopology.Edge(markerCenter.subtract(halfV),
+				markerCenter.add(halfV)));
+		}
+		return new GluePoint(center, marker);
+	}
+
+	private static double normalizedPixelLength(double length) {
+		double nearest = Math.rint(length);
+		return Math.abs(length - nearest) <= GLUE_POINT_PIXEL_EPSILON ? nearest : length;
+	}
+
+	@Nullable
+	private static PixelInterval pixelInterval(double coordinate, double length) {
+		if (!Double.isFinite(coordinate) || !Double.isFinite(length)
+			|| length <= GLUE_POINT_PIXEL_EPSILON)
+			return null;
+		int cellCount = Math.max(1, (int) Math.ceil(length - GLUE_POINT_PIXEL_EPSILON));
+		int cell = Math.min(cellCount - 1, Math.max(0, (int) Math.floor(coordinate)));
+		double start = cell;
+		double end = Math.min(length, start + 1.0d);
+		if (end <= start + GLUE_POINT_PIXEL_EPSILON)
+			return null;
+		boolean wholePixel = Math.abs(end - start - 1.0d) <= GLUE_POINT_PIXEL_EPSILON;
+		return new PixelInterval(start, end, (start + end) * 0.5d, wholePixel);
 	}
 
 	private static Ray playerRay(LocalPlayer player) {
@@ -2510,11 +2888,13 @@ public final class SurgicalTableClientHandler {
 		seamSelection = null;
 		cubeSelection = null;
 		componentSelection = null;
+		hoveredGluePoint = null;
 		connectedSelectionCache = null;
 		directSelectionCache = null;
 		lastSelectionMode = Integer.MIN_VALUE;
 		lastSelectionRay = null;
 		lastSelectionPendingGlue = null;
+		GLUE_POINT_OUTLINE.clear();
 		clearSeamHighlight();
 	}
 
@@ -2937,11 +3317,18 @@ public final class SurgicalTableClientHandler {
 
 	private record Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
 		List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
-		List<SurgicalClientTopology.Edge> cubeEdges, boolean glueJoint) {
+		List<SurgicalClientTopology.Edge> cubeEdges, boolean glueJoint, boolean combination) {
 		private Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
 			List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
 			List<SurgicalClientTopology.Edge> cubeEdges) {
-			this(tablePos, subjectId, targetId, observedCubeCount, seams, edges, cubeEdges, false);
+			this(tablePos, subjectId, targetId, observedCubeCount, seams, edges, cubeEdges, false, false);
+		}
+
+		private Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
+			List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
+			List<SurgicalClientTopology.Edge> cubeEdges, boolean glueJoint) {
+			this(tablePos, subjectId, targetId, observedCubeCount, seams, edges, cubeEdges,
+				glueJoint, false);
 		}
 	}
 
@@ -2950,7 +3337,16 @@ public final class SurgicalTableClientHandler {
 
 	private record Ray(Vec3 start, Vec3 end) {}
 
-	private record CubeHit(BlockPos tablePos, TableGeometry geometry, int cubeId, int faceIndex, Vec3 location) {}
+	private record CubeHit(BlockPos tablePos, TableGeometry geometry, int cubeId, int faceIndex, Vec3 location,
+		@Nullable GluePoint gluePoint) {}
+
+	private record GluePoint(Vec3 location, List<SurgicalClientTopology.Edge> markerEdges) {
+		private GluePoint {
+			markerEdges = List.copyOf(markerEdges);
+		}
+	}
+
+	private record PixelInterval(double start, double end, double center, boolean wholePixel) {}
 
 	private record GluePreviewCubeHit(GlueSubjectPreview subject,
 		SurgicalModelRenderContext.CubeGeometry geometry, int cubeId, int faceIndex, Vec3 location) {}
@@ -3213,7 +3609,8 @@ public final class SurgicalTableClientHandler {
 	private record FootprintGroups(List<SurgicalTableLayout.Footprint> moving,
 		List<SurgicalTableLayout.Footprint> occupied) {}
 
-	private record PendingGlue(Selection selection, Vec3 hit, InteractionHand hand, int faceIndex) {}
+	private record PendingGlue(Selection selection, Vec3 hit, InteractionHand hand, int faceIndex,
+		GluePoint point) {}
 
 	private record GluePlanningSubject(SurgicalSubject subject, BitSet cubes,
 		List<SurgicalModelRenderContext.CubeGeometry> baseTarget,

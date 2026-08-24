@@ -107,6 +107,18 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 					noSpace(player);
 			}
 		}
+		case COMBINE -> {
+			if (targetId < observedCubeCount && held.is(Items.HONEY_BOTTLE))
+				table.combineConnected(player, held, hand, subjectId, targetId, observedCubeCount, seams);
+		}
+		case BREAK_COMBINATION -> {
+			if (targetId < observedCubeCount && held.is(Items.SHEARS))
+				table.breakCombination(player, held, hand, subjectId, targetId, observedCubeCount, seams);
+		}
+		case DETACH_COMBINATION -> {
+			if (targetId < observedCubeCount && held.is(Items.SHEARS))
+				table.detachCombination(player, held, hand, subjectId, targetId, observedCubeCount, seams);
+		}
 		case PLACE -> {}
 		}
 	}
@@ -148,6 +160,9 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		CUT,
 		PACK,
 		CUT_CUBE_CONNECTIONS,
-		CUT_GLUE
+		CUT_GLUE,
+		COMBINE,
+		BREAK_COMBINATION,
+		DETACH_COMBINATION
 	}
 }

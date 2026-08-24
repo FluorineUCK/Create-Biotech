@@ -31,6 +31,7 @@ import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.chat.Component;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
 import net.minecraft.world.InteractionHand;
@@ -38,6 +39,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.AABB;
@@ -162,6 +164,39 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		subjects.clear();
 		subjectsById.clear();
 		subjectsByPersistentId.clear();
+	}
+
+	private void normalizeCombinations() {
+		Map<UUID, SurgicalCombination> byId = new HashMap<>();
+		Set<UUID> conflicting = new HashSet<>();
+		for (SurgicalSubject subject : subjects)
+			for (SurgicalCombination combination : subject.combinations()) {
+				SurgicalCombination previous = byId.putIfAbsent(combination.id(), combination);
+				if (previous != null && !previous.members().equals(combination.members()))
+					conflicting.add(combination.id());
+			}
+		List<SurgicalCombination> valid = new ArrayList<>();
+		Set<SurgicalCombination.Member> occupied = new HashSet<>();
+		for (SurgicalCombination combination : byId.values()) {
+			if (conflicting.contains(combination.id()))
+				continue;
+			boolean complete = true;
+			for (SurgicalCombination.Member member : combination.members()) {
+				SurgicalSubject subject = getSubjectByPersistentId(member.subjectKey());
+				if (subject == null || !subject.validPresentCube(member.cubeId()) || occupied.contains(member)) {
+					complete = false;
+					break;
+				}
+			}
+			if (!complete)
+				continue;
+			occupied.addAll(combination.members());
+			valid.add(combination);
+		}
+		for (SurgicalSubject subject : subjects)
+			subject.replaceCombinations(List.of());
+		for (SurgicalCombination combination : valid)
+			attachCombination(combination);
 	}
 
 	public void includeClientRenderBounds(AABB bounds) {
@@ -289,6 +324,19 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (second != first)
 				second.addGlueJoint(joint);
 		}
+		for (SurgicalAssembly.Combination encoded : assembly.combinations()) {
+			List<SurgicalCombination.Member> members = new ArrayList<>(encoded.members().size());
+			for (SurgicalAssembly.CombinationMember member : encoded.members()) {
+				SurgicalSubject restoredSubject = restored.get(member.source());
+				members.add(new SurgicalCombination.Member(restoredSubject.persistentId(), member.cube()));
+			}
+			SurgicalCombination combination = SurgicalCombination.create(encoded.id(), members);
+			if (combination == null)
+				return false;
+			for (int source : encoded.members().stream()
+				.mapToInt(SurgicalAssembly.CombinationMember::source).distinct().toArray())
+				restored.get(source).addCombination(combination);
+		}
 		addSubjects(restored);
 		clientRenderBounds = null;
 		CapturedEntityBoxHelper.clearCapturedEntity(box);
@@ -343,6 +391,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 		SurgicalAssembly.Seam seam = subject.seams.get(seamId);
 		if (!subject.validPresentCube(seam.first()) || !subject.validPresentCube(seam.second()))
+			return false;
+		SurgicalCombination protectedCombination = subject.combinationContaining(seam.first());
+		if (protectedCombination != null
+			&& protectedCombination.contains(subject.persistentId(), seam.second()))
 			return false;
 
 		BitSet proposedCuts = (BitSet) subject.cutSeams.clone();
@@ -405,6 +457,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (subject == null || !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
 			|| !subject.validPresentCube(cubeId))
 			return false;
+		if (subject.combinationContaining(cubeId) != null)
+			return false;
 
 		List<Integer> updatedOrder = new ArrayList<>(subject.cutOrder);
 		BitSet proposedCuts = (BitSet) subject.cutSeams.clone();
@@ -460,10 +514,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (component == null || component.isEmpty() || level == null)
 			return false;
 		Set<SurgicalGlueJoint> groupJoints = jointsWithin(group);
-		SurgicalAssembly assembly = groupJoints.isEmpty()
+		Set<SurgicalCombination> groupCombinations = combinationsWithin(group);
+		SurgicalAssembly assembly = groupJoints.isEmpty() && groupCombinations.isEmpty()
 			? SurgicalAssembly.create(subject.profile(), subject.cubeCount, component,
 				subject.seams, subject.cutSeams, subject.cutOrder)
-			: compositeAssembly(group, groupJoints, subject);
+			: compositeAssembly(group, groupJoints, groupCombinations, subject);
 		if (assembly == null)
 			return false;
 		SlimeBionicEntity bionic = CBEntityTypes.SLIME_BIONIC.get().create(level);
@@ -478,6 +533,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (removed != null)
 				groupedSubject.removeComponent(removed);
 			groupedSubject.removeGlueJoints(groupJoints);
+			groupedSubject.removeCombinations(groupCombinations);
 			if (groupedSubject.isEmpty())
 				removeSubject(groupedSubject);
 		}
@@ -485,6 +541,113 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		setChangedAndSync();
 		level.playSound(null, worldPosition, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 0.7f, 0.85f);
 		return true;
+	}
+
+	public boolean combineConnected(Player player, ItemStack honeyBottle, InteractionHand hand,
+		int subjectId, int cubeId, int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || !honeyBottle.is(Items.HONEY_BOTTLE)
+			|| !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
+			|| !subject.validPresentCube(cubeId))
+			return false;
+		ComponentGroup connected = gluedGroup(subject, cubeId);
+		List<SurgicalCombination.Member> members = new ArrayList<>();
+		for (Map.Entry<UUID, BitSet> entry : connected.components.entrySet())
+			for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
+				cube = entry.getValue().nextSetBit(cube + 1))
+				members.add(new SurgicalCombination.Member(entry.getKey(), cube));
+		if (members.size() < 2)
+			return false;
+
+		Set<SurgicalCombination> replaced = new HashSet<>();
+		for (SurgicalCombination existing : allCombinations()) {
+			boolean intersects = false;
+			for (SurgicalCombination.Member member : existing.members())
+				if (connected.contains(member)) {
+					intersects = true;
+					break;
+				}
+			if (intersects)
+				replaced.add(existing);
+		}
+		if (replaced.size() == 1) {
+			SurgicalCombination existing = replaced.iterator().next();
+			if (existing.members().size() == members.size() && existing.members().containsAll(members))
+				return false;
+		}
+		SurgicalCombination combination = SurgicalCombination.create(members);
+		if (combination == null)
+			return false;
+		for (SurgicalSubject candidate : subjects)
+			candidate.removeCombinations(replaced);
+		attachCombination(combination);
+		consumeHoneyBottle(player, honeyBottle, hand);
+		clientRenderBounds = null;
+		setChangedAndSync();
+		if (level != null)
+			level.playSound(null, worldPosition, SoundEvents.HONEY_DRINK, SoundSource.BLOCKS, 0.8f, 1.1f);
+		player.displayClientMessage(Component.translatable(
+			"message.create_biotech.surgical_table.combine_success"), true);
+		return true;
+	}
+
+	public boolean breakCombination(Player player, ItemStack shears, InteractionHand hand,
+		int subjectId, int cubeId, int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || !shears.is(Items.SHEARS)
+			|| !subject.initializeOrMatchTopology(observedCubeCount, observedSeams))
+			return false;
+		SurgicalCombination combination = subject.combinationContaining(cubeId);
+		if (combination == null || !externalCombinationJoints(combination).isEmpty())
+			return false;
+		Set<SurgicalCombination> removed = Set.of(combination);
+		for (SurgicalSubject candidate : subjects)
+			candidate.removeCombinations(removed);
+		shears.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
+		setChangedAndSync();
+		if (level != null)
+			level.playSound(null, worldPosition, SoundEvents.SHEEP_SHEAR, SoundSource.BLOCKS, 0.8f, 1.05f);
+		player.displayClientMessage(Component.translatable(
+			"message.create_biotech.surgical_table.combination_broken"), true);
+		return true;
+	}
+
+	public boolean detachCombination(Player player, ItemStack shears, InteractionHand hand,
+		int subjectId, int cubeId, int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || !shears.is(Items.SHEARS)
+			|| !subject.initializeOrMatchTopology(observedCubeCount, observedSeams))
+			return false;
+		SurgicalCombination combination = subject.combinationContaining(cubeId);
+		if (combination == null)
+			return false;
+		List<SurgicalGlueJoint> external = externalCombinationJoints(combination);
+		if (external.isEmpty())
+			return false;
+		Set<SurgicalGlueJoint> removed = Set.copyOf(external);
+		for (SurgicalSubject candidate : subjects)
+			candidate.removeGlueJoints(removed);
+		shears.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
+		clientRenderBounds = null;
+		setChangedAndSync();
+		if (level != null)
+			level.playSound(null, worldPosition, SoundEvents.SHEEP_SHEAR, SoundSource.BLOCKS, 0.8f, 1.1f);
+		player.displayClientMessage(Component.translatable(
+			"message.create_biotech.surgical_table.combination_detached"), true);
+		return true;
+	}
+
+	private static void consumeHoneyBottle(Player player, ItemStack honeyBottle, InteractionHand hand) {
+		if (player.getAbilities().instabuild)
+			return;
+		honeyBottle.shrink(1);
+		ItemStack emptyBottle = new ItemStack(Items.GLASS_BOTTLE);
+		if (honeyBottle.isEmpty()) {
+			player.setItemInHand(hand, emptyBottle);
+			return;
+		}
+		if (!player.getInventory().add(emptyBottle))
+			player.drop(emptyBottle, false);
 	}
 
 	public boolean glueComponents(Player player, ItemStack glue, InteractionHand hand,
@@ -510,6 +673,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 
 		Set<SurgicalGlueJoint> existingJoints = allGlueJoints();
+		Set<SurgicalCombination> existingCombinations = allCombinations();
 		Map<UUID, ExtractedSubject> extracted = new HashMap<>();
 		for (Map.Entry<UUID, BitSet> entry : moving.components.entrySet()) {
 			SurgicalSubject original = getSubjectByPersistentId(entry.getKey());
@@ -539,6 +703,13 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			subject.replaceGlueJoints(List.of());
 		for (SurgicalGlueJoint joint : remappedJoints)
 			attachJoint(joint);
+		for (SurgicalSubject subject : subjects)
+			subject.replaceCombinations(List.of());
+		for (SurgicalCombination combination : existingCombinations) {
+			SurgicalCombination remapped = remapCombination(combination, extracted);
+			if (remapped != null)
+				attachCombination(remapped);
+		}
 
 		SurgicalSubject movedFirst = remappedSubject(first, firstCubeId, extracted);
 		SurgicalGlueJoint joint = SurgicalGlueJoint.of(
@@ -701,6 +872,19 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			? new SurgicalGlueJoint.Endpoint(moved.subject.persistentId(), endpoint.cubeId()) : endpoint;
 	}
 
+	@Nullable
+	private static SurgicalCombination remapCombination(SurgicalCombination combination,
+		Map<UUID, ExtractedSubject> extracted) {
+		List<SurgicalCombination.Member> members = new ArrayList<>(combination.members().size());
+		for (SurgicalCombination.Member member : combination.members()) {
+			ExtractedSubject moved = extracted.get(member.subjectKey());
+			UUID subjectKey = moved != null && moved.cubes.get(member.cubeId())
+				? moved.subject.persistentId() : member.subjectKey();
+			members.add(new SurgicalCombination.Member(subjectKey, member.cubeId()));
+		}
+		return SurgicalCombination.create(combination.id(), members);
+	}
+
 	private static SurgicalSubject remappedSubject(SurgicalSubject original, int cubeId,
 		Map<UUID, ExtractedSubject> extracted) {
 		ExtractedSubject moved = extracted.get(original.persistentId());
@@ -715,6 +899,17 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		first.addGlueJoint(joint);
 		if (second != first)
 			second.addGlueJoint(joint);
+	}
+
+	private void attachCombination(SurgicalCombination combination) {
+		Set<UUID> attached = new HashSet<>();
+		for (SurgicalCombination.Member member : combination.members()) {
+			if (!attached.add(member.subjectKey()))
+				continue;
+			SurgicalSubject subject = getSubjectByPersistentId(member.subjectKey());
+			if (subject != null)
+				subject.addCombination(combination);
+		}
 	}
 
 	private record ValidatedGlueMove(Map<Integer, Vec3> offsets,
@@ -745,6 +940,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		boolean changed;
 		do {
 			changed = false;
+			for (SurgicalCombination combination : allCombinations())
+				changed |= followCombination(combination, components);
 			for (SurgicalGlueJoint joint : allGlueJoints()) {
 				if (joint.equals(excluded))
 					continue;
@@ -755,7 +952,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return new ComponentGroup(components);
 	}
 
-	/** Native components joined transitively through surgical glue, keyed by current subject id. */
+	/** Native components joined transitively through glue and honey combinations, keyed by subject id. */
 	public Map<Integer, BitSet> connectedComponents(int subjectId, int cubeId) {
 		SurgicalSubject start = getSubject(subjectId);
 		if (start == null || !start.validPresentCube(cubeId))
@@ -793,6 +990,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return null;
 		SurgicalGlueJoint joint = subject.glueJoints().get(glueJointId);
 		if (!joint.touches(subject.persistentId()))
+			return null;
+		if (isInternalCombinationJoint(joint))
 			return null;
 		SurgicalSubject firstSubject = getSubjectByPersistentId(joint.first().subjectKey());
 		SurgicalSubject secondSubject = getSubjectByPersistentId(joint.second().subjectKey());
@@ -876,6 +1075,31 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return existing.cardinality() != previous;
 	}
 
+	private boolean followCombination(SurgicalCombination combination, Map<UUID, BitSet> components) {
+		boolean reached = false;
+		for (SurgicalCombination.Member member : combination.members()) {
+			BitSet included = components.get(member.subjectKey());
+			if (included != null && included.get(member.cubeId())) {
+				reached = true;
+				break;
+			}
+		}
+		if (!reached)
+			return false;
+		boolean changed = false;
+		for (SurgicalCombination.Member member : combination.members()) {
+			SurgicalSubject target = getSubjectByPersistentId(member.subjectKey());
+			if (target == null || !target.validPresentCube(member.cubeId()))
+				continue;
+			BitSet addition = target.componentContaining(member.cubeId());
+			BitSet existing = components.computeIfAbsent(member.subjectKey(), ignored -> new BitSet());
+			int previous = existing.cardinality();
+			existing.or(addition);
+			changed |= existing.cardinality() != previous;
+		}
+		return changed;
+	}
+
 	private Set<SurgicalGlueJoint> allGlueJoints() {
 		Set<SurgicalGlueJoint> joints = new HashSet<>();
 		for (SurgicalSubject subject : subjects)
@@ -883,12 +1107,63 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return joints;
 	}
 
-	/** Subject ids that currently form one logical editing group through glue joints. */
+	private Set<SurgicalCombination> allCombinations() {
+		Set<SurgicalCombination> combinations = new HashSet<>();
+		for (SurgicalSubject subject : subjects)
+			combinations.addAll(subject.combinations());
+		return combinations;
+	}
+
+	@Nullable
+	public SurgicalCombination combinationContaining(int subjectId, int cubeId) {
+		SurgicalSubject subject = getSubject(subjectId);
+		return subject == null ? null : subject.combinationContaining(cubeId);
+	}
+
+	public boolean isInternalCombinationJoint(SurgicalGlueJoint joint) {
+		if (joint == null)
+			return false;
+		for (SurgicalCombination combination : allCombinations())
+			if (combination.contains(joint.first().subjectKey(), joint.first().cubeId())
+				&& combination.contains(joint.second().subjectKey(), joint.second().cubeId()))
+				return true;
+		return false;
+	}
+
+	public boolean isInternalCombinationSeam(int subjectId, SurgicalAssembly.Seam seam) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || seam == null)
+			return false;
+		SurgicalCombination first = subject.combinationContaining(seam.first());
+		return first != null && first.contains(subject.persistentId(), seam.second());
+	}
+
+	public List<SurgicalGlueJoint> externalCombinationJoints(SurgicalCombination combination) {
+		if (combination == null)
+			return List.of();
+		List<SurgicalGlueJoint> external = new ArrayList<>();
+		for (SurgicalGlueJoint joint : allGlueJoints()) {
+			boolean first = combination.contains(joint.first().subjectKey(), joint.first().cubeId());
+			boolean second = combination.contains(joint.second().subjectKey(), joint.second().cubeId());
+			if (first != second)
+				external.add(joint);
+		}
+		return List.copyOf(external);
+	}
+
+	/** Subject ids that currently form one logical editing group through glue or combinations. */
 	public Set<Integer> glueConnectedSubjectIds(int subjectId) {
 		SurgicalSubject start = getSubject(subjectId);
 		if (start == null)
 			return Set.of();
 		Map<UUID, List<UUID>> adjacency = new HashMap<>();
+		for (SurgicalCombination combination : allCombinations()) {
+			UUID anchor = combination.members().getFirst().subjectKey();
+			for (SurgicalCombination.Member member : combination.members()) {
+				adjacency.computeIfAbsent(anchor, ignored -> new ArrayList<>()).add(member.subjectKey());
+				adjacency.computeIfAbsent(member.subjectKey(), ignored -> new ArrayList<>()).add(anchor);
+			}
+		}
 		for (SurgicalGlueJoint joint : allGlueJoints()) {
 			adjacency.computeIfAbsent(joint.first().subjectKey(), ignored -> new ArrayList<>())
 				.add(joint.second().subjectKey());
@@ -918,9 +1193,24 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return joints;
 	}
 
+	private Set<SurgicalCombination> combinationsWithin(ComponentGroup group) {
+		Set<SurgicalCombination> combinations = new HashSet<>();
+		for (SurgicalCombination combination : allCombinations()) {
+			boolean included = true;
+			for (SurgicalCombination.Member member : combination.members())
+				if (!group.contains(member)) {
+					included = false;
+					break;
+				}
+			if (included)
+				combinations.add(combination);
+		}
+		return combinations;
+	}
+
 	@Nullable
 	private SurgicalAssembly compositeAssembly(ComponentGroup group, Set<SurgicalGlueJoint> joints,
-		SurgicalSubject anchor) {
+		Set<SurgicalCombination> combinations, SurgicalSubject anchor) {
 		List<SurgicalAssembly.Source> sources = new ArrayList<>();
 		Map<UUID, Integer> sourceIds = new HashMap<>();
 		for (SurgicalSubject grouped : subjects) {
@@ -956,8 +1246,19 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			encodedJoints.add(new SurgicalAssembly.Joint(firstSource, joint.first().cubeId(),
 				secondSource, joint.second().cubeId()));
 		}
-		return SurgicalAssembly.createComposite(sources, encodedJoints, anchor.placementFacing(),
-			anchor.layPose());
+		List<SurgicalAssembly.Combination> encodedCombinations = new ArrayList<>();
+		for (SurgicalCombination combination : combinations) {
+			List<SurgicalAssembly.CombinationMember> members = new ArrayList<>();
+			for (SurgicalCombination.Member member : combination.members()) {
+				Integer source = sourceIds.get(member.subjectKey());
+				if (source == null)
+					return null;
+				members.add(new SurgicalAssembly.CombinationMember(source, member.cubeId()));
+			}
+			encodedCombinations.add(new SurgicalAssembly.Combination(combination.id(), members));
+		}
+		return SurgicalAssembly.createComposite(sources, encodedJoints, encodedCombinations,
+			anchor.placementFacing(), anchor.layPose());
 	}
 
 	private record ComponentGroup(Map<UUID, BitSet> components) {
@@ -970,6 +1271,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		private boolean contains(SurgicalGlueJoint.Endpoint endpoint) {
 			BitSet cubes = components.get(endpoint.subjectKey());
 			return cubes != null && cubes.get(endpoint.cubeId());
+		}
+
+		private boolean contains(SurgicalCombination.Member member) {
+			BitSet cubes = components.get(member.subjectKey());
+			return cubes != null && cubes.get(member.cubeId());
 		}
 
 		private boolean intersects(ComponentGroup other) {
@@ -1169,6 +1475,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 		clearSubjects();
 		addSubjects(loaded);
+		normalizeCombinations();
 		nextSubjectId = Math.max(tag.getInt(NEXT_SUBJECT_ID_TAG),
 			ids.stream().mapToInt(Integer::intValue).max().orElse(-1) + 1);
 		if (clientPacket) {

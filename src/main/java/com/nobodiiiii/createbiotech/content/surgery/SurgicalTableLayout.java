@@ -47,12 +47,15 @@ public final class SurgicalTableLayout {
 	/**
 	 * Validates one source restored from a packed glued assembly. Components and sources in the
 	 * same assembly may overlap because the glue points themselves can be inside both models.
+	 * Smart-glue rotation can also leave different cubes in one native component with different
+	 * translations; the placement path separately verifies those translations against the packed
+	 * server-owned assembly before calling this method.
 	 */
 	public static boolean validateCompositeComponents(SurgicalTablePlane.Plane plane, int cubeCount,
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
 		List<Footprint> occupiedFootprints, Footprint assemblyEnvelope) {
 		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
-			occupiedFootprints, assemblyEnvelope, true, false);
+			occupiedFootprints, assemblyEnvelope, true, true);
 	}
 
 	/** Validates exact glue-preview placement while allowing the already-glued native components to overlap. */

@@ -9,6 +9,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.jetbrains.annotations.Nullable;
 
@@ -25,7 +26,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_CUBES = 1024;
 	public static final int MAX_SEAMS = 4096;
 	public static final int MAX_SOURCES = 256;
-	private static final int CURRENT_VERSION = 6;
+	private static final int CURRENT_VERSION = 7;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -35,6 +36,11 @@ public final class SurgicalAssembly {
 	private static final String CUT_ORDER_TAG = "CutOrder";
 	private static final String SOURCES_TAG = "Sources";
 	private static final String JOINTS_TAG = "GlueJoints";
+	private static final String COMBINATIONS_TAG = "Combinations";
+	private static final String COMBINATION_ID_TAG = "Id";
+	private static final String COMBINATION_MEMBERS_TAG = "Members";
+	private static final String MEMBER_SOURCE_TAG = "Source";
+	private static final String MEMBER_CUBE_TAG = "Cube";
 	private static final String PRESERVE_LAYOUT_TAG = "PreserveLayout";
 	private static final String LAYOUT_FACING_TAG = "LayoutFacing";
 	private static final String LAYOUT_LAY_POSE_TAG = "LayoutLayPose";
@@ -62,14 +68,17 @@ public final class SurgicalAssembly {
 
 	private final List<Source> sources;
 	private final List<Joint> joints;
+	private final List<Combination> combinations;
 	private final boolean preserveLayout;
 	private final Direction layoutFacing;
 	private final SurgicalLayPose layoutLayPose;
 
-	private SurgicalAssembly(List<Source> sources, List<Joint> joints, boolean preserveLayout,
+	private SurgicalAssembly(List<Source> sources, List<Joint> joints, List<Combination> combinations,
+		boolean preserveLayout,
 		Direction layoutFacing, SurgicalLayPose layoutLayPose) {
 		this.sources = List.copyOf(sources);
 		this.joints = List.copyOf(joints);
+		this.combinations = List.copyOf(combinations);
 		this.preserveLayout = preserveLayout;
 		this.layoutFacing = horizontal(layoutFacing);
 		this.layoutLayPose = layoutLayPose == null ? SurgicalLayPose.IDENTITY : layoutLayPose;
@@ -87,26 +96,32 @@ public final class SurgicalAssembly {
 		Source source = Source.create(profile, cubeCount, presentCubes, seams, cutSeams, cutOrder,
 			Direction.NORTH, SurgicalLayPose.IDENTITY, Vec3.ZERO, Map.of());
 		return source == null ? null
-			: new SurgicalAssembly(List.of(source), List.of(), false, Direction.NORTH,
+			: new SurgicalAssembly(List.of(source), List.of(), List.of(), false, Direction.NORTH,
 				SurgicalLayPose.IDENTITY);
 	}
 
 	@Nullable
 	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints) {
-		return createComposite(sources, joints, inferLayoutFacing(sources), inferLayoutLayPose(sources));
+		return createComposite(sources, joints, List.of(), inferLayoutFacing(sources), inferLayoutLayPose(sources));
 	}
 
 	@Nullable
 	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints,
 		Direction layoutFacing) {
-		return createComposite(sources, joints, layoutFacing, inferLayoutLayPose(sources));
+		return createComposite(sources, joints, List.of(), layoutFacing, inferLayoutLayPose(sources));
 	}
 
 	@Nullable
 	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints,
 		Direction layoutFacing, SurgicalLayPose layoutLayPose) {
+		return createComposite(sources, joints, List.of(), layoutFacing, layoutLayPose);
+	}
+
+	@Nullable
+	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints,
+		List<Combination> combinations, Direction layoutFacing, SurgicalLayPose layoutLayPose) {
 		if (sources == null || sources.isEmpty() || sources.size() > MAX_SOURCES || joints == null
-			|| joints.size() > MAX_SEAMS)
+			|| joints.size() > MAX_SEAMS || combinations == null || combinations.size() > MAX_CUBES)
 			return null;
 		List<Source> frozenSources = new ArrayList<>(sources.size());
 		int totalCubes = 0;
@@ -126,7 +141,21 @@ public final class SurgicalAssembly {
 				return null;
 			frozenJoints.add(normalized);
 		}
-		return new SurgicalAssembly(frozenSources, frozenJoints, true, layoutFacing, layoutLayPose);
+		Set<UUID> combinationIds = new HashSet<>();
+		Set<CombinationMember> combinedMembers = new HashSet<>();
+		List<Combination> frozenCombinations = new ArrayList<>(combinations.size());
+		for (Combination combination : combinations) {
+			Combination normalized = combination == null ? null : combination.normalized();
+			if (normalized == null || !normalized.validFor(frozenSources)
+				|| !combinationIds.add(normalized.id()))
+				return null;
+			for (CombinationMember member : normalized.members())
+				if (!combinedMembers.add(member))
+					return null;
+			frozenCombinations.add(normalized);
+		}
+		return new SurgicalAssembly(frozenSources, frozenJoints, frozenCombinations, true,
+			layoutFacing, layoutLayPose);
 	}
 
 	@Nullable
@@ -159,15 +188,41 @@ public final class SurgicalAssembly {
 					encoded.getInt(SECOND_SOURCE_TAG), encoded.getInt(SECOND_CUBE_TAG)));
 			}
 		}
+		List<Combination> combinations = new ArrayList<>();
+		if (version >= 7 && tag.contains(COMBINATIONS_TAG, Tag.TAG_LIST)) {
+			ListTag encodedCombinations = tag.getList(COMBINATIONS_TAG, Tag.TAG_COMPOUND);
+			if (encodedCombinations.size() > MAX_CUBES)
+				return null;
+			for (int index = 0; index < encodedCombinations.size(); index++) {
+				CompoundTag encoded = encodedCombinations.getCompound(index);
+				if (!encoded.hasUUID(COMBINATION_ID_TAG)
+					|| !encoded.contains(COMBINATION_MEMBERS_TAG, Tag.TAG_LIST))
+					return null;
+				ListTag encodedMembers = encoded.getList(COMBINATION_MEMBERS_TAG, Tag.TAG_COMPOUND);
+				if (encodedMembers.size() < 2 || encodedMembers.size() > MAX_CUBES)
+					return null;
+				List<CombinationMember> members = new ArrayList<>(encodedMembers.size());
+				for (int memberIndex = 0; memberIndex < encodedMembers.size(); memberIndex++) {
+					CompoundTag member = encodedMembers.getCompound(memberIndex);
+					if (!member.contains(MEMBER_SOURCE_TAG, Tag.TAG_ANY_NUMERIC)
+						|| !member.contains(MEMBER_CUBE_TAG, Tag.TAG_ANY_NUMERIC))
+						return null;
+					members.add(new CombinationMember(member.getInt(MEMBER_SOURCE_TAG),
+						member.getInt(MEMBER_CUBE_TAG)));
+				}
+				combinations.add(new Combination(encoded.getUUID(COMBINATION_ID_TAG), members));
+			}
+		}
 		Direction layoutFacing = version >= 4 && tag.contains(LAYOUT_FACING_TAG, Tag.TAG_ANY_NUMERIC)
 			? Direction.from3DDataValue(tag.getInt(LAYOUT_FACING_TAG)) : inferLayoutFacing(sources);
 		SurgicalLayPose layoutLayPose = version >= 5 && tag.contains(LAYOUT_LAY_POSE_TAG, Tag.TAG_COMPOUND)
 			? readLayPose(tag.getCompound(LAYOUT_LAY_POSE_TAG)) : inferLayoutLayPose(sources);
-		SurgicalAssembly assembly = createComposite(sources, joints, layoutFacing, layoutLayPose);
+		SurgicalAssembly assembly = createComposite(sources, joints, combinations, layoutFacing, layoutLayPose);
 		if (assembly == null)
 			return null;
 		return tag.getBoolean(PRESERVE_LAYOUT_TAG) ? assembly
-			: new SurgicalAssembly(assembly.sources, assembly.joints, false, assembly.layoutFacing,
+			: new SurgicalAssembly(assembly.sources, assembly.joints, assembly.combinations, false,
+				assembly.layoutFacing,
 				assembly.layoutLayPose);
 	}
 
@@ -210,6 +265,23 @@ public final class SurgicalAssembly {
 			}
 			tag.put(JOINTS_TAG, encodedJoints);
 		}
+		if (!combinations.isEmpty()) {
+			ListTag encodedCombinations = new ListTag();
+			for (Combination combination : combinations) {
+				CompoundTag encoded = new CompoundTag();
+				encoded.putUUID(COMBINATION_ID_TAG, combination.id());
+				ListTag encodedMembers = new ListTag();
+				for (CombinationMember member : combination.members()) {
+					CompoundTag encodedMember = new CompoundTag();
+					encodedMember.putInt(MEMBER_SOURCE_TAG, member.source());
+					encodedMember.putInt(MEMBER_CUBE_TAG, member.cube());
+					encodedMembers.add(encodedMember);
+				}
+				encoded.put(COMBINATION_MEMBERS_TAG, encodedMembers);
+				encodedCombinations.add(encoded);
+			}
+			tag.put(COMBINATIONS_TAG, encodedCombinations);
+		}
 		if (preserveLayout)
 			tag.putBoolean(PRESERVE_LAYOUT_TAG, true);
 		tag.putInt(LAYOUT_FACING_TAG, layoutFacing.get3DDataValue());
@@ -219,6 +291,7 @@ public final class SurgicalAssembly {
 
 	public List<Source> sources() { return sources; }
 	public List<Joint> joints() { return joints; }
+	public List<Combination> combinations() { return combinations; }
 	public boolean preservesLayout() { return preserveLayout; }
 	public Direction layoutFacing() { return layoutFacing; }
 	public SurgicalLayPose layoutLayPose() { return layoutLayPose; }
@@ -574,6 +647,35 @@ public final class SurgicalAssembly {
 				&& (firstSource != secondSource || firstCube != secondCube);
 		}
 	}
+
+	public record Combination(UUID id, List<CombinationMember> members) {
+		public Combination {
+			members = members == null ? List.of() : List.copyOf(members);
+		}
+
+		@Nullable
+		private Combination normalized() {
+			if (id == null || members.size() < 2 || members.size() > MAX_CUBES)
+				return null;
+			Set<CombinationMember> unique = new HashSet<>(members);
+			if (unique.size() != members.size())
+				return null;
+			List<CombinationMember> normalized = new ArrayList<>(unique);
+			normalized.sort(Comparator.comparingInt(CombinationMember::source)
+				.thenComparingInt(CombinationMember::cube));
+			return new Combination(id, normalized);
+		}
+
+		private boolean validFor(List<Source> sources) {
+			for (CombinationMember member : members)
+				if (member.source < 0 || member.source >= sources.size()
+					|| !sources.get(member.source).containsCube(member.cube))
+					return false;
+			return true;
+		}
+	}
+
+	public record CombinationMember(int source, int cube) {}
 
 	public record Seam(int first, int second) {
 		public static Seam of(int first, int second) {
