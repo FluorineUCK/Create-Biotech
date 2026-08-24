@@ -19,11 +19,23 @@ public class CBPoiTypes {
 
 	public static final ResourceKey<PoiType> TELEPORTATION_KEY =
 		ResourceKey.create(Registries.POINT_OF_INTEREST_TYPE, CreateBiotech.asResource("teleportation"));
+	public static final ResourceKey<PoiType> FIXED_CARROT_FISHING_ROD_KEY =
+		ResourceKey.create(Registries.POINT_OF_INTEREST_TYPE,
+			CreateBiotech.asResource("fixed_carrot_fishing_rod"));
 
 	public static final DeferredHolder<PoiType, PoiType> TELEPORTATION =
 		POI_TYPES.register("teleportation",
 			() -> new PoiType(
 				Set.copyOf(CBFluids.TELEPORTATION_BLOCK.get()
+					.getStateDefinition()
+					.getPossibleStates()),
+				0,
+				1));
+
+	public static final DeferredHolder<PoiType, PoiType> FIXED_CARROT_FISHING_ROD =
+		POI_TYPES.register("fixed_carrot_fishing_rod",
+			() -> new PoiType(
+				Set.copyOf(CBBlocks.FIXED_CARROT_FISHING_ROD.get()
 					.getStateDefinition()
 					.getPossibleStates()),
 				0,

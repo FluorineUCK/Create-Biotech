@@ -164,13 +164,12 @@ public class FixedCarrotFishingRodBlock extends HorizontalDirectionalBlock imple
 
 	private InteractionResult interact(BlockState state, Level level, BlockPos pos, Player player,
 		ItemStack heldItem) {
-		if (level.isClientSide())
-			return InteractionResult.SUCCESS;
-
 		if (!(level.getBlockEntity(pos) instanceof FixedCarrotFishingRodBlockEntity blockEntity))
 			return InteractionResult.PASS;
 
 		ItemStack baitItem = blockEntity.getBaitItem();
+		if (level.isClientSide())
+			return baitItem.isEmpty() && heldItem.isEmpty() ? InteractionResult.PASS : InteractionResult.SUCCESS;
 
 		if (baitItem.isEmpty() && !heldItem.isEmpty()) {
 			ItemStack copy = heldItem.copy();
@@ -180,22 +179,27 @@ public class FixedCarrotFishingRodBlock extends HorizontalDirectionalBlock imple
 			if (!player.isCreative())
 				heldItem.shrink(1);
 		} else if (!baitItem.isEmpty() && heldItem.isEmpty()) {
-			player.addItem(baitItem.copy());
+			giveOrDrop(player, baitItem.copy());
 			blockEntity.setBaitItem(ItemStack.EMPTY);
 		} else if (!baitItem.isEmpty() && !heldItem.isEmpty()) {
-			player.addItem(baitItem.copy());
 			ItemStack copy = heldItem.copy();
 			copy.setCount(1);
-			blockEntity.setBaitItem(copy);
-			blockEntity.setAdvancementOwner(player);
 			if (!player.isCreative())
 				heldItem.shrink(1);
+			blockEntity.setBaitItem(copy);
+			blockEntity.setAdvancementOwner(player);
+			giveOrDrop(player, baitItem.copy());
 		} else {
 			return InteractionResult.PASS;
 		}
 
 		level.playSound(null, pos, SoundEvents.ITEM_FRAME_ADD_ITEM, SoundSource.BLOCKS, 1.0f, 1.0f);
 		return InteractionResult.SUCCESS;
+	}
+
+	private static void giveOrDrop(Player player, ItemStack stack) {
+		if (!player.addItem(stack))
+			player.drop(stack, false);
 	}
 
 	@Override

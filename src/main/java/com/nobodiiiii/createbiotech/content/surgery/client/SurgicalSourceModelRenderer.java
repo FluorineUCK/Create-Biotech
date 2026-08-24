@@ -1,70 +1,26 @@
 package com.nobodiiiii.createbiotech.content.surgery.client;
 
 import java.util.BitSet;
-import java.util.IdentityHashMap;
 import java.util.Map;
 import java.util.WeakHashMap;
 
 import org.jetbrains.annotations.Nullable;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
-import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 public final class SurgicalSourceModelRenderer {
 	private static final Map<Object, Map<MimicProfile, CachedPreview>> PREVIEWS = new WeakHashMap<>();
-	private static final Map<LivingEntity, CachedCubeIds> CUBE_IDS = new WeakHashMap<>();
+	private static final Map<LivingEntity, CachedRenderPlan> RENDER_PLANS = new WeakHashMap<>();
 
 	private SurgicalSourceModelRenderer() {}
-
-	private static final class DiscardingVertexConsumer implements VertexConsumer {
-		@Override
-		public VertexConsumer addVertex(float x, float y, float z) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setColor(int red, int green, int blue, int alpha) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv(float u, float v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv1(int u, int v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setUv2(int u, int v) {
-			return this;
-		}
-
-		@Override
-		public VertexConsumer setNormal(float x, float y, float z) {
-			return this;
-		}
-	}
-
-	private static final class DiscardingBuffer implements MultiBufferSource {
-		private final Map<RenderType, VertexConsumer> consumers = new IdentityHashMap<>();
-
-		@Override
-		public VertexConsumer getBuffer(RenderType renderType) {
-			return consumers.computeIfAbsent(renderType, ignored -> new DiscardingVertexConsumer());
-		}
-	}
 
 	@Nullable
 	public static LivingEntity preview(Object owner, MimicProfile profile) {
@@ -108,30 +64,32 @@ public final class SurgicalSourceModelRenderer {
 		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition,
 		boolean renderSourceGeometry) {
 		preparePreview(preview, yaw);
-		EntityRenderer<LivingEntity> renderer = renderer(preview);
-		CachedCubeIds cachedIds = CUBE_IDS.get(preview);
-		if (cachedIds == null || cachedIds.renderer != renderer) {
-			cachedIds = new CachedCubeIds(renderer, new SurgicalModelRenderContext.CubeIdCache());
-			CUBE_IDS.put(preview, cachedIds);
-		}
+		SurgicalCapturedRenderPlan plan = plan(preview, yaw, partialTick, packedLight);
+		return plan.render(poseStack, buffer, packedLight, cubeCount, presentCubes, cubeOffsets,
+			collectGeometry, cameraPosition, renderSourceGeometry);
+	}
 
-		SurgicalModelRenderContext.begin(poseStack, cubeCount, presentCubes, cubeOffsets,
-			collectGeometry, cameraPosition, renderSourceGeometry, cachedIds.cubeIds);
-		SurgicalModelRenderContext.Snapshot snapshot;
-		try {
-			renderer.render(preview, yaw, partialTick, poseStack, buffer, packedLight);
-		} finally {
-			snapshot = SurgicalModelRenderContext.end();
+	private static SurgicalCapturedRenderPlan plan(LivingEntity preview, float yaw, float partialTick,
+		int packedLight) {
+		EntityRenderer<LivingEntity> renderer = renderer(preview);
+		CachedRenderPlan cached = RENDER_PLANS.get(preview);
+		if (cached == null || cached.renderer != renderer
+			|| Float.floatToIntBits(cached.yaw) != Float.floatToIntBits(yaw)) {
+			SurgicalCapturedRenderPlan plan =
+				SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick, packedLight);
+			cached = new CachedRenderPlan(renderer, yaw, plan);
+			RENDER_PLANS.put(preview, cached);
 		}
-		return snapshot;
+		return cached.plan;
 	}
 
 	/** Captures unoffset source geometry without submitting the temporary model to the visible buffer. */
 	public static SurgicalModelRenderContext.Snapshot captureGeometry(LivingEntity preview, int cubeCount,
 		BitSet presentCubes, PoseStack poseStack, int packedLight, float yaw, float partialTick,
 		@Nullable Vec3 cameraPosition, boolean renderSourceGeometry) {
-		return render(preview, cubeCount, presentCubes, Map.of(), poseStack, new DiscardingBuffer(),
-			packedLight, yaw, partialTick, true, cameraPosition, renderSourceGeometry);
+		preparePreview(preview, yaw);
+		return plan(preview, yaw, partialTick, packedLight)
+			.snapshot(poseStack, cubeCount, presentCubes, Map.of(), cameraPosition);
 	}
 
 	private static void preparePreview(LivingEntity preview, float yaw) {
@@ -153,11 +111,12 @@ public final class SurgicalSourceModelRenderer {
 
 	public static void clear() {
 		PREVIEWS.clear();
-		CUBE_IDS.clear();
+		RENDER_PLANS.clear();
+		SurgicalCapturedRenderPlan.clearResources();
 	}
 
 	private record CachedPreview(ClientLevel level, MimicProfile profile, LivingEntity entity) {}
 
-	private record CachedCubeIds(EntityRenderer<LivingEntity> renderer,
-		SurgicalModelRenderContext.CubeIdCache cubeIds) {}
+	private record CachedRenderPlan(EntityRenderer<LivingEntity> renderer, float yaw,
+		SurgicalCapturedRenderPlan plan) {}
 }

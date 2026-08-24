@@ -33,6 +33,7 @@
     "FunnelBlockEntityMixin",
     "FunnelItemMixin",
     "FluidTankBlockEntityMixin",
+    "FollowTemptationFixedCarrotFishingRodMixin",
     "ItemHelperMixin",
     "MagmaBeltFunnelBlockMixin",
     "LivingEntitySlimeMimicHurtSoundMixin",
@@ -56,6 +57,8 @@
     "SmartBlockEntityLegacyRefreshMixin",
     "SpawnEggItemMixin",
     "StockKeeperRequestMenuAccessor",
+    "TemptGoalFixedCarrotFishingRodMixin",
+    "TemptingSensorFixedCarrotFishingRodMixin",
     "VillagerSlimeMimicTradesMixin",
     "RedStoneWireEntityRedstoneMixin"
   ],
@@ -68,6 +71,7 @@
     "client.CreeperAccessor",
     "client.CreeperRendererMixin",
     "client.DeltaTrackerTimerMixin",
+	"client.EntityRenderDispatcherSlimeMimicMixin",
     "client.FlapStuffsMixin",
     "client.FluidTankRendererMixin",
     "client.FunnelRendererMixin",
@@ -86,7 +90,6 @@
     "client.LevelRendererAccessor",
     "client.MixinSuperGlueSelectionHandler",
     "client.ModelPartAccessor",
-    "client.ModelPartRenderMixin",
     "client.WorldSectionElementImplMixin"
   ],
   "injectors": {

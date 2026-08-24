@@ -2,7 +2,6 @@ package com.nobodiiiii.createbiotech;
 
 import net.minecraft.core.registries.Registries;
 
-import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodGoalHandler;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerArmInteractions;
 import com.nobodiiiii.createbiotech.content.bufferpad.BufferPadMovementBehaviour;
 import com.nobodiiiii.createbiotech.content.experience.ExperienceOpenPipeEffectHandler;
@@ -30,6 +29,7 @@ import com.nobodiiiii.createbiotech.registry.CBFluids;
 import com.nobodiiiii.createbiotech.registry.CBItems;
 import com.nobodiiiii.createbiotech.registry.CBIngredients;
 import com.nobodiiiii.createbiotech.registry.CBMenuTypes;
+import com.nobodiiiii.createbiotech.registry.CBMemoryModuleTypes;
 import com.nobodiiiii.createbiotech.registry.CBMobEffects;
 import com.nobodiiiii.createbiotech.registry.CBParticleTypes;
 import com.nobodiiiii.createbiotech.registry.CBPoiTypes;
@@ -73,6 +73,7 @@ public class CreateBiotech {
 		modEventBus.addListener(CBCapabilities::register);
 		CBEntityTypes.register(modEventBus);
 		CBMenuTypes.register(modEventBus);
+		CBMemoryModuleTypes.register(modEventBus);
 		CBParticleTypes.register(modEventBus);
 		CBRecipeConditions.register(modEventBus);
 		CBRecipeTypes.register(modEventBus);
@@ -84,7 +85,6 @@ public class CreateBiotech {
 		modEventBus.addListener(CreateBiotech::onRegister);
 		CBPackets.register();
 		registerAllayEvents();
-		FixedCarrotFishingRodGoalHandler.register();
 		FrogStomachSlimeSpawning.register();
 		FrogStomachSecretionSpreading.register();
 	}

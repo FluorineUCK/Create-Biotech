@@ -78,7 +78,6 @@ import com.nobodiiiii.createbiotech.client.particle.FrogPortalParticle;
 import com.nobodiiiii.createbiotech.client.particle.SonicConeWaveParticle;
 import com.nobodiiiii.createbiotech.client.particle.SquidPrinterInkParticle;
 import com.nobodiiiii.createbiotech.client.particle.StraightEnchantParticle;
-import com.nobodiiiii.createbiotech.client.render.SlimeMimicRenderLayer;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.nobodiiiii.createbiotech.registry.CBBlockEntityTypes;
 import com.nobodiiiii.createbiotech.registry.CBEntityTypes;
@@ -191,11 +190,6 @@ public class CreateBiotechClient {
 	}
 
 	@SubscribeEvent
-	public static void addEntityRenderLayers(EntityRenderersEvent.AddLayers event) {
-		SlimeMimicRenderLayer.registerOnAll(event);
-	}
-
-	@SubscribeEvent
 	public static void registerAdditionalModels(ModelEvent.RegisterAdditional event) {
 		java.util.function.Consumer<net.minecraft.resources.ResourceLocation> register = location ->
 			event.register(new ModelResourceLocation(location, ModelResourceLocation.STANDALONE_VARIANT));
@@ -286,7 +280,6 @@ public class CreateBiotechClient {
 		event.registerReloadListener(new ResourceManagerReloadListener() {
 			@Override
 			public void onResourceManagerReload(ResourceManager resourceManager) {
-				SlimeMimicRenderLayer.clearCachedTextureData();
 				CapturedEntityRenderManager.clearForResourceReload();
 				SurgicalTableClientHandler.clear();
 				SurgicalSourceModelRenderer.clear();

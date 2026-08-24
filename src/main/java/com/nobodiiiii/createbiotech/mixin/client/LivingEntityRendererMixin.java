@@ -7,17 +7,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import com.llamalad7.mixinextras.sugar.Local;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
-import com.nobodiiiii.createbiotech.client.render.SlimeMimicRenderLayer;
 import com.nobodiiiii.createbiotech.content.buttercat.ButterRotation;
-import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
-import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 
-import net.minecraft.client.model.EntityModel;
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.LivingEntityRenderer;
 import net.minecraft.client.renderer.entity.layers.RenderLayer;
@@ -42,46 +36,13 @@ public abstract class LivingEntityRendererMixin {
 	@WrapOperation(
 		method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
 		at = @At(value = "INVOKE",
-			target = "Lnet/minecraft/client/model/EntityModel;renderToBuffer(Lcom/mojang/blaze3d/vertex/PoseStack;Lcom/mojang/blaze3d/vertex/VertexConsumer;III)V"))
-	private void createBiotech$skipBaseBodyForSlimeMimic(EntityModel<?> model, PoseStack poseStack,
-		VertexConsumer consumer, int packedLight, int overlay, int color,
-		Operation<Void> original, @Local(argsOnly = true) LivingEntity entity,
-		@Local(argsOnly = true) MultiBufferSource buffer) {
-		if (!SlimeMimicHandler.isSlimeMimic(entity) || entity.isInvisible()) {
-			original.call(model, poseStack, consumer, packedLight, overlay, color);
-			return;
-		}
-
-		SlimeMimicRenderLayer.beginBodyPartReplacement(buffer, entity, consumer, color);
-		try {
-			original.call(model, poseStack, consumer, packedLight, overlay, color);
-			SlimeMimicRenderLayer.renderDeferredOuterParts();
-		} finally {
-			SlimeMimicRenderLayer.endPartInterception();
-		}
-	}
-
-	@WrapOperation(
-		method = "render(Lnet/minecraft/world/entity/LivingEntity;FFLcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;I)V",
-		at = @At(value = "INVOKE",
 			target = "Lnet/minecraft/client/renderer/entity/layers/RenderLayer;render(Lcom/mojang/blaze3d/vertex/PoseStack;Lnet/minecraft/client/renderer/MultiBufferSource;ILnet/minecraft/world/entity/Entity;FFFFFF)V"))
 	private void createBiotech$bindIndependentLayerModel(RenderLayer<?, ?> layer, PoseStack poseStack,
 		MultiBufferSource buffer, int packedLight, Entity entity, float limbSwing, float limbSwingAmount,
 		float partialTick, float ageInTicks, float netHeadYaw, float headPitch, Operation<Void> original) {
 		if (EntityGeometry.isBaseModelMeasurement())
 			return;
-		if (!SurgicalModelRenderContext.isActive()) {
-			original.call(layer, poseStack, buffer, packedLight, entity, limbSwing, limbSwingAmount,
-				partialTick, ageInTicks, netHeadYaw, headPitch);
-			return;
-		}
-		SurgicalModelRenderContext.beginRenderLayer(layer.getParentModel());
-		try {
-			MultiBufferSource trackedBuffer = SlimeMimicRenderLayer.trackRenderLayerBuffer(buffer);
-			original.call(layer, poseStack, trackedBuffer, packedLight, entity, limbSwing, limbSwingAmount,
-				partialTick, ageInTicks, netHeadYaw, headPitch);
-		} finally {
-			SurgicalModelRenderContext.endRenderLayer();
-		}
+		original.call(layer, poseStack, buffer, packedLight, entity, limbSwing, limbSwingAmount,
+			partialTick, ageInTicks, netHeadYaw, headPitch);
 	}
 }
