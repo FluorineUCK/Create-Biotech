@@ -28,7 +28,6 @@ public final class SurgicalClientTopology {
 	};
 	private static final double COMPONENT_OFFSET = 1.0d / 16.0d;
 	private static final double LAYOUT_QUANTUM = 1.0d / 1024.0d;
-	private static final double OUTER_RENDER_INFLATION = 0.1d / 16.0d;
 	private static final double SEPARATION_GAP = 1.0d / 1024.0d;
 	private static final int MAX_LAYOUT_SEARCH_NODES = 8192;
 	private static final double DISTANCE_EPSILON = 1.0e-9d;
@@ -304,7 +303,7 @@ public final class SurgicalClientTopology {
 			return Map.of();
 		Map<Integer, Bounds> baseBounds = new HashMap<>();
 		for (Map.Entry<Integer, SurgicalModelRenderContext.CubeGeometry> entry : byId.entrySet())
-			baseBounds.put(entry.getKey(), Bounds.of(entry.getValue()).inflate(OUTER_RENDER_INFLATION));
+			baseBounds.put(entry.getKey(), Bounds.of(entry.getValue()));
 
 		List<Integer> normalizedOrder = SurgicalAssembly.normalizeCutOrder(cutOrder, cutSeams, seams.size());
 		BitSet appliedCuts = new BitSet(seams.size());
@@ -475,7 +474,7 @@ public final class SurgicalClientTopology {
 		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		Bounds bounds = null;
 		for (SurgicalModelRenderContext.CubeGeometry cube : cubes) {
-			Bounds cubeBounds = Bounds.of(cube).inflate(OUTER_RENDER_INFLATION);
+			Bounds cubeBounds = Bounds.of(cube);
 			bounds = bounds == null ? cubeBounds : bounds.union(cubeBounds);
 		}
 		if (bounds == null || workArea.isEmpty())
@@ -711,7 +710,7 @@ public final class SurgicalClientTopology {
 		Map<Integer, Bounds> bounds = new HashMap<>();
 		for (SurgicalModelRenderContext.CubeGeometry cube : cubes)
 			if (presentCubes.get(cube.cubeId()))
-				bounds.putIfAbsent(cube.cubeId(), Bounds.of(cube).inflate(OUTER_RENDER_INFLATION));
+				bounds.putIfAbsent(cube.cubeId(), Bounds.of(cube));
 		return bounds;
 	}
 
@@ -1143,11 +1142,6 @@ public final class SurgicalClientTopology {
 			return minX <= other.maxX + tolerance && maxX + tolerance >= other.minX
 				&& minY <= other.maxY + tolerance && maxY + tolerance >= other.minY
 				&& minZ <= other.maxZ + tolerance && maxZ + tolerance >= other.minZ;
-		}
-
-		private Bounds inflate(double amount) {
-			return new Bounds(minX - amount, minY - amount, minZ - amount,
-				maxX + amount, maxY + amount, maxZ + amount);
 		}
 
 		private Bounds translate(Vec3 offset) {

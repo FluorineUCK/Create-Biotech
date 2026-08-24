@@ -55,7 +55,6 @@ public final class SurgicalCapturedRenderPlan {
 	private static final RenderType INNER_RENDER_TYPE = RenderType.entityCutoutNoCull(SLIME_TEXTURE);
 	private static final RenderType OUTER_RENDER_TYPE = RenderType.entityTranslucent(SLIME_TEXTURE);
 	private static final float SLIME_CENTER_Y = 20.0f / 16.0f;
-	private static final float OUTER_INFLATE = 0.1f / 16.0f;
 	private static final float THIN_EDGE = 0.05f / 16.0f;
 	private static final float OVERLAY_EXPANSION_MAX = 1.1f / 16.0f;
 	private static final float OVERLAY_CENTER_EPSILON = 0.1f / 16.0f;
@@ -177,7 +176,7 @@ public final class SurgicalCapturedRenderPlan {
 			List<CapturedVertex> vertices = stream.vertices;
 			if (stream.renderType.mode() != VertexFormat.Mode.QUADS) {
 				if (!vertices.isEmpty())
-					extras.add(new SourceBatch(stream.renderType, List.copyOf(vertices)));
+					extras.add(new SourceBatch(stream.renderType, List.copyOf(vertices), false));
 				continue;
 			}
 
@@ -213,7 +212,8 @@ public final class SurgicalCapturedRenderPlan {
 				cursor += 4;
 			}
 			if (cursor < vertices.size())
-				extras.add(new SourceBatch(stream.renderType, List.copyOf(vertices.subList(cursor, vertices.size()))));
+				extras.add(new SourceBatch(stream.renderType,
+					List.copyOf(vertices.subList(cursor, vertices.size())), false));
 		}
 
 		List<ComponentBuilder> visible = recovered.values().stream()
@@ -308,7 +308,7 @@ public final class SurgicalCapturedRenderPlan {
 		List<SourceBatch> extras) {
 		List<CapturedVertex> quad = vertices.subList(cursor, cursor + 4);
 		if (quadVisible(renderType, quad))
-			extras.add(new SourceBatch(renderType, List.copyOf(quad)));
+			extras.add(new SourceBatch(renderType, List.copyOf(quad), false));
 	}
 
 	private static boolean hasVisibleQuad(RenderType renderType, List<CapturedVertex> vertices) {
@@ -642,9 +642,10 @@ public final class SurgicalCapturedRenderPlan {
 		}
 
 		private void addVisibleBatch(RenderType renderType, List<CapturedVertex> vertices) {
-			SourceBatch batch = new SourceBatch(renderType, List.copyOf(vertices));
+			boolean surfaceOverlay = primaryRenderType != renderType;
+			SourceBatch batch = new SourceBatch(renderType, List.copyOf(vertices), surfaceOverlay);
 			batches.add(batch);
-			if (primaryRenderType != renderType)
+			if (surfaceOverlay)
 				surfaceOverlays.add(batch);
 		}
 
@@ -708,13 +709,13 @@ public final class SurgicalCapturedRenderPlan {
 		private void renderSource(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 			@Nullable Vec3 offset) {
 			for (SourceBatch batch : batches)
-				batch.render(poseStack, buffer, packedLight, offset);
+				batch.renderSource(poseStack, buffer, packedLight, offset);
 		}
 
 		private void renderSurfaceOverlays(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 			@Nullable Vec3 offset) {
 			for (SourceBatch batch : surfaceOverlays)
-				batch.render(poseStack, buffer, packedLight, offset);
+				batch.renderSurfaceOverlay(poseStack, buffer, packedLight, offset);
 		}
 
 		private void renderSlime(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
@@ -724,17 +725,14 @@ public final class SurgicalCapturedRenderPlan {
 			if (offset != null)
 				cubePose.last().pose().translateLocal((float) offset.x, (float) offset.y, (float) offset.z);
 
-			Vector3f edgeA = inflated(a, outer);
-			Vector3f edgeB = inflated(b, outer);
-			Vector3f edgeC = inflated(c, outer);
 			Vector3f center = new Vector3f(corners.getFirst())
 				.add(new Vector3f(a).mul(0.5f))
 				.add(new Vector3f(b).mul(0.5f))
 				.add(new Vector3f(c).mul(0.5f));
 			Matrix4f transform = new Matrix4f().identity();
-			transform.m00(2.0f * edgeA.x).m01(2.0f * edgeA.y).m02(2.0f * edgeA.z);
-			transform.m10(2.0f * edgeB.x).m11(2.0f * edgeB.y).m12(2.0f * edgeB.z);
-			transform.m20(2.0f * edgeC.x).m21(2.0f * edgeC.y).m22(2.0f * edgeC.z);
+			transform.m00(2.0f * a.x).m01(2.0f * a.y).m02(2.0f * a.z);
+			transform.m10(2.0f * b.x).m11(2.0f * b.y).m12(2.0f * b.z);
+			transform.m20(2.0f * c.x).m21(2.0f * c.y).m22(2.0f * c.z);
 			transform.m30(center.x).m31(center.y).m32(center.z);
 			cubePose.mulPose(transform);
 			cubePose.translate(0.0f, -SLIME_CENTER_Y, 0.0f);
@@ -764,20 +762,35 @@ public final class SurgicalCapturedRenderPlan {
 			}
 			return new SurgicalModelRenderContext.CubeGeometry(id, transformed);
 		}
-
-		private static Vector3f inflated(Vector3f edge, boolean outer) {
-			if (!outer)
-				return new Vector3f(edge);
-			float length = edge.length();
-			if (length <= 1.0e-7f)
-				return new Vector3f(edge);
-			return new Vector3f(edge).mul((length + 2.0f * OUTER_INFLATE) / length);
-		}
 	}
 
-	private record SourceBatch(RenderType renderType, List<CapturedVertex> vertices) {
+	private record SourceBatch(RenderType renderType, List<CapturedVertex> vertices, boolean surfaceOverlay) {
 		private void render(PoseStack poseStack, MultiBufferSource buffer, int packedLight, @Nullable Vec3 offset) {
-			VertexConsumer consumer = buffer.getBuffer(renderType);
+			render(poseStack, buffer, packedLight, offset, renderType);
+		}
+
+		private void renderSource(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+			@Nullable Vec3 offset) {
+			if (surfaceOverlay)
+				renderSurfaceOverlay(poseStack, buffer, packedLight, offset);
+			else
+				render(poseStack, buffer, packedLight, offset);
+		}
+
+		private void renderSurfaceOverlay(PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+			@Nullable Vec3 offset) {
+			RenderType offsetRenderType = renderType;
+			ResourceLocation texture = renderTypeTexture(renderType);
+			// Vanilla profession/type layers use this memoized cutout type. Match by identity so
+			// translucent, emissive and other special-material overlays retain their original state.
+			if (texture != null && renderType == RenderType.entityCutoutNoCull(texture))
+				offsetRenderType = RenderType.entityCutoutNoCullZOffset(texture);
+			render(poseStack, buffer, packedLight, offset, offsetRenderType);
+		}
+
+		private void render(PoseStack poseStack, MultiBufferSource buffer, int packedLight, @Nullable Vec3 offset,
+			RenderType effectiveRenderType) {
+			VertexConsumer consumer = buffer.getBuffer(effectiveRenderType);
 			Matrix4f pose = poseStack.last().pose();
 			Matrix3f normal = poseStack.last().normal();
 			float offsetX = offset == null ? 0.0f : (float) offset.x;
