@@ -76,6 +76,7 @@ import net.neoforged.neoforge.event.level.LevelEvent;
 public final class SurgicalTableClientHandler {
 	private static final int SEAM_HIGHLIGHT_COLOR = PonderPalette.RED.getColor();
 	private static final int CUBE_HIGHLIGHT_COLOR = PonderPalette.BLUE.getColor();
+	private static final int HONEY_HIGHLIGHT_COLOR = 0xE8A43A;
 	private static final float HIGHLIGHT_LINE_WIDTH = 1.0f / 32.0f;
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
 	private static final double GLUE_EDIT_TRANSLATION_STEP = 1.0d / 16.0d;
@@ -90,10 +91,13 @@ public final class SurgicalTableClientHandler {
 	private static final InteractionHand[] HANDS = { InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND };
 	private static final OutlineState SEAM_OUTLINE = new OutlineState();
 	private static final OutlineState CUBE_OUTLINE = new OutlineState();
+	private static final OutlineState COMBINATION_OUTLINE = new OutlineState();
 	private static final OutlineState GLUE_EDIT_OUTLINE = new OutlineState();
 	private static final OutlineState GLUE_POINT_OUTLINE = new OutlineState();
 	private static final Object PLACEMENT_OUTLINE_SLOT = new Object();
 	private static final Map<SubjectKey, TableGeometry> TABLES = new HashMap<>();
+	private static final Map<CombinationOutlineKey, CombinationOutlineCache> COMBINATION_OUTLINES =
+		new HashMap<>();
 	private static long lastPlacementOutlineTick = Long.MIN_VALUE;
 	private static long lastPlacementPromptTick = Long.MIN_VALUE;
 	private static long lastGlueEditPromptTick = Long.MIN_VALUE;
@@ -243,6 +247,7 @@ public final class SurgicalTableClientHandler {
 		placementSource = null;
 		clearPlacementPreview();
 		TABLES.clear();
+		COMBINATION_OUTLINES.clear();
 		geometryGeneration++;
 		lastSelectionRay = null;
 		lastSelectionPendingGlue = null;
@@ -691,6 +696,7 @@ public final class SurgicalTableClientHandler {
 			&& level.getBlockEntity(gluePreview.ownerPos) instanceof SurgicalTableBlockEntity found
 			? found : null;
 		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
+		List<SurgicalClientTopology.Edge> combinationEdges = new ArrayList<>();
 		java.util.Set<UUID> collapsed = new java.util.HashSet<>();
 		for (GlueSubjectPreview subject : gluePreview.subjects) {
 			BitSet ordinary = (BitSet) subject.cubes.clone();
@@ -705,7 +711,8 @@ public final class SurgicalTableClientHandler {
 					if (member.subjectKey().equals(source.persistentId()))
 						ordinary.clear(member.cubeId());
 				if (collapsed.add(combination.id()))
-					edges.addAll(previewCombinationOuterEdges(gluePreview.subjects, table, combination));
+					combinationEdges.addAll(previewCombinationOuterEdges(
+						gluePreview.subjects, table, combination));
 			}
 			for (int cubeId = ordinary.nextSetBit(0); cubeId >= 0;
 				cubeId = ordinary.nextSetBit(cubeId + 1)) {
@@ -714,10 +721,11 @@ public final class SurgicalTableClientHandler {
 					edges.addAll(SurgicalClientTopology.cubeEdges(cube));
 			}
 		}
-		if (edges.isEmpty())
+		if (edges.isEmpty() && combinationEdges.isEmpty())
 			return false;
 		SEAM_OUTLINE.clear();
 		CUBE_OUTLINE.show(edges, CUBE_HIGHLIGHT_COLOR);
+		COMBINATION_OUTLINE.show(combinationEdges, HONEY_HIGHLIGHT_COLOR);
 		return true;
 	}
 
@@ -964,6 +972,7 @@ public final class SurgicalTableClientHandler {
 		GLUE_EDIT_OUTLINE.clear();
 		GLUE_POINT_OUTLINE.clear();
 		CUBE_OUTLINE.clear();
+		COMBINATION_OUTLINE.clear();
 	}
 
 	private static void showGlueEditPrompt(LocalPlayer player, ClientLevel level) {
@@ -1782,7 +1791,7 @@ public final class SurgicalTableClientHandler {
 					offsets.put(cube, offsets.getOrDefault(cube, Vec3.ZERO).add(planned.delta()));
 			geometry.applyPreview(table, Map.copyOf(offsets), geometry.cutSeams, pending.joint);
 		}
-		List<SurgicalClientTopology.Edge> highlighted = connectedSelectionEdges(
+		SelectionHighlightEdges highlighted = connectedSelectionEdges(
 			pending.tablePos, table, pending.movingComponents);
 		if (highlighted == null) {
 			abortPendingGlueCut();
@@ -1795,7 +1804,8 @@ public final class SurgicalTableClientHandler {
 		seamSelection = null;
 		cubeSelection = null;
 		componentSelection = new Selection(pending.tablePos, pending.subjectId, pending.targetId,
-			pending.observedCubeCount, pending.seams, List.of(), List.copyOf(highlighted), true);
+			pending.observedCubeCount, pending.seams, List.of(), highlighted.cubeEdges,
+			highlighted.combinationEdges, true, false);
 		highlightSelection(componentSelection);
 		player.displayClientMessage(Component.translatable(
 			"message.create_biotech.surgical_table.place_cut"), true);
@@ -2133,7 +2143,8 @@ public final class SurgicalTableClientHandler {
 			if (distance >= bestDistance)
 				continue;
 			bestDistance = distance;
-			List<SurgicalClientTopology.Edge> routedEdges = new ArrayList<>(
+			List<SurgicalClientTopology.Edge> routedEdges = new ArrayList<>();
+			List<SurgicalClientTopology.Edge> routedCombinationEdges = new ArrayList<>(
 				combinationOuterEdges(hit.tablePos, table, combination));
 			SurgicalGlueJoint.Endpoint outside = combination.contains(joint.first().subjectKey(),
 				joint.first().cubeId()) ? joint.second() : joint.first();
@@ -2141,7 +2152,8 @@ public final class SurgicalTableClientHandler {
 			SurgicalCombination outsideCombination = outsideSubject == null ? null
 				: outsideSubject.combinationContaining(outside.cubeId());
 			if (outsideCombination != null)
-				routedEdges.addAll(combinationOuterEdges(hit.tablePos, table, outsideCombination));
+				routedCombinationEdges.addAll(combinationOuterEdges(
+					hit.tablePos, table, outsideCombination));
 			else if (outsideSubject != null) {
 				TableGeometry outsideGeometry = TABLES.get(new SubjectKey(hit.tablePos, outsideSubject.id()));
 				SurgicalModelRenderContext.CubeGeometry outsideCube = outsideGeometry == null ? null
@@ -2151,7 +2163,8 @@ public final class SurgicalTableClientHandler {
 			}
 			Selection selected = candidate.selection;
 			best = new Selection(selected.tablePos, selected.subjectId, selected.targetId,
-				selected.observedCubeCount, selected.seams, selected.edges, List.copyOf(routedEdges), true, false);
+				selected.observedCubeCount, selected.seams, selected.edges, List.copyOf(routedEdges),
+				List.copyOf(routedCombinationEdges), true, false);
 		}
 		return best;
 	}
@@ -2334,20 +2347,22 @@ public final class SurgicalTableClientHandler {
 			hit.geometry.observedCubeCount, hit.geometry.seams);
 		if (components.isEmpty())
 			return null;
-		List<SurgicalClientTopology.Edge> edges = connectedSelectionEdges(hit.tablePos, table, components);
+		SelectionHighlightEdges edges = connectedSelectionEdges(hit.tablePos, table, components);
 		if (edges == null)
 			return null;
 		Selection selection = new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
-			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(), List.copyOf(edges));
+			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(), edges.cubeEdges,
+			edges.combinationEdges, false, false);
 		connectedSelectionCache = new CubeSelectionCache(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
 			table.clientDataRevision(), hit.geometry.renderRevision, selection);
 		return selection;
 	}
 
 	@Nullable
-	private static List<SurgicalClientTopology.Edge> connectedSelectionEdges(BlockPos tablePos,
+	private static SelectionHighlightEdges connectedSelectionEdges(BlockPos tablePos,
 		SurgicalTableBlockEntity table, Map<Integer, BitSet> components) {
 		List<SurgicalClientTopology.Edge> edges = new ArrayList<>();
+		List<SurgicalClientTopology.Edge> combinationEdges = new ArrayList<>();
 		java.util.Set<UUID> collapsed = new java.util.HashSet<>();
 		for (Map.Entry<Integer, BitSet> entry : components.entrySet()) {
 			SurgicalSubject subject = table.getSubject(entry.getKey());
@@ -2365,11 +2380,11 @@ public final class SurgicalTableClientHandler {
 					if (member.subjectKey().equals(subject.persistentId()))
 						ordinary.clear(member.cubeId());
 				if (collapsed.add(combination.id()))
-					edges.addAll(combinationOuterEdges(tablePos, table, combination));
+					combinationEdges.addAll(combinationOuterEdges(tablePos, table, combination));
 			}
 			edges.addAll(geometry.componentCubeEdges(ordinary));
 		}
-		return List.copyOf(edges);
+		return new SelectionHighlightEdges(edges, combinationEdges);
 	}
 
 	private static boolean combinationFullySelected(SurgicalTableBlockEntity table,
@@ -2413,6 +2428,11 @@ public final class SurgicalTableClientHandler {
 
 	private static List<SurgicalClientTopology.Edge> combinationOuterEdges(BlockPos tablePos,
 		SurgicalTableBlockEntity table, SurgicalCombination combination) {
+		CombinationOutlineKey key = new CombinationOutlineKey(tablePos, combination.id());
+		CombinationOutlineCache cached = COMBINATION_OUTLINES.get(key);
+		if (cached != null && cached.tableRevision == table.clientDataRevision()
+			&& cached.geometryGeneration == geometryGeneration)
+			return cached.edges;
 		List<SurgicalModelRenderContext.CubeGeometry> cubes = new ArrayList<>();
 		for (SurgicalCombination.Member member : combination.members()) {
 			SurgicalSubject subject = table.getSubjectByPersistentId(member.subjectKey());
@@ -2423,25 +2443,15 @@ public final class SurgicalTableClientHandler {
 			if (cube != null)
 				cubes.add(cube);
 		}
-		return outerEdgesForCubes(cubes);
+		List<SurgicalClientTopology.Edge> edges = outerEdgesForCubes(cubes);
+		COMBINATION_OUTLINES.put(key, new CombinationOutlineCache(table.clientDataRevision(),
+			geometryGeneration, edges));
+		return edges;
 	}
 
 	private static List<SurgicalClientTopology.Edge> outerEdgesForCubes(
 		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
-		AABB bounds = null;
-		for (SurgicalModelRenderContext.CubeGeometry cube : cubes) {
-			AABB cubeBounds = cubeBounds(cube);
-			bounds = bounds == null ? cubeBounds : bounds.minmax(cubeBounds);
-		}
-		if (bounds == null)
-			return List.of();
-		List<Vec3> corners = new ArrayList<>(8);
-		for (int z = 0; z < 2; z++)
-			for (int y = 0; y < 2; y++)
-				for (int x = 0; x < 2; x++)
-					corners.add(new Vec3(x == 0 ? bounds.minX : bounds.maxX,
-						y == 0 ? bounds.minY : bounds.maxY, z == 0 ? bounds.minZ : bounds.maxZ));
-		return SurgicalClientTopology.cubeEdges(new SurgicalModelRenderContext.CubeGeometry(-1, corners));
+		return SurgicalClientTopology.outerEdges(cubes);
 	}
 
 	@Nullable
@@ -2856,11 +2866,13 @@ public final class SurgicalTableClientHandler {
 	private static void highlightSelection(Selection selection) {
 		SEAM_OUTLINE.show(selection.edges, SEAM_HIGHLIGHT_COLOR);
 		CUBE_OUTLINE.show(selection.cubeEdges, CUBE_HIGHLIGHT_COLOR);
+		COMBINATION_OUTLINE.show(selection.combinationEdges, HONEY_HIGHLIGHT_COLOR);
 	}
 
 	private static void clearSeamHighlight() {
 		SEAM_OUTLINE.clear();
 		CUBE_OUTLINE.clear();
+		COMBINATION_OUTLINE.clear();
 	}
 
 	private static boolean isEmptyBox(ItemStack stack) {
@@ -3315,20 +3327,43 @@ public final class SurgicalTableClientHandler {
 
 	private record SubjectKey(BlockPos tablePos, int subjectId) {}
 
+	private record CombinationOutlineKey(BlockPos tablePos, UUID combinationId) {}
+
+	private record CombinationOutlineCache(int tableRevision, long geometryGeneration,
+		List<SurgicalClientTopology.Edge> edges) {}
+
+	private record SelectionHighlightEdges(List<SurgicalClientTopology.Edge> cubeEdges,
+		List<SurgicalClientTopology.Edge> combinationEdges) {
+		private SelectionHighlightEdges {
+			cubeEdges = List.copyOf(cubeEdges);
+			combinationEdges = List.copyOf(combinationEdges);
+		}
+	}
+
 	private record Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
 		List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
-		List<SurgicalClientTopology.Edge> cubeEdges, boolean glueJoint, boolean combination) {
+		List<SurgicalClientTopology.Edge> cubeEdges,
+		List<SurgicalClientTopology.Edge> combinationEdges, boolean glueJoint, boolean combination) {
 		private Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
 			List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
 			List<SurgicalClientTopology.Edge> cubeEdges) {
-			this(tablePos, subjectId, targetId, observedCubeCount, seams, edges, cubeEdges, false, false);
+			this(tablePos, subjectId, targetId, observedCubeCount, seams, edges, cubeEdges,
+				List.of(), false, false);
 		}
 
 		private Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
 			List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
 			List<SurgicalClientTopology.Edge> cubeEdges, boolean glueJoint) {
 			this(tablePos, subjectId, targetId, observedCubeCount, seams, edges, cubeEdges,
-				glueJoint, false);
+				List.of(), glueJoint, false);
+		}
+
+		private Selection(BlockPos tablePos, int subjectId, int targetId, int observedCubeCount,
+			List<SurgicalAssembly.Seam> seams, List<SurgicalClientTopology.Edge> edges,
+			List<SurgicalClientTopology.Edge> cubeEdges, boolean glueJoint, boolean combination) {
+			this(tablePos, subjectId, targetId, observedCubeCount, seams, edges,
+				combination ? List.of() : cubeEdges, combination ? cubeEdges : List.of(),
+				glueJoint, combination);
 		}
 	}
 

@@ -253,10 +253,13 @@ public final class MimicProfile {
 
 	private static CompoundTag sanitizePreviewData(CompoundTag source) {
 		CompoundTag preview = source.copy();
+		// Equipment is an external render attachment, not part of the biological source model.
+		// Keeping it here would replay the same held/armor model for every separately packed part.
 		for (String field : List.of("UUID", "Pos", "Motion", "Rotation", "FallDistance", "Fire", "Air",
 			"OnGround", "Invulnerable", "PortalCooldown", "Passengers", "Leash", "Health",
 			"AbsorptionAmount", "HurtTime", "DeathTime", "HurtByTimestamp", "Brain", "attributes",
-			"Attributes", "SleepingX", "SleepingY", "SleepingZ"))
+			"Attributes", "SleepingX", "SleepingY", "SleepingZ", "HandItems", "HandDropChances",
+			"ArmorItems", "ArmorDropChances", "body_armor_item", "body_armor_drop_chance"))
 			preview.remove(field);
 		return preview;
 	}
