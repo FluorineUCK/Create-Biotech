@@ -613,8 +613,25 @@ public final class SurgicalClientTopology {
 		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> horizontalOffsets,
 		double surfaceY) {
+		return groundComponents(cubeCount, presentCubes, seams, cutSeams, cubes, horizontalOffsets,
+			surfaceY, false);
+	}
+
+	/** Grounds even an uncut component, used after its last glue connection has been severed. */
+	public static Map<Integer, Vec3> groundAllComponents(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> horizontalOffsets,
+		double surfaceY) {
+		return groundComponents(cubeCount, presentCubes, seams, cutSeams, cubes, horizontalOffsets,
+			surfaceY, true);
+	}
+
+	private static Map<Integer, Vec3> groundComponents(int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> horizontalOffsets,
+		double surfaceY, boolean includeUncut) {
 		if (!Double.isFinite(surfaceY) || !SurgicalAssembly.validTopology(cubeCount, seams)
-			|| cutSeams.isEmpty())
+			|| !includeUncut && cutSeams.isEmpty())
 			return Map.copyOf(horizontalOffsets);
 
 		List<BitSet> components = SurgicalAssembly.components(cubeCount, presentCubes, seams, cutSeams);
