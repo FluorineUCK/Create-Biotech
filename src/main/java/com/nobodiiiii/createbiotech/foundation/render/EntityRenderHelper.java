@@ -5,6 +5,7 @@ import org.joml.Quaternionf;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalCapturedRenderPlan;
 import com.nobodiiiii.createbiotech.mixin.WalkAnimationStateAccessor;
 
 import net.createmod.catnip.animation.AnimationTickHolder;
@@ -98,6 +99,10 @@ public final class EntityRenderHelper {
 	private static <T extends Entity> void renderWithAssignedRenderer(EntityRenderDispatcher dispatcher,
 		RenderSettings<T> settings, PoseStack poseStack, MultiBufferSource buffer) {
 		EntityRenderer renderer = dispatcher.getRenderer(settings.entity);
+		if (settings.entity instanceof LivingEntity living
+			&& SurgicalCapturedRenderPlan.tryRenderSlimeMimic(renderer, living, settings.dispatcherYaw,
+				settings.partialTicks, poseStack, buffer, settings.packedLight))
+			return;
 		renderer.render(settings.entity, settings.dispatcherYaw, settings.partialTicks, poseStack, buffer,
 			settings.packedLight);
 	}

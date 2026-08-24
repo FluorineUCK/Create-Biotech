@@ -6,9 +6,7 @@ import org.spongepowered.asm.mixin.injection.At;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.mojang.blaze3d.vertex.PoseStack;
-import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalCapturedRenderPlan;
-import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 
 import net.minecraft.client.renderer.MultiBufferSource;
 import net.minecraft.client.renderer.entity.EntityRenderDispatcher;
@@ -25,14 +23,10 @@ public abstract class EntityRenderDispatcherSlimeMimicMixin {
 	private <E extends Entity> void createBiotech$renderCompleteSlimeMimic(EntityRenderer<? super E> renderer,
 		E entity, float yaw, float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 		Operation<Void> original) {
-		if (!(entity instanceof LivingEntity living) || entity instanceof SlimeBionicEntity
-			|| !SlimeMimicHandler.isSlimeMimic(living)
-			|| living.isInvisible()) {
+		if (!(entity instanceof LivingEntity living)
+			|| !SurgicalCapturedRenderPlan.tryRenderSlimeMimic(renderer, living, yaw, partialTick,
+				poseStack, buffer, packedLight)) {
 			original.call(renderer, entity, yaw, partialTick, poseStack, buffer, packedLight);
-			return;
 		}
-
-		SurgicalCapturedRenderPlan.renderSlimeMimic(renderer, living, yaw, partialTick,
-			poseStack, buffer, packedLight);
 	}
 }

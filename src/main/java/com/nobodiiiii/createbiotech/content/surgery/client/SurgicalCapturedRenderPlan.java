@@ -20,6 +20,8 @@ import com.mojang.blaze3d.platform.NativeImage;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.blaze3d.vertex.VertexFormat;
+import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
+import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 import com.nobodiiiii.createbiotech.mixin.client.CompositeRenderStateAccessor;
 import com.nobodiiiii.createbiotech.mixin.client.CompositeRenderTypeAccessor;
 import com.nobodiiiii.createbiotech.mixin.client.TextureStateShardAccessor;
@@ -94,12 +96,16 @@ public final class SurgicalCapturedRenderPlan {
 	 * same capture and therefore become normal, separately recoverable components.
 	 */
 	@SuppressWarnings("unchecked")
-	public static void renderSlimeMimic(EntityRenderer<?> renderer, LivingEntity entity, float yaw,
+	public static boolean tryRenderSlimeMimic(EntityRenderer<?> renderer, LivingEntity entity, float yaw,
 		float partialTick, PoseStack poseStack, MultiBufferSource buffer, int packedLight) {
+		if (entity instanceof SlimeBionicEntity || !SlimeMimicHandler.isSlimeMimic(entity)
+			|| entity.isInvisible())
+			return false;
 		SurgicalCapturedRenderPlan frame = capture((EntityRenderer<LivingEntity>) renderer, entity,
 			yaw, partialTick, packedLight);
 		frame.render(poseStack, buffer, packedLight, 0, ALL_COMPONENTS, NO_OFFSETS,
 			false, null, false);
+		return true;
 	}
 
 	int cubeCount() {
@@ -156,7 +162,7 @@ public final class SurgicalCapturedRenderPlan {
 	}
 
 	private static SurgicalCapturedRenderPlan build(List<CaptureStream> streams) {
-		Map<GeometryKey, ComponentBuilder> recovered = new LinkedHashMap<>();
+		Map<GeometryKey, List<ComponentBuilder>> recovered = new LinkedHashMap<>();
 		List<SourceBatch> extras = new ArrayList<>();
 		int order = 0;
 
@@ -179,11 +185,16 @@ public final class SurgicalCapturedRenderPlan {
 				}
 
 				GeometryKey key = GeometryKey.of(cuboid.corners);
-				ComponentBuilder builder = recovered.get(key);
+				List<ComponentBuilder> matches = recovered.computeIfAbsent(key, ignored -> new ArrayList<>());
+				ComponentBuilder builder = matches.stream()
+					.filter(candidate -> !candidate.captureStreams.get(stream.id))
+					.findFirst()
+					.orElse(null);
 				if (builder == null) {
 					builder = new ComponentBuilder(order++, cuboid);
-					recovered.put(key, builder);
+					matches.add(builder);
 				}
+				builder.captureStreams.set(stream.id);
 				if (hasVisibleQuad(stream.renderType, candidateVertices))
 					builder.batches.add(new SourceBatch(stream.renderType, List.copyOf(candidateVertices)));
 				cursor += 24;
@@ -198,6 +209,7 @@ public final class SurgicalCapturedRenderPlan {
 		}
 
 		List<ComponentBuilder> visible = recovered.values().stream()
+			.flatMap(List::stream)
 			.filter(builder -> !builder.batches.isEmpty())
 			.sorted(Comparator.comparingInt(builder -> builder.order))
 			.toList();
@@ -356,77 +368,55 @@ public final class SurgicalCapturedRenderPlan {
 	private static RecoveredCuboid recoverCuboid(List<CapturedVertex> vertices) {
 		List<Vector3f> points = uniquePositions(vertices);
 		if (points.size() == 8)
-			return recoverSolid(points);
+			return recoverSolid(vertices, points);
 		if (points.size() == 4)
-			return recoverFlat(points);
+			return recoverFlat(vertices, points);
 		return null;
 	}
 
 	@Nullable
-	private static RecoveredCuboid recoverSolid(List<Vector3f> points) {
-		RecoveredCuboid best = null;
-		float bestScore = Float.POSITIVE_INFINITY;
-		for (int originIndex = 0; originIndex < points.size(); originIndex++) {
-			Vector3f origin = points.get(originIndex);
-			List<Vector3f> ends = new ArrayList<>(points);
-			ends.remove(originIndex);
-			for (int aIndex = 0; aIndex < ends.size(); aIndex++) {
-				Vector3f endA = ends.get(aIndex);
-				Vector3f a = new Vector3f(endA).sub(origin);
-				for (int bIndex = aIndex + 1; bIndex < ends.size(); bIndex++) {
-					Vector3f endB = ends.get(bIndex);
-					Vector3f b = new Vector3f(endB).sub(origin);
-					for (int cIndex = bIndex + 1; cIndex < ends.size(); cIndex++) {
-						Vector3f endC = ends.get(cIndex);
-						Vector3f c = new Vector3f(endC).sub(origin);
-						float determinant = new Vector3f(a).cross(b).dot(c);
-						if (Math.abs(determinant) <= 1.0e-8f)
-							continue;
-						List<Vector3f> corners = parallelepiped(origin, a, b, c);
-						if (!samePointSet(corners, points))
-							continue;
-						float score = a.lengthSquared() + b.lengthSquared() + c.lengthSquared();
-						if (score < bestScore) {
-							bestScore = score;
-							best = new RecoveredCuboid(corners, a, b, c);
-						}
-					}
-				}
-			}
+	private static RecoveredCuboid recoverSolid(List<CapturedVertex> vertices, List<Vector3f> points) {
+		// A ModelPart cube emits each face as an ordered quad. Deriving the first two
+		// axes from that order keeps the slime UV basis attached to the source cube.
+		// Choosing the numerically "best" equivalent corner basis made the axes swap
+		// as animated parts rotated and their floating-point errors changed.
+		Vector3f origin = position(vertices.get(0));
+		Vector3f a = position(vertices.get(1)).sub(origin);
+		Vector3f b = position(vertices.get(3)).sub(origin);
+		if (new Vector3f(a).cross(b).lengthSquared() <= 1.0e-8f)
+			return null;
+
+		for (Vector3f point : points) {
+			Vector3f c = new Vector3f(point).sub(origin);
+			if (Math.abs(new Vector3f(a).cross(b).dot(c)) <= 1.0e-8f)
+				continue;
+			List<Vector3f> corners = parallelepiped(origin, a, b, c);
+			if (samePointSet(corners, points))
+				return new RecoveredCuboid(corners, a, b, c);
 		}
-		return best;
+		return null;
 	}
 
 	@Nullable
-	private static RecoveredCuboid recoverFlat(List<Vector3f> points) {
-		RecoveredCuboid best = null;
-		float bestScore = Float.POSITIVE_INFINITY;
-		for (int originIndex = 0; originIndex < points.size(); originIndex++) {
-			Vector3f origin = points.get(originIndex);
-			List<Vector3f> ends = new ArrayList<>(points);
-			ends.remove(originIndex);
-			for (int aIndex = 0; aIndex < ends.size(); aIndex++) {
-				Vector3f endA = ends.get(aIndex);
-				Vector3f a = new Vector3f(endA).sub(origin);
-				for (int bIndex = aIndex + 1; bIndex < ends.size(); bIndex++) {
-					Vector3f endB = ends.get(bIndex);
-					Vector3f b = new Vector3f(endB).sub(origin);
-					if (new Vector3f(a).cross(b).lengthSquared() <= 1.0e-8f)
-						continue;
-					List<Vector3f> face = List.of(new Vector3f(origin), new Vector3f(origin).add(a),
-						new Vector3f(origin).add(b), new Vector3f(origin).add(a).add(b));
-					if (!samePointSet(face, points))
-						continue;
-					float score = a.lengthSquared() + b.lengthSquared();
-					if (score < bestScore) {
-						bestScore = score;
-						Vector3f zero = new Vector3f();
-						best = new RecoveredCuboid(parallelepiped(origin, a, b, zero), a, b, zero);
-					}
-				}
-			}
+	private static RecoveredCuboid recoverFlat(List<CapturedVertex> vertices, List<Vector3f> points) {
+		for (int cursor = 0; cursor + 4 <= vertices.size(); cursor += 4) {
+			Vector3f origin = position(vertices.get(cursor));
+			Vector3f a = position(vertices.get(cursor + 1)).sub(origin);
+			Vector3f b = position(vertices.get(cursor + 3)).sub(origin);
+			if (new Vector3f(a).cross(b).lengthSquared() <= 1.0e-8f)
+				continue;
+			List<Vector3f> face = List.of(new Vector3f(origin), new Vector3f(origin).add(a),
+				new Vector3f(origin).add(b), new Vector3f(origin).add(a).add(b));
+			if (!samePointSet(face, points))
+				continue;
+			Vector3f zero = new Vector3f();
+			return new RecoveredCuboid(parallelepiped(origin, a, b, zero), a, b, zero);
 		}
-		return best;
+		return null;
+	}
+
+	private static Vector3f position(CapturedVertex vertex) {
+		return new Vector3f(vertex.x, vertex.y, vertex.z);
 	}
 
 	private static List<Vector3f> parallelepiped(Vector3f origin, Vector3f a, Vector3f b, Vector3f c) {
@@ -495,7 +485,7 @@ public final class SurgicalCapturedRenderPlan {
 
 		@Override
 		public VertexConsumer getBuffer(RenderType renderType) {
-			CaptureStream stream = new CaptureStream(renderType);
+			CaptureStream stream = new CaptureStream(streams.size(), renderType);
 			streams.add(stream);
 			return stream.consumer;
 		}
@@ -507,11 +497,13 @@ public final class SurgicalCapturedRenderPlan {
 	}
 
 	private static final class CaptureStream {
+		private final int id;
 		private final RenderType renderType;
 		private final List<CapturedVertex> vertices = new ArrayList<>();
 		private final RecordingConsumer consumer = new RecordingConsumer(vertices);
 
-		private CaptureStream(RenderType renderType) {
+		private CaptureStream(int id, RenderType renderType) {
+			this.id = id;
 			this.renderType = renderType;
 		}
 	}
@@ -626,6 +618,7 @@ public final class SurgicalCapturedRenderPlan {
 		private final int order;
 		private final RecoveredCuboid cuboid;
 		private final List<SourceBatch> batches = new ArrayList<>();
+		private final BitSet captureStreams = new BitSet();
 
 		private ComponentBuilder(int order, RecoveredCuboid cuboid) {
 			this.order = order;
