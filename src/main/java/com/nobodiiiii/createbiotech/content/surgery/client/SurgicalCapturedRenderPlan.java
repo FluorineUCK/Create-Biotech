@@ -2,9 +2,11 @@ package com.nobodiiiii.createbiotech.content.surgery.client;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Comparator;
+import java.util.Deque;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -69,6 +71,9 @@ public final class SurgicalCapturedRenderPlan {
 	private static final float POSITION_QUANTIZATION = 100_000.0f;
 
 	private static final Map<ResourceLocation, AlphaMask> ALPHA_MASKS = new HashMap<>();
+	private static final ThreadLocal<Deque<List<ObservedCube>>> MODEL_CUBE_CAPTURES =
+		ThreadLocal.withInitial(ArrayDeque::new);
+	private static volatile int activeModelCubeCaptureCount;
 	private static ModelPart innerCube;
 	private static ModelPart outerCube;
 	private static final BitSet ALL_COMPONENTS = new BitSet();
@@ -87,12 +92,44 @@ public final class SurgicalCapturedRenderPlan {
 		float yaw, float partialTick) {
 		RecordingBuffer recording = new RecordingBuffer();
 		PoseStack neutralPose = new PoseStack();
+		List<ObservedCube> observedCubes = new ArrayList<>();
+		Deque<List<ObservedCube>> captures = MODEL_CUBE_CAPTURES.get();
+		captures.push(observedCubes);
+		activeModelCubeCaptureCount++;
 		try {
 			renderer.render(preview, yaw, partialTick, neutralPose, recording, CAPTURE_LIGHT);
 		} finally {
 			recording.finish();
+			captures.pop();
+			activeModelCubeCaptureCount = Math.max(0, activeModelCubeCaptureCount - 1);
+			if (captures.isEmpty())
+				MODEL_CUBE_CAPTURES.remove();
 		}
-		return build(recording.streams);
+		return build(recording.streams, observedCubes);
+	}
+
+	/** Records unscaled ModelPart pixel bounds while the renderer emits the matching transformed vertices. */
+	public static void observeModelCube(ModelPart.Cube cube, PoseStack.Pose pose) {
+		if (activeModelCubeCaptureCount == 0)
+			return;
+		Deque<List<ObservedCube>> captures = MODEL_CUBE_CAPTURES.get();
+		if (captures.isEmpty())
+			return;
+		List<Vector3f> transformed = new ArrayList<>(8);
+		List<Vec3> model = new ArrayList<>(8);
+		Matrix4f matrix = pose.pose();
+		for (int z = 0; z < 2; z++) {
+			for (int y = 0; y < 2; y++) {
+				for (int x = 0; x < 2; x++) {
+					Vec3 source = new Vec3(x == 0 ? cube.minX : cube.maxX,
+						y == 0 ? cube.minY : cube.maxY, z == 0 ? cube.minZ : cube.maxZ);
+					model.add(source);
+					transformed.add(matrix.transformPosition(new Vector3f((float) (source.x / 16.0d),
+						(float) (source.y / 16.0d), (float) (source.z / 16.0d))));
+				}
+			}
+		}
+		captures.peek().add(new ObservedCube(transformed, model));
 	}
 
 	/**
@@ -180,7 +217,7 @@ public final class SurgicalCapturedRenderPlan {
 		outerCube = null;
 	}
 
-	private static SurgicalCapturedRenderPlan build(List<CaptureStream> streams) {
+	private static SurgicalCapturedRenderPlan build(List<CaptureStream> streams, List<ObservedCube> observedCubes) {
 		Map<GeometryKey, List<ComponentBuilder>> recovered = new LinkedHashMap<>();
 		List<SourceBatch> extras = new ArrayList<>();
 		int order = 0;
@@ -210,7 +247,8 @@ public final class SurgicalCapturedRenderPlan {
 					.findFirst()
 					.orElse(null);
 				if (builder == null) {
-					builder = new ComponentBuilder(order++, cuboid);
+					builder = new ComponentBuilder(order++, cuboid,
+						matchingModelCorners(cuboid, observedCubes));
 					matches.add(builder);
 				}
 				builder.captureStreams.set(stream.id);
@@ -370,10 +408,10 @@ public final class SurgicalCapturedRenderPlan {
 		if (resource == null)
 			return AlphaMask.OPAQUE;
 		try (InputStream stream = resource.open(); NativeImage image = NativeImage.read(stream)) {
-			if (!image.format().hasAlpha())
-				return AlphaMask.OPAQUE;
 			int width = image.getWidth();
 			int height = image.getHeight();
+			if (!image.format().hasAlpha())
+				return new AlphaMask(width, height, new BitSet(), true);
 			BitSet pixels = new BitSet(width * height);
 			for (int y = 0; y < height; y++)
 				for (int x = 0; x < width; x++)
@@ -635,18 +673,125 @@ public final class SurgicalCapturedRenderPlan {
 		float u, float v, int overlayU, int overlayV, int lightU, int lightV,
 		float normalX, float normalY, float normalZ) {}
 
+	private static List<Vec3> matchingModelCorners(RecoveredCuboid cuboid, List<ObservedCube> observedCubes) {
+		GeometryKey targetKey = GeometryKey.of(cuboid.corners);
+		for (ObservedCube observed : observedCubes) {
+			if (!targetKey.equals(GeometryKey.of(observed.transformedCorners)))
+				continue;
+			List<Vec3> ordered = new ArrayList<>(8);
+			for (Vector3f corner : cuboid.corners) {
+				int match = matchingCorner(observed.transformedCorners, corner);
+				if (match < 0) {
+					ordered.clear();
+					break;
+				}
+				ordered.add(observed.modelCorners.get(match));
+			}
+			if (ordered.size() == 8)
+				return List.copyOf(ordered);
+		}
+		return List.of();
+	}
+
+	private static int matchingCorner(List<Vector3f> corners, Vector3f target) {
+		for (int index = 0; index < corners.size(); index++) {
+			Vector3f candidate = corners.get(index);
+			if (Math.abs(candidate.x - target.x) <= POSITION_EPSILON
+				&& Math.abs(candidate.y - target.y) <= POSITION_EPSILON
+				&& Math.abs(candidate.z - target.z) <= POSITION_EPSILON)
+				return index;
+		}
+		return -1;
+	}
+
+	private static List<SurgicalModelRenderContext.FaceGrid> recoverFaceGrids(RecoveredCuboid cuboid,
+		RenderType renderType, List<CapturedVertex> vertices) {
+		ResourceLocation texture = renderTypeTexture(renderType);
+		AlphaMask textureInfo = texture == null ? null : alphaMask(texture);
+		if (textureInfo == null || textureInfo.width <= 0 || textureInfo.height <= 0 || vertices.size() < 24)
+			return List.of();
+		List<SurgicalModelRenderContext.FaceGrid> grids = new ArrayList<>(6);
+		for (int[] face : SurgicalClientTopology.CUBE_FACES) {
+			List<CapturedVertex> quad = matchingFaceQuad(cuboid.corners, face, vertices);
+			if (quad == null) {
+				grids.add(new SurgicalModelRenderContext.FaceGrid(0.0d, 0.0d));
+				continue;
+			}
+			CapturedVertex origin = vertexAt(quad, cuboid.corners.get(face[0]));
+			CapturedVertex alongU = vertexAt(quad, cuboid.corners.get(face[1]));
+			CapturedVertex alongV = vertexAt(quad, cuboid.corners.get(face[3]));
+			if (origin == null || alongU == null || alongV == null) {
+				grids.add(new SurgicalModelRenderContext.FaceGrid(0.0d, 0.0d));
+				continue;
+			}
+			grids.add(new SurgicalModelRenderContext.FaceGrid(
+				texturePixelDistance(origin, alongU, textureInfo.width, textureInfo.height),
+				texturePixelDistance(origin, alongV, textureInfo.width, textureInfo.height)));
+		}
+		return List.copyOf(grids);
+	}
+
+	@Nullable
+	private static List<CapturedVertex> matchingFaceQuad(List<Vector3f> corners, int[] face,
+		List<CapturedVertex> vertices) {
+		for (int cursor = 0; cursor + 4 <= vertices.size(); cursor += 4) {
+			List<CapturedVertex> quad = vertices.subList(cursor, cursor + 4);
+			boolean matches = true;
+			for (CapturedVertex vertex : quad) {
+				boolean belongs = false;
+				for (int corner : face) {
+					if (samePosition(vertex, corners.get(corner))) {
+						belongs = true;
+						break;
+					}
+				}
+				if (!belongs) {
+					matches = false;
+					break;
+				}
+			}
+			if (matches)
+				return quad;
+		}
+		return null;
+	}
+
+	@Nullable
+	private static CapturedVertex vertexAt(List<CapturedVertex> vertices, Vector3f position) {
+		for (CapturedVertex vertex : vertices)
+			if (samePosition(vertex, position))
+				return vertex;
+		return null;
+	}
+
+	private static boolean samePosition(CapturedVertex vertex, Vector3f position) {
+		return Math.abs(vertex.x - position.x) <= POSITION_EPSILON
+			&& Math.abs(vertex.y - position.y) <= POSITION_EPSILON
+			&& Math.abs(vertex.z - position.z) <= POSITION_EPSILON;
+	}
+
+	private static double texturePixelDistance(CapturedVertex first, CapturedVertex second,
+		int textureWidth, int textureHeight) {
+		double u = (second.u - first.u) * textureWidth;
+		double v = (second.v - first.v) * textureHeight;
+		return Math.hypot(u, v);
+	}
+
 	private static final class ComponentBuilder {
 		private final int order;
 		private final RecoveredCuboid cuboid;
+		private final List<Vec3> modelCorners;
 		private final List<SourceBatch> batches = new ArrayList<>();
 		private final List<SourceBatch> surfaceOverlays = new ArrayList<>();
 		private final BitSet captureStreams = new BitSet();
 		@Nullable
 		private RenderType primaryRenderType;
+		private List<SurgicalModelRenderContext.FaceGrid> faceGrids = List.of();
 
-		private ComponentBuilder(int order, RecoveredCuboid cuboid) {
+		private ComponentBuilder(int order, RecoveredCuboid cuboid, List<Vec3> modelCorners) {
 			this.order = order;
 			this.cuboid = cuboid;
+			this.modelCorners = List.copyOf(modelCorners);
 		}
 
 		private void observeMaterial(RenderType renderType) {
@@ -656,6 +801,8 @@ public final class SurgicalCapturedRenderPlan {
 
 		private void addVisibleBatch(RenderType renderType, List<CapturedVertex> vertices) {
 			boolean surfaceOverlay = primaryRenderType != renderType;
+			if (faceGrids.isEmpty())
+				faceGrids = recoverFaceGrids(cuboid, renderType, vertices);
 			SourceBatch batch = new SourceBatch(renderType, List.copyOf(vertices), surfaceOverlay);
 			batches.add(batch);
 			if (surfaceOverlay)
@@ -664,11 +811,18 @@ public final class SurgicalCapturedRenderPlan {
 
 		private Component build(int id, boolean preserveSource) {
 			return new Component(id, cuboid.corners, cuboid.a, cuboid.b, cuboid.c,
-				preserveSource, List.copyOf(batches), List.copyOf(surfaceOverlays));
+				modelCorners, faceGrids, preserveSource, List.copyOf(batches), List.copyOf(surfaceOverlays));
 		}
 	}
 
 	private record RecoveredCuboid(List<Vector3f> corners, Vector3f a, Vector3f b, Vector3f c) {}
+
+	private record ObservedCube(List<Vector3f> transformedCorners, List<Vec3> modelCorners) {
+		private ObservedCube {
+			transformedCorners = transformedCorners.stream().map(Vector3f::new).toList();
+			modelCorners = List.copyOf(modelCorners);
+		}
+	}
 
 	private record GeometryKey(List<QuantizedPoint> points) {
 		private static GeometryKey of(List<Vector3f> corners) {
@@ -703,17 +857,22 @@ public final class SurgicalCapturedRenderPlan {
 		private final Vector3f a;
 		private final Vector3f b;
 		private final Vector3f c;
+		private final List<Vec3> modelCorners;
+		private final List<SurgicalModelRenderContext.FaceGrid> faceGrids;
 		private final boolean preserveSource;
 		private final List<SourceBatch> batches;
 		private final List<SourceBatch> surfaceOverlays;
 
 		private Component(int id, List<Vector3f> corners, Vector3f a, Vector3f b, Vector3f c,
-			boolean preserveSource, List<SourceBatch> batches, List<SourceBatch> surfaceOverlays) {
+			List<Vec3> modelCorners, List<SurgicalModelRenderContext.FaceGrid> faceGrids, boolean preserveSource,
+			List<SourceBatch> batches, List<SourceBatch> surfaceOverlays) {
 			this.id = id;
 			this.corners = corners.stream().map(Vector3f::new).toList();
 			this.a = new Vector3f(a);
 			this.b = new Vector3f(b);
 			this.c = new Vector3f(c);
+			this.modelCorners = List.copyOf(modelCorners);
+			this.faceGrids = List.copyOf(faceGrids);
 			this.preserveSource = preserveSource;
 			this.batches = batches;
 			this.surfaceOverlays = surfaceOverlays;
@@ -784,7 +943,7 @@ public final class SurgicalCapturedRenderPlan {
 					worldPoint = worldCenter.add(rotation.rotate(worldPoint.subtract(worldCenter)));
 				transformed.add(worldPoint.add(offsetX + cameraX, offsetY + cameraY, offsetZ + cameraZ));
 			}
-			return new SurgicalModelRenderContext.CubeGeometry(id, transformed);
+			return new SurgicalModelRenderContext.CubeGeometry(id, transformed, modelCorners, faceGrids);
 		}
 
 		private Vector3f center() {

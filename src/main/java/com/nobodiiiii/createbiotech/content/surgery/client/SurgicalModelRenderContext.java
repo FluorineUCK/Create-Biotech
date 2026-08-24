@@ -262,11 +262,38 @@ public final class SurgicalModelRenderContext {
 		}
 	}
 
-	public record CubeGeometry(int cubeId, List<Vec3> corners) {
+	public record CubeGeometry(int cubeId, List<Vec3> corners, List<Vec3> modelCorners,
+		List<FaceGrid> faceGrids) {
+		public CubeGeometry(int cubeId, List<Vec3> corners) {
+			this(cubeId, corners, List.of(), List.of());
+		}
+
+		public CubeGeometry(int cubeId, List<Vec3> corners, List<FaceGrid> faceGrids) {
+			this(cubeId, corners, List.of(), faceGrids);
+		}
+
 		public CubeGeometry {
 			corners = List.copyOf(corners);
+			modelCorners = List.copyOf(modelCorners);
+			faceGrids = List.copyOf(faceGrids);
 			if (corners.size() != 8)
 				throw new IllegalArgumentException("A cube geometry requires exactly 8 corners");
+			if (!modelCorners.isEmpty() && modelCorners.size() != 8)
+				throw new IllegalArgumentException("Model pixel geometry must describe all 8 corners");
+			if (!faceGrids.isEmpty() && faceGrids.size() != 6)
+				throw new IllegalArgumentException("Cube face grids must describe all 6 faces");
+		}
+
+		public CubeGeometry withCorners(List<Vec3> transformedCorners) {
+			return new CubeGeometry(cubeId, transformedCorners, modelCorners, faceGrids);
+		}
+	}
+
+	/** Source-texture pixel counts along the two ordered edges of one recovered cube face. */
+	public record FaceGrid(double pixelsU, double pixelsV) {
+		public boolean valid() {
+			return Double.isFinite(pixelsU) && Double.isFinite(pixelsV)
+				&& pixelsU > 1.0e-6d && pixelsV > 1.0e-6d;
 		}
 	}
 
@@ -401,21 +428,17 @@ public final class SurgicalModelRenderContext {
 				return;
 			capturedGeometry.set(cubeId);
 			Matrix4f pose = poseStack.last().pose();
-			minX /= 16.0f;
-			minY /= 16.0f;
-			minZ /= 16.0f;
-			maxX /= 16.0f;
-			maxY /= 16.0f;
-			maxZ /= 16.0f;
-
 			List<Vec3> corners = new ArrayList<>(8);
+			List<Vec3> modelCorners = new ArrayList<>(8);
 			for (int z = 0; z < 2; z++) {
 				for (int y = 0; y < 2; y++) {
 					for (int x = 0; x < 2; x++) {
+						Vec3 model = new Vec3(x == 0 ? minX : maxX,
+							y == 0 ? minY : maxY, z == 0 ? minZ : maxZ);
+						modelCorners.add(model);
 						Vector3f transformed = pose.transformPosition(new Vector3f(
-							x == 0 ? minX : maxX,
-							y == 0 ? minY : maxY,
-							z == 0 ? minZ : maxZ));
+							(float) (model.x / 16.0d), (float) (model.y / 16.0d),
+							(float) (model.z / 16.0d)));
 						double cameraX = cameraPosition == null ? 0.0d : cameraPosition.x;
 						double cameraY = cameraPosition == null ? 0.0d : cameraPosition.y;
 						double cameraZ = cameraPosition == null ? 0.0d : cameraPosition.z;
@@ -424,7 +447,7 @@ public final class SurgicalModelRenderContext {
 					}
 				}
 			}
-			geometry.add(new CubeGeometry(cubeId, corners));
+			geometry.add(new CubeGeometry(cubeId, corners, modelCorners, List.of()));
 		}
 
 		private Snapshot snapshot() {

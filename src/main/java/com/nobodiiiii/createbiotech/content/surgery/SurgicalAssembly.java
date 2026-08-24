@@ -26,7 +26,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_CUBES = 1024;
 	public static final int MAX_SEAMS = 4096;
 	public static final int MAX_SOURCES = 256;
-	private static final int CURRENT_VERSION = 7;
+	private static final int CURRENT_VERSION = 8;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -41,6 +41,12 @@ public final class SurgicalAssembly {
 	private static final String COMBINATION_MEMBERS_TAG = "Members";
 	private static final String MEMBER_SOURCE_TAG = "Source";
 	private static final String MEMBER_CUBE_TAG = "Cube";
+	private static final String LIMBS_TAG = "Limbs";
+	private static final String LIMB_TYPE_TAG = "Type";
+	private static final String LIMB_CHILD_SOURCE_TAG = "ChildSource";
+	private static final String LIMB_CHILD_CUBE_TAG = "ChildCube";
+	private static final String LIMB_PARENT_SOURCE_TAG = "ParentSource";
+	private static final String LIMB_PARENT_CUBE_TAG = "ParentCube";
 	private static final String PRESERVE_LAYOUT_TAG = "PreserveLayout";
 	private static final String LAYOUT_FACING_TAG = "LayoutFacing";
 	private static final String LAYOUT_LAY_POSE_TAG = "LayoutLayPose";
@@ -69,16 +75,18 @@ public final class SurgicalAssembly {
 	private final List<Source> sources;
 	private final List<Joint> joints;
 	private final List<Combination> combinations;
+	private final List<Limb> limbs;
 	private final boolean preserveLayout;
 	private final Direction layoutFacing;
 	private final SurgicalLayPose layoutLayPose;
 
 	private SurgicalAssembly(List<Source> sources, List<Joint> joints, List<Combination> combinations,
-		boolean preserveLayout,
+		List<Limb> limbs, boolean preserveLayout,
 		Direction layoutFacing, SurgicalLayPose layoutLayPose) {
 		this.sources = List.copyOf(sources);
 		this.joints = List.copyOf(joints);
 		this.combinations = List.copyOf(combinations);
+		this.limbs = List.copyOf(limbs);
 		this.preserveLayout = preserveLayout;
 		this.layoutFacing = horizontal(layoutFacing);
 		this.layoutLayPose = layoutLayPose == null ? SurgicalLayPose.IDENTITY : layoutLayPose;

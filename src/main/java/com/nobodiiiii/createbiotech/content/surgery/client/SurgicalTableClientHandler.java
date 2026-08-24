@@ -1169,7 +1169,7 @@ public final class SurgicalTableClientHandler {
 			.getOrDefault(cubeId, SurgicalCubeRotation.IDENTITY);
 		Vec3 offset = offsets.getOrDefault(cubeId, Vec3.ZERO);
 		Vec3 center = cubeCenter(base);
-		return new SurgicalModelRenderContext.CubeGeometry(cubeId, base.corners().stream()
+		return base.withCorners(base.corners().stream()
 			.map(corner -> center.add(rotation.rotate(corner.subtract(center))).add(offset)).toList());
 	}
 
@@ -1577,7 +1577,7 @@ public final class SurgicalTableClientHandler {
 		List<Vec3> corners = cube.corners().stream()
 			.map(corner -> targetAnchor.add(source.rotateInto(target, corner.subtract(sourceAnchor))))
 			.toList();
-		return new SurgicalModelRenderContext.CubeGeometry(cube.cubeId(), corners);
+		return cube.withCorners(corners);
 	}
 
 	private static SurgicalModelRenderContext.CubeGeometry reframeCurrentCube(
@@ -1586,7 +1586,7 @@ public final class SurgicalTableClientHandler {
 		List<Vec3> corners = cube.corners().stream()
 			.map(corner -> secondPoint.add(source.rotateInto(target, corner.subtract(firstPoint))))
 			.toList();
-		return new SurgicalModelRenderContext.CubeGeometry(cube.cubeId(), corners);
+		return cube.withCorners(corners);
 	}
 
 	@Nullable
@@ -1625,7 +1625,7 @@ public final class SurgicalTableClientHandler {
 			Vec3 center = cubeCenter(cube);
 			List<Vec3> corners = cube.corners().stream()
 				.map(corner -> center.add(rotation.rotate(corner.subtract(center))).add(offset)).toList();
-			transformed.add(new SurgicalModelRenderContext.CubeGeometry(cube.cubeId(), corners));
+			transformed.add(cube.withCorners(corners));
 		}
 		return List.copyOf(transformed);
 	}
@@ -2030,7 +2030,7 @@ public final class SurgicalTableClientHandler {
 			return cubes;
 		List<SurgicalModelRenderContext.CubeGeometry> translated = new ArrayList<>(cubes.size());
 		for (SurgicalModelRenderContext.CubeGeometry cube : cubes)
-			translated.add(new SurgicalModelRenderContext.CubeGeometry(cube.cubeId(),
+			translated.add(cube.withCorners(
 				cube.corners().stream().map(corner -> corner.add(offset)).toList()));
 		return List.copyOf(translated);
 	}
@@ -2595,8 +2595,12 @@ public final class SurgicalTableClientHandler {
 		double rv = relative.dot(edgeV);
 		double u = Math.max(0.0d, Math.min(1.0d, (ru * vv - rv * uv) / determinant));
 		double v = Math.max(0.0d, Math.min(1.0d, (rv * uu - ru * uv) / determinant));
-		double pixelsU = normalizedPixelLength(Math.sqrt(uu) / MODEL_PIXEL_SIZE);
-		double pixelsV = normalizedPixelLength(Math.sqrt(vv) / MODEL_PIXEL_SIZE);
+		SurgicalModelRenderContext.FaceGrid faceGrid = cube.faceGrids().isEmpty()
+			? null : cube.faceGrids().get(faceIndex);
+		double pixelsU = normalizedPixelLength(faceGrid != null && faceGrid.valid()
+			? faceGrid.pixelsU() : Math.sqrt(uu) / MODEL_PIXEL_SIZE);
+		double pixelsV = normalizedPixelLength(faceGrid != null && faceGrid.valid()
+			? faceGrid.pixelsV() : Math.sqrt(vv) / MODEL_PIXEL_SIZE);
 		PixelInterval cellU = pixelInterval(u * pixelsU, pixelsU);
 		PixelInterval cellV = pixelInterval(v * pixelsV, pixelsV);
 		if (cellU == null || cellV == null)
