@@ -132,15 +132,16 @@ public final class SlimeBionicAnimator {
 	/**
 	 * Groups every limb with the cubes that move as one part and works out where it hinges.
 	 *
-	 * <p>Honey combinations still move as one rigid part, but they do not participate in hinge
-	 * detection. The pivot and rest direction come only from the two cubes that really share the
-	 * boundary seam or glue joint. This prevents unrelated cubes elsewhere in a large combination
-	 * from pulling the axis away from its physical connection.</p>
+	 * <p>Honey combinations still move as one rigid part. Their physical hinge comes only from the
+	 * two cubes that really share the boundary seam or glue joint, while the pose direction follows
+	 * the centre of the complete driven group. That distinction matters for an asymmetric limb whose
+	 * selected connection cube lies on the opposite side of the hinge from most of its visible mass.</p>
 	 */
 	private static List<ResolvedLimb> resolveLimbs(SurgicalAssembly assembly, List<SourceState> sources) {
 		SurgicalConnectionGraph<Integer> connections = connectionGraph(assembly);
 		if (connections == null)
 			return List.of();
+		double bodyCenterX = bodyCenter(sources, AXIS_X);
 		Map<SurgicalLimbType, List<ResolvedLimb>> byType = new EnumMap<>(SurgicalLimbType.class);
 		for (SurgicalAssembly.Limb limb : assembly.limbs()) {
 			Member selectedChild = new Member(limb.childSource(), limb.childCube());
@@ -156,12 +157,13 @@ public final class SlimeBionicAnimator {
 			if (child == null || parent == null)
 				continue;
 			Vec3 pivot = pivot(limb.type(), child, parent);
-			Vec3 restDirection = child.center().subtract(pivot);
+			Vec3 drivenCenter = groupCenter(childMembers, sources);
+			Vec3 restDirection = (drivenCenter == null ? child.center() : drivenCenter).subtract(pivot);
 			if (restDirection.lengthSqr() < GEOMETRY_EPSILON)
 				continue;
 			byType.computeIfAbsent(limb.type(), ignored -> new ArrayList<>())
 				.add(new ResolvedLimb(limb.type(), childMembers, pivot,
-					BODY_SPACE.project(child.center().subtract(parent.center()), AXIS_X),
+					BODY_SPACE.project(child.center(), AXIS_X) - bodyCenterX,
 					BODY_SPACE.restAlignment(limb.type(), restDirection), LimbDriver.NONE));
 		}
 		List<ResolvedLimb> resolved = new ArrayList<>();
@@ -182,6 +184,38 @@ public final class SlimeBionicAnimator {
 					: slot == 1 ? LimbDriver.LEFT : LimbDriver.NONE));
 		});
 		return resolved;
+	}
+
+	/** Centre of the complete rigid part that an installed joint rotates. */
+	@Nullable
+	private static Vec3 groupCenter(List<Member> members, List<SourceState> sources) {
+		Vec3 sum = Vec3.ZERO;
+		int count = 0;
+		for (Member member : members) {
+			CubeBox box = box(sources, member);
+			if (box == null)
+				continue;
+			sum = sum.add(box.center());
+			count++;
+		}
+		return count == 0 ? null : sum.scale(1.0d / count);
+	}
+
+	/**
+	 * Finds the same geometric centre the renderer later moves onto the entity origin.
+	 *
+	 * <p>A limb's side belongs to its position in the complete body, not to the direction from an
+	 * arbitrarily placed parent cube.</p>
+	 */
+	private static double bodyCenter(List<SourceState> sources, int axis) {
+		double min = Double.POSITIVE_INFINITY;
+		double max = Double.NEGATIVE_INFINITY;
+		for (SourceState source : sources)
+			for (CubeBox box : source.boxes().values()) {
+				min = Math.min(min, box.min()[axis]);
+				max = Math.max(max, box.max()[axis]);
+			}
+		return Double.isFinite(min) && Double.isFinite(max) ? (min + max) * 0.5d : 0.0d;
 	}
 
 	/** The cubes that rotate with {@code cube}: its honey combination, or the cube on its own. */

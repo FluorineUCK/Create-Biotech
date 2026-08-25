@@ -85,8 +85,8 @@ public final class SurgicalTableClientHandler {
 	private static final float GLUE_POINT_LINE_WIDTH = HIGHLIGHT_LINE_WIDTH / 4.0f;
 	private static final float GLUE_FIRST_PREVIEW_ALPHA = 0.5f;
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
-	private static final double GLUE_EDIT_TRANSLATION_STEP = 1.0d / 16.0d;
-	private static final double GLUE_EDIT_ROTATION_STEP = 15.0d;
+	private static final double GLUE_EDIT_TRANSLATION_STEP = 1.0d / 32.0d;
+	private static final double GLUE_EDIT_ROTATION_STEP = 5.0d;
 	private static final int GLUE_EDIT_CIRCLE_SEGMENTS = 32;
 	private static final double GLUE_EDIT_GUIDE_MARGIN = 1.0d / 16.0d;
 	private static final double MODEL_PIXEL_SIZE = 1.0d / 16.0d;
