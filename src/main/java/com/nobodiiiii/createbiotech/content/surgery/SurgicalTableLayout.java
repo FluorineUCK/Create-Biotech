@@ -7,6 +7,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import org.jetbrains.annotations.Nullable;
+
+import net.minecraft.core.Direction;
+import net.minecraft.world.phys.Vec3;
+
 /** Side-safe wire data and validation for surgical-table component placement. */
 public final class SurgicalTableLayout {
 	public static final int SUBDIVISIONS = 4;
@@ -28,7 +33,7 @@ public final class SurgicalTableLayout {
 	public static boolean validatePlacement(SurgicalTablePlane.Plane plane, double originOffsetX,
 		double originOffsetZ, Proposal proposal, List<Footprint> occupiedFootprints) {
 		if (!plane.valid() || plane.workArea().isEmpty() || !finiteBounded(originOffsetX)
-			|| !finiteBounded(originOffsetZ) || !proposal.offsets().isEmpty()
+			|| !finiteBounded(originOffsetZ) || indexOffsets(proposal.offsets()) == null
 			|| proposal.footprints().size() != 1)
 			return false;
 		Footprint footprint = proposal.footprints().getFirst();
@@ -37,11 +42,99 @@ public final class SurgicalTableLayout {
 			&& doesNotOverlap(proposal.footprints(), occupiedFootprints);
 	}
 
+	/**
+	 * Canonical validation for a placement preview and its eventual server-side commit.
+	 * The client renders these exact values and the server stores the same values; neither side
+	 * derives a second facing, vertical grounding, or composite transform after this check.
+	 */
+	public static boolean validateSubjectPlacement(SurgicalTablePlane.Plane plane,
+		@Nullable SurgicalAssembly assembly, Direction placementFacing, SurgicalLayPose layPose,
+		double originOffsetX, double originOffsetZ, Proposal envelope,
+		List<Proposal> sourceLayouts, List<Footprint> occupiedFootprints) {
+		if (placementFacing == null || !placementFacing.getAxis().isHorizontal()
+			|| layPose == null || !layPose.valid() || sourceLayouts == null
+			|| !validatePlacement(plane, originOffsetX, originOffsetZ, envelope, occupiedFootprints))
+			return false;
+		if (assembly == null)
+			return sourceLayouts.isEmpty() && envelope.offsets().isEmpty();
+
+		boolean composite = assembly.preservesLayout() || assembly.sources().size() != 1;
+		if (!composite)
+			return sourceLayouts.isEmpty() && assembly.cubeRotations().isEmpty()
+				&& validateInitialOffsets(assembly, envelope.offsets());
+		if (!envelope.offsets().isEmpty() || sourceLayouts.size() != assembly.sources().size()
+			|| !layPose.equals(assembly.placedLayPose(placementFacing)))
+			return false;
+
+		List<SurgicalAssembly.PlacedSource> placedSources = assembly.placedSources(placementFacing);
+		if (placedSources.size() != sourceLayouts.size())
+			return false;
+		Footprint assemblyEnvelope = envelope.footprints().getFirst();
+		for (int sourceId = 0; sourceId < placedSources.size(); sourceId++) {
+			SurgicalAssembly.PlacedSource placed = placedSources.get(sourceId);
+			SurgicalAssembly.Source source = placed.source();
+			Proposal sourceLayout = sourceLayouts.get(sourceId);
+			if (!finiteBounded(originOffsetX + placed.originOffset().x)
+				|| !finiteBounded(originOffsetZ + placed.originOffset().z)
+				|| !finiteBounded(placed.originOffset().y)
+				|| !matchesSourceOffsets(placed, sourceLayout)
+				|| !validateCompositeComponents(plane, source.cubeCount(), source.presentCubes(),
+					source.seams(), source.cutSeams(), sourceLayout, occupiedFootprints, assemblyEnvelope))
+				return false;
+		}
+		return true;
+	}
+
+	private static boolean validateInitialOffsets(SurgicalAssembly assembly, List<CubeOffset> proposed) {
+		BitSet present = assembly.presentCubes();
+		Map<Integer, CubeOffset> offsets = indexOffsets(proposed);
+		if (offsets == null || offsets.size() != present.cardinality())
+			return false;
+		for (BitSet component : SurgicalAssembly.components(assembly.cubeCount(), present,
+			assembly.seams(), assembly.cutSeams())) {
+			CubeOffset root = offsets.get(component.nextSetBit(0));
+			if (root == null)
+				return false;
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+				CubeOffset offset = offsets.get(cube);
+				if (offset == null || Math.abs(offset.x()) > EPSILON || Math.abs(offset.z()) > EPSILON
+					|| Math.abs(offset.y() - root.y()) > EPSILON)
+					return false;
+			}
+		}
+		return true;
+	}
+
+	private static boolean matchesSourceOffsets(SurgicalAssembly.PlacedSource placed, Proposal layout) {
+		SurgicalAssembly.Source source = placed.source();
+		Map<Integer, CubeOffset> proposed = indexOffsets(layout.offsets());
+		if (proposed == null || proposed.size() != source.presentCubes().cardinality())
+			return false;
+		BitSet present = source.presentCubes();
+		for (int cube = present.nextSetBit(0); cube >= 0; cube = present.nextSetBit(cube + 1)) {
+			Vec3 expected = placed.cubeOffsets().getOrDefault(cube, Vec3.ZERO);
+			CubeOffset actual = proposed.get(cube);
+			if (actual == null || Math.abs(actual.x() - expected.x) > EPSILON
+				|| Math.abs(actual.y() - expected.y) > EPSILON
+				|| Math.abs(actual.z() - expected.z) > EPSILON)
+				return false;
+		}
+		return true;
+	}
+
 	public static boolean validateComponents(SurgicalTablePlane.Plane plane, int cubeCount,
 		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
 		List<Footprint> occupiedFootprints) {
 		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
 			occupiedFootprints, null, false, false);
+	}
+
+	/** Validates cut/move layouts that already contain exact per-cube smart-glue transforms. */
+	public static boolean validateTransformedComponents(SurgicalTablePlane.Plane plane, int cubeCount,
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, Proposal proposal,
+		List<Footprint> occupiedFootprints) {
+		return validateComponents(plane, cubeCount, presentCubes, seams, cutSeams, proposal,
+			occupiedFootprints, null, false, true);
 	}
 
 	/**
@@ -83,11 +176,11 @@ public final class SurgicalTableLayout {
 			|| proposal.offsets().size() != presentCubes.cardinality())
 			return false;
 
-		Map<Integer, CubeOffset> offsets = new HashMap<>();
-		for (CubeOffset offset : proposal.offsets()) {
-			if (offset == null || offset.cubeId() < 0 || offset.cubeId() >= cubeCount
-				|| !presentCubes.get(offset.cubeId()) || !finiteBounded(offset.x())
-				|| !finiteBounded(offset.z()) || offsets.putIfAbsent(offset.cubeId(), offset) != null)
+		Map<Integer, CubeOffset> offsets = indexOffsets(proposal.offsets());
+		if (offsets == null)
+			return false;
+		for (CubeOffset offset : offsets.values()) {
+			if (offset.cubeId() >= cubeCount || !presentCubes.get(offset.cubeId()))
 				return false;
 		}
 
@@ -117,6 +210,7 @@ public final class SurgicalTableLayout {
 				CubeOffset offset = offsets.get(cube);
 				if (offset == null || !allowPerCubeOffsets
 					&& (Math.abs(offset.x() - componentOffset.x()) > EPSILON
+						|| Math.abs(offset.y() - componentOffset.y()) > EPSILON
 						|| Math.abs(offset.z() - componentOffset.z()) > EPSILON))
 					return false;
 			}
@@ -208,7 +302,20 @@ public final class SurgicalTableLayout {
 		return Double.isFinite(value) && Math.abs(value) <= MAX_OFFSET;
 	}
 
-	public record CubeOffset(int cubeId, double x, double z) {}
+	@Nullable
+	private static Map<Integer, CubeOffset> indexOffsets(List<CubeOffset> proposed) {
+		if (proposed == null || proposed.size() > SurgicalAssembly.MAX_CUBES)
+			return null;
+		Map<Integer, CubeOffset> offsets = new HashMap<>();
+		for (CubeOffset offset : proposed)
+			if (offset == null || offset.cubeId() < 0 || !finiteBounded(offset.x())
+				|| !finiteBounded(offset.y()) || !finiteBounded(offset.z())
+				|| offsets.putIfAbsent(offset.cubeId(), offset) != null)
+				return null;
+		return offsets;
+	}
+
+	public record CubeOffset(int cubeId, double x, double y, double z) {}
 
 	public record Footprint(int componentRoot, double minX, double minZ, double maxX, double maxZ,
 		int gridX, int gridZ) {

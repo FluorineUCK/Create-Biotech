@@ -290,11 +290,10 @@ public final class SurgicalSubject {
 	void applyLayout(SurgicalTableLayout.Proposal proposal) {
 		Map<Integer, Vec3> offsets = new HashMap<>();
 		for (SurgicalTableLayout.CubeOffset offset : proposal.offsets()) {
-			double existingY = componentOffsets.getOrDefault(offset.cubeId(), Vec3.ZERO).y;
-			if (Math.abs(offset.x()) <= 1.0e-12d && Math.abs(existingY) <= 1.0e-12d
+			if (Math.abs(offset.x()) <= 1.0e-12d && Math.abs(offset.y()) <= 1.0e-12d
 				&& Math.abs(offset.z()) <= 1.0e-12d)
 				continue;
-			offsets.put(offset.cubeId(), new Vec3(offset.x(), existingY, offset.z()));
+			offsets.put(offset.cubeId(), new Vec3(offset.x(), offset.y(), offset.z()));
 		}
 		componentOffsets = Map.copyOf(offsets);
 		occupiedFootprints = proposal.footprints();

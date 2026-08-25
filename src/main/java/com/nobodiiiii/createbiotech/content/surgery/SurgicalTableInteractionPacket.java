@@ -45,6 +45,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		for (SurgicalTableLayout.CubeOffset offset : layout.offsets()) {
 			buffer.writeVarInt(offset.cubeId());
 			buffer.writeDouble(offset.x());
+			buffer.writeDouble(offset.y());
 			buffer.writeDouble(offset.z());
 		}
 		buffer.writeVarInt(layout.footprints().size());
@@ -144,7 +145,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(offsetCount);
 		for (int index = 0; index < offsetCount; index++)
 			offsets.add(new SurgicalTableLayout.CubeOffset(buffer.readVarInt(), buffer.readDouble(),
-				buffer.readDouble()));
+				buffer.readDouble(), buffer.readDouble()));
 		int footprintCount = buffer.readVarInt();
 		if (footprintCount < 0 || footprintCount > SurgicalAssembly.MAX_CUBES)
 			throw new IllegalArgumentException("Invalid surgical footprint count " + footprintCount);

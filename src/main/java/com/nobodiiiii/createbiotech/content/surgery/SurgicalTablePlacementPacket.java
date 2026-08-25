@@ -7,6 +7,7 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -16,12 +17,13 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
 
 /** Server-validated placement data for both ordinary and laid-out multi-source bodies. */
-public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
+public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand, Direction placementFacing,
 	 double originOffsetX, double originOffsetZ, SurgicalLayPose layPose,
 	 SurgicalTableLayout.Proposal envelope,
 	 List<SurgicalTableLayout.Proposal> sourceLayouts) {
 
 	public SurgicalTablePlacementPacket {
+		placementFacing = placementFacing == null ? Direction.NORTH : placementFacing;
 		layPose = layPose == null ? SurgicalLayPose.IDENTITY : layPose;
 		envelope = envelope == null ? SurgicalTableLayout.Proposal.EMPTY : envelope;
 		sourceLayouts = sourceLayouts == null ? List.of() : List.copyOf(sourceLayouts);
@@ -30,13 +32,15 @@ public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
 	}
 
 	public SurgicalTablePlacementPacket(FriendlyByteBuf buffer) {
-		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), buffer.readDouble(),
+		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), buffer.readEnum(Direction.class),
+			buffer.readDouble(),
 			buffer.readDouble(), SurgicalLayPose.read(buffer), readLayout(buffer), readSourceLayouts(buffer));
 	}
 
 	public void write(FriendlyByteBuf buffer) {
 		buffer.writeBlockPos(pos);
 		buffer.writeEnum(hand);
+		buffer.writeEnum(placementFacing);
 		buffer.writeDouble(originOffsetX);
 		buffer.writeDouble(originOffsetZ);
 		layPose.write(buffer);
@@ -59,7 +63,7 @@ public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
 		if (table == null || !(held.getItem() instanceof CapturedEntityBoxItem)
 			|| !CapturedEntityBoxHelper.hasCapturedEntity(held))
 			return;
-		if (!table.tryPlaceSubject(held, plane, player.getDirection(), layPose, originOffsetX, originOffsetZ,
+		if (!table.tryPlaceSubject(held, plane, placementFacing, layPose, originOffsetX, originOffsetZ,
 			envelope, sourceLayouts))
 			player.displayClientMessage(Component.translatable(
 				"message.create_biotech.surgical_table.no_space"), true);
@@ -89,6 +93,7 @@ public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
 		for (SurgicalTableLayout.CubeOffset offset : layout.offsets()) {
 			buffer.writeVarInt(offset.cubeId());
 			buffer.writeDouble(offset.x());
+			buffer.writeDouble(offset.y());
 			buffer.writeDouble(offset.z());
 		}
 		buffer.writeVarInt(layout.footprints().size());
@@ -110,7 +115,7 @@ public record SurgicalTablePlacementPacket(BlockPos pos, InteractionHand hand,
 		List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(offsetCount);
 		for (int index = 0; index < offsetCount; index++)
 			offsets.add(new SurgicalTableLayout.CubeOffset(buffer.readVarInt(), buffer.readDouble(),
-				buffer.readDouble()));
+				buffer.readDouble(), buffer.readDouble()));
 		int footprintCount = buffer.readVarInt();
 		if (footprintCount < 0 || footprintCount > SurgicalAssembly.MAX_CUBES)
 			throw new IllegalArgumentException("Invalid surgical placement footprint count " + footprintCount);

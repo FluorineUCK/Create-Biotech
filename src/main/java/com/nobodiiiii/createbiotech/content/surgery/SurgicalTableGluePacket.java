@@ -16,7 +16,7 @@ import net.minecraft.world.phys.Vec3;
 
 /** Server-validated second click for gluing two surgical components at exact hit points. */
 public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoint first, Endpoint second,
-	SurgicalLayPose targetPose, double groundLiftY, List<Move> moves, List<AnchorMove> anchorMoves) {
+	SurgicalLayPose targetPose, List<Move> moves, List<AnchorMove> anchorMoves) {
 	public SurgicalTableGluePacket {
 		targetPose = targetPose == null ? SurgicalLayPose.IDENTITY : targetPose;
 		moves = moves == null ? List.of() : List.copyOf(moves);
@@ -27,7 +27,7 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 
 	public SurgicalTableGluePacket(FriendlyByteBuf buffer) {
 		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), Endpoint.read(buffer), Endpoint.read(buffer),
-			SurgicalLayPose.read(buffer), buffer.readDouble(), readMoves(buffer), readAnchorMoves(buffer));
+			SurgicalLayPose.read(buffer), readMoves(buffer), readAnchorMoves(buffer));
 	}
 
 	public void write(FriendlyByteBuf buffer) {
@@ -36,7 +36,6 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 		first.write(buffer);
 		second.write(buffer);
 		targetPose.write(buffer);
-		buffer.writeDouble(groundLiftY);
 		buffer.writeVarInt(moves.size());
 		for (Move move : moves)
 			move.write(buffer);
@@ -47,7 +46,7 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 
 	public void handle(ServerPlayer player) {
 		if (player == null || player.isSpectator() || !player.mayBuild() || !player.level().isLoaded(pos)
-			|| !first.valid() || !second.valid() || !validGroundLift())
+			|| !first.valid() || !second.valid())
 			return;
 		ItemStack held = player.getItemInHand(hand);
 		if (!(held.getItem() instanceof SuperGlueItem))
@@ -66,19 +65,13 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 		SurgicalSubject secondSubject = table.getSubject(second.subjectId);
 		if (firstSubject == null || secondSubject == null || !targetPose.equals(secondSubject.layPose())
 			|| !firstSubject.initializeOrMatchTopology(first.observedCubeCount, first.seams)
-			|| !secondSubject.initializeOrMatchTopology(second.observedCubeCount, second.seams)
-			|| !table.prepareGlueLayout(firstSubject, plane, first.layout)
-			|| firstSubject != secondSubject && !table.prepareGlueLayout(secondSubject, plane, second.layout))
+			|| !secondSubject.initializeOrMatchTopology(second.observedCubeCount, second.seams))
 			return;
 		if (table.glueComponents(player, held, hand, first.subjectId, first.cubeId,
-			second.subjectId, second.cubeId, targetPose, groundLiftY, moves, anchorMoves, plane))
+			second.subjectId, second.cubeId, targetPose, moves, anchorMoves, plane,
+			first.layout, second.layout))
 			player.displayClientMessage(Component.translatable(
 				"message.create_biotech.surgical_table.glue_success"), true);
-	}
-
-	private boolean validGroundLift() {
-		return Double.isFinite(groundLiftY) && groundLiftY >= 0.0d
-			&& groundLiftY <= SurgicalTablePlane.MAX_TILES + 2.0d;
 	}
 
 	private static List<Move> readMoves(FriendlyByteBuf buffer) {
@@ -252,6 +245,7 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 			for (SurgicalTableLayout.CubeOffset offset : layout.offsets()) {
 				buffer.writeVarInt(offset.cubeId());
 				buffer.writeDouble(offset.x());
+				buffer.writeDouble(offset.y());
 				buffer.writeDouble(offset.z());
 			}
 			buffer.writeVarInt(layout.footprints().size());
@@ -273,7 +267,7 @@ public record SurgicalTableGluePacket(BlockPos pos, InteractionHand hand, Endpoi
 			List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(offsetCount);
 			for (int index = 0; index < offsetCount; index++)
 				offsets.add(new SurgicalTableLayout.CubeOffset(buffer.readVarInt(), buffer.readDouble(),
-					buffer.readDouble()));
+					buffer.readDouble(), buffer.readDouble()));
 			int footprintCount = buffer.readVarInt();
 			if (footprintCount < 0 || footprintCount > SurgicalAssembly.MAX_CUBES)
 				throw new IllegalArgumentException("Invalid surgical footprint count " + footprintCount);

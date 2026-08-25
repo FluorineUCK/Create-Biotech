@@ -292,25 +292,17 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	public boolean tryPlaceSubject(ItemStack box, SurgicalTablePlane.Plane plane, Direction placementFacing,
 		SurgicalLayPose layPose, double placedOriginOffsetX, double placedOriginOffsetZ,
-		SurgicalTableLayout.Proposal proposal) {
-		return tryPlaceSubject(box, plane, placementFacing, layPose, placedOriginOffsetX, placedOriginOffsetZ,
-			proposal, List.of());
-	}
-
-	public boolean tryPlaceSubject(ItemStack box, SurgicalTablePlane.Plane plane, Direction placementFacing,
-		SurgicalLayPose layPose, double placedOriginOffsetX, double placedOriginOffsetZ,
 		SurgicalTableLayout.Proposal proposal,
 		List<SurgicalTableLayout.Proposal> sourceLayouts) {
 		List<SurgicalTableLayout.Footprint> occupied = occupiedForValidation(plane, -1);
 		if (level == null || level.isClientSide || subjects.size() >= MAX_SUBJECTS
 			|| !worldPosition.equals(plane.source()) || !(box.getItem() instanceof CapturedEntityBoxItem)
 			|| !CapturedEntityBoxHelper.hasCapturedEntity(box) || occupied == null
-			|| sourceLayouts == null || layPose == null || !layPose.valid()
-			|| !SurgicalTableLayout.validatePlacement(plane, placedOriginOffsetX, placedOriginOffsetZ, proposal,
-				occupied))
+			|| sourceLayouts == null || layPose == null || !layPose.valid())
 			return false;
 
 		Entity captured = CapturedEntityBoxHelper.createCapturedEntity(box, level);
+		SurgicalAssembly placementAssembly = null;
 		MimicProfile profile;
 		int cubeCount;
 		BitSet present;
@@ -321,9 +313,14 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			SurgicalAssembly assembly = bionic.getAssembly();
 			if (assembly == null)
 				return false;
-			if (assembly.preservesLayout() || assembly.sources().size() != 1)
-				return tryPlaceComposite(box, plane, placementFacing, placedOriginOffsetX, placedOriginOffsetZ,
-					proposal, sourceLayouts, occupied, assembly);
+			placementAssembly = assembly;
+			if (assembly.preservesLayout() || assembly.sources().size() != 1) {
+				if (!SurgicalTableLayout.validateSubjectPlacement(plane, assembly, placementFacing, layPose,
+					placedOriginOffsetX, placedOriginOffsetZ, proposal, sourceLayouts, occupied))
+					return false;
+				return tryPlaceComposite(box, placementFacing, placedOriginOffsetX, placedOriginOffsetZ,
+					sourceLayouts, assembly);
+			}
 			if (!sourceLayouts.isEmpty())
 				return false;
 			profile = assembly.profile();
@@ -346,9 +343,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		} else {
 			return false;
 		}
+		if (!SurgicalTableLayout.validateSubjectPlacement(plane, placementAssembly, placementFacing, layPose,
+			placedOriginOffsetX, placedOriginOffsetZ, proposal, sourceLayouts, occupied))
+			return false;
 
 		SurgicalSubject subject = new SurgicalSubject(allocateSubjectId(), profile, placementFacing, layPose, cubeCount,
-			present, seams, cuts, cutOrder, placedOriginOffsetX, placedOriginOffsetZ, java.util.Map.of(),
+			present, seams, cuts, cutOrder, placedOriginOffsetX, placedOriginOffsetZ, placementOffsets(proposal),
 			proposal.footprints());
 		addSubject(subject);
 		clientRenderBounds = null;
@@ -358,30 +358,15 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return true;
 	}
 
-	private boolean tryPlaceComposite(ItemStack box, SurgicalTablePlane.Plane plane, Direction placementFacing,
-		double placedOriginOffsetX, double placedOriginOffsetZ, SurgicalTableLayout.Proposal envelopeProposal,
-		List<SurgicalTableLayout.Proposal> sourceLayouts,
-		List<SurgicalTableLayout.Footprint> occupied, SurgicalAssembly assembly) {
+	private boolean tryPlaceComposite(ItemStack box, Direction placementFacing,
+		double placedOriginOffsetX, double placedOriginOffsetZ,
+		List<SurgicalTableLayout.Proposal> sourceLayouts, SurgicalAssembly assembly) {
 		List<SurgicalAssembly.Source> assemblySources = assembly.sources();
 		List<SurgicalAssembly.PlacedSource> placedSources = assembly.placedSources(placementFacing);
 		if (sourceLayouts.size() != assemblySources.size()
 			|| placedSources.size() != assemblySources.size()
 			|| subjects.size() > MAX_SUBJECTS - assemblySources.size())
 			return false;
-		SurgicalTableLayout.Footprint envelope = envelopeProposal.footprints().getFirst();
-		for (int sourceId = 0; sourceId < assemblySources.size(); sourceId++) {
-			SurgicalAssembly.PlacedSource placed = placedSources.get(sourceId);
-			SurgicalAssembly.Source source = placed.source();
-			SurgicalTableLayout.Proposal sourceLayout = sourceLayouts.get(sourceId);
-			double originX = placedOriginOffsetX + placed.originOffset().x;
-			double originZ = placedOriginOffsetZ + placed.originOffset().z;
-			if (!validStoredOrigin(originX) || !validStoredOrigin(originZ)
-				|| !validStoredOrigin(placed.originOffset().y)
-				|| !matchesSourceOffsets(placed, sourceLayout)
-				|| !SurgicalTableLayout.validateCompositeComponents(plane, source.cubeCount(),
-					source.presentCubes(), source.seams(), source.cutSeams(), sourceLayout, occupied, envelope))
-				return false;
-		}
 
 		// Restore sources as normal table subjects so each source keeps its own model topology and
 		// automatically participates in the existing ray selection and shears workflow.
@@ -438,24 +423,14 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return true;
 	}
 
-	private static boolean matchesSourceOffsets(SurgicalAssembly.PlacedSource placed,
-		SurgicalTableLayout.Proposal layout) {
-		SurgicalAssembly.Source source = placed.source();
-		if (layout.offsets().size() != source.presentCubes().cardinality())
-			return false;
-		Map<Integer, SurgicalTableLayout.CubeOffset> proposed = new HashMap<>();
-		for (SurgicalTableLayout.CubeOffset offset : layout.offsets())
-			if (proposed.putIfAbsent(offset.cubeId(), offset) != null)
-				return false;
-		BitSet present = source.presentCubes();
-		for (int cube = present.nextSetBit(0); cube >= 0; cube = present.nextSetBit(cube + 1)) {
-			Vec3 expected = placed.cubeOffsets().getOrDefault(cube, Vec3.ZERO);
-			SurgicalTableLayout.CubeOffset actual = proposed.get(cube);
-			if (actual == null || Math.abs(actual.x() - expected.x) > 1.0e-6d
-				|| Math.abs(actual.z() - expected.z) > 1.0e-6d)
-				return false;
+	private static Map<Integer, Vec3> placementOffsets(SurgicalTableLayout.Proposal proposal) {
+		Map<Integer, Vec3> offsets = new HashMap<>();
+		for (SurgicalTableLayout.CubeOffset offset : proposal.offsets()) {
+			Vec3 value = new Vec3(offset.x(), offset.y(), offset.z());
+			if (value.lengthSqr() > 1.0e-24d)
+				offsets.put(offset.cubeId(), value);
 		}
-		return true;
+		return Map.copyOf(offsets);
 	}
 
 	private static Map<Integer, Vec3> restoredOffsets(SurgicalAssembly.PlacedSource placed) {
@@ -469,10 +444,6 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				restored.put(cube, offset);
 		}
 		return Map.copyOf(restored);
-	}
-
-	private static boolean validStoredOrigin(double value) {
-		return Double.isFinite(value) && Math.abs(value) <= SurgicalTablePlane.MAX_TILES + 2.0d;
 	}
 
 	public boolean cutSeam(Player player, ItemStack shears, InteractionHand hand, int subjectId, int seamId,
@@ -492,10 +463,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 		BitSet proposedCuts = (BitSet) subject.cutSeams.clone();
 		proposedCuts.set(seamId);
-		List<SurgicalTableLayout.Footprint> occupied = occupiedForValidation(plane,
-			glueConnectedSubjectIds(subjectId));
-		if (occupied == null || !SurgicalTableLayout.validateComponents(plane, subject.cubeCount,
-			subject.presentCubes, subject.seams, proposedCuts, proposal, occupied))
+		if (!canApplyComponentLayout(subjectId, proposedCuts, proposal, plane))
 			return false;
 
 		subject.cutSeams = proposedCuts;
@@ -516,15 +484,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalTablePlane.Plane plane, double moveX, double moveZ) {
 		SurgicalSubject subject = getSubject(subjectId);
 		if (subject == null || !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
-			|| !plane.valid())
+			|| !canApplyGlueCut(subjectId, glueJointId, moveX, moveZ, plane))
 			return false;
 		GlueCutState cut = glueCutState(subject, glueJointId);
-		if (cut == null || !validCutDelta(moveX, moveZ)
-			|| !cut.separates && (Math.abs(moveX) > 1.0e-9d || Math.abs(moveZ) > 1.0e-9d))
-			return false;
 		Vec3 delta = new Vec3(moveX, 0.0d, moveZ);
-		if (cut.separates && !canPlaceSeparatedGroup(cut.moving, delta, plane))
-			return false;
 
 		Set<SurgicalGlueJoint> removed = Set.of(cut.joint);
 		for (SurgicalSubject connected : subjects)
@@ -574,10 +537,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		int cutCount = seamCutCount + glueCuts.size();
 		if (cutCount == 0)
 			return false;
-		List<SurgicalTableLayout.Footprint> occupied = occupiedForValidation(plane,
-			glueConnectedSubjectIds(subjectId));
-		if (occupied == null || !SurgicalTableLayout.validateComponents(plane, subject.cubeCount,
-			subject.presentCubes, subject.seams, proposedCuts, proposal, occupied))
+		if (!canApplyComponentLayout(subjectId, proposedCuts, proposal, plane))
 			return false;
 
 		subject.cutSeams = proposedCuts;
@@ -866,26 +826,25 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	public boolean glueComponents(Player player, ItemStack glue, InteractionHand hand,
 		int firstSubjectId, int firstCubeId, int secondSubjectId, int secondCubeId,
-		SurgicalLayPose targetPose, double groundLiftY, List<SurgicalTableGluePacket.Move> moves,
+		SurgicalLayPose targetPose, List<SurgicalTableGluePacket.Move> moves,
 		List<SurgicalTableGluePacket.AnchorMove> anchorMoves,
-		SurgicalTablePlane.Plane plane) {
-		SurgicalSubject first = getSubject(firstSubjectId);
-		SurgicalSubject second = getSubject(secondSubjectId);
-		if (first == null || second == null || !first.validPresentCube(firstCubeId)
-			|| !second.validPresentCube(secondCubeId) || targetPose == null
-			|| !targetPose.equals(second.layPose()) || !plane.valid()
-			|| !validGlueLift(groundLiftY))
+		SurgicalTablePlane.Plane plane, SurgicalTableLayout.Proposal firstLayout,
+		SurgicalTableLayout.Proposal secondLayout) {
+		ValidatedGluePlan plan = validateGluePlan(glue, firstSubjectId, firstCubeId,
+			secondSubjectId, secondCubeId, targetPose, moves, anchorMoves, plane, firstLayout, secondLayout);
+		if (plan == null)
 			return false;
+		SurgicalSubject first = plan.first;
+		SurgicalSubject second = plan.second;
+		ComponentGroup moving = plan.moving;
+		Map<UUID, ValidatedGlueMove> validated = plan.moves;
+		Map<UUID, Map<Integer, Vec3>> validatedAnchors = plan.anchorMoves;
 
-		ComponentGroup moving = gluedGroup(first, firstCubeId);
-		ComponentGroup anchored = gluedGroup(second, secondCubeId);
-		boolean editedTransforms = glue.getItem() instanceof SmartSuperGlueItem;
-		Map<UUID, ValidatedGlueMove> validated = validateGlueMoves(moving, anchored, moves, plane,
-			editedTransforms);
-		Map<UUID, Map<Integer, Vec3>> validatedAnchors = validateGlueAnchors(anchored, anchorMoves,
-			groundLiftY);
-		if (moving.intersects(anchored) || validated == null || validatedAnchors == null)
-			return false;
+		// Endpoint normalization is part of the same accepted plan. Apply it only after every move
+		// and anchor has passed validation, so a rejected packet cannot partially change the table.
+		first.applyLayout(firstLayout);
+		if (first != second)
+			second.applyLayout(secondLayout);
 
 		Set<SurgicalGlueJoint> existingJoints = allGlueJoints();
 		Set<SurgicalCombination> existingCombinations = allCombinations();
@@ -908,7 +867,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 		for (Map.Entry<UUID, Map<Integer, Vec3>> entry : validatedAnchors.entrySet()) {
 			SurgicalSubject anchoredSubject = getSubjectByPersistentId(entry.getKey());
-			BitSet selected = anchored.components.get(entry.getKey());
+			BitSet selected = plan.anchored.components.get(entry.getKey());
 			if (anchoredSubject != null && selected != null)
 				anchoredSubject.applyComponentOffsets(selected, entry.getValue());
 		}
@@ -947,9 +906,51 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return true;
 	}
 
-	private static boolean validGlueLift(double liftY) {
-		return Double.isFinite(liftY) && liftY >= 0.0d
-			&& liftY <= SurgicalTablePlane.MAX_TILES + 2.0d;
+	public boolean canApplyGlueCut(int subjectId, int glueJointId, double moveX, double moveZ,
+		SurgicalTablePlane.Plane plane) {
+		SurgicalSubject subject = getSubject(subjectId);
+		GlueCutState cut = subject == null ? null : glueCutState(subject, glueJointId);
+		if (cut == null || !plane.valid() || !validCutDelta(moveX, moveZ)
+			|| !cut.separates && (Math.abs(moveX) > 1.0e-9d || Math.abs(moveZ) > 1.0e-9d))
+			return false;
+		return !cut.separates || canPlaceSeparatedGroup(cut.moving,
+			new Vec3(moveX, 0.0d, moveZ), plane);
+	}
+
+	/** Uses the exact same non-mutating acceptance path as {@link #glueComponents}. */
+	public boolean canGlueComponents(ItemStack glue, int firstSubjectId, int firstCubeId,
+		int secondSubjectId, int secondCubeId, SurgicalLayPose targetPose,
+		List<SurgicalTableGluePacket.Move> moves, List<SurgicalTableGluePacket.AnchorMove> anchorMoves,
+		SurgicalTablePlane.Plane plane, SurgicalTableLayout.Proposal firstLayout,
+		SurgicalTableLayout.Proposal secondLayout) {
+		return validateGluePlan(glue, firstSubjectId, firstCubeId, secondSubjectId, secondCubeId,
+			targetPose, moves, anchorMoves, plane, firstLayout, secondLayout) != null;
+	}
+
+	@Nullable
+	private ValidatedGluePlan validateGluePlan(ItemStack glue, int firstSubjectId, int firstCubeId,
+		int secondSubjectId, int secondCubeId, SurgicalLayPose targetPose,
+		List<SurgicalTableGluePacket.Move> moves, List<SurgicalTableGluePacket.AnchorMove> anchorMoves,
+		SurgicalTablePlane.Plane plane, SurgicalTableLayout.Proposal firstLayout,
+		SurgicalTableLayout.Proposal secondLayout) {
+		SurgicalSubject first = getSubject(firstSubjectId);
+		SurgicalSubject second = getSubject(secondSubjectId);
+		if (first == null || second == null || !first.validPresentCube(firstCubeId)
+			|| !second.validPresentCube(secondCubeId) || targetPose == null
+			|| !targetPose.equals(second.layPose()) || !plane.valid()
+			|| !validateGlueLayout(first, plane, firstLayout)
+			|| first != second && !validateGlueLayout(second, plane, secondLayout))
+			return null;
+
+		ComponentGroup moving = gluedGroup(first, firstCubeId);
+		ComponentGroup anchored = gluedGroup(second, secondCubeId);
+		boolean editedTransforms = glue.getItem() instanceof SmartSuperGlueItem;
+		Map<UUID, ValidatedGlueMove> validated = validateGlueMoves(moving, anchored, moves, plane,
+			editedTransforms);
+		Map<UUID, Map<Integer, Vec3>> validatedAnchors = validateGlueAnchors(anchored, anchorMoves);
+		if (moving.intersects(anchored) || validated == null || validatedAnchors == null)
+			return null;
+		return new ValidatedGluePlan(first, second, moving, anchored, validated, validatedAnchors);
 	}
 
 	@Nullable
@@ -998,10 +999,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	@Nullable
 	private Map<UUID, Map<Integer, Vec3>> validateGlueAnchors(ComponentGroup anchored,
-		List<SurgicalTableGluePacket.AnchorMove> moves, double groundLiftY) {
+		List<SurgicalTableGluePacket.AnchorMove> moves) {
 		if (moves == null || moves.size() != anchored.components.size())
 			return null;
 		Map<UUID, Map<Integer, Vec3>> validated = new HashMap<>();
+		Double commonLift = null;
 		for (SurgicalTableGluePacket.AnchorMove move : moves) {
 			SurgicalSubject subject = getSubject(move.subjectId());
 			if (subject == null || validated.containsKey(subject.persistentId()))
@@ -1014,13 +1016,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				Vec3 existing = subject.componentOffsets.getOrDefault(translation.cubeId(), Vec3.ZERO);
 				SurgicalCubeRotation existingRotation = subject.componentRotations.getOrDefault(
 					translation.cubeId(), SurgicalCubeRotation.IDENTITY);
+				double lift = translation.offset().y - existing.y;
 				if (!translation.valid() || !selected.get(translation.cubeId())
 					|| Math.abs(translation.offset().x - existing.x) > 1.0e-6d
-					|| Math.abs(translation.offset().y - existing.y - groundLiftY) > 1.0e-6d
 					|| Math.abs(translation.offset().z - existing.z) > 1.0e-6d
+					|| commonLift != null && Math.abs(lift - commonLift) > 1.0e-6d
 					|| !translation.rotation().approximatelyEquals(existingRotation, 1.0e-6d)
 					|| offsets.putIfAbsent(translation.cubeId(), translation.offset()) != null)
 					return null;
+				if (commonLift == null)
+					commonLift = lift;
 			}
 			if (offsets.size() != selected.cardinality())
 				return null;
@@ -1038,6 +1043,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			Vec3 expected = offsets.get(proposed.cubeId());
 			if (expected == null || !seen.add(proposed.cubeId())
 				|| Math.abs(expected.x - proposed.x()) > 1.0e-6d
+				|| Math.abs(expected.y - proposed.y()) > 1.0e-6d
 				|| Math.abs(expected.z - proposed.z()) > 1.0e-6d)
 				return false;
 		}
@@ -1054,6 +1060,25 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 					return false;
 		}
 		return true;
+	}
+
+	public boolean canApplyComponentLayout(int subjectId, BitSet cutSeams,
+		SurgicalTableLayout.Proposal proposal, SurgicalTablePlane.Plane plane) {
+		SurgicalSubject subject = getSubject(subjectId);
+		List<SurgicalTableLayout.Footprint> occupied = subject == null ? null
+			: occupiedForValidation(plane, glueConnectedSubjectIds(subjectId));
+		return subject != null && occupied != null
+			&& validateComponentLayout(subject, cutSeams, proposal, plane, occupied);
+	}
+
+	private static boolean validateComponentLayout(SurgicalSubject subject, BitSet cutSeams,
+		SurgicalTableLayout.Proposal proposal, SurgicalTablePlane.Plane plane,
+		List<SurgicalTableLayout.Footprint> occupied) {
+		return hasNonUniformStoredOffsets(subject, subject.presentCubes)
+			? SurgicalTableLayout.validateTransformedComponents(plane, subject.cubeCount,
+				subject.presentCubes, subject.seams, cutSeams, proposal, occupied)
+			: SurgicalTableLayout.validateComponents(plane, subject.cubeCount,
+				subject.presentCubes, subject.seams, cutSeams, proposal, occupied);
 	}
 
 	/** Whether a previously edited native component already needs distinct per-cube translations. */
@@ -1155,9 +1180,13 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		Map<Integer, SurgicalCubeRotation> rotations,
 		SurgicalTableLayout.Proposal layout) {}
 
+	private record ValidatedGluePlan(SurgicalSubject first, SurgicalSubject second,
+		ComponentGroup moving, ComponentGroup anchored,
+		Map<UUID, ValidatedGlueMove> moves, Map<UUID, Map<Integer, Vec3>> anchorMoves) {}
+
 	private record ExtractedSubject(BitSet cubes, SurgicalSubject subject) {}
 
-	boolean prepareGlueLayout(SurgicalSubject subject, SurgicalTablePlane.Plane plane,
+	public boolean validateGlueLayout(SurgicalSubject subject, SurgicalTablePlane.Plane plane,
 		SurgicalTableLayout.Proposal proposal) {
 		List<SurgicalTableLayout.Footprint> occupied = occupiedForValidation(plane,
 			glueConnectedSubjectIds(subject.id()));
@@ -1165,7 +1194,6 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			|| !SurgicalTableLayout.validateEditedGlueComponents(plane, subject.cubeCount,
 				subject.presentCubes, subject.seams, subject.cutSeams, proposal, occupied))
 			return false;
-		subject.applyLayout(proposal);
 		return true;
 	}
 
@@ -1174,14 +1202,28 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalTableLayout.Proposal proposal) {
 		if (proposal.offsets().size() != subject.presentCubes.cardinality())
 			return false;
-		Set<Integer> seen = new HashSet<>();
+		Map<Integer, Vec3> proposedOffsets = new HashMap<>();
 		for (SurgicalTableLayout.CubeOffset proposed : proposal.offsets()) {
-			if (!subject.presentCubes.get(proposed.cubeId()) || !seen.add(proposed.cubeId()))
+			if (!subject.presentCubes.get(proposed.cubeId())
+				|| proposedOffsets.putIfAbsent(proposed.cubeId(),
+					new Vec3(proposed.x(), proposed.y(), proposed.z())) != null)
 				return false;
 			Vec3 expected = subject.componentOffsets.getOrDefault(proposed.cubeId(), Vec3.ZERO);
 			if (Math.abs(proposed.x() - expected.x) > 1.0e-6d
 				|| Math.abs(proposed.z() - expected.z) > 1.0e-6d)
 				return false;
+		}
+		for (BitSet component : SurgicalAssembly.components(subject.cubeCount, subject.presentCubes,
+			subject.seams, subject.cutSeams)) {
+			int root = component.nextSetBit(0);
+			double lift = proposedOffsets.get(root).y
+				- subject.componentOffsets.getOrDefault(root, Vec3.ZERO).y;
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+				double cubeLift = proposedOffsets.get(cube).y
+					- subject.componentOffsets.getOrDefault(cube, Vec3.ZERO).y;
+				if (Math.abs(cubeLift - lift) > 1.0e-6d)
+					return false;
+			}
 		}
 		return true;
 	}

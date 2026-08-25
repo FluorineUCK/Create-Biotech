@@ -569,7 +569,7 @@ public final class SurgicalClientTopology {
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
 		SurgicalTablePlane.WorkArea workArea, List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, List.of(), occupiedFootprints, false);
+			workArea, List.of(), occupiedFootprints, false, false);
 	}
 
 	/** Preserves the exact overlapping layout of one source in a packed glued assembly. */
@@ -579,7 +579,7 @@ public final class SurgicalClientTopology {
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
 		SurgicalTablePlane.WorkArea workArea, List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		return planSnappedLayout(cubeCount, presentCubes, seams, cutSeams, cubes, currentOffsets,
-			workArea, List.of(), occupiedFootprints, true);
+			workArea, List.of(), occupiedFootprints, true, false);
 	}
 
 	/** Snaps one detached component to the legal slot nearest the supplied world-space target. */
@@ -591,7 +591,7 @@ public final class SurgicalClientTopology {
 		List<SurgicalTableLayout.Footprint> occupiedFootprints) {
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
 			workArea, List.of(new SnapRequest((BitSet) movingComponent.clone(), targetX, targetZ)),
-			occupiedFootprints, false);
+			occupiedFootprints, false, true);
 	}
 
 	/** Sequentially places every newly detached batch-cut component at its nearest legal slot. */
@@ -612,7 +612,7 @@ public final class SurgicalClientTopology {
 			requests.add(new SnapRequest((BitSet) component.clone(), bounds.centerX(), bounds.centerZ()));
 		}
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, requests, occupiedFootprints, false);
+			workArea, requests, occupiedFootprints, false, true);
 	}
 
 	/** Aligns every detached component so its rendered outer bounds touch the table surface. */
@@ -676,7 +676,8 @@ public final class SurgicalClientTopology {
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> currentOffsets,
 		SurgicalTablePlane.WorkArea workArea, List<SnapRequest> requests,
-		List<SurgicalTableLayout.Footprint> occupiedFootprints, boolean allowComponentOverlap) {
+		List<SurgicalTableLayout.Footprint> occupiedFootprints, boolean allowComponentOverlap,
+		boolean groundComponents) {
 		if (!SurgicalAssembly.validTopology(cubeCount, seams) || workArea.isEmpty())
 			return null;
 		Map<Integer, Bounds> baseBounds = layoutBounds(presentCubes, cubes);
@@ -716,6 +717,25 @@ public final class SurgicalClientTopology {
 			snapped.put(moving.nextSetBit(0), selected);
 		}
 
+		if (groundComponents) {
+			double surfaceY = workArea.y() + 1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE;
+			for (BitSet component : components) {
+				double lowestY = Double.POSITIVE_INFINITY;
+				for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+					Bounds bounds = baseBounds.get(cube);
+					if (bounds != null)
+						lowestY = Math.min(lowestY,
+							bounds.minY + plannedOffsets.getOrDefault(cube, Vec3.ZERO).y);
+				}
+				if (!Double.isFinite(lowestY))
+					return null;
+				double lift = surfaceY - lowestY;
+				for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1))
+					plannedOffsets.put(cube,
+						plannedOffsets.getOrDefault(cube, Vec3.ZERO).add(0.0d, lift, 0.0d));
+			}
+		}
+
 		List<SurgicalTableLayout.Footprint> footprints = new ArrayList<>(presentCubes.cardinality());
 		for (BitSet component : components) {
 			int root = component.nextSetBit(0);
@@ -738,7 +758,7 @@ public final class SurgicalClientTopology {
 		List<SurgicalTableLayout.CubeOffset> offsets = new ArrayList<>(presentCubes.cardinality());
 		for (int cube = presentCubes.nextSetBit(0); cube >= 0; cube = presentCubes.nextSetBit(cube + 1)) {
 			Vec3 offset = plannedOffsets.getOrDefault(cube, Vec3.ZERO);
-			offsets.add(new SurgicalTableLayout.CubeOffset(cube, offset.x, offset.z));
+			offsets.add(new SurgicalTableLayout.CubeOffset(cube, offset.x, offset.y, offset.z));
 		}
 		return new PlannedLayout(Map.copyOf(plannedOffsets),
 			new SurgicalTableLayout.Proposal(offsets, footprints));
