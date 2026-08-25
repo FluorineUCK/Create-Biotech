@@ -8,6 +8,7 @@ import java.util.Map;
 
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
@@ -37,6 +38,9 @@ public final class SlimeBionicAnimator {
 	private static final int AXIS_X = 0;
 	private static final int AXIS_Y = 1;
 	private static final int AXIS_Z = 2;
+	private static final double GEOMETRY_EPSILON = 1.0e-10d;
+	private static final double PRINCIPAL_AXIS_SHARE = 0.55d;
+	private static final Basis BODY_SPACE = Basis.bodySpace();
 	@Nullable
 	private static HumanoidModel<LivingEntity> zombieModel;
 
@@ -49,15 +53,14 @@ public final class SlimeBionicAnimator {
 	/**
 	 * Reduces one source's captured cubes to what the joint maths needs.
 	 *
-	 * <p>The snapshot must come from the same pose stack and the same static offsets and rotations
-	 * the visible render uses, because both the pivot and the resulting translations live in the
-	 * render path's world axes.</p>
+	 * <p>Snapshots are measured in the body's yaw-zero render frame. Keeping this rest geometry out
+	 * of world space makes the selected side, hinge and animation axes stable while the creature
+	 * turns.</p>
 	 */
-	public static Map<Integer, CubeBox> measure(SurgicalModelRenderContext.Snapshot snapshot, float yaw) {
-		Basis basis = Basis.of(yaw);
+	public static Map<Integer, CubeBox> measure(SurgicalModelRenderContext.Snapshot snapshot) {
 		Map<Integer, CubeBox> boxes = new HashMap<>();
 		for (SurgicalModelRenderContext.CubeGeometry cube : snapshot.cubes()) {
-			CubeBox box = CubeBox.of(cube.corners(), basis);
+			CubeBox box = CubeBox.of(cube.corners(), BODY_SPACE);
 			if (box != null)
 				boxes.put(cube.cubeId(), box);
 		}
@@ -71,15 +74,14 @@ public final class SlimeBionicAnimator {
 	 * contains the cubes an installed joint actually moves.</p>
 	 */
 	public static List<Frame> resolve(SlimeBionicEntity entity, SurgicalAssembly assembly,
-		List<SourceState> sources, float yaw, float partialTick) {
+		List<SourceState> sources, float partialTick) {
 		int sourceCount = assembly.sources().size();
 		List<Frame> frames = new ArrayList<>(sourceCount);
 		for (int source = 0; source < sourceCount; source++)
 			frames.add(Frame.EMPTY);
 		if (assembly.limbs().isEmpty() || sources.size() != sourceCount)
 			return frames;
-		Basis basis = Basis.of(yaw);
-		List<ResolvedLimb> limbs = resolveLimbs(assembly, sources, basis);
+		List<ResolvedLimb> limbs = resolveLimbs(assembly, sources);
 		if (limbs.isEmpty())
 			return frames;
 		Pose pose = pose(entity, partialTick);
@@ -92,7 +94,8 @@ public final class SlimeBionicAnimator {
 			ModelPart driver = pose.driver(limb);
 			if (driver == null)
 				continue;
-			SurgicalCubeRotation rotation = basis.reframe(driver.zRot, driver.yRot, driver.xRot);
+			SurgicalCubeRotation rotation = BODY_SPACE.reframe(limb.restAlignment(),
+				driver.zRot, driver.yRot, driver.xRot);
 			if (rotation.isIdentity())
 				continue;
 			for (Member member : limb.members()) {
@@ -128,27 +131,44 @@ public final class SlimeBionicAnimator {
 	/**
 	 * Groups every limb with the cubes that move as one part and works out where it hinges.
 	 *
-	 * <p>Honey combinations behave as a single rigid cube, and paired limbs are ordered left to
-	 * right across the body so two legs stride in opposite phase instead of together.</p>
+	 * <p>Honey combinations behave as one rigid part. The hinge comes from the part's actual long
+	 * axis (or its parent-facing surface for a cube-like part), and the vanilla animation is
+	 * retargeted from its canonical limb direction into that measured rest direction. This lets a
+	 * hanging, horizontal or raised limb use the same joint without orientation thresholds.</p>
 	 */
-	private static List<ResolvedLimb> resolveLimbs(SurgicalAssembly assembly, List<SourceState> sources,
-		Basis basis) {
+	private static List<ResolvedLimb> resolveLimbs(SurgicalAssembly assembly, List<SourceState> sources) {
 		Map<SurgicalLimbType, List<ResolvedLimb>> byType = new EnumMap<>(SurgicalLimbType.class);
 		for (SurgicalAssembly.Limb limb : assembly.limbs()) {
 			List<Member> childMembers = group(assembly, limb.childSource(), limb.childCube());
-			CubeBox child = union(sources, childMembers, basis);
-			CubeBox parent = union(sources, group(assembly, limb.parentSource(), limb.parentCube()), basis);
+			CubeBox child = union(sources, childMembers);
+			CubeBox parent = union(sources, group(assembly, limb.parentSource(), limb.parentCube()));
 			if (child == null || parent == null)
 				continue;
+			Vec3 pivot = pivot(limb.type(), child, parent);
+			Vec3 restDirection = child.center().subtract(pivot);
+			if (restDirection.lengthSqr() < GEOMETRY_EPSILON)
+				continue;
 			byType.computeIfAbsent(limb.type(), ignored -> new ArrayList<>())
-				.add(new ResolvedLimb(limb.type(), childMembers, pivot(child, parent, basis),
-					child.projected(AXIS_X), 0));
+				.add(new ResolvedLimb(limb.type(), childMembers, pivot,
+					BODY_SPACE.project(child.center().subtract(parent.center()), AXIS_X),
+					BODY_SPACE.restAlignment(limb.type(), restDirection), LimbDriver.NONE));
 		}
 		List<ResolvedLimb> resolved = new ArrayList<>();
 		byType.forEach((type, limbs) -> {
 			limbs.sort((first, second) -> Double.compare(first.side(), second.side()));
+			if (type == SurgicalLimbType.NECK) {
+				if (!limbs.isEmpty())
+					resolved.add(limbs.getFirst().withDriver(LimbDriver.HEAD));
+				return;
+			}
+			if (limbs.size() == 1) {
+				ResolvedLimb limb = limbs.getFirst();
+				resolved.add(limb.withDriver(limb.side() > 0.0d ? LimbDriver.LEFT : LimbDriver.RIGHT));
+				return;
+			}
 			for (int slot = 0; slot < limbs.size(); slot++)
-				resolved.add(limbs.get(slot).withSlot(slot));
+				resolved.add(limbs.get(slot).withDriver(slot == 0 ? LimbDriver.RIGHT
+					: slot == 1 ? LimbDriver.LEFT : LimbDriver.NONE));
 		});
 		return resolved;
 	}
@@ -173,7 +193,7 @@ public final class SlimeBionicAnimator {
 	}
 
 	@Nullable
-	private static CubeBox union(List<SourceState> sources, List<Member> members, Basis basis) {
+	private static CubeBox union(List<SourceState> sources, List<Member> members) {
 		CubeBox union = null;
 		for (Member member : members) {
 			if (member.source() < 0 || member.source() >= sources.size())
@@ -181,32 +201,42 @@ public final class SlimeBionicAnimator {
 			CubeBox box = sources.get(member.source()).boxes().get(member.cube());
 			if (box == null)
 				continue;
-			union = union == null ? box : union.merge(box, basis);
+			union = union == null ? box : union.merge(box, BODY_SPACE);
 		}
 		return union;
 	}
 
 	/**
-	 * Places the hinge where the limb meets the body.
+	 * Places the hinge on the child end that meets its parent.
 	 *
-	 * <p>A neck, a shoulder and a hip are all vertical hinges in every vanilla model, so the axis is
-	 * the body's own vertical one and the pivot sits on the limb's centre line — which is exactly
-	 * where vanilla puts its head, arm and leg pivots. Only which <em>end</em> hinges is left to
-	 * geometry.</p>
-	 *
-	 * <p>Limbs hang, so the upper end is the joint. The one exception is a part the body sits
-	 * entirely below — a head on a torso, or a horn on a head — which is jointed at its underside
-	 * instead. Asking instead which end lies nearer the parent cannot decide this: an arm spans its
-	 * torso's exact height, so both of its ends are equally near and any such measure ties.</p>
+	 * <p>Elongated parts use their principal geometric axis, so the calculation follows an arm or leg
+	 * after the player lays it flat or points it upward. Cube-like parts use the surface reached by a
+	 * ray toward the parent, which is the stable choice for heads and other compact pieces.</p>
 	 */
-	private static Vec3 pivot(CubeBox child, CubeBox parent, Basis basis) {
-		// Projections onto the body-local vertical axis grow downwards, so the larger value is lower.
-		double top = child.min(AXIS_Y);
-		double bottom = child.max(AXIS_Y);
-		double parentMiddle = (parent.min(AXIS_Y) + parent.max(AXIS_Y)) * 0.5d;
-		double reach = parentMiddle > bottom ? bottom : top;
-		return child.center().add(basis.axis(AXIS_Y)
-			.scale(reach - basis.project(child.center(), AXIS_Y)));
+	private static Vec3 pivot(SurgicalLimbType type, CubeBox child, CubeBox parent) {
+		Vec3 principal = child.principalAxis(BODY_SPACE);
+		if (principal == null)
+			return child.surfaceToward(parent.center(), type, BODY_SPACE);
+
+		double radius = child.supportRadius(principal);
+		Vec3 first = child.center().add(principal.scale(radius));
+		Vec3 second = child.center().subtract(principal.scale(radius));
+		double firstDistance = parent.distanceToSqr(first, BODY_SPACE);
+		double secondDistance = parent.distanceToSqr(second, BODY_SPACE);
+		if (Math.abs(firstDistance - secondDistance) > GEOMETRY_EPSILON)
+			return firstDistance < secondDistance ? first : second;
+
+		// A vertical arm can run beside the whole torso, making both ends equally close. In that
+		// genuinely ambiguous case, choose the end facing the parent's vertical centre; a centred
+		// shoulder/hip uses its upper end, matching the canonical humanoid rest pose.
+		double childY = BODY_SPACE.project(child.center(), AXIS_Y);
+		double parentY = BODY_SPACE.project(parent.center(), AXIS_Y);
+		double firstY = BODY_SPACE.project(first, AXIS_Y);
+		double secondY = BODY_SPACE.project(second, AXIS_Y);
+		double targetY = childY < parentY ? Math.max(firstY, secondY) : Math.min(firstY, secondY);
+		if (type == SurgicalLimbType.NECK && Math.abs(childY - parentY) <= GEOMETRY_EPSILON)
+			targetY = Math.max(firstY, secondY);
+		return Math.abs(firstY - targetY) <= Math.abs(secondY - targetY) ? first : second;
 	}
 
 
@@ -256,20 +286,22 @@ public final class SlimeBionicAnimator {
 	private record Pose(HumanoidModel<LivingEntity> model) {
 		@Nullable
 		private ModelPart driver(ResolvedLimb limb) {
-			return switch (limb.type()) {
-			case NECK -> limb.slot() == 0 ? model.head : null;
-			case SHOULDER -> limb.slot() == 0 ? model.rightArm : limb.slot() == 1 ? model.leftArm : null;
-			case HIP -> limb.slot() == 0 ? model.rightLeg : limb.slot() == 1 ? model.leftLeg : null;
+			return switch (limb.driver()) {
+			case HEAD -> model.head;
+			case RIGHT -> limb.type() == SurgicalLimbType.SHOULDER ? model.rightArm : model.rightLeg;
+			case LEFT -> limb.type() == SurgicalLimbType.SHOULDER ? model.leftArm : model.leftLeg;
+			case NONE -> null;
 			};
 		}
 	}
 
 	private record Member(int source, int cube) {}
+	private enum LimbDriver { NONE, HEAD, RIGHT, LEFT }
 
 	private record ResolvedLimb(SurgicalLimbType type, List<Member> members, Vec3 pivot, double side,
-		int slot) {
-		private ResolvedLimb withSlot(int slot) {
-			return new ResolvedLimb(type, members, pivot, side, slot);
+		SurgicalCubeRotation restAlignment, LimbDriver driver) {
+		private ResolvedLimb withDriver(LimbDriver driver) {
+			return new ResolvedLimb(type, members, pivot, side, restAlignment, driver);
 		}
 	}
 
@@ -277,7 +309,7 @@ public final class SlimeBionicAnimator {
 	public record SourceState(Map<Integer, CubeBox> boxes, Map<Integer, Vec3> offsets,
 		Map<Integer, SurgicalCubeRotation> rotations) {}
 
-	/** One source's cube transforms for the current frame, in the render path's world axes. */
+	/** One source's cube transforms for the current frame, in the yaw-zero body frame. */
 	public record Frame(Map<Integer, Vec3> offsets, Map<Integer, SurgicalCubeRotation> rotations) {
 		public static final Frame EMPTY = new Frame(Map.of(), Map.of());
 
@@ -311,15 +343,10 @@ public final class SlimeBionicAnimator {
 	 * exact frame is what lets zombie joint angles apply unchanged.</p>
 	 */
 	private record Basis(Quaternionf modelToWorld, Vec3 modelX, Vec3 modelY, Vec3 modelZ) {
-		private static Basis of(float yaw) {
-			double radians = Math.toRadians(yaw);
-			Quaternionf modelToWorld = new Quaternionf()
-				.rotateY((float) Math.toRadians(180.0d - yaw))
-				.rotateZ((float) Math.PI);
-			return new Basis(modelToWorld,
-				new Vec3(Math.cos(radians), 0.0d, Math.sin(radians)),
-				new Vec3(0.0d, -1.0d, 0.0d),
-				new Vec3(Math.sin(radians), 0.0d, -Math.cos(radians)));
+		private static Basis bodySpace() {
+			return new Basis(new Quaternionf().rotateY((float) Math.PI).rotateZ((float) Math.PI),
+				new Vec3(1.0d, 0.0d, 0.0d), new Vec3(0.0d, -1.0d, 0.0d),
+				new Vec3(0.0d, 0.0d, -1.0d));
 		}
 
 		private Vec3 axis(int index) {
@@ -334,12 +361,48 @@ public final class SlimeBionicAnimator {
 			return modelX.scale(x).add(modelY.scale(y)).add(modelZ.scale(z));
 		}
 
-		/** Converts vanilla {@link ModelPart} Euler angles into a world-axis rotation. */
-		private SurgicalCubeRotation reframe(float zRot, float yRot, float xRot) {
+		/** Builds the rest-frame rotation that maps a canonical humanoid limb onto this child. */
+		private SurgicalCubeRotation restAlignment(SurgicalLimbType type, Vec3 restDirection) {
+			Vec3 actual = new Vec3(project(restDirection, AXIS_X), project(restDirection, AXIS_Y),
+				project(restDirection, AXIS_Z)).normalize();
+			Vector3f canonical = new Vector3f(0.0f,
+				type == SurgicalLimbType.NECK ? -1.0f : 1.0f, 0.0f);
+			Vector3f actualVector = new Vector3f((float) actual.x, (float) actual.y, (float) actual.z);
+			Quaternionf alignment = new Quaternionf().rotationTo(canonical, actualVector);
+
+			// rotationTo fixes the long direction but leaves twist underdetermined. Define the
+			// swing axis geometrically: it is perpendicular to the installed limb and body forward,
+			// just as canonical humanoid X is perpendicular to a hanging limb and model Z.
+			Vec3 targetX = actual.cross(new Vec3(0.0d, 0.0d, 1.0d))
+				.scale(type == SurgicalLimbType.NECK ? -1.0d : 1.0d);
+			if (targetX.lengthSqr() < GEOMETRY_EPSILON)
+				targetX = new Vec3(1.0d, 0.0d, 0.0d)
+					.subtract(actual.scale(actual.x));
+			targetX = targetX.normalize();
+			Vector3f mapped = alignment.transform(new Vector3f(1.0f, 0.0f, 0.0f));
+			Vec3 mappedX = new Vec3(mapped.x, mapped.y, mapped.z).normalize();
+			double sine = actual.dot(mappedX.cross(targetX));
+			double cosine = Mth.clamp(mappedX.dot(targetX), -1.0d, 1.0d);
+			float twistAngle = (float) Math.atan2(sine, cosine);
+			if (Math.abs(twistAngle) > 1.0e-6f) {
+				Quaternionf twist = new Quaternionf().rotationAxis(twistAngle, actualVector);
+				alignment = twist.mul(alignment);
+			}
+			return new SurgicalCubeRotation(alignment.x(), alignment.y(), alignment.z(), alignment.w());
+		}
+
+		/** Retargets vanilla {@link ModelPart} Euler angles through the measured rest frame. */
+		private SurgicalCubeRotation reframe(SurgicalCubeRotation restAlignment,
+			float zRot, float yRot, float xRot) {
 			if (zRot == 0.0f && yRot == 0.0f && xRot == 0.0f)
 				return SurgicalCubeRotation.IDENTITY;
-			Quaternionf world = new Quaternionf(modelToWorld)
+			Quaternionf alignment = new Quaternionf((float) restAlignment.x(),
+				(float) restAlignment.y(), (float) restAlignment.z(), (float) restAlignment.w());
+			Quaternionf modelRotation = new Quaternionf(alignment)
 				.mul(new Quaternionf().rotationZYX(zRot, yRot, xRot))
+				.mul(new Quaternionf(alignment).conjugate());
+			Quaternionf world = new Quaternionf(modelToWorld)
+				.mul(modelRotation)
 				.mul(new Quaternionf(modelToWorld).conjugate());
 			return new SurgicalCubeRotation(world.x(), world.y(), world.z(), world.w());
 		}
@@ -351,7 +414,11 @@ public final class SlimeBionicAnimator {
 	 * <p>The centre is the mean of the transformed corners, which is exactly the point the render
 	 * path rotates a cube around once its static offset is included.</p>
 	 */
-	public record CubeBox(Vec3 center, double[] min, double[] max) {
+	public record CubeBox(Vec3 center, double[] min, double[] max, List<Vec3> points) {
+		public CubeBox {
+			points = List.copyOf(points);
+		}
+
 		@Nullable
 		private static CubeBox of(List<Vec3> corners, Basis basis) {
 			if (corners.isEmpty())
@@ -367,7 +434,7 @@ public final class SlimeBionicAnimator {
 				}
 				sum = sum.add(corner);
 			}
-			return new CubeBox(sum.scale(1.0d / corners.size()), min, max);
+			return new CubeBox(sum.scale(1.0d / corners.size()), min, max, corners);
 		}
 
 		/** Merged groups take the enclosing box, so the centre has to be rebuilt from its corners. */
@@ -378,20 +445,93 @@ public final class SlimeBionicAnimator {
 				min[axis] = Math.min(this.min[axis], other.min[axis]);
 				max[axis] = Math.max(this.max[axis], other.max[axis]);
 			}
+			List<Vec3> mergedPoints = new ArrayList<>(points.size() + other.points.size());
+			mergedPoints.addAll(points);
+			mergedPoints.addAll(other.points);
 			return new CubeBox(basis.toWorld((min[AXIS_X] + max[AXIS_X]) * 0.5d,
-				(min[AXIS_Y] + max[AXIS_Y]) * 0.5d, (min[AXIS_Z] + max[AXIS_Z]) * 0.5d), min, max);
+				(min[AXIS_Y] + max[AXIS_Y]) * 0.5d, (min[AXIS_Z] + max[AXIS_Z]) * 0.5d),
+				min, max, mergedPoints);
 		}
 
-		private double min(int axis) {
-			return min[axis];
+		/** Longest covariance axis, or null when the group is too cube-like to define one. */
+		@Nullable
+		private Vec3 principalAxis(Basis basis) {
+			if (points.size() < 2)
+				return null;
+			Vec3 mean = Vec3.ZERO;
+			for (Vec3 point : points)
+				mean = mean.add(point);
+			mean = mean.scale(1.0d / points.size());
+			double xx = 0.0d;
+			double xy = 0.0d;
+			double xz = 0.0d;
+			double yy = 0.0d;
+			double yz = 0.0d;
+			double zz = 0.0d;
+			for (Vec3 point : points) {
+				Vec3 delta = point.subtract(mean);
+				xx += delta.x * delta.x;
+				xy += delta.x * delta.y;
+				xz += delta.x * delta.z;
+				yy += delta.y * delta.y;
+				yz += delta.y * delta.z;
+				zz += delta.z * delta.z;
+			}
+			double trace = xx + yy + zz;
+			if (trace < GEOMETRY_EPSILON)
+				return null;
+			int seedAxis = AXIS_X;
+			for (int axis = AXIS_Y; axis <= AXIS_Z; axis++)
+				if (max[axis] - min[axis] > max[seedAxis] - min[seedAxis])
+					seedAxis = axis;
+			Vec3 axis = basis.axis(seedAxis);
+			for (int iteration = 0; iteration < 16; iteration++) {
+				Vec3 next = new Vec3(xx * axis.x + xy * axis.y + xz * axis.z,
+					xy * axis.x + yy * axis.y + yz * axis.z,
+					xz * axis.x + yz * axis.y + zz * axis.z);
+				if (next.lengthSqr() < GEOMETRY_EPSILON)
+					return null;
+				axis = next.normalize();
+			}
+			Vec3 multiplied = new Vec3(xx * axis.x + xy * axis.y + xz * axis.z,
+				xy * axis.x + yy * axis.y + yz * axis.z,
+				xz * axis.x + yz * axis.y + zz * axis.z);
+			double eigenvalue = axis.dot(multiplied);
+			return eigenvalue / trace >= PRINCIPAL_AXIS_SHARE ? axis : null;
 		}
 
-		private double max(int axis) {
-			return max[axis];
+		private double supportRadius(Vec3 axis) {
+			double radius = 0.0d;
+			for (Vec3 point : points)
+				radius = Math.max(radius, Math.abs(point.subtract(center).dot(axis)));
+			return radius;
 		}
 
-		private double projected(int axis) {
-			return (min[axis] + max[axis]) * 0.5d;
+		private double distanceToSqr(Vec3 point, Basis basis) {
+			double distance = 0.0d;
+			for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
+				double projected = basis.project(point, axis);
+				double outside = projected < min[axis] ? min[axis] - projected
+					: projected > max[axis] ? projected - max[axis] : 0.0d;
+				distance += outside * outside;
+			}
+			return distance;
+		}
+
+		private Vec3 surfaceToward(Vec3 target, SurgicalLimbType type, Basis basis) {
+			Vec3 direction = target.subtract(center);
+			if (direction.lengthSqr() < GEOMETRY_EPSILON)
+				direction = basis.axis(AXIS_Y).scale(type == SurgicalLimbType.NECK ? 1.0d : -1.0d);
+			double scale = Double.POSITIVE_INFINITY;
+			for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
+				double component = basis.project(direction, axis);
+				if (Math.abs(component) <= GEOMETRY_EPSILON)
+					continue;
+				double centerProjection = basis.project(center, axis);
+				double boundary = component > 0.0d ? max[axis] : min[axis];
+				scale = Math.min(scale, (boundary - centerProjection) / component);
+			}
+			return Double.isFinite(scale) ? center.add(direction.scale(scale)) : center;
 		}
 	}
 }
