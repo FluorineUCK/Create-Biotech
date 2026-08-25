@@ -594,7 +594,11 @@ public final class SurgicalClientTopology {
 			occupiedFootprints, false, true);
 	}
 
-	/** Sequentially places every newly detached batch-cut component at its nearest legal slot. */
+	/**
+	 * Sequentially places every newly detached batch-cut component at its nearest legal slot.
+	 * Vertical grounding is left to the caller because retained glue can join these native
+	 * components to bodies whose geometry lives in another subject.
+	 */
 	@Nullable
 	public static PlannedLayout autoSnapComponents(int cubeCount, BitSet presentCubes,
 		List<SurgicalAssembly.Seam> seams, BitSet proposedCuts,
@@ -612,7 +616,7 @@ public final class SurgicalClientTopology {
 			requests.add(new SnapRequest((BitSet) component.clone(), bounds.centerX(), bounds.centerZ()));
 		}
 		return planSnappedLayout(cubeCount, presentCubes, seams, proposedCuts, cubes, currentOffsets,
-			workArea, requests, occupiedFootprints, false, true);
+			workArea, requests, occupiedFootprints, false, false);
 	}
 
 	/** Aligns every detached component so its rendered outer bounds touch the table surface. */

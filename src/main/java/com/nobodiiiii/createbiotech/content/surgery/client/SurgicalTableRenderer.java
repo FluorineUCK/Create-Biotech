@@ -65,8 +65,10 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		// one subject at a time exposed a partially refreshed table for one frame.
 		for (SurgicalSubject subject : subjects)
 			prepareSubjectGeometry(table, subject, poseStack, packedLight, projectSourceGeometry);
+		SurgicalTableClientHandler.completePlacementHandoffIfReady(table);
 		for (SurgicalSubject subject : subjects)
-			renderSubject(table, subject, poseStack, buffer, packedLight, projectSourceGeometry);
+			if (!SurgicalTableClientHandler.suppressForPlacementHandoff(table, subject))
+				renderSubject(table, subject, poseStack, buffer, packedLight, projectSourceGeometry);
 	}
 
 	static boolean projectsSourceGeometry(SurgicalTableBlockEntity table) {

@@ -6,6 +6,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 import org.jetbrains.annotations.Nullable;
@@ -1647,11 +1648,42 @@ public final class SurgicalTableClientHandler {
 		SurgicalTableBlockEntity table = level.getBlockEntity(commit.tablePos)
 			instanceof SurgicalTableBlockEntity found ? found : null;
 		if (table != null && table.clientDataRevision() != commit.tableRevision) {
-			cancelPendingVisualCommit(level, false);
-			return;
+			if (commit.retainPlacementPreview)
+				commit.serverAcknowledged = true;
+			else {
+				cancelPendingVisualCommit(level, false);
+				return;
+			}
 		}
 		if (table == null || level.getGameTime() >= commit.expiresAtTick)
-			cancelPendingVisualCommit(level, true);
+			cancelPendingVisualCommit(level, !commit.serverAcknowledged);
+	}
+
+	/** Switches from the placement preview only after every newly added subject is render-ready. */
+	static void completePlacementHandoffIfReady(SurgicalTableBlockEntity table) {
+		PendingVisualCommit commit = pendingVisualCommit;
+		if (commit == null || !commit.retainPlacementPreview || !commit.serverAcknowledged
+			|| !commit.tablePos.equals(table.getBlockPos()))
+			return;
+		boolean foundAddedSubject = false;
+		for (SurgicalSubject subject : table.getSubjects()) {
+			if (commit.placementBaselineSubjectIds.contains(subject.id()))
+				continue;
+			foundAddedSubject = true;
+			TableGeometry geometry = TABLES.get(new SubjectKey(commit.tablePos, subject.id()));
+			if (geometry == null || !geometry.matchesModel(table, subject) || !geometry.topologyReady()
+				|| geometry.renderRevision != subject.clientRenderRevision())
+				return;
+		}
+		if (foundAddedSubject && table.getLevel() instanceof ClientLevel level)
+			cancelPendingVisualCommit(level, false);
+	}
+
+	static boolean suppressForPlacementHandoff(SurgicalTableBlockEntity table, SurgicalSubject subject) {
+		PendingVisualCommit commit = pendingVisualCommit;
+		return commit != null && commit.retainPlacementPreview && commit.serverAcknowledged
+			&& commit.tablePos.equals(table.getBlockPos())
+			&& !commit.placementBaselineSubjectIds.contains(subject.id());
 	}
 
 	private static void cancelPendingVisualCommit(@Nullable ClientLevel level, boolean rollbackGeometry) {
@@ -1722,7 +1754,7 @@ public final class SurgicalTableClientHandler {
 		Map<Integer, SurgicalCubeRotation> currentRotations, BitSet currentCutSeams,
 		@Nullable SurgicalGlueJoint excludedJoint, double surfaceY) {
 		List<SurgicalClientTopology.GroundingBody<UUID>> bodies = new ArrayList<>();
-		java.util.Set<SurgicalGlueJoint> joints = new java.util.HashSet<>();
+		Set<SurgicalGlueJoint> joints = new java.util.HashSet<>();
 		for (SurgicalSubject subject : table.getSubjects()) {
 			for (SurgicalGlueJoint joint : subject.glueJoints())
 				if (!joint.equals(excludedJoint))
@@ -2076,7 +2108,11 @@ public final class SurgicalTableClientHandler {
 	@Nullable
 	private static SurgicalClientTopology.PlannedLayout planBatchCut(ClientLevel level, Selection selected) {
 		TableGeometry geometry = TABLES.get(new SubjectKey(selected.tablePos, selected.subjectId));
-		if (geometry == null || selected.targetId < 0 || selected.targetId >= geometry.observedCubeCount)
+		SurgicalTableBlockEntity table = level.getBlockEntity(selected.tablePos)
+			instanceof SurgicalTableBlockEntity found ? found : null;
+		SurgicalSubject subject = table == null ? null : table.getSubject(selected.subjectId);
+		if (geometry == null || subject == null
+			|| selected.targetId < 0 || selected.targetId >= geometry.observedCubeCount)
 			return null;
 		BitSet proposedCuts = (BitSet) geometry.cutSeams.clone();
 		for (int seamId = 0; seamId < geometry.seams.size(); seamId++) {
@@ -2089,7 +2125,30 @@ public final class SurgicalTableClientHandler {
 			geometry.seams, geometry.cutSeams, selected.targetId);
 		List<BitSet> split = SurgicalAssembly.components(geometry.observedCubeCount, affected, geometry.seams,
 			proposedCuts);
-		List<BitSet> moving = split.size() <= 1 ? List.of() : split.subList(1, split.size());
+		// CUT_CUBE_CONNECTIONS removes only glue joints that touch the clicked cube. Every other
+		// joint must remain a rigid constraint while the newly separated native parts are laid out.
+		Set<SurgicalGlueJoint> removedJoints = new java.util.HashSet<>();
+		for (SurgicalGlueJoint joint : subject.glueJoints())
+			if (joint.touches(subject.persistentId(), selected.targetId))
+				removedJoints.add(joint);
+		List<BitSet> moving = new ArrayList<>();
+		if (split.size() > 1)
+			for (BitSet component : split.subList(1, split.size())) {
+				boolean retainedByGlue = false;
+				for (SurgicalGlueJoint joint : subject.glueJoints()) {
+					if (removedJoints.contains(joint))
+						continue;
+					SurgicalGlueJoint.Endpoint first = joint.first();
+					SurgicalGlueJoint.Endpoint second = joint.second();
+					if (first.subjectKey().equals(subject.persistentId()) && component.get(first.cubeId())
+						|| second.subjectKey().equals(subject.persistentId()) && component.get(second.cubeId())) {
+						retainedByGlue = true;
+						break;
+					}
+				}
+				if (!retainedByGlue)
+					moving.add(component);
+			}
 		SurgicalTablePlane.Plane plane = clientPlane(level, selected.tablePos);
 		if (!plane.valid() || !selected.tablePos.equals(plane.source()))
 			return null;
@@ -2099,10 +2158,13 @@ public final class SurgicalTableClientHandler {
 			return null;
 		SurgicalClientTopology.PlannedLayout planned = moving.isEmpty()
 			? SurgicalClientTopology.currentLayout(geometry.observedCubeCount, geometry.presentCubes,
-				geometry.seams, proposedCuts, geometry.layoutCubes, geometry.offsets, plane.workArea(), occupied)
+				geometry.seams, proposedCuts, geometry.layoutCubes, geometry.serverOffsets, plane.workArea(), occupied)
 			: SurgicalClientTopology.autoSnapComponents(geometry.observedCubeCount, geometry.presentCubes,
-				geometry.seams, proposedCuts, geometry.layoutCubes, geometry.offsets, plane.workArea(), moving,
+				geometry.seams, proposedCuts, geometry.layoutCubes, geometry.serverOffsets, plane.workArea(), moving,
 				occupied);
+		// Persist server-space offsets. TableGeometry applies the retained glue graph's shared
+		// grounding only while rendering; storing that derived lift on this subject alone would make
+		// the next refresh apply it a second time relative to the untouched connected subjects.
 		return planned != null && clientAcceptsComponentLayout(level, selected.tablePos,
 			selected.subjectId, proposedCuts, planned.proposal(), plane) ? planned : null;
 	}
@@ -3934,8 +3996,10 @@ public final class SurgicalTableClientHandler {
 		private final int tableRevision;
 		private final long expiresAtTick;
 		private final List<Integer> geometrySubjectIds;
+		private final List<Integer> placementBaselineSubjectIds;
 		private final boolean retainPlacementPreview;
 		private final boolean retainGluePreview;
+		private boolean serverAcknowledged;
 
 		private PendingVisualCommit(BlockPos tablePos, int tableRevision, long expiresAtTick,
 			List<Integer> geometrySubjectIds, boolean retainPlacementPreview, boolean retainGluePreview) {
@@ -3943,6 +4007,10 @@ public final class SurgicalTableClientHandler {
 			this.tableRevision = tableRevision;
 			this.expiresAtTick = expiresAtTick;
 			this.geometrySubjectIds = List.copyOf(geometrySubjectIds);
+			Minecraft minecraft = Minecraft.getInstance();
+			this.placementBaselineSubjectIds = retainPlacementPreview && minecraft.level != null
+				&& minecraft.level.getBlockEntity(tablePos) instanceof SurgicalTableBlockEntity table
+				? table.getSubjects().stream().map(SurgicalSubject::id).toList() : List.of();
 			this.retainPlacementPreview = retainPlacementPreview;
 			this.retainGluePreview = retainGluePreview;
 		}
