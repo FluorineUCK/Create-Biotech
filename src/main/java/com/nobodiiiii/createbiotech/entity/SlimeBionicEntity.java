@@ -37,6 +37,7 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private static final String ASSEMBLY_TAG = "SurgicalAssembly";
 	private static final String SOURCE_FORM_TAG = "BionicSourceForm";
 	private static final double DEFAULT_ATTACK_DISTANCE_SQR = 5.0d * 5.0d;
+	private static final float MAX_COLLISION_WIDTH = 0.9f;
 	private static final EntityDataAccessor<CompoundTag> ASSEMBLY = SynchedEntityData.defineId(
 		SlimeBionicEntity.class, EntityDataSerializers.COMPOUND_TAG);
 	@Nullable
@@ -146,9 +147,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
 		if (bounds == null)
 			return super.getDefaultDimensions(pose);
-		// Vanilla mobs use one centred, yaw-independent square footprint whose side is the body's
-		// lateral width. Their fore-aft model depth is deliberately not promoted to collision width.
-		float width = bounds.width();
+		// Keep one centred, yaw-independent square footprint, but do not let broad source models
+		// promote visual width into an unstable pathfinding/collision width.
+		float width = Math.min(bounds.width(), MAX_COLLISION_WIDTH);
 		float height = bounds.minY() + bounds.height();
 		float eyeHeight = Mth.clamp(bounds.minY() + bounds.height() * 0.85f, 0.0f, height);
 		return EntityDimensions.fixed(width, height).withEyeHeight(eyeHeight);
