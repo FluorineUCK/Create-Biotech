@@ -93,6 +93,7 @@ public final class SurgicalTableClientHandler {
 	private static final double GLUE_POINT_CROSS_HALF_LENGTH_PIXELS = 0.3d;
 	private static final double GLUE_POINT_PIXEL_EPSILON = 1.0e-4d;
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
+	private static final int VISUAL_COMMIT_TIMEOUT_TICKS = 40;
 	private static final InteractionHand[] HANDS = { InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND };
 	private static final OutlineState SEAM_OUTLINE = new OutlineState();
 	private static final OutlineState CUBE_OUTLINE = new OutlineState();
@@ -139,6 +140,10 @@ public final class SurgicalTableClientHandler {
 	private static PlacementSource placementSource;
 	@Nullable
 	private static PlacementPreview placementPreview;
+	@Nullable
+	private static PlacementSuppression placementSuppression;
+	@Nullable
+	private static PendingVisualCommit pendingVisualCommit;
 	@Nullable
 	private static CubeSelectionCache connectedSelectionCache;
 	@Nullable
@@ -209,7 +214,7 @@ public final class SurgicalTableClientHandler {
 	public static Map<Integer, Vec3> offsetsFor(SurgicalTableBlockEntity table, SurgicalSubject subject) {
 		TableGeometry geometry = TABLES.get(new SubjectKey(table.getBlockPos(), subject.id()));
 		if (geometry == null || !geometry.matchesModel(table, subject))
-			return Map.of();
+			return subject.componentOffsetsForRender();
 		if (geometry.retryPendingGrounding(table))
 			geometryGeneration++;
 		geometry.markSeen(table);
@@ -220,7 +225,7 @@ public final class SurgicalTableClientHandler {
 		SurgicalSubject subject) {
 		TableGeometry geometry = TABLES.get(new SubjectKey(table.getBlockPos(), subject.id()));
 		if (geometry == null || !geometry.matchesModel(table, subject))
-			return Map.of();
+			return subject.componentRotationsForRender();
 		geometry.markSeen(table);
 		return geometry.rotations;
 	}
@@ -253,6 +258,8 @@ public final class SurgicalTableClientHandler {
 		glueEditor = null;
 		lastGlueEditPromptTick = Long.MIN_VALUE;
 		placementSource = null;
+		placementSuppression = null;
+		pendingVisualCommit = null;
 		clearPlacementPreview();
 		TABLES.clear();
 		COMBINATION_OUTLINES.clear();
@@ -273,6 +280,7 @@ public final class SurgicalTableClientHandler {
 		LocalPlayer player = minecraft.player;
 		ClientLevel level = minecraft.level;
 		if (player == null || level == null || minecraft.screen != null) {
+			cancelPendingVisualCommit(level, true);
 			abortPendingCut();
 			abortPendingGlueCut();
 			pendingGlue = null;
@@ -288,6 +296,7 @@ public final class SurgicalTableClientHandler {
 		}
 
 		long now = level.getGameTime();
+		updatePendingVisualCommit(level);
 		int geometryCount = TABLES.size();
 		TABLES.entrySet().removeIf(entry -> now - entry.getValue().lastSeenTick > 5
 			|| !(level.getBlockEntity(entry.getKey().tablePos) instanceof SurgicalTableBlockEntity table)
@@ -316,6 +325,8 @@ public final class SurgicalTableClientHandler {
 
 	@SubscribeEvent
 	public static void onRenderFrame(RenderFrameEvent.Pre event) {
+		if (Minecraft.getInstance().level != null)
+			updatePendingVisualCommit(Minecraft.getInstance().level);
 		updatePlacementPreview();
 		updateSelections();
 	}
@@ -324,6 +335,24 @@ public final class SurgicalTableClientHandler {
 		Minecraft minecraft = Minecraft.getInstance();
 		LocalPlayer player = minecraft.player;
 		ClientLevel level = minecraft.level;
+		if (retainsPlacementPreview()) {
+			if (level != null && level.getGameTime() != lastPlacementOutlineTick) {
+				Outliner.getInstance().keep(PLACEMENT_OUTLINE_SLOT);
+				lastPlacementOutlineTick = level.getGameTime();
+			}
+			return;
+		}
+		if (placementSuppression != null && player != null && level != null) {
+			PlacementSuppression suppression = placementSuppression;
+			boolean inventoryUpdated = !ItemStack.isSameItemSameComponents(suppression.sourceBox,
+				player.getItemInHand(suppression.hand));
+			if (inventoryUpdated || level.getGameTime() >= suppression.expiresAtTick) {
+				placementSuppression = null;
+			} else {
+				clearPlacementPreview();
+				return;
+			}
+		}
 		if (player == null || level == null || minecraft.screen != null
 			|| pendingCut != null || pendingGlueCut != null
 			|| !(minecraft.hitResult instanceof BlockHitResult hit)
@@ -616,6 +645,12 @@ public final class SurgicalTableClientHandler {
 			clearSelections();
 			return;
 		}
+		if (retainsGluePreview()) {
+			hoveredGluePoint = null;
+			GLUE_POINT_OUTLINE.clear();
+			clearSeamHighlight();
+			return;
+		}
 		if (pendingCut != null) {
 			hoveredGluePoint = null;
 			GLUE_POINT_OUTLINE.clear();
@@ -796,6 +831,12 @@ public final class SurgicalTableClientHandler {
 		if (minecraft.screen != null || minecraft.player == null)
 			return;
 		KeyMapping key = event.getKeyMapping();
+		if (minecraft.level != null)
+			updatePendingVisualCommit(minecraft.level);
+		if (pendingVisualCommit != null && key == minecraft.options.keyUse && event.isUseItem()) {
+			consumeInteraction(event, event.getHand());
+			return;
+		}
 		if ((pendingCut != null || pendingGlueCut != null) && key == minecraft.options.keyAttack
 			&& minecraft.player.isShiftKeyDown()) {
 			abortPendingCut();
@@ -1035,7 +1076,7 @@ public final class SurgicalTableClientHandler {
 			firstEndpoint, secondEndpoint, preview.targetPose,
 			preview.moves, preview.anchorMoves));
 		AllSoundEvents.SLIME_ADDED.playAt(level, BlockPos.containing(hit.location), 0.5f, 0.95f, false);
-		clearPendingGlue();
+		commitGluePreview(level, preview);
 		return true;
 	}
 
@@ -1061,7 +1102,7 @@ public final class SurgicalTableClientHandler {
 			editor.first, editor.second, preview.targetPose,
 			preview.moves, preview.anchorMoves));
 		AllSoundEvents.SLIME_ADDED.playAt(level, BlockPos.containing(preview.targetHit), 0.5f, 0.95f, false);
-		clearPendingGlue();
+		commitGluePreview(level, preview);
 	}
 
 	@SubscribeEvent(priority = EventPriority.HIGH)
@@ -1107,6 +1148,19 @@ public final class SurgicalTableClientHandler {
 		pendingGlue = null;
 		hoveredGluePoint = null;
 		gluePreview = null;
+		glueEditor = null;
+		lastGlueEditPromptTick = Long.MIN_VALUE;
+		GLUE_EDIT_OUTLINE.clear();
+		GLUE_POINT_OUTLINE.clear();
+		CUBE_OUTLINE.clear();
+		COMBINATION_OUTLINE.clear();
+	}
+
+	private static void commitGluePreview(ClientLevel level, GluePreview preview) {
+		beginVisualCommit(level, preview.ownerPos, preview.tableRevision, List.of(), false, true);
+		pendingGlue = null;
+		hoveredGluePoint = null;
+		gluePreview = preview;
 		glueEditor = null;
 		lastGlueEditPromptTick = Long.MIN_VALUE;
 		GLUE_EDIT_OUTLINE.clear();
@@ -1568,6 +1622,62 @@ public final class SurgicalTableClientHandler {
 		return adjusted;
 	}
 
+	private static boolean retainsPlacementPreview() {
+		return pendingVisualCommit != null && pendingVisualCommit.retainPlacementPreview;
+	}
+
+	private static boolean retainsGluePreview() {
+		return pendingVisualCommit != null && pendingVisualCommit.retainGluePreview;
+	}
+
+	private static void beginVisualCommit(ClientLevel level, BlockPos tablePos, int tableRevision,
+		List<Integer> geometrySubjectIds, boolean retainPlacementPreview, boolean retainGluePreview) {
+		cancelPendingVisualCommit(level, true);
+		int currentRevision = level.getBlockEntity(tablePos) instanceof SurgicalTableBlockEntity table
+			? table.clientDataRevision() : tableRevision;
+		pendingVisualCommit = new PendingVisualCommit(tablePos, currentRevision,
+			level.getGameTime() + VISUAL_COMMIT_TIMEOUT_TICKS, geometrySubjectIds,
+			retainPlacementPreview, retainGluePreview);
+	}
+
+	private static void updatePendingVisualCommit(ClientLevel level) {
+		PendingVisualCommit commit = pendingVisualCommit;
+		if (commit == null)
+			return;
+		SurgicalTableBlockEntity table = level.getBlockEntity(commit.tablePos)
+			instanceof SurgicalTableBlockEntity found ? found : null;
+		if (table != null && table.clientDataRevision() != commit.tableRevision) {
+			cancelPendingVisualCommit(level, false);
+			return;
+		}
+		if (table == null || level.getGameTime() >= commit.expiresAtTick)
+			cancelPendingVisualCommit(level, true);
+	}
+
+	private static void cancelPendingVisualCommit(@Nullable ClientLevel level, boolean rollbackGeometry) {
+		PendingVisualCommit commit = pendingVisualCommit;
+		pendingVisualCommit = null;
+		if (commit == null)
+			return;
+		if (rollbackGeometry && level != null
+			&& level.getBlockEntity(commit.tablePos) instanceof SurgicalTableBlockEntity table) {
+			for (int subjectId : commit.geometrySubjectIds) {
+				TableGeometry geometry = TABLES.get(new SubjectKey(commit.tablePos, subjectId));
+				if (geometry != null && table.hasSubject(subjectId))
+					geometry.clearPreview(table);
+			}
+		}
+		PlacementPreview committedPlacement = commit.retainPlacementPreview ? placementPreview : null;
+		if (!rollbackGeometry && committedPlacement != null && level != null)
+			placementSuppression = new PlacementSuppression(committedPlacement.hand,
+				committedPlacement.source.box.copy(), level.getGameTime() + VISUAL_COMMIT_TIMEOUT_TICKS);
+		if (commit.retainPlacementPreview)
+			clearPlacementPreview();
+		if (commit.retainGluePreview)
+			gluePreview = null;
+		geometryGeneration++;
+	}
+
 	private static boolean glueTopologyKnown(SurgicalSubject first, SurgicalSubject second) {
 		return first.cubeCount() != 0 && second.cubeCount() != 0;
 	}
@@ -1769,6 +1879,7 @@ public final class SurgicalTableClientHandler {
 			placement.plan.originOffsetX(), placement.plan.originOffsetZ(), placement.layPose,
 			placement.plan.proposal(),
 			placement.sourceLayouts));
+		beginVisualCommit(level, placement.ownerPos, placement.tableRevision, List.of(), true, false);
 		return true;
 	}
 
@@ -1919,7 +2030,12 @@ public final class SurgicalTableClientHandler {
 		Vec3 delta = pending.planned.delta();
 		sendInteraction(selected, pending.hand, SurgicalTableInteractionPacket.Action.CUT_GLUE,
 			SurgicalTableLayout.Proposal.EMPTY, delta.x, delta.z);
-		abortPendingGlueCut();
+		ClientLevel level = Minecraft.getInstance().level;
+		pendingGlueCut = null;
+		componentSelection = null;
+		if (level != null)
+			beginVisualCommit(level, pending.tablePos, pending.plannedTableRevision,
+				List.copyOf(pending.movingComponents.keySet()), false, false);
 	}
 
 	private static void abortPendingGlueCut() {
@@ -2065,7 +2181,12 @@ public final class SurgicalTableClientHandler {
 			pending.observedCubeCount, pending.seams, List.of(), List.of());
 		sendInteraction(selected, pending.hand, SurgicalTableInteractionPacket.Action.CUT,
 			pending.planned.proposal());
-		abortPendingCut();
+		ClientLevel level = Minecraft.getInstance().level;
+		pendingCut = null;
+		componentSelection = null;
+		if (level != null)
+			beginVisualCommit(level, pending.tablePos, pending.plannedTableRevision,
+				List.of(pending.subjectId), false, false);
 	}
 
 	private static void abortPendingCut() {
@@ -3607,6 +3728,12 @@ public final class SurgicalTableClientHandler {
 		}
 	}
 
+	private record PlacementSuppression(InteractionHand hand, ItemStack sourceBox, long expiresAtTick) {
+		private PlacementSuppression {
+			sourceBox = sourceBox.copy();
+		}
+	}
+
 	private record PlacementGeometry(EntityGeometry.Bounds bounds, SurgicalLayPose layPose,
 		Map<Integer, Vec3> cubeOffsets,
 		List<SourcePlacementGeometry> sources) {
@@ -3799,6 +3926,25 @@ public final class SurgicalTableClientHandler {
 
 		private BitSet presentCubes() {
 			return assembly == null ? new BitSet() : assembly.presentCubes();
+		}
+	}
+
+	private static final class PendingVisualCommit {
+		private final BlockPos tablePos;
+		private final int tableRevision;
+		private final long expiresAtTick;
+		private final List<Integer> geometrySubjectIds;
+		private final boolean retainPlacementPreview;
+		private final boolean retainGluePreview;
+
+		private PendingVisualCommit(BlockPos tablePos, int tableRevision, long expiresAtTick,
+			List<Integer> geometrySubjectIds, boolean retainPlacementPreview, boolean retainGluePreview) {
+			this.tablePos = tablePos.immutable();
+			this.tableRevision = tableRevision;
+			this.expiresAtTick = expiresAtTick;
+			this.geometrySubjectIds = List.copyOf(geometrySubjectIds);
+			this.retainPlacementPreview = retainPlacementPreview;
+			this.retainGluePreview = retainGluePreview;
 		}
 	}
 

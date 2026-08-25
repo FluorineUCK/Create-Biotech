@@ -60,6 +60,11 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		if (subjects.isEmpty())
 			return;
 		boolean projectSourceGeometry = projectsSourceGeometry(table);
+		// Refresh every subject before any of them is drawn. Connected grounding can span several
+		// subjects, and a table sync advances all of their revisions at once. Refreshing and drawing
+		// one subject at a time exposed a partially refreshed table for one frame.
+		for (SurgicalSubject subject : subjects)
+			prepareSubjectGeometry(table, subject, poseStack, packedLight, projectSourceGeometry);
 		for (SurgicalSubject subject : subjects)
 			renderSubject(table, subject, poseStack, buffer, packedLight, projectSourceGeometry);
 	}
@@ -73,6 +78,30 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 			.anyMatch(pos -> level.getBlockState(pos).is(CBBlocks.PROJECTION_SURGICAL_TABLE.get()));
 	}
 
+	private static void prepareSubjectGeometry(SurgicalTableBlockEntity table, SurgicalSubject subject,
+		PoseStack poseStack, int packedLight, boolean projectSourceGeometry) {
+		if (!SurgicalTableClientHandler.needsGeometryUpdate(table, subject))
+			return;
+		LivingEntity preview = SurgicalSourceModelRenderer.preview(subject, subject.profile());
+		if (preview == null)
+			return;
+
+		// BlockEntityRenderDispatcher has already established the table's world/camera transform on
+		// this stack. Geometry and grounding operate in that coordinate space, so retain the exact
+		// renderer base pose just as the former one-pass capture did.
+		poseStack.pushPose();
+		poseStack.translate(subject.originOffsetX(), 0.0d, subject.originOffsetZ());
+		SurgicalTablePoseResolver.resolve(subject.layPose()).apply(poseStack);
+		int storedCount = subject.cubeCount();
+		BitSet present = storedCount > 0
+			? SurgicalTableClientHandler.presentCubesFor(table, subject, storedCount) : EMPTY_CUBES;
+		Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
+		SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.captureGeometry(preview,
+			storedCount, present, poseStack, packedLight, 0.0f, 0.0f, camera, projectSourceGeometry);
+		poseStack.popPose();
+		SurgicalTableClientHandler.updateGeometry(table, subject, snapshot);
+	}
+
 	private static void renderSubject(SurgicalTableBlockEntity table, SurgicalSubject subject,
 		PoseStack poseStack, MultiBufferSource buffer, int packedLight, boolean projectSourceGeometry) {
 		MimicProfile profile = subject.profile();
@@ -84,15 +113,9 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 		poseStack.translate(subject.originOffsetX(), 0.0d, subject.originOffsetZ());
 		SurgicalTablePoseResolver.resolve(subject.layPose()).apply(poseStack);
 		int storedCount = subject.cubeCount();
-		boolean collectGeometry = SurgicalTableClientHandler.needsGeometryUpdate(table, subject);
 		BitSet present = storedCount > 0
 			? SurgicalTableClientHandler.presentCubesFor(table, subject, storedCount) : EMPTY_CUBES;
 		Vec3 camera = Minecraft.getInstance().gameRenderer.getMainCamera().getPosition();
-		if (collectGeometry) {
-			SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.captureGeometry(preview,
-				storedCount, present, poseStack, packedLight, 0.0f, 0.0f, camera, projectSourceGeometry);
-			SurgicalTableClientHandler.updateGeometry(table, subject, snapshot);
-		}
 		Map<Integer, Vec3> offsets = SurgicalTableClientHandler.offsetsFor(table, subject);
 		Map<Integer, SurgicalCubeRotation> rotations = SurgicalTableClientHandler.rotationsFor(table, subject);
 		// The immutable captured source plan is cached by MimicProfile. Lay pose, grounded Y,
