@@ -633,6 +633,118 @@ public final class SurgicalClientTopology {
 			surfaceY, true);
 	}
 
+	/**
+	 * Grounds native components together when glue links connect them, including links crossing
+	 * source/subject boundaries. Placement previews and placed table subjects both use this path so
+	 * stale vertical offsets saved before boxing cannot produce a different preview height.
+	 */
+	@Nullable
+	public static <K> Map<K, Map<Integer, Vec3>> groundConnectedBodies(List<GroundingBody<K>> bodies,
+		List<GroundingLink<K>> links, double surfaceY) {
+		if (bodies.isEmpty() || !Double.isFinite(surfaceY))
+			return null;
+		Map<K, GroundingBody<K>> indexed = new LinkedHashMap<>();
+		Map<K, Map<Integer, SurgicalModelRenderContext.CubeGeometry>> cubes = new HashMap<>();
+		Map<K, Map<Integer, Vec3>> grounded = new LinkedHashMap<>();
+		Map<K, BitSet> processed = new HashMap<>();
+		for (GroundingBody<K> body : bodies) {
+			if (body == null || body.key() == null || indexed.putIfAbsent(body.key(), body) != null
+				|| !SurgicalAssembly.validTopology(body.cubeCount(), body.seams()))
+				return null;
+			Map<Integer, SurgicalModelRenderContext.CubeGeometry> bodyCubes = indexCubeGeometry(body.cubes());
+			if (bodyCubes.size() < body.presentCubes().cardinality())
+				return null;
+			for (int cube = body.presentCubes().nextSetBit(0); cube >= 0;
+				cube = body.presentCubes().nextSetBit(cube + 1))
+				if (!bodyCubes.containsKey(cube))
+					return null;
+			cubes.put(body.key(), bodyCubes);
+			grounded.put(body.key(), new HashMap<>(body.offsets()));
+			processed.put(body.key(), new BitSet(body.cubeCount()));
+		}
+
+		for (GroundingBody<K> origin : bodies) {
+			for (BitSet component : SurgicalAssembly.components(origin.cubeCount(), origin.presentCubes(),
+				origin.seams(), origin.cutSeams())) {
+				BitSet originProcessed = processed.get(origin.key());
+				if (component.intersects(originProcessed))
+					continue;
+				Map<K, BitSet> group = new LinkedHashMap<>();
+				group.put(origin.key(), (BitSet) component.clone());
+				boolean changed;
+				do {
+					changed = false;
+					for (GroundingLink<K> link : links) {
+						if (link == null)
+							return null;
+						int forward = followGroundingLink(link.firstBody(), link.firstCube(),
+							link.secondBody(), link.secondCube(), group, indexed);
+						int backward = followGroundingLink(link.secondBody(), link.secondCube(),
+							link.firstBody(), link.firstCube(), group, indexed);
+						if (forward < 0 || backward < 0)
+							return null;
+						changed |= forward > 0 || backward > 0;
+					}
+				} while (changed);
+
+				double lowestY = Double.POSITIVE_INFINITY;
+				for (Map.Entry<K, BitSet> entry : group.entrySet()) {
+					GroundingBody<K> body = indexed.get(entry.getKey());
+					Map<Integer, SurgicalModelRenderContext.CubeGeometry> bodyCubes = cubes.get(entry.getKey());
+					if (body == null || bodyCubes == null)
+						return null;
+					processed.get(entry.getKey()).or(entry.getValue());
+					for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
+						cube = entry.getValue().nextSetBit(cube + 1)) {
+						SurgicalModelRenderContext.CubeGeometry geometry = bodyCubes.get(cube);
+						if (geometry == null)
+							return null;
+						double offsetY = body.offsets().getOrDefault(cube, Vec3.ZERO).y;
+						for (Vec3 corner : geometry.corners())
+							lowestY = Math.min(lowestY, corner.y + offsetY);
+					}
+				}
+				if (!Double.isFinite(lowestY))
+					return null;
+				double lift = surfaceY - lowestY;
+				for (Map.Entry<K, BitSet> entry : group.entrySet()) {
+					GroundingBody<K> body = indexed.get(entry.getKey());
+					Map<Integer, Vec3> bodyGrounded = grounded.get(entry.getKey());
+					for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
+						cube = entry.getValue().nextSetBit(cube + 1)) {
+						Vec3 adjusted = body.offsets().getOrDefault(cube, Vec3.ZERO).add(0.0d, lift, 0.0d);
+						if (adjusted.lengthSqr() <= DISTANCE_EPSILON)
+							bodyGrounded.remove(cube);
+						else
+							bodyGrounded.put(cube, adjusted);
+					}
+				}
+			}
+		}
+
+		Map<K, Map<Integer, Vec3>> frozen = new LinkedHashMap<>();
+		grounded.forEach((key, value) -> frozen.put(key, Map.copyOf(value)));
+		return Map.copyOf(frozen);
+	}
+
+	private static <K> int followGroundingLink(K fromBody, int fromCube, K toBody, int toCube,
+		Map<K, BitSet> group, Map<K, GroundingBody<K>> bodies) {
+		BitSet included = group.get(fromBody);
+		if (included == null || !included.get(fromCube))
+			return 0;
+		GroundingBody<K> target = bodies.get(toBody);
+		if (target == null || toCube < 0 || toCube >= target.cubeCount() || !target.presentCubes().get(toCube))
+			return -1;
+		BitSet addition = SurgicalAssembly.componentContaining(target.cubeCount(), target.presentCubes(),
+			target.seams(), target.cutSeams(), toCube);
+		if (addition.isEmpty())
+			return -1;
+		BitSet existing = group.computeIfAbsent(toBody, ignored -> new BitSet(target.cubeCount()));
+		int previous = existing.cardinality();
+		existing.or(addition);
+		return existing.cardinality() == previous ? 0 : 1;
+	}
+
 	private static Map<Integer, Vec3> groundComponents(int cubeCount, BitSet presentCubes,
 		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
 		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> horizontalOffsets,
@@ -771,6 +883,15 @@ public final class SurgicalClientTopology {
 			if (presentCubes.get(cube.cubeId()))
 				bounds.putIfAbsent(cube.cubeId(), Bounds.of(cube));
 		return bounds;
+	}
+
+	private static Map<Integer, SurgicalModelRenderContext.CubeGeometry> indexCubeGeometry(
+		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
+		Map<Integer, SurgicalModelRenderContext.CubeGeometry> indexed = new HashMap<>();
+		for (SurgicalModelRenderContext.CubeGeometry cube : cubes)
+			if (cube != null)
+				indexed.putIfAbsent(cube.cubeId(), cube);
+		return Map.copyOf(indexed);
 	}
 
 	@Nullable
@@ -1367,6 +1488,20 @@ public final class SurgicalClientTopology {
 			offsets = Map.copyOf(offsets);
 		}
 	}
+
+	public record GroundingBody<K>(K key, int cubeCount, BitSet presentCubes,
+		List<SurgicalAssembly.Seam> seams, BitSet cutSeams,
+		List<SurgicalModelRenderContext.CubeGeometry> cubes, Map<Integer, Vec3> offsets) {
+		public GroundingBody {
+			presentCubes = (BitSet) presentCubes.clone();
+			seams = List.copyOf(seams);
+			cutSeams = (BitSet) cutSeams.clone();
+			cubes = List.copyOf(cubes);
+			offsets = Map.copyOf(offsets);
+		}
+	}
+
+	public record GroundingLink<K>(K firstBody, int firstCube, K secondBody, int secondCube) {}
 
 	private record SnapRequest(BitSet component, double targetX, double targetZ) {}
 

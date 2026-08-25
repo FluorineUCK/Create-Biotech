@@ -10,9 +10,9 @@ import net.minecraft.nbt.Tag;
 /**
  * A persistent anatomical joint between two surgical cubes.
  *
- * <p>Unlike {@link SurgicalGlueJoint} the two endpoints are not interchangeable: the animation
- * rotates the {@link #child()} group around the {@link #parent()} group, so the player's click
- * order is preserved exactly as recorded.</p>
+ * <p>Unlike {@link SurgicalGlueJoint} the two endpoints are not interchangeable: click order keeps
+ * the selected child part rotating around the selected parent part, while each stored endpoint is
+ * the real cube at their shared physical connection.</p>
  */
 public record SurgicalLimbJoint(SurgicalLimbType type, SurgicalGlueJoint.Endpoint child,
 	SurgicalGlueJoint.Endpoint parent) {

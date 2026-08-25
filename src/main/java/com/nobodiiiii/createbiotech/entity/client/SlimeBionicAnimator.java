@@ -131,17 +131,24 @@ public final class SlimeBionicAnimator {
 	/**
 	 * Groups every limb with the cubes that move as one part and works out where it hinges.
 	 *
-	 * <p>Honey combinations behave as one rigid part. The hinge comes from the part's actual long
-	 * axis (or its parent-facing surface for a cube-like part), and the vanilla animation is
-	 * retargeted from its canonical limb direction into that measured rest direction. This lets a
-	 * hanging, horizontal or raised limb use the same joint without orientation thresholds.</p>
+	 * <p>Honey combinations still move as one rigid part, but they do not participate in hinge
+	 * detection. The pivot and rest direction come only from the two cubes that really share the
+	 * boundary seam or glue joint. This prevents unrelated cubes elsewhere in a large combination
+	 * from pulling the axis away from its physical connection.</p>
 	 */
 	private static List<ResolvedLimb> resolveLimbs(SurgicalAssembly assembly, List<SourceState> sources) {
 		Map<SurgicalLimbType, List<ResolvedLimb>> byType = new EnumMap<>(SurgicalLimbType.class);
 		for (SurgicalAssembly.Limb limb : assembly.limbs()) {
-			List<Member> childMembers = group(assembly, limb.childSource(), limb.childCube());
-			CubeBox child = union(sources, childMembers);
-			CubeBox parent = union(sources, group(assembly, limb.parentSource(), limb.parentCube()));
+			Member selectedChild = new Member(limb.childSource(), limb.childCube());
+			Member selectedParent = new Member(limb.parentSource(), limb.parentCube());
+			List<Member> childMembers = group(assembly, selectedChild.source(), selectedChild.cube());
+			List<Member> parentMembers = group(assembly, selectedParent.source(), selectedParent.cube());
+			Connection connection = connection(assembly, selectedChild, selectedParent,
+				childMembers, parentMembers);
+			if (connection == null)
+				continue;
+			CubeBox child = box(sources, connection.child());
+			CubeBox parent = box(sources, connection.parent());
 			if (child == null || parent == null)
 				continue;
 			Vec3 pivot = pivot(limb.type(), child, parent);
@@ -193,17 +200,43 @@ public final class SlimeBionicAnimator {
 	}
 
 	@Nullable
-	private static CubeBox union(List<SourceState> sources, List<Member> members) {
-		CubeBox union = null;
-		for (Member member : members) {
-			if (member.source() < 0 || member.source() >= sources.size())
-				continue;
-			CubeBox box = sources.get(member.source()).boxes().get(member.cube());
-			if (box == null)
-				continue;
-			union = union == null ? box : union.merge(box, BODY_SPACE);
+	private static CubeBox box(List<SourceState> sources, Member member) {
+		return member.source() < 0 || member.source() >= sources.size() ? null
+			: sources.get(member.source()).boxes().get(member.cube());
+	}
+
+	/** Resolves old arbitrary combination endpoints as well as newly stored physical endpoints. */
+	@Nullable
+	private static Connection connection(SurgicalAssembly assembly, Member selectedChild,
+		Member selectedParent, List<Member> childMembers, List<Member> parentMembers) {
+		if (directlyConnected(assembly, selectedChild, selectedParent))
+			return new Connection(selectedChild, selectedParent);
+		for (Member child : childMembers)
+			for (Member parent : parentMembers)
+				if (directlyConnected(assembly, child, parent))
+					return new Connection(child, parent);
+		return null;
+	}
+
+	private static boolean directlyConnected(SurgicalAssembly assembly, Member first, Member second) {
+		if (first.source() == second.source()) {
+			SurgicalAssembly.Source source = assembly.sources().get(first.source());
+			List<SurgicalAssembly.Seam> seams = source.seams();
+			java.util.BitSet cutSeams = source.cutSeams();
+			for (int index = 0; index < seams.size(); index++) {
+				SurgicalAssembly.Seam seam = seams.get(index);
+				if (!cutSeams.get(index) && (seam.first() == first.cube() && seam.second() == second.cube()
+					|| seam.first() == second.cube() && seam.second() == first.cube()))
+					return true;
+			}
 		}
-		return union;
+		for (SurgicalAssembly.Joint joint : assembly.joints())
+			if (joint.firstSource() == first.source() && joint.firstCube() == first.cube()
+				&& joint.secondSource() == second.source() && joint.secondCube() == second.cube()
+				|| joint.firstSource() == second.source() && joint.firstCube() == second.cube()
+				&& joint.secondSource() == first.source() && joint.secondCube() == first.cube())
+				return true;
+		return false;
 	}
 
 	/**
@@ -296,6 +329,7 @@ public final class SlimeBionicAnimator {
 	}
 
 	private record Member(int source, int cube) {}
+	private record Connection(Member child, Member parent) {}
 	private enum LimbDriver { NONE, HEAD, RIGHT, LEFT }
 
 	private record ResolvedLimb(SurgicalLimbType type, List<Member> members, Vec3 pivot, double side,
@@ -355,10 +389,6 @@ public final class SlimeBionicAnimator {
 
 		private double project(Vec3 vector, int index) {
 			return vector.dot(axis(index));
-		}
-
-		private Vec3 toWorld(double x, double y, double z) {
-			return modelX.scale(x).add(modelY.scale(y)).add(modelZ.scale(z));
 		}
 
 		/** Builds the rest-frame rotation that maps a canonical humanoid limb onto this child. */
@@ -435,22 +465,6 @@ public final class SlimeBionicAnimator {
 				sum = sum.add(corner);
 			}
 			return new CubeBox(sum.scale(1.0d / corners.size()), min, max, corners);
-		}
-
-		/** Merged groups take the enclosing box, so the centre has to be rebuilt from its corners. */
-		private CubeBox merge(CubeBox other, Basis basis) {
-			double[] min = new double[3];
-			double[] max = new double[3];
-			for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
-				min[axis] = Math.min(this.min[axis], other.min[axis]);
-				max[axis] = Math.max(this.max[axis], other.max[axis]);
-			}
-			List<Vec3> mergedPoints = new ArrayList<>(points.size() + other.points.size());
-			mergedPoints.addAll(points);
-			mergedPoints.addAll(other.points);
-			return new CubeBox(basis.toWorld((min[AXIS_X] + max[AXIS_X]) * 0.5d,
-				(min[AXIS_Y] + max[AXIS_Y]) * 0.5d, (min[AXIS_Z] + max[AXIS_Z]) * 0.5d),
-				min, max, mergedPoints);
 		}
 
 		/** Longest covariance axis, or null when the group is too cube-like to define one. */

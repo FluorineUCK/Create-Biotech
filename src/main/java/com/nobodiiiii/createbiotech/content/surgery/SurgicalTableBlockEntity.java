@@ -600,9 +600,9 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	/**
-	 * Installs one anatomical joint. The first-clicked cube becomes the rotating child and the
-	 * second-clicked cube the pivot, so the click order the player used is what the animation plays
-	 * back later.
+	 * Installs one anatomical joint. Click order selects the rotating child part and parent part;
+	 * when either is a honey combination, the stored endpoints are narrowed to the two cubes that
+	 * actually share the seam or glue joint between those parts.
 	 */
 	public boolean attachLimb(Player player, ItemStack jointItem, InteractionHand hand,
 		SurgicalLimbType type, int childSubjectId, int childCubeId, int parentSubjectId, int parentCubeId,
@@ -618,16 +618,19 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			|| childSubject == parentSubject && childCubeId == parentCubeId)
 			return false;
 
-		SurgicalGlueJoint.Endpoint child = new SurgicalGlueJoint.Endpoint(childSubject.persistentId(),
+		SurgicalGlueJoint.Endpoint selectedChild = new SurgicalGlueJoint.Endpoint(childSubject.persistentId(),
 			childCubeId);
-		SurgicalGlueJoint.Endpoint parent = new SurgicalGlueJoint.Endpoint(parentSubject.persistentId(),
+		SurgicalGlueJoint.Endpoint selectedParent = new SurgicalGlueJoint.Endpoint(parentSubject.persistentId(),
 			parentCubeId);
-		if (!directlyConnected(child, parent))
-			return refuse(player, "limb_not_connected");
-
 		SurgicalCombination childCombination = childSubject.combinationContaining(childCubeId);
-		if (childCombination != null && childCombination.contains(parent.subjectKey(), parent.cubeId()))
+		if (childCombination != null
+			&& childCombination.contains(selectedParent.subjectKey(), selectedParent.cubeId()))
 			return refuse(player, "limb_same_combination");
+		DirectConnection connection = directConnection(selectedChild, selectedParent);
+		if (connection == null)
+			return refuse(player, "limb_not_connected");
+		SurgicalGlueJoint.Endpoint child = connection.child();
+		SurgicalGlueJoint.Endpoint parent = connection.parent();
 
 		ComponentGroup body = gluedGroup(parentSubject, parentCubeId);
 		Set<SurgicalLimbJoint> installed = limbsWithin(body);
@@ -659,22 +662,35 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	/**
-	 * Whether the two parts physically touch.
+	 * Finds the real cube pair through which two selected parts physically touch.
 	 *
 	 * <p>Comparison happens between whole rotating groups rather than single cubes: a honey
 	 * combination behaves as one part, so clicking any of its cubes has to find the seam or glue
 	 * joint that actually holds the combination against the body.</p>
 	 */
-	private boolean directlyConnected(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second) {
+	@Nullable
+	private DirectConnection directConnection(SurgicalGlueJoint.Endpoint first,
+		SurgicalGlueJoint.Endpoint second) {
 		List<SurgicalGlueJoint.Endpoint> firstGroup = rotatingGroup(first);
 		List<SurgicalGlueJoint.Endpoint> secondGroup = rotatingGroup(second);
 		Set<SurgicalGlueJoint> glueJoints = allGlueJoints();
+		if (directlyConnected(first, second, glueJoints))
+			return new DirectConnection(first, second);
 		for (SurgicalGlueJoint.Endpoint child : firstGroup)
 			for (SurgicalGlueJoint.Endpoint parent : secondGroup)
-				if (sharesUncutSeam(child, parent) || glueJoints.contains(SurgicalGlueJoint.of(child, parent)))
-					return true;
-		return false;
+				if (directlyConnected(child, parent, glueJoints))
+					return new DirectConnection(child, parent);
+		return null;
 	}
+
+	private boolean directlyConnected(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second,
+		Set<SurgicalGlueJoint> glueJoints) {
+		return sharesUncutSeam(first, second)
+			|| glueJoints.contains(SurgicalGlueJoint.of(first, second));
+	}
+
+	private record DirectConnection(SurgicalGlueJoint.Endpoint child,
+		SurgicalGlueJoint.Endpoint parent) {}
 
 	private boolean sharesUncutSeam(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second) {
 		if (!first.subjectKey().equals(second.subjectKey()))

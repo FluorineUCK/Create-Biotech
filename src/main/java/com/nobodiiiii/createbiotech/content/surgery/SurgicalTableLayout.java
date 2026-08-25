@@ -44,8 +44,9 @@ public final class SurgicalTableLayout {
 
 	/**
 	 * Canonical validation for a placement preview and its eventual server-side commit.
-	 * The client renders these exact values and the server stores the same values; neither side
-	 * derives a second facing, vertical grounding, or composite transform after this check.
+	 * The client renders and the server stores the same facing, component layout and composite
+	 * transform. Effective render Y is subsequently grounded through the shared connected-body
+	 * path because packed data deliberately preserves relative pre-boxing offsets.
 	 */
 	public static boolean validateSubjectPlacement(SurgicalTablePlane.Plane plane,
 		@Nullable SurgicalAssembly assembly, Direction placementFacing, SurgicalLayPose layPose,

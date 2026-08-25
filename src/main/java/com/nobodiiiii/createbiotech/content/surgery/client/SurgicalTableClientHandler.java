@@ -550,7 +550,7 @@ public final class SurgicalTableClientHandler {
 					placedSource.originOffset().z);
 				SurgicalTablePoseResolver.resolve(placedSource.layPose()).apply(poseStack);
 				SurgicalSourceModelRenderer.render(preview, assemblySource.cubeCount(),
-					assemblySource.presentCubes(), layoutOffsets(placement.sourceLayouts.get(sourceIndex)),
+					assemblySource.presentCubes(), sourceGeometry.previewOffsets(),
 					sourceGeometry.renderRotations(),
 					poseStack, buffer, light,
 					0.0f, partialTicks, false, camera, placement.projectSourceGeometry);
@@ -1611,8 +1611,12 @@ public final class SurgicalTableClientHandler {
 		SurgicalSubject currentSubject, TableGeometry currentGeometry, Map<Integer, Vec3> currentOffsets,
 		Map<Integer, SurgicalCubeRotation> currentRotations, BitSet currentCutSeams,
 		@Nullable SurgicalGlueJoint excludedJoint, double surfaceY) {
-		Map<UUID, GroundingSubject> subjects = new HashMap<>();
+		List<SurgicalClientTopology.GroundingBody<UUID>> bodies = new ArrayList<>();
+		java.util.Set<SurgicalGlueJoint> joints = new java.util.HashSet<>();
 		for (SurgicalSubject subject : table.getSubjects()) {
+			for (SurgicalGlueJoint joint : subject.glueJoints())
+				if (!joint.equals(excludedJoint))
+					joints.add(joint);
 			boolean currentSubjectEntry = subject.persistentId().equals(currentSubject.persistentId());
 			TableGeometry geometry = currentSubjectEntry ? currentGeometry
 				: TABLES.get(new SubjectKey(table.getBlockPos(), subject.id()));
@@ -1627,89 +1631,17 @@ public final class SurgicalTableClientHandler {
 			Map<Integer, SurgicalCubeRotation> rotations = currentSubjectEntry ? currentRotations
 				: geometry.serverRotations;
 			BitSet cutSeams = currentSubjectEntry ? currentCutSeams : geometry.cutSeams;
-			subjects.put(subject.persistentId(), new GroundingSubject(geometry, cutSeams, offsets,
-				indexCubes(transformCubes(geometry.baseCubes, rotations, Map.of()))));
+			bodies.add(new SurgicalClientTopology.GroundingBody<>(subject.persistentId(),
+				geometry.observedCubeCount, geometry.presentCubes, geometry.seams, cutSeams,
+				transformCubes(geometry.baseCubes, rotations, Map.of()), offsets));
 		}
-
-		GroundingSubject current = subjects.get(currentSubject.persistentId());
-		if (current == null || current.geometry != currentGeometry)
-			return null;
-		List<BitSet> components = SurgicalAssembly.components(current.geometry.observedCubeCount,
-			current.geometry.presentCubes, current.geometry.seams, current.cutSeams);
-		Map<Integer, Vec3> grounded = new HashMap<>(currentOffsets);
-		BitSet processed = new BitSet(current.geometry.observedCubeCount);
-		for (BitSet component : components) {
-			if (component.intersects(processed))
-				continue;
-			Map<UUID, BitSet> group = new HashMap<>();
-			group.put(currentSubject.persistentId(), (BitSet) component.clone());
-			boolean changed;
-			do {
-				changed = false;
-				for (SurgicalSubject subject : table.getSubjects())
-					for (SurgicalGlueJoint joint : subject.glueJoints()) {
-						if (joint.equals(excludedJoint))
-							continue;
-						int forward = followGroundingJoint(joint.first(), joint.second(), group, subjects);
-						int backward = followGroundingJoint(joint.second(), joint.first(), group, subjects);
-						if (forward < 0 || backward < 0)
-							return null;
-						changed |= forward > 0 || backward > 0;
-					}
-			} while (changed);
-
-			BitSet currentCubes = group.get(currentSubject.persistentId());
-			if (currentCubes == null || currentCubes.isEmpty())
-				return null;
-			processed.or(currentCubes);
-			double lowestY = Double.POSITIVE_INFINITY;
-			for (Map.Entry<UUID, BitSet> entry : group.entrySet()) {
-				GroundingSubject grouped = subjects.get(entry.getKey());
-				if (grouped == null)
-					return null;
-				for (int cubeId = entry.getValue().nextSetBit(0); cubeId >= 0;
-					cubeId = entry.getValue().nextSetBit(cubeId + 1)) {
-					SurgicalModelRenderContext.CubeGeometry cube = grouped.cubes.get(cubeId);
-					if (cube == null)
-						return null;
-					double offsetY = grouped.offsets.getOrDefault(cubeId, Vec3.ZERO).y;
-					for (Vec3 corner : cube.corners())
-						lowestY = Math.min(lowestY, corner.y + offsetY);
-				}
-			}
-			if (!Double.isFinite(lowestY))
-				return null;
-			double groundDelta = surfaceY - lowestY;
-			for (int cubeId = currentCubes.nextSetBit(0); cubeId >= 0;
-				cubeId = currentCubes.nextSetBit(cubeId + 1)) {
-				Vec3 adjusted = currentOffsets.getOrDefault(cubeId, Vec3.ZERO)
-					.add(0.0d, groundDelta, 0.0d);
-				if (adjusted.lengthSqr() <= 1.0e-24d)
-					grounded.remove(cubeId);
-				else
-					grounded.put(cubeId, adjusted);
-			}
-		}
-		return Map.copyOf(grounded);
-	}
-
-	/** Returns {@code -1} when a reached glue endpoint has no current geometry, {@code 1} on growth. */
-	private static int followGroundingJoint(SurgicalGlueJoint.Endpoint from,
-		SurgicalGlueJoint.Endpoint to, Map<UUID, BitSet> group, Map<UUID, GroundingSubject> subjects) {
-		BitSet included = group.get(from.subjectKey());
-		if (included == null || !included.get(from.cubeId()))
-			return 0;
-		GroundingSubject target = subjects.get(to.subjectKey());
-		if (target == null)
-			return -1;
-		BitSet component = SurgicalAssembly.componentContaining(target.geometry.observedCubeCount,
-			target.geometry.presentCubes, target.geometry.seams, target.cutSeams, to.cubeId());
-		if (component.isEmpty())
-			return -1;
-		BitSet existing = group.computeIfAbsent(to.subjectKey(), ignored -> new BitSet());
-		int previousSize = existing.cardinality();
-		existing.or(component);
-		return existing.cardinality() != previousSize ? 1 : 0;
+		List<SurgicalClientTopology.GroundingLink<UUID>> links = joints.stream()
+			.map(joint -> new SurgicalClientTopology.GroundingLink<>(joint.first().subjectKey(),
+				joint.first().cubeId(), joint.second().subjectKey(), joint.second().cubeId()))
+			.toList();
+		Map<UUID, Map<Integer, Vec3>> grounded = SurgicalClientTopology.groundConnectedBodies(
+			bodies, links, surfaceY);
+		return grounded == null ? null : grounded.get(currentSubject.persistentId());
 	}
 
 	private static List<SurgicalTableLayout.Footprint> gluePreviewObstacles(SurgicalTableBlockEntity table,
@@ -3586,15 +3518,6 @@ public final class SurgicalTableClientHandler {
 		}
 	}
 
-	private record GroundingSubject(TableGeometry geometry, BitSet cutSeams, Map<Integer, Vec3> offsets,
-		Map<Integer, SurgicalModelRenderContext.CubeGeometry> cubes) {
-		private GroundingSubject {
-			cutSeams = (BitSet) cutSeams.clone();
-			offsets = Map.copyOf(offsets);
-			cubes = Map.copyOf(cubes);
-		}
-	}
-
 	private record SubjectKey(BlockPos tablePos, int subjectId) {}
 
 	private record CombinationOutlineKey(BlockPos tablePos, UUID combinationId) {}
@@ -3695,10 +3618,12 @@ public final class SurgicalTableClientHandler {
 
 	private record SourcePlacementGeometry(SurgicalAssembly.PlacedSource placedSource,
 		List<SurgicalModelRenderContext.CubeGeometry> baseCubes, Map<Integer, Vec3> renderOffsets,
+		Map<Integer, Vec3> previewOffsets,
 		Map<Integer, SurgicalCubeRotation> renderRotations) {
 		private SourcePlacementGeometry {
 			baseCubes = List.copyOf(baseCubes);
 			renderOffsets = Map.copyOf(renderOffsets);
+			previewOffsets = Map.copyOf(previewOffsets);
 			renderRotations = Map.copyOf(renderRotations);
 		}
 	}
@@ -3806,13 +3731,12 @@ public final class SurgicalTableClientHandler {
 				if (snapshot.observedCubeCount() != source.cubeCount()
 					|| snapshot.cubes().size() != source.presentCubes().cardinality())
 					return null;
-				// A composite assembly promises to preserve its packed layout. In particular, keep
-				// the saved vertical component offsets: the server restores these exact values when
-				// the sources become table subjects, so grounding them again here would make the
-				// placement preview disagree with the confirmed result.
+				// Preserve the packed relative offsets for validation and restoration. A separate
+				// shared grounding pass below applies the same group-wide Y correction used after the
+				// sources become table subjects.
 				Map<Integer, Vec3> renderOffsets = placedSource.cubeOffsets();
 				geometries.add(new SourcePlacementGeometry(placedSource, snapshot.cubes(), renderOffsets,
-					placedSource.cubeRotations()));
+					renderOffsets, placedSource.cubeRotations()));
 				discarded.reset();
 
 				poseStack = sourcePose(placedSource, entity);
@@ -3821,8 +3745,35 @@ public final class SurgicalTableClientHandler {
 					LightTexture.FULL_BRIGHT,
 					0.0f, 0.0f, false, null, projectSourceGeometry);
 			}
-			return combined.hasVertices()
-				? new PlacementGeometry(combined.bounds(), assembly.placedLayPose(facing), Map.of(), geometries) : null;
+			if (!combined.hasVertices())
+				return null;
+			List<SurgicalClientTopology.GroundingBody<Integer>> bodies = new ArrayList<>(geometries.size());
+			for (int sourceId = 0; sourceId < geometries.size(); sourceId++) {
+				SourcePlacementGeometry geometry = geometries.get(sourceId);
+				SurgicalAssembly.Source source = geometry.placedSource().source();
+				bodies.add(new SurgicalClientTopology.GroundingBody<>(sourceId, source.cubeCount(),
+					source.presentCubes(), source.seams(), source.cutSeams(), geometry.baseCubes(),
+					geometry.renderOffsets()));
+			}
+			List<SurgicalClientTopology.GroundingLink<Integer>> links = assembly.joints().stream()
+				.map(joint -> new SurgicalClientTopology.GroundingLink<>(joint.firstSource(), joint.firstCube(),
+					joint.secondSource(), joint.secondCube()))
+				.toList();
+			Map<Integer, Map<Integer, Vec3>> grounded = SurgicalClientTopology.groundConnectedBodies(
+				bodies, links, 1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE);
+			if (grounded == null || grounded.size() != geometries.size())
+				return null;
+			List<SourcePlacementGeometry> previewGeometries = new ArrayList<>(geometries.size());
+			for (int sourceId = 0; sourceId < geometries.size(); sourceId++) {
+				SourcePlacementGeometry geometry = geometries.get(sourceId);
+				Map<Integer, Vec3> previewOffsets = grounded.get(sourceId);
+				if (previewOffsets == null)
+					return null;
+				previewGeometries.add(new SourcePlacementGeometry(geometry.placedSource(), geometry.baseCubes(),
+					geometry.renderOffsets(), previewOffsets, geometry.renderRotations()));
+			}
+			return new PlacementGeometry(combined.bounds(), assembly.placedLayPose(facing), Map.of(),
+				previewGeometries);
 		}
 
 		private PoseStack sourcePose(SurgicalAssembly.PlacedSource placedSource, LivingEntity entity) {
