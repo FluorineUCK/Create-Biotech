@@ -5,6 +5,8 @@ import org.jetbrains.annotations.Nullable;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalGait;
+import com.nobodiiiii.createbiotech.entity.ai.SlimeBionicBodyRotationControl;
+import com.nobodiiiii.createbiotech.entity.ai.SlimeBionicGroundNavigation;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 
 import net.minecraft.nbt.CompoundTag;
@@ -19,6 +21,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.Pose;
+import net.minecraft.world.entity.ai.control.BodyRotationControl;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
@@ -28,6 +31,7 @@ import net.minecraft.world.entity.ai.goal.RandomLookAroundGoal;
 import net.minecraft.world.entity.ai.goal.WaterAvoidingRandomStrollGoal;
 import net.minecraft.world.entity.ai.goal.target.HurtByTargetGoal;
 import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -37,7 +41,6 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private static final String ASSEMBLY_TAG = "SurgicalAssembly";
 	private static final String SOURCE_FORM_TAG = "BionicSourceForm";
 	private static final double DEFAULT_ATTACK_DISTANCE_SQR = 5.0d * 5.0d;
-	private static final float MAX_COLLISION_WIDTH = 0.9f;
 	private static final EntityDataAccessor<CompoundTag> ASSEMBLY = SynchedEntityData.defineId(
 		SlimeBionicEntity.class, EntityDataSerializers.COMPOUND_TAG);
 	@Nullable
@@ -83,6 +86,16 @@ public class SlimeBionicEntity extends PathfinderMob {
 		targetSelector.addGoal(1, new HurtByTargetGoal(this));
 		targetSelector.addGoal(2, new NearestAttackableTargetGoal<>(this, Player.class, true));
 		targetSelector.addGoal(3, new NearestAttackableTargetGoal<>(this, Villager.class, false));
+	}
+
+	@Override
+	protected BodyRotationControl createBodyControl() {
+		return new SlimeBionicBodyRotationControl(this);
+	}
+
+	@Override
+	protected PathNavigation createNavigation(Level level) {
+		return new SlimeBionicGroundNavigation(this, level);
 	}
 
 	@Override
@@ -147,9 +160,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
 		if (bounds == null)
 			return super.getDefaultDimensions(pose);
-		// Keep one centred, yaw-independent square footprint, but do not let broad source models
-		// promote visual width into an unstable pathfinding/collision width.
-		float width = Math.min(bounds.width(), MAX_COLLISION_WIDTH);
+		// Vanilla mobs use one centred, yaw-independent square footprint whose side is the body's
+		// lateral width. Their fore-aft model depth is deliberately not promoted to collision width.
+		float width = bounds.width();
 		float height = bounds.minY() + bounds.height();
 		float eyeHeight = Mth.clamp(bounds.minY() + bounds.height() * 0.85f, 0.0f, height);
 		return EntityDimensions.fixed(width, height).withEyeHeight(eyeHeight);
