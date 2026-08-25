@@ -29,7 +29,6 @@ import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
-import net.minecraft.world.phys.AABB;
 
 /** A real, walking entity whose visible body is supplied by a surgical assembly. */
 public class SlimeBionicEntity extends PathfinderMob {
@@ -49,7 +48,6 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private SurgicalAssembly reportedBoundsAssembly;
 	@Nullable
 	private SurgicalAssembly.BodyBounds reportedBodyBounds;
-	private float collisionBodyYaw = Float.NaN;
 
 	public SlimeBionicEntity(EntityType<? extends SlimeBionicEntity> type, Level level) {
 		super(type, level);
@@ -144,8 +142,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
 		if (bounds == null)
 			return super.getDefaultDimensions(pose);
-		float width = 2.0f * Math.max(Math.abs(bounds.centerX()) + bounds.width() * 0.5f,
-			Math.abs(bounds.centerZ()) + bounds.depth() * 0.5f);
+		// The renderer projects the measured arm-free core centre onto the entity origin. Navigation
+		// and collision can therefore share one centred, yaw-independent vanilla footprint.
+		float width = Math.max(bounds.width(), bounds.depth());
 		float height = bounds.minY() + bounds.height();
 		float eyeHeight = Mth.clamp(bounds.minY() + bounds.height() * 0.85f, 0.0f, height);
 		return EntityDimensions.fixed(width, height).withEyeHeight(eyeHeight);
@@ -156,35 +155,6 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly assembly = getAssembly();
 		return level().isClientSide && clientBoundsAssembly == assembly
 			? clientBodyBounds : assembly == null ? null : assembly.bodyBounds();
-	}
-
-	@Override
-	protected AABB makeBoundingBox() {
-		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
-		if (bounds == null)
-			return super.makeBoundingBox();
-		double radians = Math.toRadians(-yBodyRot);
-		double cosine = Math.abs(Math.cos(radians));
-		double sine = Math.abs(Math.sin(radians));
-		double halfX = (bounds.width() * cosine + bounds.depth() * sine) * 0.5d;
-		double halfZ = (bounds.width() * sine + bounds.depth() * cosine) * 0.5d;
-		double signedCosine = Math.cos(radians);
-		double signedSine = Math.sin(radians);
-		double offsetX = bounds.centerX() * signedCosine + bounds.centerZ() * signedSine;
-		double offsetZ = -bounds.centerX() * signedSine + bounds.centerZ() * signedCosine;
-		double minY = getY() + bounds.minY();
-		return new AABB(getX() + offsetX - halfX, minY, getZ() + offsetZ - halfZ,
-			getX() + offsetX + halfX, minY + bounds.height(), getZ() + offsetZ + halfZ);
-	}
-
-	@Override
-	public void tick() {
-		super.tick();
-		if (activeBodyBounds() != null
-			&& (Float.isNaN(collisionBodyYaw) || Math.abs(Mth.wrapDegrees(yBodyRot - collisionBodyYaw)) > 0.01f)) {
-			collisionBodyYaw = yBodyRot;
-			setBoundingBox(makeBoundingBox());
-		}
 	}
 
 	@Override

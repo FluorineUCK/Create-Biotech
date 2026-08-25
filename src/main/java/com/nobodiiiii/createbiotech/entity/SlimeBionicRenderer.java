@@ -141,8 +141,9 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	/**
 	 * Measures the rest pose once per cached configuration.
 	 *
-	 * <p>The model offset that grounds and centres the body has to come from the still rest pose:
-	 * remeasuring an animated frame would make a walking body bob as its own bounds shift.</p>
+	 * <p>The model offset that grounds the body and places its arm-free collision-core projection at
+	 * the entity origin has to come from the still rest pose: remeasuring an animated frame would
+	 * make a walking body bob as its own bounds shift.</p>
 	 */
 	@Nullable
 	private static CompositeCachedGeometry measureComposite(SlimeBionicEntity entity,
@@ -155,12 +156,14 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		if (!geometry.hasVertices())
 			return null;
 		EntityGeometry.Bounds bounds = geometry.bounds();
-		updateClientBodyBounds(entity, assembly, bounds, sources);
+		SurgicalAssembly.BodyBounds bodyBounds = updateClientBodyBounds(entity, assembly, bounds, sources);
 		return new CompositeCachedGeometry(assembly, slimeForm,
-			new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ()), List.copyOf(sources));
+			modelOffset(bounds, bodyBounds), List.copyOf(sources));
 	}
 
-	private static void updateClientBodyBounds(SlimeBionicEntity entity, SurgicalAssembly assembly,
+	@Nullable
+	private static SurgicalAssembly.BodyBounds updateClientBodyBounds(SlimeBionicEntity entity,
+		SurgicalAssembly assembly,
 		EntityGeometry.Bounds bounds, List<SlimeBionicAnimator.SourceState> sources) {
 		Set<SurgicalAssembly.CombinationMember> armCubes = new HashSet<>();
 		for (SurgicalAssembly.Limb limb : assembly.limbs())
@@ -186,6 +189,19 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 				bodyBounds = bodyBounds.withLegLength(legLength);
 			entity.setClientBodyBounds(assembly, bodyBounds);
 		}
+		return bodyBounds;
+	}
+
+	/** Centres the world entity on the already measured arm-free collision core's XZ projection. */
+	private static Vec3 modelOffset(EntityGeometry.Bounds visible,
+		@Nullable SurgicalAssembly.BodyBounds bodyBounds) {
+		double centerX = visible.centerX();
+		double centerZ = visible.centerZ();
+		if (bodyBounds != null) {
+			centerX += bodyBounds.centerX();
+			centerZ += bodyBounds.centerZ();
+		}
+		return new Vec3(-centerX, -visible.minY(), -centerZ);
 	}
 
 	/**
@@ -294,10 +310,10 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		EntityGeometry.Bounds bounds = bodyGeometry.bounds();
 		Map<Integer, SlimeBionicAnimator.CubeBox> restBoxes = restPose[0] == null ? Map.of()
 			: SlimeBionicAnimator.measure(restPose[0]);
-		updateClientBodyBounds(entity, assembly, bounds,
+		SurgicalAssembly.BodyBounds bodyBounds = updateClientBodyBounds(entity, assembly, bounds,
 			List.of(new SlimeBionicAnimator.SourceState(restBoxes, offsets, assembly.cubeRotations())));
-		Vec3 modelOffset = new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ());
-		return new CachedGeometry(assembly, slimeForm, presentCubes, offsets, modelOffset, restBoxes);
+		return new CachedGeometry(assembly, slimeForm, presentCubes, offsets,
+			modelOffset(bounds, bodyBounds), restBoxes);
 	}
 
 	private static Map<Integer, Vec3> componentOffsets(LivingEntity preview, SurgicalAssembly assembly,

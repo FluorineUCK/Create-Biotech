@@ -85,11 +85,6 @@ public class CBEntityTypes {
 			.<SlimeBionicEntity>of(SlimeBionicEntity::new, MobCategory.CREATURE)
 			.sized(0.6F, 0.8F)
 			.setTrackingRange(10)
-			// Its stitched limbs derive their walk cycle, attack blend and facing from the
-			// client-side entity state. Updating only every three ticks keeps movement itself
-			// interpolated, but makes transitions between those animations visibly quantized.
-			.setUpdateInterval(1)
-			.setShouldReceiveVelocityUpdates(true)
 			.build("slime_bionic"));
 
 	private CBEntityTypes() {}
