@@ -4,6 +4,7 @@ import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalGait;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 
 import net.minecraft.nbt.CompoundTag;
@@ -59,10 +60,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 	}
 
 	public static AttributeSupplier.Builder createAttributes() {
-		// Placeholder statistics. Deriving them from the packed assembly is a separate step.
 		return createMobAttributes()
 			.add(Attributes.MAX_HEALTH, 20.0d)
-			.add(Attributes.MOVEMENT_SPEED, 0.23d)
+			.add(Attributes.MOVEMENT_SPEED, SurgicalGait.VILLAGER_WALK_SPEED)
 			.add(Attributes.ATTACK_DAMAGE, 3.0d)
 			.add(Attributes.ARMOR, 2.0d)
 			.add(Attributes.FOLLOW_RANGE, 35.0d)
@@ -97,7 +97,19 @@ public class SlimeBionicEntity extends PathfinderMob {
 		clientBodyBounds = null;
 		reportedBoundsAssembly = null;
 		reportedBodyBounds = null;
+		refreshMovementSpeed(assembly);
 		refreshDimensions();
+	}
+
+	/** Applies the leg-length curve to the authoritative movement attribute. */
+	private void refreshMovementSpeed(SurgicalAssembly assembly) {
+		if (level().isClientSide)
+			return;
+		SurgicalAssembly.BodyBounds bounds = assembly.bodyBounds();
+		double speed = SurgicalGait.movementSpeed(bounds == null ? 0.0d : bounds.legLength());
+		var movement = getAttribute(Attributes.MOVEMENT_SPEED);
+		if (movement != null && movement.getBaseValue() != speed)
+			movement.setBaseValue(speed);
 	}
 
 	@Nullable

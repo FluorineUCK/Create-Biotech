@@ -22,6 +22,7 @@ public record SlimeBionicBodyBoundsPacket(int entityId, SurgicalAssembly.BodyBou
 		buffer.writeFloat(bounds.centerX());
 		buffer.writeFloat(bounds.minY());
 		buffer.writeFloat(bounds.centerZ());
+		buffer.writeFloat(bounds.legLength());
 	}
 
 	public void handle(ServerPlayer player) {
@@ -40,7 +41,7 @@ public record SlimeBionicBodyBoundsPacket(int entityId, SurgicalAssembly.BodyBou
 	private static SurgicalAssembly.BodyBounds readBounds(FriendlyByteBuf buffer) {
 		SurgicalAssembly.BodyBounds bounds = SurgicalAssembly.BodyBounds.create(
 			buffer.readFloat(), buffer.readFloat(), buffer.readFloat(), buffer.readFloat(),
-			buffer.readFloat(), buffer.readFloat());
+			buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
 		if (bounds == null)
 			throw new IllegalArgumentException("Invalid bionic body bounds");
 		return bounds;
@@ -52,7 +53,8 @@ public record SlimeBionicBodyBoundsPacket(int entityId, SurgicalAssembly.BodyBou
 			&& close(existing.height(), measured.height()) && close(existing.depth(), measured.depth())
 			&& closeOffset(existing.centerX(), measured.centerX())
 			&& closeOffset(existing.minY(), measured.minY())
-			&& closeOffset(existing.centerZ(), measured.centerZ());
+			&& closeOffset(existing.centerZ(), measured.centerZ())
+			&& reasonableLegLength(existing.legLength(), measured.legLength());
 	}
 
 	private static boolean close(float expected, float measured) {
@@ -61,5 +63,9 @@ public record SlimeBionicBodyBoundsPacket(int entityId, SurgicalAssembly.BodyBou
 
 	private static boolean closeOffset(float expected, float measured) {
 		return Math.abs(expected - measured) <= 0.5f;
+	}
+
+	private static boolean reasonableLegLength(float expected, float measured) {
+		return expected == 0.0f || measured > 0.0f && close(expected, measured);
 	}
 }

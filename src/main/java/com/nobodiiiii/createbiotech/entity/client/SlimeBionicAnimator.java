@@ -13,6 +13,7 @@ import org.joml.Vector3f;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalConnectionGraph;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalGait;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
@@ -41,9 +42,8 @@ public final class SlimeBionicAnimator {
 	private static final int AXIS_Z = 2;
 	private static final double GEOMETRY_EPSILON = 1.0e-10d;
 	private static final double PRINCIPAL_AXIS_SHARE = 0.55d;
-	private static final double VANILLA_HUMANOID_LEG_LENGTH = 12.0d / 16.0d;
-	private static final float MIN_GAIT_FREQUENCY_SCALE = 0.25f;
-	private static final float MAX_GAIT_FREQUENCY_SCALE = 4.0f;
+	/** HumanoidModel multiplies this by 1.4, giving the villager-like maximum of 0.7 rad (~40 degrees). */
+	private static final float MAX_LIMB_SWING_AMOUNT = 0.5f;
 	private static final Basis BODY_SPACE = Basis.bodySpace();
 	@Nullable
 	private static HumanoidModel<LivingEntity> zombieModel;
@@ -88,7 +88,8 @@ public final class SlimeBionicAnimator {
 		List<ResolvedLimb> limbs = resolveLimbs(assembly, sources);
 		if (limbs.isEmpty())
 			return frames;
-		Pose pose = pose(entity, partialTick, gaitFrequencyScale(limbs, sources));
+		Pose pose = pose(entity, partialTick,
+			SurgicalGait.animationFrequencyScale(effectiveLegLength(limbs, sources)));
 		if (pose == null)
 			return frames;
 
@@ -190,15 +191,19 @@ public final class SlimeBionicAnimator {
 	}
 
 	/**
-	 * Retargets vanilla's distance-driven gait to the body's actual legs.
+	 * Measures the effective leg length used by movement and animation retargeting.
 	 *
 	 * <p>A vanilla humanoid's hip is twelve model pixels above its sole. For each installed hip we
 	 * instead measure from the resolved hinge down to the lowest point of the complete rotating leg
-	 * group. Averaging both sides keeps an asymmetric body on one shared alternating gait. The
-	 * resulting inverse length ratio changes only phase frequency: {@link LivingEntity#walkAnimation}
-	 * still supplies vanilla's smoothed, actual-distance-based walk/run speed and swing amount.</p>
+	 * group. Averaging both sides keeps an asymmetric body on one shared alternating gait.</p>
 	 */
-	private static float gaitFrequencyScale(List<ResolvedLimb> limbs, List<SourceState> sources) {
+	public static float effectiveLegLength(SurgicalAssembly assembly, List<SourceState> sources) {
+		if (assembly == null || sources == null || sources.size() != assembly.sources().size())
+			return 0.0f;
+		return effectiveLegLength(resolveLimbs(assembly, sources), sources);
+	}
+
+	private static float effectiveLegLength(List<ResolvedLimb> limbs, List<SourceState> sources) {
 		double totalLength = 0.0d;
 		int measuredLegs = 0;
 		for (ResolvedLimb limb : limbs) {
@@ -218,10 +223,8 @@ public final class SlimeBionicAnimator {
 			measuredLegs++;
 		}
 		if (measuredLegs == 0)
-			return 1.0f;
-		double averageLength = totalLength / measuredLegs;
-		return Mth.clamp((float) (VANILLA_HUMANOID_LEG_LENGTH / averageLength),
-			MIN_GAIT_FREQUENCY_SCALE, MAX_GAIT_FREQUENCY_SCALE);
+			return 0.0f;
+		return (float) (totalLength / measuredLegs);
 	}
 
 	/** Centre of the complete rigid part that an installed joint rotates. */
@@ -367,7 +370,9 @@ public final class SlimeBionicAnimator {
 		float limbSwing = 0.0f;
 		float limbSwingAmount = 0.0f;
 		if (!entity.isPassenger() && entity.isAlive()) {
-			limbSwingAmount = Math.min(entity.walkAnimation.speed(partialTick), 1.0f);
+			// WalkAnimation.position keeps accumulating at the full movement-derived speed. Capping only
+			// the amount therefore converts speed beyond this point into faster steps, not wider swings.
+			limbSwingAmount = Math.min(entity.walkAnimation.speed(partialTick), MAX_LIMB_SWING_AMOUNT);
 			limbSwing = entity.walkAnimation.position(partialTick) * gaitFrequencyScale;
 		}
 

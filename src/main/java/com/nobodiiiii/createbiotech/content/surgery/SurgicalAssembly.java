@@ -28,7 +28,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_LIMBS = 5;
 	public static final double MAX_BODY_SIZE = 64.0d;
 	public static final double MIN_BODY_SIZE = 1.0d / 64.0d;
-	private static final int CURRENT_VERSION = 11;
+	private static final int CURRENT_VERSION = 12;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -58,6 +58,7 @@ public final class SurgicalAssembly {
 	private static final String BODY_CENTER_X_TAG = "BodyCenterX";
 	private static final String BODY_MIN_Y_TAG = "BodyMinY";
 	private static final String BODY_CENTER_Z_TAG = "BodyCenterZ";
+	private static final String BODY_LEG_LENGTH_TAG = "BodyLegLength";
 	private static final String FACING_TAG = "Facing";
 	private static final String LAY_POSE_TAG = "LayPose";
 	private static final String POSE_AXIS_TAG = "Axis";
@@ -297,7 +298,8 @@ public final class SurgicalAssembly {
 				assembly.limbs, false, assembly.layoutFacing,
 				assembly.layoutLayPose, null);
 		// Versions 9 and 10 used older bounds. Discard them so those bodies are measured again with
-		// the horizontal-only weighting introduced in version 11.
+		// the horizontal-only weighting introduced in version 11. Version 11 bounds remain usable;
+		// their absent leg length defaults to zero until a rendering client measures it.
 		if (version >= 11 && tag.contains(BODY_WIDTH_TAG, Tag.TAG_ANY_NUMERIC)
 			&& tag.contains(BODY_HEIGHT_TAG, Tag.TAG_ANY_NUMERIC)
 			&& tag.contains(BODY_DEPTH_TAG, Tag.TAG_ANY_NUMERIC)
@@ -307,7 +309,9 @@ public final class SurgicalAssembly {
 			BodyBounds bounds = BodyBounds.create(tag.getDouble(BODY_WIDTH_TAG),
 				tag.getDouble(BODY_HEIGHT_TAG), tag.getDouble(BODY_DEPTH_TAG),
 				tag.getDouble(BODY_CENTER_X_TAG), tag.getDouble(BODY_MIN_Y_TAG),
-				tag.getDouble(BODY_CENTER_Z_TAG));
+				tag.getDouble(BODY_CENTER_Z_TAG),
+				version >= 12 && tag.contains(BODY_LEG_LENGTH_TAG, Tag.TAG_ANY_NUMERIC)
+					? tag.getDouble(BODY_LEG_LENGTH_TAG) : 0.0d);
 			if (bounds == null)
 				return null;
 			assembly = assembly.withBodyBounds(bounds);
@@ -395,6 +399,7 @@ public final class SurgicalAssembly {
 			tag.putFloat(BODY_CENTER_X_TAG, bodyBounds.centerX());
 			tag.putFloat(BODY_MIN_Y_TAG, bodyBounds.minY());
 			tag.putFloat(BODY_CENTER_Z_TAG, bodyBounds.centerZ());
+			tag.putFloat(BODY_LEG_LENGTH_TAG, bodyBounds.legLength());
 		}
 		return tag;
 	}
@@ -554,12 +559,13 @@ public final class SurgicalAssembly {
 		return List.copyOf(decoded);
 	}
 
-	/** Volume-weighted upright collision core and its offset from the complete visible body. */
+	/** Volume-weighted upright collision core, visible offset and measured effective leg length. */
 	public record BodyBounds(float width, float height, float depth,
-		float centerX, float minY, float centerZ) {
+		float centerX, float minY, float centerZ, float legLength) {
 		public BodyBounds {
 			if (!validSize(width) || !validSize(height) || !validSize(depth)
-				|| !validOffset(centerX) || !validVerticalOffset(minY) || !validOffset(centerZ))
+				|| !validOffset(centerX) || !validVerticalOffset(minY) || !validOffset(centerZ)
+				|| !validLegLength(legLength))
 				throw new IllegalArgumentException("Invalid surgical body bounds");
 		}
 
@@ -571,12 +577,26 @@ public final class SurgicalAssembly {
 		@Nullable
 		public static BodyBounds create(double width, double height, double depth,
 			double centerX, double minY, double centerZ) {
+			return create(width, height, depth, centerX, minY, centerZ, 0.0d);
+		}
+
+		@Nullable
+		public static BodyBounds create(double width, double height, double depth,
+			double centerX, double minY, double centerZ, double legLength) {
 			if (!validSize(width) || !validSize(height) || !validSize(depth))
 				return null;
-			if (!validOffset(centerX) || !validVerticalOffset(minY) || !validOffset(centerZ))
+			if (!validOffset(centerX) || !validVerticalOffset(minY) || !validOffset(centerZ)
+				|| !validLegLength(legLength))
 				return null;
 			return new BodyBounds((float) width, (float) height, (float) depth,
-				(float) centerX, (float) minY, (float) centerZ);
+				(float) centerX, (float) minY, (float) centerZ, (float) legLength);
+		}
+
+		public BodyBounds withLegLength(double measuredLegLength) {
+			if (!validLegLength(measuredLegLength))
+				throw new IllegalArgumentException("Invalid surgical leg length");
+			return new BodyBounds(width, height, depth, centerX, minY, centerZ,
+				(float) measuredLegLength);
 		}
 
 		private static boolean validSize(double value) {
@@ -589,6 +609,10 @@ public final class SurgicalAssembly {
 
 		private static boolean validVerticalOffset(double value) {
 			return Double.isFinite(value) && value >= 0.0d && value <= MAX_BODY_SIZE;
+		}
+
+		private static boolean validLegLength(double value) {
+			return value == 0.0d || validSize(value);
 		}
 	}
 

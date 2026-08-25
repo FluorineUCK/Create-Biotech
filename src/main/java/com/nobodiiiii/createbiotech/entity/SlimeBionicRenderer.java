@@ -179,8 +179,13 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		SurgicalBodyBounds.Envelope visible = new SurgicalBodyBounds.Envelope(
 			bounds.minX(), bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ());
 		SurgicalAssembly.BodyBounds bodyBounds = SurgicalBodyBounds.measure(bodyCubes, allCubes, visible);
-		if (bodyBounds != null)
+		if (bodyBounds != null) {
+			float legLength = SlimeBionicAnimator.effectiveLegLength(assembly, sources);
+			if (legLength >= SurgicalAssembly.MIN_BODY_SIZE
+				&& legLength <= SurgicalAssembly.MAX_BODY_SIZE)
+				bodyBounds = bodyBounds.withLegLength(legLength);
 			entity.setClientBodyBounds(assembly, bodyBounds);
+		}
 	}
 
 	/**
