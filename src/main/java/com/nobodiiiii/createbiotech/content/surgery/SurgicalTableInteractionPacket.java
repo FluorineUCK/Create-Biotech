@@ -12,9 +12,12 @@ import net.minecraft.world.phys.Vec3;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.jetbrains.annotations.Nullable;
+
 public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand, Action action,
 	int subjectId, int targetId, int observedCubeCount, List<SurgicalAssembly.Seam> seams,
-	double originOffsetX, double originOffsetZ, SurgicalTableLayout.Proposal layout) {
+	double originOffsetX, double originOffsetZ, SurgicalTableLayout.Proposal layout,
+	@Nullable SurgicalAssembly.BodyBounds bodyBounds) {
 
 	public SurgicalTableInteractionPacket {
 		seams = List.copyOf(seams);
@@ -24,7 +27,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 	public SurgicalTableInteractionPacket(FriendlyByteBuf buffer) {
 		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), buffer.readEnum(Action.class),
 			buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), readSeams(buffer), buffer.readDouble(),
-			buffer.readDouble(), readLayout(buffer));
+			buffer.readDouble(), readLayout(buffer), readBodyBounds(buffer));
 	}
 
 	public void write(FriendlyByteBuf buffer) {
@@ -57,6 +60,12 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			buffer.writeDouble(footprint.maxZ());
 			buffer.writeInt(footprint.gridX());
 			buffer.writeInt(footprint.gridZ());
+		}
+		buffer.writeBoolean(bodyBounds != null);
+		if (bodyBounds != null) {
+			buffer.writeFloat(bodyBounds.width());
+			buffer.writeFloat(bodyBounds.height());
+			buffer.writeFloat(bodyBounds.depth());
 		}
 	}
 
@@ -100,7 +109,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			if (targetId < observedCubeCount
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.isBox(held)
 				&& !com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.hasCapturedEntity(held))
-				table.packComponent(player, held, subjectId, targetId, observedCubeCount, seams);
+				table.packComponent(player, held, subjectId, targetId, observedCubeCount, seams, bodyBounds);
 		}
 		case CUT_CUBE_CONNECTIONS -> {
 			if (targetId < observedCubeCount && held.is(Items.SHEARS)) {
@@ -155,6 +164,13 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			footprints.add(new SurgicalTableLayout.Footprint(buffer.readVarInt(), buffer.readDouble(),
 				buffer.readDouble(), buffer.readDouble(), buffer.readDouble(), buffer.readInt(), buffer.readInt()));
 		return new SurgicalTableLayout.Proposal(offsets, footprints);
+	}
+
+	@Nullable
+	private static SurgicalAssembly.BodyBounds readBodyBounds(FriendlyByteBuf buffer) {
+		if (!buffer.readBoolean())
+			return null;
+		return SurgicalAssembly.BodyBounds.create(buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
 	}
 
 	public enum Action {

@@ -4,14 +4,18 @@ import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.network.CBPackets;
 
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
+import net.minecraft.util.Mth;
+import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.entity.ai.goal.FloatGoal;
@@ -24,6 +28,7 @@ import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
 
 /** A real, walking entity whose visible body is supplied by a surgical assembly. */
 public class SlimeBionicEntity extends PathfinderMob {
@@ -35,6 +40,15 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private CompoundTag cachedAssemblyData;
 	@Nullable
 	private SurgicalAssembly cachedAssembly;
+	@Nullable
+	private SurgicalAssembly clientBoundsAssembly;
+	@Nullable
+	private SurgicalAssembly.BodyBounds clientBodyBounds;
+	@Nullable
+	private SurgicalAssembly reportedBoundsAssembly;
+	@Nullable
+	private SurgicalAssembly.BodyBounds reportedBodyBounds;
+	private float collisionBodyYaw = Float.NaN;
 
 	public SlimeBionicEntity(EntityType<? extends SlimeBionicEntity> type, Level level) {
 		super(type, level);
@@ -79,6 +93,11 @@ public class SlimeBionicEntity extends PathfinderMob {
 		entityData.set(ASSEMBLY, encoded);
 		cachedAssemblyData = encoded;
 		cachedAssembly = assembly;
+		clientBoundsAssembly = null;
+		clientBodyBounds = null;
+		reportedBoundsAssembly = null;
+		reportedBodyBounds = null;
+		refreshDimensions();
 	}
 
 	@Nullable
@@ -89,6 +108,75 @@ public class SlimeBionicEntity extends PathfinderMob {
 			cachedAssembly = SurgicalAssembly.load(encoded);
 		}
 		return cachedAssembly;
+	}
+
+	/** Applies the renderer's exact visible envelope on the client, including slime-shell inflation. */
+	public void setClientBodyBounds(SurgicalAssembly assembly, SurgicalAssembly.BodyBounds bounds) {
+		if (!level().isClientSide || assembly == null || bounds == null || getAssembly() != assembly)
+			return;
+		if (clientBoundsAssembly == assembly && bounds.equals(clientBodyBounds))
+			return;
+		clientBoundsAssembly = assembly;
+		clientBodyBounds = bounds;
+		refreshDimensions();
+		if (!bounds.equals(assembly.bodyBounds())
+			&& (reportedBoundsAssembly != assembly || !bounds.equals(reportedBodyBounds))) {
+			reportedBoundsAssembly = assembly;
+			reportedBodyBounds = bounds;
+			CBPackets.sendToServer(new SlimeBionicBodyBoundsPacket(getId(), bounds));
+		}
+	}
+
+	@Override
+	protected EntityDimensions getDefaultDimensions(Pose pose) {
+		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
+		if (bounds == null)
+			return super.getDefaultDimensions(pose);
+		float width = Math.max(bounds.width(), bounds.depth());
+		return EntityDimensions.fixed(width, bounds.height()).withEyeHeight(bounds.height() * 0.85f);
+	}
+
+	@Nullable
+	private SurgicalAssembly.BodyBounds activeBodyBounds() {
+		SurgicalAssembly assembly = getAssembly();
+		return level().isClientSide && clientBoundsAssembly == assembly
+			? clientBodyBounds : assembly == null ? null : assembly.bodyBounds();
+	}
+
+	@Override
+	protected AABB makeBoundingBox() {
+		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
+		if (bounds == null)
+			return super.makeBoundingBox();
+		double radians = Math.toRadians(yBodyRot);
+		double cosine = Math.abs(Math.cos(radians));
+		double sine = Math.abs(Math.sin(radians));
+		double halfX = (bounds.width() * cosine + bounds.depth() * sine) * 0.5d;
+		double halfZ = (bounds.width() * sine + bounds.depth() * cosine) * 0.5d;
+		return new AABB(getX() - halfX, getY(), getZ() - halfZ,
+			getX() + halfX, getY() + bounds.height(), getZ() + halfZ);
+	}
+
+	@Override
+	public void tick() {
+		super.tick();
+		if (activeBodyBounds() != null
+			&& (Float.isNaN(collisionBodyYaw) || Math.abs(Mth.wrapDegrees(yBodyRot - collisionBodyYaw)) > 0.01f)) {
+			collisionBodyYaw = yBodyRot;
+			setBoundingBox(makeBoundingBox());
+		}
+	}
+
+	@Override
+	public void onSyncedDataUpdated(EntityDataAccessor<?> key) {
+		super.onSyncedDataUpdated(key);
+		if (ASSEMBLY.equals(key)) {
+			clientBoundsAssembly = null;
+			clientBodyBounds = null;
+			reportedBoundsAssembly = null;
+			reportedBodyBounds = null;
+			refreshDimensions();
+		}
 	}
 
 	@Override

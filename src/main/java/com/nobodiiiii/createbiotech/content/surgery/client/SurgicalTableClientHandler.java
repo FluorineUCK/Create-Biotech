@@ -943,8 +943,14 @@ public final class SurgicalTableClientHandler {
 			cubeSelection = selected;
 			if (selected == null)
 				return;
+			SurgicalAssembly.BodyBounds bodyBounds = selectedBodyBounds(selected);
+			if (bodyBounds == null) {
+				showNoSpace(minecraft.player);
+				consumeInteraction(event, hand);
+				return;
+			}
 			sendInteraction(selected, hand, SurgicalTableInteractionPacket.Action.PACK,
-				SurgicalTableLayout.Proposal.EMPTY);
+				SurgicalTableLayout.Proposal.EMPTY, bodyBounds);
 		} else {
 			return;
 		}
@@ -1891,15 +1897,27 @@ public final class SurgicalTableClientHandler {
 
 	private static void sendInteraction(Selection selected, InteractionHand hand,
 		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal) {
-		sendInteraction(selected, hand, action, proposal, 0.0d, 0.0d);
+		sendInteraction(selected, hand, action, proposal, 0.0d, 0.0d, null);
+	}
+
+	private static void sendInteraction(Selection selected, InteractionHand hand,
+		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal,
+		@Nullable SurgicalAssembly.BodyBounds bodyBounds) {
+		sendInteraction(selected, hand, action, proposal, 0.0d, 0.0d, bodyBounds);
 	}
 
 	private static void sendInteraction(Selection selected, InteractionHand hand,
 		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal,
 		double originOffsetX, double originOffsetZ) {
+		sendInteraction(selected, hand, action, proposal, originOffsetX, originOffsetZ, null);
+	}
+
+	private static void sendInteraction(Selection selected, InteractionHand hand,
+		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal,
+		double originOffsetX, double originOffsetZ, @Nullable SurgicalAssembly.BodyBounds bodyBounds) {
 		CBPackets.sendToServer(new SurgicalTableInteractionPacket(selected.tablePos, hand, action,
 			selected.subjectId, selected.targetId, selected.observedCubeCount, selected.seams,
-			originOffsetX, originOffsetZ, proposal));
+			originOffsetX, originOffsetZ, proposal, bodyBounds));
 	}
 
 	private static boolean tryPlaceSubject(LocalPlayer player, ClientLevel level, InteractionHand hand,
@@ -2685,6 +2703,50 @@ public final class SurgicalTableClientHandler {
 		connectedSelectionCache = new CubeSelectionCache(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
 			table.clientDataRevision(), hit.geometry.renderRevision, selection);
 		return selection;
+	}
+
+	/** Measures the selected connected body in the upright frame used by the packed entity. */
+	@Nullable
+	private static SurgicalAssembly.BodyBounds selectedBodyBounds(Selection selection) {
+		ClientLevel level = Minecraft.getInstance().level;
+		if (level == null
+			|| !(level.getBlockEntity(selection.tablePos()) instanceof SurgicalTableBlockEntity table))
+			return null;
+		SurgicalSubject anchor = table.getSubject(selection.subjectId());
+		if (anchor == null)
+			return null;
+		Map<Integer, BitSet> components = table.connectedComponents(selection.subjectId(),
+			selection.targetId(), selection.observedCubeCount(), selection.seams());
+		if (components.isEmpty())
+			return null;
+
+		double minX = Double.POSITIVE_INFINITY;
+		double minY = Double.POSITIVE_INFINITY;
+		double minZ = Double.POSITIVE_INFINITY;
+		double maxX = Double.NEGATIVE_INFINITY;
+		double maxY = Double.NEGATIVE_INFINITY;
+		double maxZ = Double.NEGATIVE_INFINITY;
+		for (Map.Entry<Integer, BitSet> entry : components.entrySet()) {
+			TableGeometry geometry = TABLES.get(new SubjectKey(selection.tablePos(), entry.getKey()));
+			if (geometry == null || !geometry.topologyReady())
+				return null;
+			for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
+				cube = entry.getValue().nextSetBit(cube + 1)) {
+				SurgicalModelRenderContext.CubeGeometry cubeGeometry = geometry.cubesById.get(cube);
+				if (cubeGeometry == null)
+					return null;
+				for (Vec3 corner : cubeGeometry.corners()) {
+					Vec3 upright = anchor.layPose().inverseRotate(corner);
+					minX = Math.min(minX, upright.x);
+					minY = Math.min(minY, upright.y);
+					minZ = Math.min(minZ, upright.z);
+					maxX = Math.max(maxX, upright.x);
+					maxY = Math.max(maxY, upright.y);
+					maxZ = Math.max(maxZ, upright.z);
+				}
+			}
+		}
+		return SurgicalAssembly.BodyBounds.create(maxX - minX, maxY - minY, maxZ - minZ);
 	}
 
 	@Nullable

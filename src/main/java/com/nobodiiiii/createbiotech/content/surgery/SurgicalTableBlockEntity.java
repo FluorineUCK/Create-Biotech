@@ -555,11 +555,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	public boolean packComponent(Player player, ItemStack boxes, int subjectId, int cubeId,
-		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams,
+		@Nullable SurgicalAssembly.BodyBounds bodyBounds) {
 		SurgicalSubject subject = getSubject(subjectId);
 		if (subject == null || !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
 			|| !subject.validPresentCube(cubeId) || !CapturedEntityBoxItem.isBox(boxes)
-			|| CapturedEntityBoxItem.hasCapturedEntity(boxes))
+			|| CapturedEntityBoxItem.hasCapturedEntity(boxes) || bodyBounds == null)
 			return false;
 
 		ComponentGroup group = connectedGroup(subject, cubeId);
@@ -576,6 +577,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			: compositeAssembly(group, groupJoints, groupCombinations, groupLimbs, subject);
 		if (assembly == null)
 			return false;
+		assembly = assembly.withBodyBounds(bodyBounds);
 		SlimeBionicEntity bionic = CBEntityTypes.SLIME_BIONIC.get().create(level);
 		if (bionic == null)
 			return false;

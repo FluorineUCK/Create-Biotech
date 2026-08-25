@@ -77,7 +77,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			boolean rebuildGeometry = cached == null || cached.assembly != assembly
 				|| cached.slimeForm != slimeForm;
 			if (rebuildGeometry) {
-				cached = rebuildGeometry(preview, assembly, partialTick, packedLight, slimeForm);
+				cached = rebuildGeometry(entity, preview, assembly, partialTick, packedLight, slimeForm);
 				if (cached != null) {
 					GEOMETRY.put(entity, cached);
 				} else {
@@ -151,8 +151,17 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		if (!geometry.hasVertices())
 			return null;
 		EntityGeometry.Bounds bounds = geometry.bounds();
+		updateClientBodyBounds(entity, assembly, bounds);
 		return new CompositeCachedGeometry(assembly, slimeForm,
 			new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ()), List.copyOf(sources));
+	}
+
+	private static void updateClientBodyBounds(SlimeBionicEntity entity, SurgicalAssembly assembly,
+		EntityGeometry.Bounds bounds) {
+		SurgicalAssembly.BodyBounds bodyBounds = SurgicalAssembly.BodyBounds.create(
+			bounds.sizeX(), bounds.sizeY(), bounds.sizeZ());
+		if (bodyBounds != null)
+			entity.setClientBodyBounds(assembly, bodyBounds);
 	}
 
 	/**
@@ -238,7 +247,8 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 	}
 
 	@Nullable
-	private static CachedGeometry rebuildGeometry(LivingEntity preview, SurgicalAssembly assembly,
+	private static CachedGeometry rebuildGeometry(SlimeBionicEntity entity, LivingEntity preview,
+		SurgicalAssembly assembly,
 		float partialTick, int packedLight, boolean slimeForm) {
 		if (preview == null)
 			return null;
@@ -258,6 +268,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 				offsets, assembly.cubeRotations(),
 				new PoseStack(), measuringBuffer, packedLight, 0.0f, partialTick, true, null, !slimeForm));
 		EntityGeometry.Bounds bounds = bodyGeometry.bounds();
+		updateClientBodyBounds(entity, assembly, bounds);
 		Vec3 modelOffset = new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ());
 		Map<Integer, SlimeBionicAnimator.CubeBox> restBoxes = restPose[0] == null ? Map.of()
 			: SlimeBionicAnimator.measure(restPose[0]);

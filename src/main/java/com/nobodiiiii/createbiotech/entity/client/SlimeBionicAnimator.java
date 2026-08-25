@@ -285,6 +285,10 @@ public final class SlimeBionicAnimator {
 	 * ray toward the parent, which is the stable choice for heads and other compact pieces.</p>
 	 */
 	private static Vec3 pivot(SurgicalLimbType type, CubeBox child, CubeBox parent) {
+		// Head pitch and yaw must originate at the neck connection itself. Using an endpoint of an
+		// elongated or unusually shaped head makes it orbit around its own centre instead of nodding.
+		if (type == SurgicalLimbType.NECK)
+			return child.contactCenter(parent, BODY_SPACE);
 		Vec3 principal = child.principalAxis(BODY_SPACE);
 		if (principal == null)
 			return child.surfaceToward(parent.center(), type, BODY_SPACE);
@@ -429,6 +433,10 @@ public final class SlimeBionicAnimator {
 			return vector.dot(axis(index));
 		}
 
+		private Vec3 point(double x, double y, double z) {
+			return modelX.scale(x).add(modelY.scale(y)).add(modelZ.scale(z));
+		}
+
 		/** Builds the rest-frame rotation that maps a canonical humanoid limb onto this child. */
 		private SurgicalCubeRotation restAlignment(SurgicalLimbType type, Vec3 restDirection) {
 			Vec3 actual = new Vec3(project(restDirection, AXIS_X), project(restDirection, AXIS_Y),
@@ -568,6 +576,21 @@ public final class SlimeBionicAnimator {
 				distance += outside * outside;
 			}
 			return distance;
+		}
+
+		/** Centre of the nearest shared/connecting region between this cube and another. */
+		private Vec3 contactCenter(CubeBox other, Basis basis) {
+			double[] coordinate = new double[3];
+			for (int axis = AXIS_X; axis <= AXIS_Z; axis++) {
+				if (max[axis] < other.min[axis])
+					coordinate[axis] = (max[axis] + other.min[axis]) * 0.5d;
+				else if (other.max[axis] < min[axis])
+					coordinate[axis] = (min[axis] + other.max[axis]) * 0.5d;
+				else
+					coordinate[axis] = (Math.max(min[axis], other.min[axis])
+						+ Math.min(max[axis], other.max[axis])) * 0.5d;
+			}
+			return basis.point(coordinate[AXIS_X], coordinate[AXIS_Y], coordinate[AXIS_Z]);
 		}
 
 		private Vec3 surfaceToward(Vec3 target, SurgicalLimbType type, Basis basis) {

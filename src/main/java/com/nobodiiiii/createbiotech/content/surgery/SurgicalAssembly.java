@@ -26,7 +26,9 @@ public final class SurgicalAssembly {
 	public static final int MAX_SEAMS = 4096;
 	public static final int MAX_SOURCES = 256;
 	public static final int MAX_LIMBS = 5;
-	private static final int CURRENT_VERSION = 8;
+	public static final double MAX_BODY_SIZE = 64.0d;
+	private static final double MIN_BODY_SIZE = 1.0d / 64.0d;
+	private static final int CURRENT_VERSION = 9;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -50,6 +52,9 @@ public final class SurgicalAssembly {
 	private static final String PRESERVE_LAYOUT_TAG = "PreserveLayout";
 	private static final String LAYOUT_FACING_TAG = "LayoutFacing";
 	private static final String LAYOUT_LAY_POSE_TAG = "LayoutLayPose";
+	private static final String BODY_WIDTH_TAG = "BodyWidth";
+	private static final String BODY_HEIGHT_TAG = "BodyHeight";
+	private static final String BODY_DEPTH_TAG = "BodyDepth";
 	private static final String FACING_TAG = "Facing";
 	private static final String LAY_POSE_TAG = "LayPose";
 	private static final String POSE_AXIS_TAG = "Axis";
@@ -79,10 +84,12 @@ public final class SurgicalAssembly {
 	private final boolean preserveLayout;
 	private final Direction layoutFacing;
 	private final SurgicalLayPose layoutLayPose;
+	@Nullable
+	private final BodyBounds bodyBounds;
 
 	private SurgicalAssembly(List<Source> sources, List<Joint> joints, List<Combination> combinations,
 		List<Limb> limbs, boolean preserveLayout,
-		Direction layoutFacing, SurgicalLayPose layoutLayPose) {
+		Direction layoutFacing, SurgicalLayPose layoutLayPose, @Nullable BodyBounds bodyBounds) {
 		this.sources = List.copyOf(sources);
 		this.joints = List.copyOf(joints);
 		this.combinations = List.copyOf(combinations);
@@ -90,6 +97,7 @@ public final class SurgicalAssembly {
 		this.preserveLayout = preserveLayout;
 		this.layoutFacing = horizontal(layoutFacing);
 		this.layoutLayPose = layoutLayPose == null ? SurgicalLayPose.IDENTITY : layoutLayPose;
+		this.bodyBounds = bodyBounds;
 	}
 
 	@Nullable
@@ -105,7 +113,7 @@ public final class SurgicalAssembly {
 			Direction.NORTH, SurgicalLayPose.IDENTITY, Vec3.ZERO, Map.of());
 		return source == null ? null
 			: new SurgicalAssembly(List.of(source), List.of(), List.of(), List.of(), false, Direction.NORTH,
-				SurgicalLayPose.IDENTITY);
+				SurgicalLayPose.IDENTITY, null);
 	}
 
 	@Nullable
@@ -174,7 +182,7 @@ public final class SurgicalAssembly {
 		if (frozenLimbs == null)
 			return null;
 		return new SurgicalAssembly(frozenSources, frozenJoints, frozenCombinations, frozenLimbs, true,
-			layoutFacing, layoutLayPose);
+			layoutFacing, layoutLayPose, null);
 	}
 
 	/**
@@ -281,10 +289,20 @@ public final class SurgicalAssembly {
 			layoutLayPose);
 		if (assembly == null)
 			return null;
-		return tag.getBoolean(PRESERVE_LAYOUT_TAG) ? assembly
+		assembly = tag.getBoolean(PRESERVE_LAYOUT_TAG) ? assembly
 			: new SurgicalAssembly(assembly.sources, assembly.joints, assembly.combinations,
 				assembly.limbs, false, assembly.layoutFacing,
-				assembly.layoutLayPose);
+				assembly.layoutLayPose, null);
+		if (version >= 9 && (tag.contains(BODY_WIDTH_TAG, Tag.TAG_ANY_NUMERIC)
+			|| tag.contains(BODY_HEIGHT_TAG, Tag.TAG_ANY_NUMERIC)
+			|| tag.contains(BODY_DEPTH_TAG, Tag.TAG_ANY_NUMERIC))) {
+			BodyBounds bounds = BodyBounds.create(tag.getDouble(BODY_WIDTH_TAG),
+				tag.getDouble(BODY_HEIGHT_TAG), tag.getDouble(BODY_DEPTH_TAG));
+			if (bounds == null)
+				return null;
+			assembly = assembly.withBodyBounds(bounds);
+		}
+		return assembly;
 	}
 
 	@Nullable
@@ -360,6 +378,11 @@ public final class SurgicalAssembly {
 			tag.putBoolean(PRESERVE_LAYOUT_TAG, true);
 		tag.putInt(LAYOUT_FACING_TAG, layoutFacing.get3DDataValue());
 		tag.put(LAYOUT_LAY_POSE_TAG, writeLayPose(layoutLayPose));
+		if (bodyBounds != null) {
+			tag.putFloat(BODY_WIDTH_TAG, bodyBounds.width());
+			tag.putFloat(BODY_HEIGHT_TAG, bodyBounds.height());
+			tag.putFloat(BODY_DEPTH_TAG, bodyBounds.depth());
+		}
 		return tag;
 	}
 
@@ -370,6 +393,15 @@ public final class SurgicalAssembly {
 	public boolean preservesLayout() { return preserveLayout; }
 	public Direction layoutFacing() { return layoutFacing; }
 	public SurgicalLayPose layoutLayPose() { return layoutLayPose; }
+	@Nullable
+	public BodyBounds bodyBounds() { return bodyBounds; }
+
+	public SurgicalAssembly withBodyBounds(BodyBounds bounds) {
+		if (bounds == null)
+			throw new IllegalArgumentException("A surgical body requires valid bounds");
+		return new SurgicalAssembly(sources, joints, combinations, limbs, preserveLayout, layoutFacing,
+			layoutLayPose, bounds);
+	}
 
 	public SurgicalLayPose placedLayPose(Direction placementFacing) {
 		return layoutLayPose.rotateClockwise(clockwiseTurns(layoutFacing, horizontal(placementFacing)));
@@ -498,6 +530,25 @@ public final class SurgicalAssembly {
 		for (int seamId : encoded)
 			decoded.add(seamId);
 		return List.copyOf(decoded);
+	}
+
+	/** Upright rest-pose envelope measured from the visible cubes before the body is boxed. */
+	public record BodyBounds(float width, float height, float depth) {
+		public BodyBounds {
+			if (!validSize(width) || !validSize(height) || !validSize(depth))
+				throw new IllegalArgumentException("Invalid surgical body bounds");
+		}
+
+		@Nullable
+		public static BodyBounds create(double width, double height, double depth) {
+			if (!validSize(width) || !validSize(height) || !validSize(depth))
+				return null;
+			return new BodyBounds((float) width, (float) height, (float) depth);
+		}
+
+		private static boolean validSize(double value) {
+			return Double.isFinite(value) && value >= MIN_BODY_SIZE && value <= MAX_BODY_SIZE;
+		}
 	}
 
 	public static final class Source {
