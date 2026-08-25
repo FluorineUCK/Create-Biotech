@@ -28,6 +28,9 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableGluePacket;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalJointItem;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLimbPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlacementPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalSubject;
 import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueItem;
@@ -78,6 +81,8 @@ public final class SurgicalTableClientHandler {
 	private static final int CUBE_HIGHLIGHT_COLOR = PonderPalette.BLUE.getColor();
 	private static final int HONEY_HIGHLIGHT_COLOR = 0xE8A43A;
 	private static final float HIGHLIGHT_LINE_WIDTH = 1.0f / 32.0f;
+	private static final float GLUE_POINT_LINE_WIDTH = HIGHLIGHT_LINE_WIDTH / 4.0f;
+	private static final float GLUE_FIRST_PREVIEW_ALPHA = 0.5f;
 	private static final double MAX_SELECTION_THRESHOLD = 3.0d / 16.0d;
 	private static final double GLUE_EDIT_TRANSLATION_STEP = 1.0d / 16.0d;
 	private static final double GLUE_EDIT_ROTATION_STEP = 15.0d;
@@ -93,7 +98,7 @@ public final class SurgicalTableClientHandler {
 	private static final OutlineState CUBE_OUTLINE = new OutlineState();
 	private static final OutlineState COMBINATION_OUTLINE = new OutlineState();
 	private static final OutlineState GLUE_EDIT_OUTLINE = new OutlineState();
-	private static final OutlineState GLUE_POINT_OUTLINE = new OutlineState();
+	private static final OutlineState GLUE_POINT_OUTLINE = new OutlineState(GLUE_POINT_LINE_WIDTH);
 	private static final Object PLACEMENT_OUTLINE_SLOT = new Object();
 	private static final Map<SubjectKey, TableGeometry> TABLES = new HashMap<>();
 	private static final Map<CombinationOutlineKey, CombinationOutlineCache> COMBINATION_OUTLINES =
@@ -109,12 +114,15 @@ public final class SurgicalTableClientHandler {
 	private static Ray lastSelectionRay;
 	@Nullable
 	private static PendingGlue lastSelectionPendingGlue;
+	private static PendingLimb lastSelectionPendingLimb;
 	@Nullable
 	private static Selection seamSelection;
 	@Nullable
 	private static Selection cubeSelection;
 	@Nullable
 	private static Selection componentSelection;
+	private static Selection limbSelection;
+	private static PendingLimb pendingLimb;
 	@Nullable
 	private static PendingCut pendingCut;
 	@Nullable
@@ -251,6 +259,8 @@ public final class SurgicalTableClientHandler {
 		geometryGeneration++;
 		lastSelectionRay = null;
 		lastSelectionPendingGlue = null;
+		lastSelectionPendingLimb = null;
+		pendingLimb = null;
 		SurgicalTablePoseResolver.clear();
 		GLUE_EDIT_OUTLINE.clear();
 		GLUE_POINT_OUTLINE.clear();
@@ -560,7 +570,8 @@ public final class SurgicalTableClientHandler {
 			SurgicalTablePoseResolver.resolve(moved.pose).apply(poseStack);
 			SurgicalSourceModelRenderer.render(entity, subject.cubeCount(), moved.cubes, moved.offsets,
 				moved.rotations,
-				poseStack, buffer, light, 0.0f, partialTicks, false, camera, projectSourceGeometry);
+				poseStack, buffer, light, 0.0f, partialTicks, false, camera, projectSourceGeometry,
+				moved.editable ? GLUE_FIRST_PREVIEW_ALPHA : 1.0f);
 			poseStack.popPose();
 		}
 		buffer.endBatch();
@@ -608,14 +619,20 @@ public final class SurgicalTableClientHandler {
 		boolean holdingGlue = isSurgicalGlue(player.getMainHandItem()) || isSurgicalGlue(player.getOffhandItem());
 		boolean holdingHoney = player.getMainHandItem().is(Items.HONEY_BOTTLE)
 			|| player.getOffhandItem().is(Items.HONEY_BOTTLE);
+		boolean holdingJoint = heldLimbType(player.getMainHandItem()) != null
+			|| heldLimbType(player.getOffhandItem()) != null;
+		if (!holdingJoint && pendingLimb != null)
+			clearPendingLimb();
 		boolean highlightingDirectConnections = holdingShears && player.isShiftKeyDown();
-		if (!holdingShears && !holdingEmptyBox && !holdingEmptyLargeBox && !holdingGlue && !holdingHoney) {
+		if (!holdingShears && !holdingEmptyBox && !holdingEmptyLargeBox && !holdingGlue && !holdingHoney
+			&& !holdingJoint) {
 			hoveredGluePoint = null;
 			GLUE_POINT_OUTLINE.clear();
 			gluePreview = null;
 			seamSelection = null;
 			cubeSelection = null;
 			componentSelection = null;
+			limbSelection = null;
 			lastSelectionMode = Integer.MIN_VALUE;
 			lastSelectionRay = null;
 			clearSeamHighlight();
@@ -624,10 +641,11 @@ public final class SurgicalTableClientHandler {
 		Ray ray = playerRay(player);
 		int selectionMode = (holdingShears ? 1 : 0) | (holdingEmptyBox ? 2 : 0)
 			| (holdingEmptyLargeBox ? 4 : 0) | (holdingGlue ? 8 : 0)
-			| (highlightingDirectConnections ? 16 : 0) | (holdingHoney ? 32 : 0);
+			| (highlightingDirectConnections ? 16 : 0) | (holdingHoney ? 32 : 0)
+			| (holdingJoint ? 64 : 0);
 		if (lastSelectionTick == level.getGameTime() && lastSelectionGeneration == geometryGeneration
 			&& lastSelectionMode == selectionMode && ray.equals(lastSelectionRay)
-			&& pendingGlue == lastSelectionPendingGlue) {
+			&& pendingGlue == lastSelectionPendingGlue && pendingLimb == lastSelectionPendingLimb) {
 			refreshCurrentSelectionHighlight();
 			return;
 		}
@@ -636,7 +654,8 @@ public final class SurgicalTableClientHandler {
 		lastSelectionMode = selectionMode;
 		lastSelectionRay = ray;
 		lastSelectionPendingGlue = pendingGlue;
-		CubeHit cubeHit = holdingShears || holdingEmptyBox || holdingGlue || holdingHoney
+		lastSelectionPendingLimb = pendingLimb;
+		CubeHit cubeHit = holdingShears || holdingEmptyBox || holdingGlue || holdingHoney || holdingJoint
 			? findNearestCubeHit(player, level, ray) : null;
 		CubeHit glueHit = holdingGlue ? snapGlueHit(cubeHit) : null;
 		hoveredGluePoint = glueHit == null ? null : glueHit.gluePoint;
@@ -651,6 +670,7 @@ public final class SurgicalTableClientHandler {
 		seamSelection = holdingShears && !highlightingDirectConnections
 			? findSeamSelection(player, level, ray, cubeHit) : null;
 		cubeSelection = holdingEmptyBox ? findConnectedComponentSelection(cubeHit) : null;
+		limbSelection = holdingJoint ? findLimbTargetSelection(cubeHit) : null;
 		componentSelection = holdingHoney
 			? findConnectedComponentSelection(cubeHit)
 			: holdingGlue
@@ -665,7 +685,18 @@ public final class SurgicalTableClientHandler {
 		refreshGluePointHighlight();
 		if (highlightGluePreview())
 			return;
-		if (componentSelection != null)
+		if (pendingLimb != null) {
+			List<SurgicalClientTopology.Edge> edges = new ArrayList<>(pendingLimb.selection.cubeEdges);
+			if (limbSelection != null)
+				edges.addAll(limbSelection.cubeEdges);
+			SEAM_OUTLINE.clear();
+			COMBINATION_OUTLINE.clear();
+			CUBE_OUTLINE.show(edges, CUBE_HIGHLIGHT_COLOR);
+			return;
+		}
+		if (limbSelection != null)
+			highlightSelection(limbSelection);
+		else if (componentSelection != null)
 			highlightSelection(componentSelection);
 		else if (seamSelection != null)
 			highlightSelection(seamSelection);
@@ -767,6 +798,12 @@ public final class SurgicalTableClientHandler {
 			consumeInteraction(event, hand);
 			return;
 		}
+		if (pendingLimb != null && minecraft.player.isShiftKeyDown()) {
+			clearPendingLimb();
+			clearSelections();
+			consumeInteraction(event, hand);
+			return;
+		}
 		if (CapturedEntityBoxHelper.hasCapturedEntity(held)
 			&& tryPlaceSubject(minecraft.player, level, hand, held)) {
 			consumeInteraction(event, hand);
@@ -776,6 +813,12 @@ public final class SurgicalTableClientHandler {
 		Selection selected;
 		Ray ray = playerRay(minecraft.player);
 		CubeHit cubeHit = findNearestCubeHit(minecraft.player, level, ray);
+		SurgicalLimbType limbType = heldLimbType(held);
+		if (limbType != null) {
+			if (handleLimbClick(minecraft.player, level, hand, limbType, cubeHit))
+				consumeInteraction(event, hand);
+			return;
+		}
 		if (isSurgicalGlue(held)) {
 			if (handleGlueClick(minecraft.player, level, hand, cubeHit))
 				consumeInteraction(event, hand);
@@ -834,6 +877,43 @@ public final class SurgicalTableClientHandler {
 			return;
 		}
 		consumeInteraction(event, hand);
+	}
+
+	/**
+	 * Two right-clicks make one joint. The first click records the part that will rotate, the second
+	 * names the part it rotates around, and only then does the server hear about it.
+	 */
+	private static boolean handleLimbClick(LocalPlayer player, ClientLevel level, InteractionHand hand,
+		SurgicalLimbType type, @Nullable CubeHit hit) {
+		Selection selected = findLimbTargetSelection(hit);
+		if (selected == null)
+			return pendingLimb != null;
+		if (pendingLimb == null || pendingLimb.hand() != hand || pendingLimb.type() != type) {
+			pendingLimb = new PendingLimb(type, hand, selected);
+			limbSelection = selected;
+			player.displayClientMessage(Component.translatable(
+				"message.create_biotech.surgical_table.limb_first_" + type.id()), true);
+			AllSoundEvents.SLIME_ADDED.playAt(level, BlockPos.containing(hit.location), 0.5f, 1.2f, false);
+			return true;
+		}
+
+		PendingLimb first = pendingLimb;
+		clearPendingLimb();
+		if (!first.selection().tablePos.equals(selected.tablePos)
+			|| first.selection().subjectId == selected.subjectId
+			&& first.selection().targetId == selected.targetId) {
+			clearSelections();
+			return true;
+		}
+		CBPackets.sendToServer(new SurgicalTableLimbPacket(selected.tablePos, hand, type,
+			limbTarget(first.selection()), limbTarget(selected)));
+		clearSelections();
+		return true;
+	}
+
+	private static SurgicalTableLimbPacket.Target limbTarget(Selection selection) {
+		return new SurgicalTableLimbPacket.Target(selection.subjectId, selection.targetId,
+			selection.observedCubeCount, selection.seams);
 	}
 
 	private static boolean handleGlueClick(LocalPlayer player, ClientLevel level, InteractionHand hand,
@@ -2571,8 +2651,9 @@ public final class SurgicalTableClientHandler {
 	}
 
 	/**
-	 * Divides the selected face into model-pixel cells. Complete 1x1 cells use their
-	 * rectangular boundary; fractional edge cells still remain selectable at their center.
+	 * Divides the selected face into model-pixel cells. A hit snaps either to the
+	 * containing cell or to its nearest grid intersection, including intersections on
+	 * the outer cube boundary.
 	 */
 	@Nullable
 	private static GluePoint snapGluePoint(SurgicalModelRenderContext.CubeGeometry cube,
@@ -2595,48 +2676,66 @@ public final class SurgicalTableClientHandler {
 		double rv = relative.dot(edgeV);
 		double u = Math.max(0.0d, Math.min(1.0d, (ru * vv - rv * uv) / determinant));
 		double v = Math.max(0.0d, Math.min(1.0d, (rv * uu - ru * uv) / determinant));
+		ModelPixelSpan modelU = null;
+		ModelPixelSpan modelV = null;
+		if (!cube.modelCorners().isEmpty()) {
+			Vec3 modelOrigin = cube.modelCorners().get(face[0]);
+			modelU = modelPixelSpan(modelOrigin, cube.modelCorners().get(face[1]));
+			modelV = modelPixelSpan(modelOrigin, cube.modelCorners().get(face[3]));
+		}
 		SurgicalModelRenderContext.FaceGrid faceGrid = cube.faceGrids().isEmpty()
 			? null : cube.faceGrids().get(faceIndex);
-		double pixelsU = normalizedPixelLength(faceGrid != null && faceGrid.valid()
-			? faceGrid.pixelsU() : Math.sqrt(uu) / MODEL_PIXEL_SIZE);
-		double pixelsV = normalizedPixelLength(faceGrid != null && faceGrid.valid()
-			? faceGrid.pixelsV() : Math.sqrt(vv) / MODEL_PIXEL_SIZE);
-		PixelInterval cellU = pixelInterval(u * pixelsU, pixelsU);
-		PixelInterval cellV = pixelInterval(v * pixelsV, pixelsV);
+		double pixelsU = normalizedPixelLength(modelU != null ? modelU.length()
+			: faceGrid != null && faceGrid.valid() ? faceGrid.pixelsU() : Math.sqrt(uu) / MODEL_PIXEL_SIZE);
+		double pixelsV = normalizedPixelLength(modelV != null ? modelV.length()
+			: faceGrid != null && faceGrid.valid() ? faceGrid.pixelsV() : Math.sqrt(vv) / MODEL_PIXEL_SIZE);
+		PixelInterval cellU = modelU != null
+			? pixelInterval(u, modelU.start, modelU.end) : pixelInterval(u, 0.0d, pixelsU);
+		PixelInterval cellV = modelV != null
+			? pixelInterval(v, modelV.start, modelV.end) : pixelInterval(v, 0.0d, pixelsV);
 		if (cellU == null || cellV == null)
 			return null;
 
-		Vec3 pixelU = edgeU.scale(1.0d / pixelsU);
-		Vec3 pixelV = edgeV.scale(1.0d / pixelsV);
+		Vec3 cellCenter = origin.add(edgeU.scale(cellU.center)).add(edgeV.scale(cellV.center));
+		double intersectionU = nearestEndpoint(u, cellU);
+		double intersectionV = nearestEndpoint(v, cellV);
+		Vec3 intersection = origin.add(edgeU.scale(intersectionU)).add(edgeV.scale(intersectionV));
+		boolean selectIntersection = rawHit.distanceToSqr(intersection) < rawHit.distanceToSqr(cellCenter);
+		Vec3 location = selectIntersection ? intersection : cellCenter;
+
 		Vec3 normal = edgeU.cross(edgeV).normalize();
-		Vec3 center = origin.add(pixelU.scale(cellU.center)).add(pixelV.scale(cellV.center));
-		if (normal.dot(center.subtract(cubeCenter(cube))) < 0.0d)
+		if (normal.dot(location.subtract(cubeCenter(cube))) < 0.0d)
 			normal = normal.scale(-1.0d);
 		Vec3 surfaceOffset = normal.scale(GLUE_POINT_SURFACE_OFFSET);
-		Vec3 markerCenter = center.add(surfaceOffset);
 		List<SurgicalClientTopology.Edge> marker = new ArrayList<>(4);
-		if (cellU.wholePixel && cellV.wholePixel) {
-			Vec3 first = origin.add(pixelU.scale(cellU.start))
-				.add(pixelV.scale(cellV.start)).add(surfaceOffset);
-			Vec3 second = origin.add(pixelU.scale(cellU.end))
-				.add(pixelV.scale(cellV.start)).add(surfaceOffset);
-			Vec3 third = origin.add(pixelU.scale(cellU.end))
-				.add(pixelV.scale(cellV.end)).add(surfaceOffset);
-			Vec3 fourth = origin.add(pixelU.scale(cellU.start))
-				.add(pixelV.scale(cellV.end)).add(surfaceOffset);
+		if (!selectIntersection) {
+			Vec3 first = origin.add(edgeU.scale(cellU.start))
+				.add(edgeV.scale(cellV.start)).add(surfaceOffset);
+			Vec3 second = origin.add(edgeU.scale(cellU.end))
+				.add(edgeV.scale(cellV.start)).add(surfaceOffset);
+			Vec3 third = origin.add(edgeU.scale(cellU.end))
+				.add(edgeV.scale(cellV.end)).add(surfaceOffset);
+			Vec3 fourth = origin.add(edgeU.scale(cellU.start))
+				.add(edgeV.scale(cellV.end)).add(surfaceOffset);
 			marker.add(new SurgicalClientTopology.Edge(first, second));
 			marker.add(new SurgicalClientTopology.Edge(second, third));
 			marker.add(new SurgicalClientTopology.Edge(third, fourth));
 			marker.add(new SurgicalClientTopology.Edge(fourth, first));
 		} else {
-			Vec3 halfU = pixelU.scale(GLUE_POINT_CROSS_HALF_LENGTH_PIXELS);
-			Vec3 halfV = pixelV.scale(GLUE_POINT_CROSS_HALF_LENGTH_PIXELS);
+			Vec3 markerCenter = intersection.add(surfaceOffset);
+			Vec3 halfU = edgeU.scale(GLUE_POINT_CROSS_HALF_LENGTH_PIXELS / pixelsU);
+			Vec3 halfV = edgeV.scale(GLUE_POINT_CROSS_HALF_LENGTH_PIXELS / pixelsV);
 			marker.add(new SurgicalClientTopology.Edge(markerCenter.subtract(halfU),
 				markerCenter.add(halfU)));
 			marker.add(new SurgicalClientTopology.Edge(markerCenter.subtract(halfV),
 				markerCenter.add(halfV)));
 		}
-		return new GluePoint(center, marker);
+		return new GluePoint(location, marker);
+	}
+
+	private static double nearestEndpoint(double progress, PixelInterval interval) {
+		return Math.abs(progress - interval.start) < Math.abs(progress - interval.end)
+			? interval.start : interval.end;
 	}
 
 	private static double normalizedPixelLength(double length) {
@@ -2645,18 +2744,37 @@ public final class SurgicalTableClientHandler {
 	}
 
 	@Nullable
-	private static PixelInterval pixelInterval(double coordinate, double length) {
-		if (!Double.isFinite(coordinate) || !Double.isFinite(length)
-			|| length <= GLUE_POINT_PIXEL_EPSILON)
+	private static ModelPixelSpan modelPixelSpan(Vec3 first, Vec3 second) {
+		Vec3 delta = second.subtract(first);
+		double x = Math.abs(delta.x);
+		double y = Math.abs(delta.y);
+		double z = Math.abs(delta.z);
+		if (x >= y && x >= z && x > GLUE_POINT_PIXEL_EPSILON)
+			return new ModelPixelSpan(first.x, second.x);
+		if (y >= z && y > GLUE_POINT_PIXEL_EPSILON)
+			return new ModelPixelSpan(first.y, second.y);
+		return z > GLUE_POINT_PIXEL_EPSILON ? new ModelPixelSpan(first.z, second.z) : null;
+	}
+
+	@Nullable
+	private static PixelInterval pixelInterval(double progress, double spanStart, double spanEnd) {
+		double minimum = Math.min(spanStart, spanEnd);
+		double maximum = Math.max(spanStart, spanEnd);
+		if (!Double.isFinite(progress) || !Double.isFinite(minimum) || !Double.isFinite(maximum)
+			|| maximum - minimum <= GLUE_POINT_PIXEL_EPSILON)
 			return null;
-		int cellCount = Math.max(1, (int) Math.ceil(length - GLUE_POINT_PIXEL_EPSILON));
-		int cell = Math.min(cellCount - 1, Math.max(0, (int) Math.floor(coordinate)));
-		double start = cell;
-		double end = Math.min(length, start + 1.0d);
-		if (end <= start + GLUE_POINT_PIXEL_EPSILON)
+		double coordinate = spanStart + (spanEnd - spanStart) * Math.max(0.0d, Math.min(1.0d, progress));
+		double sample = coordinate >= maximum - GLUE_POINT_PIXEL_EPSILON
+			? Math.nextDown(maximum) : Math.max(minimum, coordinate);
+		double lower = Math.max(minimum, Math.floor(sample));
+		double upper = Math.min(maximum, Math.floor(sample) + 1.0d);
+		if (upper <= lower + GLUE_POINT_PIXEL_EPSILON)
 			return null;
-		boolean wholePixel = Math.abs(end - start - 1.0d) <= GLUE_POINT_PIXEL_EPSILON;
-		return new PixelInterval(start, end, (start + end) * 0.5d, wholePixel);
+		double first = (lower - spanStart) / (spanEnd - spanStart);
+		double second = (upper - spanStart) / (spanEnd - spanStart);
+		double start = Math.min(first, second);
+		double end = Math.max(first, second);
+		return new PixelInterval(start, end, (start + end) * 0.5d);
 	}
 
 	private static Ray playerRay(LocalPlayer player) {
@@ -2900,16 +3018,55 @@ public final class SurgicalTableClientHandler {
 		return isStandardGlue(stack) || isSmartGlue(stack);
 	}
 
+	@Nullable
+	private static SurgicalLimbType heldLimbType(ItemStack stack) {
+		return stack.getItem() instanceof SurgicalJointItem joint ? joint.limbType() : null;
+	}
+
+	private static void clearPendingLimb() {
+		pendingLimb = null;
+		limbSelection = null;
+		CUBE_OUTLINE.clear();
+		COMBINATION_OUTLINE.clear();
+	}
+
+	/**
+	 * Highlights exactly what a joint would move: a honey combination behaves as one rigid part, so
+	 * the whole combination lights up, while a loose cube highlights on its own.
+	 */
+	@Nullable
+	private static Selection findLimbTargetSelection(@Nullable CubeHit hit) {
+		if (hit == null)
+			return null;
+		ClientLevel level = Minecraft.getInstance().level;
+		SurgicalTableBlockEntity table = level != null
+			&& level.getBlockEntity(hit.tablePos) instanceof SurgicalTableBlockEntity found ? found : null;
+		SurgicalCombination combination = table == null ? null
+			: table.combinationContaining(hit.geometry.subjectId, hit.cubeId);
+		if (combination != null)
+			return combinationSelection(hit, table, combination);
+		SurgicalModelRenderContext.CubeGeometry cube = hit.geometry.cubesById.get(hit.cubeId);
+		if (cube == null)
+			return null;
+		return new Selection(hit.tablePos, hit.geometry.subjectId, hit.cubeId,
+			hit.geometry.observedCubeCount, hit.geometry.seams, List.of(),
+			List.copyOf(SurgicalClientTopology.cubeEdges(cube)));
+	}
+
+	private record PendingLimb(SurgicalLimbType type, InteractionHand hand, Selection selection) {}
+
 	private static void clearSelections() {
 		seamSelection = null;
 		cubeSelection = null;
 		componentSelection = null;
+		limbSelection = null;
 		hoveredGluePoint = null;
 		connectedSelectionCache = null;
 		directSelectionCache = null;
 		lastSelectionMode = Integer.MIN_VALUE;
 		lastSelectionRay = null;
 		lastSelectionPendingGlue = null;
+		lastSelectionPendingLimb = null;
 		GLUE_POINT_OUTLINE.clear();
 		clearSeamHighlight();
 	}
@@ -3281,8 +3438,17 @@ public final class SurgicalTableClientHandler {
 	/** Reuses Create outline objects and only rewrites geometry/colour when the selection changes. */
 	private static final class OutlineState {
 		private final List<Object> slots = new ArrayList<>();
+		private final float lineWidth;
 		private List<SurgicalClientTopology.Edge> edges = List.of();
 		private long lastRefreshTick = Long.MIN_VALUE;
+
+		private OutlineState() {
+			this(HIGHLIGHT_LINE_WIDTH);
+		}
+
+		private OutlineState(float lineWidth) {
+			this.lineWidth = lineWidth;
+		}
 
 		private void show(List<SurgicalClientTopology.Edge> nextEdges, int color) {
 			ClientLevel level = Minecraft.getInstance().level;
@@ -3303,7 +3469,7 @@ public final class SurgicalTableClientHandler {
 			for (int edge = 0; edge < edgeCount; edge++)
 				Outliner.getInstance()
 					.showLine(slots.get(edge), nextEdges.get(edge).start(), nextEdges.get(edge).end())
-					.lineWidth(HIGHLIGHT_LINE_WIDTH)
+					.lineWidth(lineWidth)
 					.disableLineNormals()
 					.colored(color);
 			for (int edge = edgeCount; edge < previousCount; edge++)
@@ -3385,7 +3551,13 @@ public final class SurgicalTableClientHandler {
 		}
 	}
 
-	private record PixelInterval(double start, double end, double center, boolean wholePixel) {}
+	private record PixelInterval(double start, double end, double center) {}
+
+	private record ModelPixelSpan(double start, double end) {
+		private double length() {
+			return Math.abs(end - start);
+		}
+	}
 
 	private record GluePreviewCubeHit(GlueSubjectPreview subject,
 		SurgicalModelRenderContext.CubeGeometry geometry, int cubeId, int faceIndex, Vec3 location) {}

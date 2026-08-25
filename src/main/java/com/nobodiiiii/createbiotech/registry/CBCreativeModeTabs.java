@@ -37,6 +37,9 @@ public class CBCreativeModeTabs {
 				output.accept(CBItems.CARDBOARD_BOX.get());
 				output.accept(CBItems.LARGE_CARDBOARD_BOX.get());
 				output.accept(CBItems.SMART_SUPER_GLUE.get());
+				output.accept(CBItems.NECK_JOINT.get());
+				output.accept(CBItems.SHOULDER_JOINT.get());
+				output.accept(CBItems.HIP_JOINT.get());
 				output.accept(CBItems.WIRELESS_TERMINAL.get());
 				output.accept(CBItems.SONIC_DOG_CANNON.get());
 				output.accept(CBItems.DING_DONG_CHICKEN.get());

@@ -26,6 +26,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_CUBES = 1024;
 	public static final int MAX_SEAMS = 4096;
 	public static final int MAX_SOURCES = 256;
+	public static final int MAX_LIMBS = 5;
 	private static final int CURRENT_VERSION = 8;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
@@ -104,7 +105,7 @@ public final class SurgicalAssembly {
 		Source source = Source.create(profile, cubeCount, presentCubes, seams, cutSeams, cutOrder,
 			Direction.NORTH, SurgicalLayPose.IDENTITY, Vec3.ZERO, Map.of());
 		return source == null ? null
-			: new SurgicalAssembly(List.of(source), List.of(), List.of(), false, Direction.NORTH,
+			: new SurgicalAssembly(List.of(source), List.of(), List.of(), List.of(), false, Direction.NORTH,
 				SurgicalLayPose.IDENTITY);
 	}
 
@@ -128,8 +129,16 @@ public final class SurgicalAssembly {
 	@Nullable
 	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints,
 		List<Combination> combinations, Direction layoutFacing, SurgicalLayPose layoutLayPose) {
+		return createComposite(sources, joints, combinations, List.of(), layoutFacing, layoutLayPose);
+	}
+
+	@Nullable
+	public static SurgicalAssembly createComposite(List<Source> sources, List<Joint> joints,
+		List<Combination> combinations, List<Limb> limbs, Direction layoutFacing,
+		SurgicalLayPose layoutLayPose) {
 		if (sources == null || sources.isEmpty() || sources.size() > MAX_SOURCES || joints == null
-			|| joints.size() > MAX_SEAMS || combinations == null || combinations.size() > MAX_CUBES)
+			|| joints.size() > MAX_SEAMS || combinations == null || combinations.size() > MAX_CUBES
+			|| limbs == null || limbs.size() > MAX_LIMBS)
 			return null;
 		List<Source> frozenSources = new ArrayList<>(sources.size());
 		int totalCubes = 0;
@@ -162,8 +171,36 @@ public final class SurgicalAssembly {
 					return null;
 			frozenCombinations.add(normalized);
 		}
-		return new SurgicalAssembly(frozenSources, frozenJoints, frozenCombinations, true,
+		List<Limb> frozenLimbs = normalizeLimbs(limbs, frozenSources);
+		if (frozenLimbs == null)
+			return null;
+		return new SurgicalAssembly(frozenSources, frozenJoints, frozenCombinations, frozenLimbs, true,
 			layoutFacing, layoutLayPose);
+	}
+
+	/**
+	 * Drops limbs that no longer describe present cubes and enforces the per-type limits. Packing
+	 * and placement both round-trip through this, so a body can never carry a second neck or a limb
+	 * whose pivot has been cut away.
+	 */
+	@Nullable
+	private static List<Limb> normalizeLimbs(List<Limb> limbs, List<Source> sources) {
+		if (limbs.isEmpty())
+			return List.of();
+		Map<SurgicalLimbType, Integer> counts = new HashMap<>();
+		Set<CombinationMember> children = new HashSet<>();
+		List<Limb> normalized = new ArrayList<>(limbs.size());
+		for (Limb limb : limbs) {
+			if (limb == null || limb.type() == null || !limb.validFor(sources))
+				return null;
+			if (!children.add(new CombinationMember(limb.childSource(), limb.childCube())))
+				return null;
+			int used = counts.merge(limb.type(), 1, Integer::sum);
+			if (used > limb.type().maxPerBody())
+				return null;
+			normalized.add(limb);
+		}
+		return List.copyOf(normalized);
 	}
 
 	@Nullable
@@ -221,16 +258,33 @@ public final class SurgicalAssembly {
 				combinations.add(new Combination(encoded.getUUID(COMBINATION_ID_TAG), members));
 			}
 		}
+		List<Limb> limbs = new ArrayList<>();
+		if (version >= 8 && tag.contains(LIMBS_TAG, Tag.TAG_LIST)) {
+			ListTag encodedLimbs = tag.getList(LIMBS_TAG, Tag.TAG_COMPOUND);
+			if (encodedLimbs.size() > MAX_LIMBS)
+				return null;
+			for (int index = 0; index < encodedLimbs.size(); index++) {
+				CompoundTag encoded = encodedLimbs.getCompound(index);
+				SurgicalLimbType type = encoded.contains(LIMB_TYPE_TAG, Tag.TAG_STRING)
+					? SurgicalLimbType.byId(encoded.getString(LIMB_TYPE_TAG)) : null;
+				if (type == null)
+					return null;
+				limbs.add(new Limb(type, encoded.getInt(LIMB_CHILD_SOURCE_TAG),
+					encoded.getInt(LIMB_CHILD_CUBE_TAG), encoded.getInt(LIMB_PARENT_SOURCE_TAG),
+					encoded.getInt(LIMB_PARENT_CUBE_TAG)));
+			}
+		}
 		Direction layoutFacing = version >= 4 && tag.contains(LAYOUT_FACING_TAG, Tag.TAG_ANY_NUMERIC)
 			? Direction.from3DDataValue(tag.getInt(LAYOUT_FACING_TAG)) : inferLayoutFacing(sources);
 		SurgicalLayPose layoutLayPose = version >= 5 && tag.contains(LAYOUT_LAY_POSE_TAG, Tag.TAG_COMPOUND)
 			? readLayPose(tag.getCompound(LAYOUT_LAY_POSE_TAG)) : inferLayoutLayPose(sources);
-		SurgicalAssembly assembly = createComposite(sources, joints, combinations, layoutFacing, layoutLayPose);
+		SurgicalAssembly assembly = createComposite(sources, joints, combinations, limbs, layoutFacing,
+			layoutLayPose);
 		if (assembly == null)
 			return null;
 		return tag.getBoolean(PRESERVE_LAYOUT_TAG) ? assembly
-			: new SurgicalAssembly(assembly.sources, assembly.joints, assembly.combinations, false,
-				assembly.layoutFacing,
+			: new SurgicalAssembly(assembly.sources, assembly.joints, assembly.combinations,
+				assembly.limbs, false, assembly.layoutFacing,
 				assembly.layoutLayPose);
 	}
 
@@ -290,6 +344,19 @@ public final class SurgicalAssembly {
 			}
 			tag.put(COMBINATIONS_TAG, encodedCombinations);
 		}
+		if (!limbs.isEmpty()) {
+			ListTag encodedLimbs = new ListTag();
+			for (Limb limb : limbs) {
+				CompoundTag encoded = new CompoundTag();
+				encoded.putString(LIMB_TYPE_TAG, limb.type().id());
+				encoded.putInt(LIMB_CHILD_SOURCE_TAG, limb.childSource());
+				encoded.putInt(LIMB_CHILD_CUBE_TAG, limb.childCube());
+				encoded.putInt(LIMB_PARENT_SOURCE_TAG, limb.parentSource());
+				encoded.putInt(LIMB_PARENT_CUBE_TAG, limb.parentCube());
+				encodedLimbs.add(encoded);
+			}
+			tag.put(LIMBS_TAG, encodedLimbs);
+		}
 		if (preserveLayout)
 			tag.putBoolean(PRESERVE_LAYOUT_TAG, true);
 		tag.putInt(LAYOUT_FACING_TAG, layoutFacing.get3DDataValue());
@@ -300,6 +367,7 @@ public final class SurgicalAssembly {
 	public List<Source> sources() { return sources; }
 	public List<Joint> joints() { return joints; }
 	public List<Combination> combinations() { return combinations; }
+	public List<Limb> limbs() { return limbs; }
 	public boolean preservesLayout() { return preserveLayout; }
 	public Direction layoutFacing() { return layoutFacing; }
 	public SurgicalLayPose layoutLayPose() { return layoutLayPose; }
@@ -684,6 +752,18 @@ public final class SurgicalAssembly {
 	}
 
 	public record CombinationMember(int source, int cube) {}
+
+	/** One anatomical joint inside a packed body: {@code child} rotates around {@code parent}. */
+	public record Limb(SurgicalLimbType type, int childSource, int childCube, int parentSource,
+		int parentCube) {
+		private boolean validFor(List<Source> sources) {
+			return childSource >= 0 && childSource < sources.size()
+				&& parentSource >= 0 && parentSource < sources.size()
+				&& sources.get(childSource).containsCube(childCube)
+				&& sources.get(parentSource).containsCube(parentCube)
+				&& (childSource != parentSource || childCube != parentCube);
+		}
+	}
 
 	public record Seam(int first, int second) {
 		public static Seam of(int first, int second) {

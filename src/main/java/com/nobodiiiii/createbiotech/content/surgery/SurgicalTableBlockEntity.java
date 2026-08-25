@@ -207,6 +207,89 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return clientRenderBounds != null;
 	}
 
+	/**
+	 * Rebuilds the limb-joint index from whatever survived the last edit. Cutting a limb away or
+	 * packing it into a box leaves dangling endpoints behind, and a body must never end up with
+	 * more joints of one kind than {@link SurgicalLimbType#maxPerBody()} allows.
+	 */
+	private void normalizeLimbJoints() {
+		Set<SurgicalLimbJoint> seen = new java.util.LinkedHashSet<>();
+		for (SurgicalSubject subject : subjects)
+			seen.addAll(subject.limbJoints());
+		if (seen.isEmpty()) {
+			for (SurgicalSubject subject : subjects)
+				if (!subject.limbJoints().isEmpty())
+					subject.replaceLimbJoints(List.of());
+			return;
+		}
+		List<SurgicalLimbJoint> valid = new ArrayList<>();
+		Set<SurgicalGlueJoint.Endpoint> children = new HashSet<>();
+		Map<UUID, Map<SurgicalLimbType, Integer>> counts = new HashMap<>();
+		for (SurgicalLimbJoint joint : seen) {
+			SurgicalSubject child = getSubjectByPersistentId(joint.child().subjectKey());
+			SurgicalSubject parent = getSubjectByPersistentId(joint.parent().subjectKey());
+			if (child == null || parent == null || !child.validPresentCube(joint.child().cubeId())
+				|| !parent.validPresentCube(joint.parent().cubeId())
+				|| !children.add(joint.child()))
+				continue;
+			ComponentGroup body = gluedGroup(parent, joint.parent().cubeId());
+			if (!body.contains(joint.child()))
+				continue;
+			UUID bodyKey = bodyKey(body);
+			int used = counts.computeIfAbsent(bodyKey, ignored -> new java.util.EnumMap<>(SurgicalLimbType.class))
+				.merge(joint.type(), 1, Integer::sum);
+			if (used > joint.type().maxPerBody())
+				continue;
+			valid.add(joint);
+		}
+		for (SurgicalSubject subject : subjects)
+			subject.replaceLimbJoints(List.of());
+		for (SurgicalLimbJoint joint : valid)
+			attachLimbJoint(joint);
+	}
+
+	/** A stable identity for one glued body, so per-body limb limits survive subject renumbering. */
+	private static UUID bodyKey(ComponentGroup group) {
+		UUID lowest = null;
+		for (Map.Entry<UUID, BitSet> entry : group.components.entrySet())
+			if (!entry.getValue().isEmpty() && (lowest == null || entry.getKey().compareTo(lowest) < 0))
+				lowest = entry.getKey();
+		return lowest == null ? new UUID(0L, 0L) : lowest;
+	}
+
+	private void attachLimbJoint(SurgicalLimbJoint joint) {
+		SurgicalSubject child = getSubjectByPersistentId(joint.child().subjectKey());
+		SurgicalSubject parent = getSubjectByPersistentId(joint.parent().subjectKey());
+		if (child == null || parent == null)
+			return;
+		child.addLimbJoint(joint);
+		if (parent != child)
+			parent.addLimbJoint(joint);
+	}
+
+	private Set<SurgicalLimbJoint> allLimbJoints() {
+		Set<SurgicalLimbJoint> joints = new java.util.LinkedHashSet<>();
+		for (SurgicalSubject subject : subjects)
+			joints.addAll(subject.limbJoints());
+		return joints;
+	}
+
+	private Set<SurgicalLimbJoint> limbsWithin(ComponentGroup group) {
+		Set<SurgicalLimbJoint> joints = new java.util.LinkedHashSet<>();
+		for (SurgicalLimbJoint joint : allLimbJoints())
+			if (group.contains(joint.child()) && group.contains(joint.parent()))
+				joints.add(joint);
+		return joints;
+	}
+
+	/** The limb joints already installed on the body that owns {@code cubeId}. */
+	public List<SurgicalLimbJoint> bodyLimbJoints(int subjectId, int cubeId) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || !subject.validPresentCube(cubeId))
+			return List.of();
+		return List.copyOf(limbsWithin(gluedGroup(subject, cubeId)));
+	}
+
 	public boolean tryPlaceSubject(ItemStack box, SurgicalTablePlane.Plane plane, Direction placementFacing,
 		SurgicalLayPose layPose, double placedOriginOffsetX, double placedOriginOffsetZ,
 		SurgicalTableLayout.Proposal proposal) {
@@ -336,6 +419,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			for (int source : encoded.members().stream()
 				.mapToInt(SurgicalAssembly.CombinationMember::source).distinct().toArray())
 				restored.get(source).addCombination(combination);
+		}
+		for (SurgicalAssembly.Limb encoded : assembly.limbs()) {
+			SurgicalSubject child = restored.get(encoded.childSource());
+			SurgicalSubject parent = restored.get(encoded.parentSource());
+			SurgicalLimbJoint limb = new SurgicalLimbJoint(encoded.type(),
+				new SurgicalGlueJoint.Endpoint(child.persistentId(), encoded.childCube()),
+				new SurgicalGlueJoint.Endpoint(parent.persistentId(), encoded.parentCube()));
+			child.addLimbJoint(limb);
+			if (parent != child)
+				parent.addLimbJoint(limb);
 		}
 		addSubjects(restored);
 		clientRenderBounds = null;
@@ -515,10 +608,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			return false;
 		Set<SurgicalGlueJoint> groupJoints = jointsWithin(group);
 		Set<SurgicalCombination> groupCombinations = combinationsWithin(group);
+		Set<SurgicalLimbJoint> groupLimbs = limbsWithin(group);
 		SurgicalAssembly assembly = groupJoints.isEmpty() && groupCombinations.isEmpty()
+			&& groupLimbs.isEmpty()
 			? SurgicalAssembly.create(subject.profile(), subject.cubeCount, component,
 				subject.seams, subject.cutSeams, subject.cutOrder)
-			: compositeAssembly(group, groupJoints, groupCombinations, subject);
+			: compositeAssembly(group, groupJoints, groupCombinations, groupLimbs, subject);
 		if (assembly == null)
 			return false;
 		SlimeBionicEntity bionic = CBEntityTypes.SLIME_BIONIC.get().create(level);
@@ -534,6 +629,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				groupedSubject.removeComponent(removed);
 			groupedSubject.removeGlueJoints(groupJoints);
 			groupedSubject.removeCombinations(groupCombinations);
+			groupedSubject.removeLimbJoints(groupLimbs);
 			if (groupedSubject.isEmpty())
 				removeSubject(groupedSubject);
 		}
@@ -541,6 +637,124 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		setChangedAndSync();
 		level.playSound(null, worldPosition, SoundEvents.ITEM_PICKUP, SoundSource.BLOCKS, 0.7f, 0.85f);
 		return true;
+	}
+
+	/**
+	 * Installs one anatomical joint. The first-clicked cube becomes the rotating child and the
+	 * second-clicked cube the pivot, so the click order the player used is what the animation plays
+	 * back later.
+	 */
+	public boolean attachLimb(Player player, ItemStack jointItem, InteractionHand hand,
+		SurgicalLimbType type, int childSubjectId, int childCubeId, int parentSubjectId, int parentCubeId,
+		int childCubeCount, List<SurgicalAssembly.Seam> childSeams, int parentCubeCount,
+		List<SurgicalAssembly.Seam> parentSeams) {
+		SurgicalSubject childSubject = getSubject(childSubjectId);
+		SurgicalSubject parentSubject = getSubject(parentSubjectId);
+		if (type == null || childSubject == null || parentSubject == null
+			|| !childSubject.initializeOrMatchTopology(childCubeCount, childSeams)
+			|| !parentSubject.initializeOrMatchTopology(parentCubeCount, parentSeams)
+			|| !childSubject.validPresentCube(childCubeId)
+			|| !parentSubject.validPresentCube(parentCubeId)
+			|| childSubject == parentSubject && childCubeId == parentCubeId)
+			return false;
+
+		SurgicalGlueJoint.Endpoint child = new SurgicalGlueJoint.Endpoint(childSubject.persistentId(),
+			childCubeId);
+		SurgicalGlueJoint.Endpoint parent = new SurgicalGlueJoint.Endpoint(parentSubject.persistentId(),
+			parentCubeId);
+		if (!directlyConnected(child, parent))
+			return refuse(player, "limb_not_connected");
+
+		SurgicalCombination childCombination = childSubject.combinationContaining(childCubeId);
+		if (childCombination != null && childCombination.contains(parent.subjectKey(), parent.cubeId()))
+			return refuse(player, "limb_same_combination");
+
+		ComponentGroup body = gluedGroup(parentSubject, parentCubeId);
+		Set<SurgicalLimbJoint> installed = limbsWithin(body);
+		int used = 0;
+		for (SurgicalLimbJoint existing : installed) {
+			if (existing.type() == type)
+				used++;
+			if (rotatesTogether(existing.child(), child))
+				return refuse(player, "limb_already_driven");
+		}
+		if (used >= type.maxPerBody())
+			return refuse(player, "limb_limit");
+
+		attachLimbJoint(new SurgicalLimbJoint(type, child, parent));
+		if (!player.getAbilities().instabuild)
+			jointItem.shrink(1);
+		setChangedAndSync();
+		if (level != null)
+			level.playSound(null, worldPosition, SoundEvents.CHAIN_PLACE, SoundSource.BLOCKS, 0.8f, 1.1f);
+		player.displayClientMessage(Component.translatable(
+			"message.create_biotech.surgical_table.limb_attached_" + type.id()), true);
+		return true;
+	}
+
+	private boolean refuse(Player player, String message) {
+		player.displayClientMessage(Component.translatable(
+			"message.create_biotech.surgical_table." + message), true);
+		return false;
+	}
+
+	/**
+	 * Whether the two parts physically touch.
+	 *
+	 * <p>Comparison happens between whole rotating groups rather than single cubes: a honey
+	 * combination behaves as one part, so clicking any of its cubes has to find the seam or glue
+	 * joint that actually holds the combination against the body.</p>
+	 */
+	private boolean directlyConnected(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second) {
+		List<SurgicalGlueJoint.Endpoint> firstGroup = rotatingGroup(first);
+		List<SurgicalGlueJoint.Endpoint> secondGroup = rotatingGroup(second);
+		Set<SurgicalGlueJoint> glueJoints = allGlueJoints();
+		for (SurgicalGlueJoint.Endpoint child : firstGroup)
+			for (SurgicalGlueJoint.Endpoint parent : secondGroup)
+				if (sharesUncutSeam(child, parent) || glueJoints.contains(SurgicalGlueJoint.of(child, parent)))
+					return true;
+		return false;
+	}
+
+	private boolean sharesUncutSeam(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second) {
+		if (!first.subjectKey().equals(second.subjectKey()))
+			return false;
+		SurgicalSubject subject = getSubjectByPersistentId(first.subjectKey());
+		if (subject == null)
+			return false;
+		for (int index = 0; index < subject.seams.size(); index++) {
+			SurgicalAssembly.Seam seam = subject.seams.get(index);
+			if (subject.cutSeams.get(index))
+				continue;
+			if (seam.first() == first.cubeId() && seam.second() == second.cubeId()
+				|| seam.first() == second.cubeId() && seam.second() == first.cubeId())
+				return true;
+		}
+		return false;
+	}
+
+	/** The cubes that would turn together with {@code endpoint}: its combination, or itself. */
+	private List<SurgicalGlueJoint.Endpoint> rotatingGroup(SurgicalGlueJoint.Endpoint endpoint) {
+		SurgicalSubject subject = getSubjectByPersistentId(endpoint.subjectKey());
+		SurgicalCombination combination = subject == null ? null
+			: subject.combinationContaining(endpoint.cubeId());
+		if (combination == null)
+			return List.of(endpoint);
+		List<SurgicalGlueJoint.Endpoint> members = new ArrayList<>(combination.members().size());
+		for (SurgicalCombination.Member member : combination.members())
+			members.add(new SurgicalGlueJoint.Endpoint(member.subjectKey(), member.cubeId()));
+		return List.copyOf(members);
+	}
+
+	/** Whether two endpoints already move as one part because honey fused their combination. */
+	private boolean rotatesTogether(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second) {
+		if (first.equals(second))
+			return true;
+		for (SurgicalCombination combination : allCombinations())
+			if (combination.contains(first.subjectKey(), first.cubeId())
+				&& combination.contains(second.subjectKey(), second.cubeId()))
+				return true;
+		return false;
 	}
 
 	public boolean combineConnected(Player player, ItemStack honeyBottle, InteractionHand hand,
@@ -668,12 +882,14 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		boolean editedTransforms = glue.getItem() instanceof SmartSuperGlueItem;
 		Map<UUID, ValidatedGlueMove> validated = validateGlueMoves(moving, anchored, moves, plane,
 			editedTransforms);
-		Map<UUID, Map<Integer, Vec3>> validatedAnchors = validateGlueAnchors(anchored, anchorMoves);
+		Map<UUID, Map<Integer, Vec3>> validatedAnchors = validateGlueAnchors(anchored, anchorMoves,
+			groundLiftY);
 		if (moving.intersects(anchored) || validated == null || validatedAnchors == null)
 			return false;
 
 		Set<SurgicalGlueJoint> existingJoints = allGlueJoints();
 		Set<SurgicalCombination> existingCombinations = allCombinations();
+		Set<SurgicalLimbJoint> existingLimbs = allLimbJoints();
 		Map<UUID, ExtractedSubject> extracted = new HashMap<>();
 		for (Map.Entry<UUID, BitSet> entry : moving.components.entrySet()) {
 			SurgicalSubject original = getSubjectByPersistentId(entry.getKey());
@@ -710,6 +926,11 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (remapped != null)
 				attachCombination(remapped);
 		}
+		for (SurgicalSubject subject : subjects)
+			subject.replaceLimbJoints(List.of());
+		for (SurgicalLimbJoint limb : existingLimbs)
+			attachLimbJoint(new SurgicalLimbJoint(limb.type(), remapEndpoint(limb.child(), extracted),
+				remapEndpoint(limb.parent(), extracted)));
 
 		SurgicalSubject movedFirst = remappedSubject(first, firstCubeId, extracted);
 		SurgicalGlueJoint joint = SurgicalGlueJoint.of(
@@ -754,11 +975,13 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 					|| offsets.putIfAbsent(translation.cubeId(), translation.offset()) != null
 					|| rotations.putIfAbsent(translation.cubeId(), translation.rotation()) != null)
 					return null;
+			boolean permitPerCubeOffsets = allowPerCubeOffsets
+				|| hasNonUniformStoredOffsets(subject, selected);
 			if (offsets.size() != selected.cardinality()
 				|| !layoutMatchesTranslations(move.layout(), offsets)
-				|| !allowPerCubeOffsets && !componentYTranslationsMatch(subject, selected, offsets)
+				|| !permitPerCubeOffsets && !componentYTranslationsMatch(subject, selected, offsets)
 				|| !componentRotationsMatch(subject, selected, rotations)
-				|| !(allowPerCubeOffsets
+				|| !(permitPerCubeOffsets
 					? SurgicalTableLayout.validateEditedGlueComponents(plane, subject.cubeCount, selected,
 						subject.seams, subject.cutSeams, move.layout(), obstacles)
 					: SurgicalTableLayout.validateGlueComponents(plane, subject.cubeCount, selected,
@@ -775,7 +998,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	@Nullable
 	private Map<UUID, Map<Integer, Vec3>> validateGlueAnchors(ComponentGroup anchored,
-		List<SurgicalTableGluePacket.AnchorMove> moves) {
+		List<SurgicalTableGluePacket.AnchorMove> moves, double groundLiftY) {
 		if (moves == null || moves.size() != anchored.components.size())
 			return null;
 		Map<UUID, Map<Integer, Vec3>> validated = new HashMap<>();
@@ -793,13 +1016,13 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 					translation.cubeId(), SurgicalCubeRotation.IDENTITY);
 				if (!translation.valid() || !selected.get(translation.cubeId())
 					|| Math.abs(translation.offset().x - existing.x) > 1.0e-6d
+					|| Math.abs(translation.offset().y - existing.y - groundLiftY) > 1.0e-6d
 					|| Math.abs(translation.offset().z - existing.z) > 1.0e-6d
 					|| !translation.rotation().approximatelyEquals(existingRotation, 1.0e-6d)
 					|| offsets.putIfAbsent(translation.cubeId(), translation.offset()) != null)
 					return null;
 			}
-			if (offsets.size() != selected.cardinality()
-				|| !componentYTranslationsMatch(subject, selected, offsets))
+			if (offsets.size() != selected.cardinality())
 				return null;
 			validated.put(subject.persistentId(), Map.copyOf(offsets));
 		}
@@ -831,6 +1054,22 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 					return false;
 		}
 		return true;
+	}
+
+	/** Whether a previously edited native component already needs distinct per-cube translations. */
+	private static boolean hasNonUniformStoredOffsets(SurgicalSubject subject, BitSet selected) {
+		for (BitSet component : SurgicalAssembly.components(subject.cubeCount, selected,
+			subject.seams, subject.cutSeams)) {
+			Vec3 expected = subject.componentOffsets.getOrDefault(component.nextSetBit(0), Vec3.ZERO);
+			for (int cube = component.nextSetBit(0); cube >= 0; cube = component.nextSetBit(cube + 1)) {
+				Vec3 actual = subject.componentOffsets.getOrDefault(cube, Vec3.ZERO);
+				if (Math.abs(actual.x - expected.x) > 1.0e-6d
+					|| Math.abs(actual.y - expected.y) > 1.0e-6d
+					|| Math.abs(actual.z - expected.z) > 1.0e-6d)
+					return true;
+			}
+		}
+		return false;
 	}
 
 	private static boolean componentRotationsMatch(SurgicalSubject subject, BitSet selected,
@@ -922,10 +1161,28 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalTableLayout.Proposal proposal) {
 		List<SurgicalTableLayout.Footprint> occupied = occupiedForValidation(plane,
 			glueConnectedSubjectIds(subject.id()));
-		if (occupied == null || !SurgicalTableLayout.validateComponents(plane, subject.cubeCount,
-			subject.presentCubes, subject.seams, subject.cutSeams, proposal, occupied))
+		if (occupied == null || !layoutMatchesStoredOffsets(subject, proposal)
+			|| !SurgicalTableLayout.validateEditedGlueComponents(plane, subject.cubeCount,
+				subject.presentCubes, subject.seams, subject.cutSeams, proposal, occupied))
 			return false;
 		subject.applyLayout(proposal);
+		return true;
+	}
+
+	/** The endpoint layout is a refreshed footprint for current server state, not another move. */
+	private static boolean layoutMatchesStoredOffsets(SurgicalSubject subject,
+		SurgicalTableLayout.Proposal proposal) {
+		if (proposal.offsets().size() != subject.presentCubes.cardinality())
+			return false;
+		Set<Integer> seen = new HashSet<>();
+		for (SurgicalTableLayout.CubeOffset proposed : proposal.offsets()) {
+			if (!subject.presentCubes.get(proposed.cubeId()) || !seen.add(proposed.cubeId()))
+				return false;
+			Vec3 expected = subject.componentOffsets.getOrDefault(proposed.cubeId(), Vec3.ZERO);
+			if (Math.abs(proposed.x() - expected.x) > 1.0e-6d
+				|| Math.abs(proposed.z() - expected.z) > 1.0e-6d)
+				return false;
+		}
 		return true;
 	}
 
@@ -1210,7 +1467,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	@Nullable
 	private SurgicalAssembly compositeAssembly(ComponentGroup group, Set<SurgicalGlueJoint> joints,
-		Set<SurgicalCombination> combinations, SurgicalSubject anchor) {
+		Set<SurgicalCombination> combinations, Set<SurgicalLimbJoint> limbs, SurgicalSubject anchor) {
 		List<SurgicalAssembly.Source> sources = new ArrayList<>();
 		Map<UUID, Integer> sourceIds = new HashMap<>();
 		for (SurgicalSubject grouped : subjects) {
@@ -1257,7 +1514,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			}
 			encodedCombinations.add(new SurgicalAssembly.Combination(combination.id(), members));
 		}
-		return SurgicalAssembly.createComposite(sources, encodedJoints, encodedCombinations,
+		List<SurgicalAssembly.Limb> encodedLimbs = new ArrayList<>();
+		for (SurgicalLimbJoint limb : limbs) {
+			Integer childSource = sourceIds.get(limb.child().subjectKey());
+			Integer parentSource = sourceIds.get(limb.parent().subjectKey());
+			if (childSource == null || parentSource == null)
+				return null;
+			encodedLimbs.add(new SurgicalAssembly.Limb(limb.type(), childSource, limb.child().cubeId(),
+				parentSource, limb.parent().cubeId()));
+		}
+		return SurgicalAssembly.createComposite(sources, encodedJoints, encodedCombinations, encodedLimbs,
 			anchor.placementFacing(), anchor.layPose());
 	}
 
@@ -1427,6 +1693,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	private void setChangedAndSync() {
+		normalizeLimbJoints();
 		setChanged();
 		sendData();
 	}
@@ -1476,6 +1743,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		clearSubjects();
 		addSubjects(loaded);
 		normalizeCombinations();
+		normalizeLimbJoints();
 		nextSubjectId = Math.max(tag.getInt(NEXT_SUBJECT_ID_TAG),
 			ids.stream().mapToInt(Integer::intValue).max().orElse(-1) + 1);
 		if (clientPacket) {

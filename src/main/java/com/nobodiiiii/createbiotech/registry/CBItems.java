@@ -29,6 +29,8 @@ import com.nobodiiiii.createbiotech.content.processing.basin.CapturedSmallSlimeI
 import com.nobodiiiii.createbiotech.content.slimebelt.SlimeBeltConnectorItem;
 import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueItem;
 import com.nobodiiiii.createbiotech.content.spiderassemblytable.SpiderAssemblyTableItem;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalJointItem;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.content.squidprinter.EnchantmentBookCopyItem;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerItem;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackageItem;
@@ -106,6 +108,15 @@ public class CBItems {
 	public static final DeferredHolder<Item, Item> PROJECTION_SURGICAL_TABLE =
 		ITEMS.register("projection_surgical_table",
 			() -> new BlockItem(CBBlocks.PROJECTION_SURGICAL_TABLE.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, SurgicalJointItem> NECK_JOINT = ITEMS.register("neck_joint",
+		() -> new SurgicalJointItem(SurgicalLimbType.NECK, new Item.Properties()));
+
+	public static final DeferredHolder<Item, SurgicalJointItem> SHOULDER_JOINT = ITEMS.register("shoulder_joint",
+		() -> new SurgicalJointItem(SurgicalLimbType.SHOULDER, new Item.Properties()));
+
+	public static final DeferredHolder<Item, SurgicalJointItem> HIP_JOINT = ITEMS.register("hip_joint",
+		() -> new SurgicalJointItem(SurgicalLimbType.HIP, new Item.Properties()));
 
 	public static final DeferredHolder<Item, EnchantmentBookCopyItem> ENCHANTMENT_BOOK_COPY =
 		ITEMS.register("enchantment_book_copy", () -> new EnchantmentBookCopyItem(new Item.Properties()));

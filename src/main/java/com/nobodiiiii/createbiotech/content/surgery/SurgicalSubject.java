@@ -46,6 +46,7 @@ public final class SurgicalSubject {
 	private static final String ROTATION_VALUE_TAG = "Rotation";
 	private static final String GLUE_JOINTS_TAG = "GlueJoints";
 	private static final String COMBINATIONS_TAG = "Combinations";
+	private static final String LIMB_JOINTS_TAG = "LimbJoints";
 	private static final String FOOTPRINTS_TAG = "Footprints";
 	private static final String FOOTPRINT_ROOT_TAG = "Root";
 	private static final String FOOTPRINT_MIN_X_TAG = "MinX";
@@ -72,6 +73,7 @@ public final class SurgicalSubject {
 	List<SurgicalTableLayout.Footprint> occupiedFootprints;
 	List<SurgicalGlueJoint> glueJoints;
 	List<SurgicalCombination> combinations;
+	List<SurgicalLimbJoint> limbJoints;
 	private int clientRenderRevision;
 
 	SurgicalSubject(int id, MimicProfile profile, Direction placementFacing, SurgicalLayPose layPose, int cubeCount,
@@ -109,6 +111,19 @@ public final class SurgicalSubject {
 		Map<Integer, SurgicalCubeRotation> componentRotations,
 		List<SurgicalTableLayout.Footprint> occupiedFootprints, List<SurgicalGlueJoint> glueJoints,
 		List<SurgicalCombination> combinations) {
+		this(id, persistentId, profile, placementFacing, layPose, cubeCount, presentCubes, seams, cutSeams,
+			cutOrder, originOffsetX, originOffsetZ, componentOffsets, componentRotations, occupiedFootprints,
+			glueJoints, combinations, List.of());
+	}
+
+	SurgicalSubject(int id, UUID persistentId, MimicProfile profile, Direction placementFacing,
+		SurgicalLayPose layPose, int cubeCount,
+		BitSet presentCubes, List<SurgicalAssembly.Seam> seams, BitSet cutSeams, List<Integer> cutOrder,
+		double originOffsetX, double originOffsetZ, Map<Integer, Vec3> componentOffsets,
+		Map<Integer, SurgicalCubeRotation> componentRotations,
+		List<SurgicalTableLayout.Footprint> occupiedFootprints, List<SurgicalGlueJoint> glueJoints,
+		List<SurgicalCombination> combinations, List<SurgicalLimbJoint> limbJoints) {
+		this.limbJoints = List.copyOf(limbJoints);
 		this.id = id;
 		this.persistentId = persistentId;
 		this.profile = profile;
@@ -212,6 +227,10 @@ public final class SurgicalSubject {
 
 	public List<SurgicalGlueJoint> glueJoints() {
 		return glueJoints;
+	}
+
+	public List<SurgicalLimbJoint> limbJoints() {
+		return limbJoints;
 	}
 
 	public List<SurgicalCombination> combinations() {
@@ -379,6 +398,23 @@ public final class SurgicalSubject {
 		combinations = List.copyOf(replacement);
 	}
 
+	void addLimbJoint(SurgicalLimbJoint joint) {
+		if (limbJoints.contains(joint))
+			return;
+		List<SurgicalLimbJoint> updated = new ArrayList<>(limbJoints);
+		updated.add(joint);
+		limbJoints = List.copyOf(updated);
+	}
+
+	void removeLimbJoints(java.util.Set<SurgicalLimbJoint> removed) {
+		if (!removed.isEmpty())
+			limbJoints = limbJoints.stream().filter(joint -> !removed.contains(joint)).toList();
+	}
+
+	void replaceLimbJoints(List<SurgicalLimbJoint> replacement) {
+		limbJoints = List.copyOf(replacement);
+	}
+
 	SurgicalSubject extract(int extractedId, BitSet extracted) {
 		BitSet selected = (BitSet) extracted.clone();
 		selected.and(presentCubes);
@@ -452,6 +488,12 @@ public final class SurgicalSubject {
 				encodedCombinations.add(combination.save());
 			tag.put(COMBINATIONS_TAG, encodedCombinations);
 		}
+		if (!limbJoints.isEmpty()) {
+			ListTag encodedLimbs = new ListTag();
+			for (SurgicalLimbJoint joint : limbJoints)
+				encodedLimbs.add(joint.save());
+			tag.put(LIMB_JOINTS_TAG, encodedLimbs);
+		}
 		if (cubeCount > 0) {
 			tag.putInt(CUBE_COUNT_TAG, cubeCount);
 			tag.putLongArray(PRESENT_CUBES_TAG, presentCubes.toLongArray());
@@ -508,8 +550,9 @@ public final class SurgicalSubject {
 		List<SurgicalTableLayout.Footprint> footprints = readFootprints(tag);
 		List<SurgicalGlueJoint> glueJoints = readGlueJoints(tag);
 		List<SurgicalCombination> combinations = readCombinations(tag);
+		List<SurgicalLimbJoint> limbJoints = readLimbJoints(tag);
 		return new SurgicalSubject(id, persistentId, profile, facing, layPose, cubeCount, present, seams, cuts, cutOrder,
-			originX, originZ, offsets, rotations, footprints, glueJoints, combinations);
+			originX, originZ, offsets, rotations, footprints, glueJoints, combinations, limbJoints);
 	}
 
 	private static SurgicalLayPose readLayPose(CompoundTag tag) {
@@ -628,6 +671,19 @@ public final class SurgicalSubject {
 		List<SurgicalGlueJoint> joints = new ArrayList<>();
 		for (int index = 0; index < encoded.size(); index++) {
 			SurgicalGlueJoint joint = SurgicalGlueJoint.load(encoded.getCompound(index));
+			if (joint != null && !joints.contains(joint))
+				joints.add(joint);
+		}
+		return List.copyOf(joints);
+	}
+
+	private static List<SurgicalLimbJoint> readLimbJoints(CompoundTag tag) {
+		if (!tag.contains(LIMB_JOINTS_TAG, Tag.TAG_LIST))
+			return List.of();
+		ListTag encoded = tag.getList(LIMB_JOINTS_TAG, Tag.TAG_COMPOUND);
+		List<SurgicalLimbJoint> joints = new ArrayList<>();
+		for (int index = 0; index < encoded.size() && joints.size() < SurgicalAssembly.MAX_LIMBS; index++) {
+			SurgicalLimbJoint joint = SurgicalLimbJoint.load(encoded.getCompound(index));
 			if (joint != null && !joints.contains(joint))
 				joints.add(joint);
 		}

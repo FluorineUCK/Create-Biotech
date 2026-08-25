@@ -90,6 +90,7 @@
     "client.LevelRendererAccessor",
     "client.MixinSuperGlueSelectionHandler",
     "client.ModelPartAccessor",
+    "client.ModelPartCubeGeometryMixin",
     "client.WorldSectionElementImplMixin"
   ],
   "injectors": {

@@ -27,6 +27,7 @@ import com.nobodiiiii.createbiotech.content.allay.logistics.courier.hud.AllayCou
 import com.nobodiiiii.createbiotech.content.allay.network.allay.AllayCourierConfirmPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableGluePacket;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLimbPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlacementPacket;
 
 import net.createmod.catnip.annotations.ClientOnly;
@@ -86,6 +87,8 @@ public final class CBPackets {
 			SurgicalTableGluePacket::write, SurgicalTableGluePacket::handle);
 		registerServer(SurgicalTablePlacementPacket.class, SurgicalTablePlacementPacket::new,
 			SurgicalTablePlacementPacket::write, SurgicalTablePlacementPacket::handle);
+		registerServer(SurgicalTableLimbPacket.class, SurgicalTableLimbPacket::new,
+			SurgicalTableLimbPacket::write, SurgicalTableLimbPacket::handle);
 
 		registerClient(PowerBeltEntityAnimationPacket.class, PowerBeltEntityAnimationPacket::new,
 			PowerBeltEntityAnimationPacket::write);

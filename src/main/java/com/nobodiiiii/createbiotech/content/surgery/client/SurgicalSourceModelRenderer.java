@@ -8,12 +8,14 @@ import java.util.WeakHashMap;
 import org.jetbrains.annotations.Nullable;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
@@ -100,9 +102,21 @@ public final class SurgicalSourceModelRenderer {
 		Map<Integer, SurgicalCubeRotation> cubeRotations, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
 		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition,
 		boolean renderSourceGeometry) {
+		return render(preview, cubeCount, presentCubes, cubeOffsets, cubeRotations, poseStack, buffer, packedLight,
+			yaw, partialTick, collectGeometry, cameraPosition, renderSourceGeometry, 1.0f);
+	}
+
+	public static SurgicalModelRenderContext.Snapshot render(LivingEntity preview, int cubeCount,
+		BitSet presentCubes, Map<Integer, Vec3> cubeOffsets,
+		Map<Integer, SurgicalCubeRotation> cubeRotations, PoseStack poseStack, MultiBufferSource buffer, int packedLight,
+		float yaw, float partialTick, boolean collectGeometry, @Nullable Vec3 cameraPosition,
+		boolean renderSourceGeometry, float alpha) {
 		preparePreview(preview, yaw);
 		SurgicalCapturedRenderPlan plan = plan(preview, yaw, partialTick);
-		return plan.render(poseStack, buffer, packedLight, cubeCount, presentCubes, cubeOffsets, cubeRotations,
+		float clampedAlpha = Math.max(0.0f, Math.min(1.0f, alpha));
+		MultiBufferSource renderBuffer = clampedAlpha < 1.0f
+			? new AlphaBufferSource(buffer, clampedAlpha) : buffer;
+		return plan.render(poseStack, renderBuffer, packedLight, cubeCount, presentCubes, cubeOffsets, cubeRotations,
 			collectGeometry, cameraPosition, renderSourceGeometry);
 	}
 
@@ -170,4 +184,51 @@ public final class SurgicalSourceModelRenderer {
 
 	private record CachedRenderPlan(EntityRenderer<LivingEntity> renderer, float yaw,
 		SurgicalCapturedRenderPlan plan) {}
+
+	private record AlphaBufferSource(MultiBufferSource delegate, float alpha) implements MultiBufferSource {
+		@Override
+		public VertexConsumer getBuffer(RenderType renderType) {
+			RenderType translucent = SurgicalCapturedRenderPlan.translucentPreviewType(renderType);
+			return new AlphaVertexConsumer(delegate.getBuffer(translucent), alpha);
+		}
+	}
+
+	private record AlphaVertexConsumer(VertexConsumer delegate, float alpha) implements VertexConsumer {
+		@Override
+		public VertexConsumer addVertex(float x, float y, float z) {
+			delegate.addVertex(x, y, z);
+			return this;
+		}
+
+		@Override
+		public VertexConsumer setColor(int red, int green, int blue, int sourceAlpha) {
+			int multipliedAlpha = Math.max(0, Math.min(255, Math.round(sourceAlpha * alpha)));
+			delegate.setColor(red, green, blue, multipliedAlpha);
+			return this;
+		}
+
+		@Override
+		public VertexConsumer setUv(float u, float v) {
+			delegate.setUv(u, v);
+			return this;
+		}
+
+		@Override
+		public VertexConsumer setUv1(int u, int v) {
+			delegate.setUv1(u, v);
+			return this;
+		}
+
+		@Override
+		public VertexConsumer setUv2(int u, int v) {
+			delegate.setUv2(u, v);
+			return this;
+		}
+
+		@Override
+		public VertexConsumer setNormal(float x, float y, float z) {
+			delegate.setNormal(x, y, z);
+			return this;
+		}
+	}
 }

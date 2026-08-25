@@ -399,6 +399,13 @@ public final class SurgicalCapturedRenderPlan {
 		return textureAccessor.createBiotech$getTexture().orElse(null);
 	}
 
+	static RenderType translucentPreviewType(RenderType renderType) {
+		if (renderType.mode() != VertexFormat.Mode.QUADS)
+			return renderType;
+		ResourceLocation texture = renderTypeTexture(renderType);
+		return texture == null ? renderType : RenderType.entityTranslucent(texture);
+	}
+
 	private static AlphaMask alphaMask(ResourceLocation texture) {
 		return ALPHA_MASKS.computeIfAbsent(texture, SurgicalCapturedRenderPlan::loadAlphaMask);
 	}

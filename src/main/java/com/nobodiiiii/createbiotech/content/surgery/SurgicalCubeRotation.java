@@ -101,8 +101,14 @@ public record SurgicalCubeRotation(double x, double y, double z, double w) {
 	}
 
 	public boolean approximatelyEquals(SurgicalCubeRotation other, double epsilon) {
-		return other != null && Math.abs(x - other.x) <= epsilon && Math.abs(y - other.y) <= epsilon
+		if (other == null)
+			return false;
+		boolean sameSign = Math.abs(x - other.x) <= epsilon && Math.abs(y - other.y) <= epsilon
 			&& Math.abs(z - other.z) <= epsilon && Math.abs(w - other.w) <= epsilon;
+		// q and -q are the same physical rotation. Near 180 degrees, tiny rounding differences
+		// can make otherwise equivalent normalized quaternions choose opposite canonical signs.
+		return sameSign || Math.abs(x + other.x) <= epsilon && Math.abs(y + other.y) <= epsilon
+			&& Math.abs(z + other.z) <= epsilon && Math.abs(w + other.w) <= epsilon;
 	}
 
 	public void write(FriendlyByteBuf buffer) {
