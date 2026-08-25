@@ -13,8 +13,10 @@ import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
 import net.minecraft.util.Mth;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.ai.attributes.AttributeSupplier;
@@ -34,6 +36,7 @@ import net.minecraft.world.level.Level;
 public class SlimeBionicEntity extends PathfinderMob {
 	private static final String ASSEMBLY_TAG = "SurgicalAssembly";
 	private static final String SOURCE_FORM_TAG = "BionicSourceForm";
+	private static final double DEFAULT_ATTACK_DISTANCE_SQR = 5.0d * 5.0d;
 	private static final EntityDataAccessor<CompoundTag> ASSEMBLY = SynchedEntityData.defineId(
 		SlimeBionicEntity.class, EntityDataSerializers.COMPOUND_TAG);
 	@Nullable
@@ -48,6 +51,7 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private SurgicalAssembly reportedBoundsAssembly;
 	@Nullable
 	private SurgicalAssembly.BodyBounds reportedBodyBounds;
+	private int attackAnimationTick;
 
 	public SlimeBionicEntity(EntityType<? extends SlimeBionicEntity> type, Level level) {
 		super(type, level);
@@ -142,9 +146,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
 		if (bounds == null)
 			return super.getDefaultDimensions(pose);
-		// The renderer projects the measured arm-free core centre onto the entity origin. Navigation
-		// and collision can therefore share one centred, yaw-independent vanilla footprint.
-		float width = Math.max(bounds.width(), bounds.depth());
+		// Vanilla mobs use one centred, yaw-independent square footprint whose side is the body's
+		// lateral width. Their fore-aft model depth is deliberately not promoted to collision width.
+		float width = bounds.width();
 		float height = bounds.minY() + bounds.height();
 		float eyeHeight = Mth.clamp(bounds.minY() + bounds.height() * 0.85f, 0.0f, height);
 		return EntityDimensions.fixed(width, height).withEyeHeight(eyeHeight);
@@ -155,6 +159,37 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly assembly = getAssembly();
 		return level().isClientSide && clientBoundsAssembly == assembly
 			? clientBodyBounds : assembly == null ? null : assembly.bodyBounds();
+	}
+
+	@Override
+	public boolean isWithinMeleeAttackRange(LivingEntity target) {
+		return distanceToSqr(target) <= DEFAULT_ATTACK_DISTANCE_SQR;
+	}
+
+	@Override
+	public void aiStep() {
+		super.aiStep();
+		if (attackAnimationTick > 0)
+			attackAnimationTick--;
+	}
+
+	@Override
+	public boolean doHurtTarget(Entity target) {
+		attackAnimationTick = 10;
+		level().broadcastEntityEvent(this, (byte) 4);
+		return super.doHurtTarget(target);
+	}
+
+	@Override
+	public void handleEntityEvent(byte id) {
+		if (id == 4)
+			attackAnimationTick = 10;
+		else
+			super.handleEntityEvent(id);
+	}
+
+	public int getAttackAnimationTick() {
+		return attackAnimationTick;
 	}
 
 	@Override

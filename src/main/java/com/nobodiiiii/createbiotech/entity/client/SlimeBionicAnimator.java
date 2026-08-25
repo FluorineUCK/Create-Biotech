@@ -387,6 +387,13 @@ public final class SlimeBionicAnimator {
 		// raised-arm pose on top, which both forces a resting angle onto every shoulder and discards
 		// the walk swing computed here.
 		model.setupAnim(entity, limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch);
+		int attackAnimationTick = entity.getAttackAnimationTick();
+		if (attackAnimationTick > 0) {
+			float attackArmPitch = -2.0f
+				+ 1.5f * Mth.triangleWave(attackAnimationTick - partialTick, 10.0f);
+			model.rightArm.xRot = attackArmPitch;
+			model.leftArm.xRot = attackArmPitch;
+		}
 		return new Pose(model);
 	}
 
