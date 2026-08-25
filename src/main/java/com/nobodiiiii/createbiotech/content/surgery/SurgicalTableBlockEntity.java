@@ -1,6 +1,5 @@
 package com.nobodiiiii.createbiotech.content.surgery;
 
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.BitSet;
 import java.util.Collections;
@@ -232,7 +231,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				|| !parent.validPresentCube(joint.parent().cubeId())
 				|| !children.add(joint.child()))
 				continue;
-			ComponentGroup body = gluedGroup(parent, joint.parent().cubeId());
+			ComponentGroup body = connectedGroup(parent, joint.parent().cubeId());
 			if (!body.contains(joint.child()))
 				continue;
 			UUID bodyKey = bodyKey(body);
@@ -287,7 +286,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalSubject subject = getSubject(subjectId);
 		if (subject == null || !subject.validPresentCube(cubeId))
 			return List.of();
-		return List.copyOf(limbsWithin(gluedGroup(subject, cubeId)));
+		return List.copyOf(limbsWithin(connectedGroup(subject, cubeId)));
 	}
 
 	public boolean tryPlaceSubject(ItemStack box, SurgicalTablePlane.Plane plane, Direction placementFacing,
@@ -448,7 +447,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	public boolean cutSeam(Player player, ItemStack shears, InteractionHand hand, int subjectId, int seamId,
 		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams, SurgicalTablePlane.Plane plane,
-		SurgicalTableLayout.Proposal proposal) {
+		SurgicalTableLayout.Proposal proposal, double moveX, double moveZ) {
 		SurgicalSubject subject = getSubject(subjectId);
 		if (subject == null || !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
 			|| seamId < 0 || seamId >= subject.seams.size() || subject.cutSeams.get(seamId))
@@ -460,19 +459,20 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (protectedCombination != null
 			&& protectedCombination.contains(subject.persistentId(), seam.second()))
 			return false;
-
-		BitSet proposedCuts = (BitSet) subject.cutSeams.clone();
-		proposedCuts.set(seamId);
-		if (!canApplyComponentLayout(subjectId, proposedCuts, proposal, plane))
+		SeamCutState cut = seamCutState(subject, seamId);
+		if (cut == null || !validateSeamCut(subject, cut, proposal, moveX, moveZ, plane))
 			return false;
 
-		subject.cutSeams = proposedCuts;
+		subject.cutSeams = cut.proposedCuts;
 		List<Integer> updatedOrder = new ArrayList<>(subject.cutOrder);
 		updatedOrder.add(seamId);
 		subject.cutOrder = SurgicalAssembly.normalizeCutOrder(updatedOrder, subject.cutSeams,
 			subject.seams.size());
 		subject.applyLayout(proposal);
+		if (cut.separates)
+			translateOtherSubjects(cut.moving, subject.persistentId(), new Vec3(moveX, 0.0d, moveZ));
 		shears.hurtAndBreak(1, player, LivingEntity.getSlotForHand(hand));
+		clientRenderBounds = null;
 		setChangedAndSync();
 		if (level != null)
 			level.playSound(null, worldPosition, SoundEvents.SHEEP_SHEAR, SoundSource.BLOCKS, 0.8f, 1.15f);
@@ -562,7 +562,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			|| CapturedEntityBoxItem.hasCapturedEntity(boxes))
 			return false;
 
-		ComponentGroup group = gluedGroup(subject, cubeId);
+		ComponentGroup group = connectedGroup(subject, cubeId);
 		BitSet component = group.components.get(subject.persistentId());
 		if (component == null || component.isEmpty() || level == null)
 			return false;
@@ -632,7 +632,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalGlueJoint.Endpoint child = connection.child();
 		SurgicalGlueJoint.Endpoint parent = connection.parent();
 
-		ComponentGroup body = gluedGroup(parentSubject, parentCubeId);
+		ComponentGroup body = connectedGroup(parentSubject, parentCubeId);
 		Set<SurgicalLimbJoint> installed = limbsWithin(body);
 		int used = 0;
 		for (SurgicalLimbJoint existing : installed) {
@@ -673,41 +673,26 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalGlueJoint.Endpoint second) {
 		List<SurgicalGlueJoint.Endpoint> firstGroup = rotatingGroup(first);
 		List<SurgicalGlueJoint.Endpoint> secondGroup = rotatingGroup(second);
-		Set<SurgicalGlueJoint> glueJoints = allGlueJoints();
-		if (directlyConnected(first, second, glueJoints))
+		SurgicalConnectionGraph<UUID> graph = connectionGraph(Set.of(), Map.of(), false);
+		if (graph == null)
+			return null;
+		if (directlyConnected(first, second, graph))
 			return new DirectConnection(first, second);
 		for (SurgicalGlueJoint.Endpoint child : firstGroup)
 			for (SurgicalGlueJoint.Endpoint parent : secondGroup)
-				if (directlyConnected(child, parent, glueJoints))
+				if (directlyConnected(child, parent, graph))
 					return new DirectConnection(child, parent);
 		return null;
 	}
 
 	private boolean directlyConnected(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second,
-		Set<SurgicalGlueJoint> glueJoints) {
-		return sharesUncutSeam(first, second)
-			|| glueJoints.contains(SurgicalGlueJoint.of(first, second));
+		SurgicalConnectionGraph<UUID> graph) {
+		return graph.directConnections(first.subjectKey(), first.cubeId())
+			.contains(second.subjectKey(), second.cubeId());
 	}
 
 	private record DirectConnection(SurgicalGlueJoint.Endpoint child,
 		SurgicalGlueJoint.Endpoint parent) {}
-
-	private boolean sharesUncutSeam(SurgicalGlueJoint.Endpoint first, SurgicalGlueJoint.Endpoint second) {
-		if (!first.subjectKey().equals(second.subjectKey()))
-			return false;
-		SurgicalSubject subject = getSubjectByPersistentId(first.subjectKey());
-		if (subject == null)
-			return false;
-		for (int index = 0; index < subject.seams.size(); index++) {
-			SurgicalAssembly.Seam seam = subject.seams.get(index);
-			if (subject.cutSeams.get(index))
-				continue;
-			if (seam.first() == first.cubeId() && seam.second() == second.cubeId()
-				|| seam.first() == second.cubeId() && seam.second() == first.cubeId())
-				return true;
-		}
-		return false;
-	}
 
 	/** The cubes that would turn together with {@code endpoint}: its combination, or itself. */
 	private List<SurgicalGlueJoint.Endpoint> rotatingGroup(SurgicalGlueJoint.Endpoint endpoint) {
@@ -740,7 +725,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			|| !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
 			|| !subject.validPresentCube(cubeId))
 			return false;
-		ComponentGroup connected = gluedGroup(subject, cubeId);
+		ComponentGroup connected = connectedGroup(subject, cubeId);
 		List<SurgicalCombination.Member> members = new ArrayList<>();
 		for (Map.Entry<UUID, BitSet> entry : connected.components.entrySet())
 			for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
@@ -926,11 +911,82 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalTablePlane.Plane plane) {
 		SurgicalSubject subject = getSubject(subjectId);
 		GlueCutState cut = subject == null ? null : glueCutState(subject, glueJointId);
-		if (cut == null || !plane.valid() || !validCutDelta(moveX, moveZ)
+		return cut != null && canApplySeparatedCut(cut.moving, cut.separates, moveX, moveZ, plane);
+	}
+
+	public boolean canApplySeamCut(int subjectId, int seamId, SurgicalTableLayout.Proposal proposal,
+		double moveX, double moveZ, SurgicalTablePlane.Plane plane) {
+		SurgicalSubject subject = getSubject(subjectId);
+		SeamCutState cut = subject == null ? null : seamCutState(subject, seamId);
+		return cut != null && validateSeamCut(subject, cut, proposal, moveX, moveZ, plane);
+	}
+
+	private boolean canApplySeparatedCut(ComponentGroup moving, boolean separates, double moveX, double moveZ,
+		SurgicalTablePlane.Plane plane) {
+		if (!plane.valid() || !validCutDelta(moveX, moveZ)
+			|| !separates && (Math.abs(moveX) > 1.0e-9d || Math.abs(moveZ) > 1.0e-9d))
+			return false;
+		return !separates || canPlaceSeparatedGroup(moving, new Vec3(moveX, 0.0d, moveZ), plane);
+	}
+
+	private boolean validateSeamCut(SurgicalSubject subject, SeamCutState cut,
+		SurgicalTableLayout.Proposal proposal, double moveX, double moveZ, SurgicalTablePlane.Plane plane) {
+		if (!plane.valid() || !validCutDelta(moveX, moveZ)
 			|| !cut.separates && (Math.abs(moveX) > 1.0e-9d || Math.abs(moveZ) > 1.0e-9d))
 			return false;
-		return !cut.separates || canPlaceSeparatedGroup(cut.moving,
-			new Vec3(moveX, 0.0d, moveZ), plane);
+		BitSet movedHere = cut.moving.components.getOrDefault(subject.persistentId(), new BitSet());
+		Map<Integer, Vec3> expected = new HashMap<>();
+		Vec3 delta = new Vec3(moveX, 0.0d, moveZ);
+		for (int cube = subject.presentCubes.nextSetBit(0); cube >= 0;
+			cube = subject.presentCubes.nextSetBit(cube + 1)) {
+			Vec3 offset = subject.componentOffsets.getOrDefault(cube, Vec3.ZERO);
+			expected.put(cube, movedHere.get(cube) ? offset.add(delta) : offset);
+		}
+		if (!layoutMatchesTranslations(proposal, expected)
+			|| !SurgicalTableLayout.validateEditedGlueComponents(plane, subject.cubeCount,
+				subject.presentCubes, subject.seams, cut.proposedCuts, proposal, List.of()))
+			return false;
+
+		List<SurgicalTableLayout.Footprint> moving = new ArrayList<>();
+		List<SurgicalTableLayout.Footprint> fixed = new ArrayList<>();
+		for (SurgicalTableLayout.Footprint footprint : proposal.footprints())
+			(movedHere.get(footprint.componentRoot()) ? moving : fixed).add(footprint);
+		for (SurgicalSubject other : subjects) {
+			if (other == subject)
+				continue;
+			BitSet moved = cut.moving.components.get(other.persistentId());
+			if (moved != null && !moved.isEmpty() && other.occupiedFootprints().isEmpty())
+				return false;
+			for (SurgicalTableLayout.Footprint footprint : other.occupiedFootprints()) {
+				if (!other.containsFootprint(moved, footprint)) {
+					fixed.add(footprint);
+					continue;
+				}
+				SurgicalTableLayout.Footprint translated = new SurgicalTableLayout.Footprint(
+					footprint.componentRoot(), footprint.minX() + moveX, footprint.minZ() + moveZ,
+					footprint.maxX() + moveX, footprint.maxZ() + moveZ,
+					SurgicalTableLayout.UNSNAPPED, SurgicalTableLayout.UNSNAPPED);
+				if (!plane.workArea().contains(translated.minX(), translated.minZ(), translated.maxX(),
+					translated.maxZ(), 1.0e-6d))
+					return false;
+				moving.add(translated);
+			}
+		}
+		for (SurgicalTableLayout.Footprint moved : moving)
+			for (SurgicalTableLayout.Footprint obstacle : fixed)
+				if (moved.overlapsStrictly(obstacle))
+					return false;
+		return true;
+	}
+
+	private void translateOtherSubjects(ComponentGroup moving, UUID currentSubject, Vec3 delta) {
+		for (Map.Entry<UUID, BitSet> entry : moving.components.entrySet()) {
+			if (entry.getKey().equals(currentSubject))
+				continue;
+			SurgicalSubject subject = getSubjectByPersistentId(entry.getKey());
+			if (subject != null)
+				subject.translateComponent(entry.getValue(), delta);
+		}
 	}
 
 	/** Uses the exact same non-mutating acceptance path as {@link #glueComponents}. */
@@ -958,8 +1014,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			|| first != second && !validateGlueLayout(second, plane, secondLayout))
 			return null;
 
-		ComponentGroup moving = gluedGroup(first, firstCubeId);
-		ComponentGroup anchored = gluedGroup(second, secondCubeId);
+		ComponentGroup moving = connectedGroup(first, firstCubeId);
+		ComponentGroup anchored = connectedGroup(second, secondCubeId);
 		boolean editedTransforms = glue.getItem() instanceof SmartSuperGlueItem;
 		Map<UUID, ValidatedGlueMove> validated = validateGlueMoves(moving, anchored, moves, plane,
 			editedTransforms);
@@ -1082,7 +1138,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		SurgicalTableLayout.Proposal proposal, SurgicalTablePlane.Plane plane) {
 		SurgicalSubject subject = getSubject(subjectId);
 		List<SurgicalTableLayout.Footprint> occupied = subject == null ? null
-			: occupiedForValidation(plane, glueConnectedSubjectIds(subjectId));
+			: occupiedForValidation(plane, connectedSubjectIds(subjectId));
 		return subject != null && occupied != null
 			&& validateComponentLayout(subject, cutSeams, proposal, plane, occupied);
 	}
@@ -1205,7 +1261,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	public boolean validateGlueLayout(SurgicalSubject subject, SurgicalTablePlane.Plane plane,
 		SurgicalTableLayout.Proposal proposal) {
 		List<SurgicalTableLayout.Footprint> occupied = occupiedForValidation(plane,
-			glueConnectedSubjectIds(subject.id()));
+			connectedSubjectIds(subject.id()));
 		if (occupied == null || !layoutMatchesStoredOffsets(subject, proposal)
 			|| !SurgicalTableLayout.validateEditedGlueComponents(plane, subject.cubeCount,
 				subject.presentCubes, subject.seams, subject.cutSeams, proposal, occupied))
@@ -1244,35 +1300,23 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return true;
 	}
 
-	private ComponentGroup gluedGroup(SurgicalSubject startSubject, int startCube) {
-		return gluedGroup(startSubject, startCube, null);
+	private ComponentGroup connectedGroup(SurgicalSubject startSubject, int startCube) {
+		return connectedGroup(startSubject, startCube, null);
 	}
 
-	private ComponentGroup gluedGroup(SurgicalSubject startSubject, int startCube,
+	private ComponentGroup connectedGroup(SurgicalSubject startSubject, int startCube,
 		@Nullable SurgicalGlueJoint excluded) {
-		Map<UUID, BitSet> components = new HashMap<>();
-		components.put(startSubject.persistentId(), startSubject.componentContaining(startCube));
-		boolean changed;
-		do {
-			changed = false;
-			for (SurgicalCombination combination : allCombinations())
-				changed |= followCombination(combination, components);
-			for (SurgicalGlueJoint joint : allGlueJoints()) {
-				if (joint.equals(excluded))
-					continue;
-				changed |= followJoint(joint.first(), joint.second(), components);
-				changed |= followJoint(joint.second(), joint.first(), components);
-			}
-		} while (changed);
-		return new ComponentGroup(components);
+		SurgicalConnectionGraph<UUID> graph = connectionGraph(excluded);
+		return graph == null ? new ComponentGroup(Map.of())
+			: new ComponentGroup(graph.componentContaining(startSubject.persistentId(), startCube).members());
 	}
 
-	/** Native components joined transitively through glue and honey combinations, keyed by subject id. */
+	/** All cubes joined through the unified native-seam/glue/combination graph, keyed by subject id. */
 	public Map<Integer, BitSet> connectedComponents(int subjectId, int cubeId) {
 		SurgicalSubject start = getSubject(subjectId);
 		if (start == null || !start.validPresentCube(cubeId))
 			return Map.of();
-		ComponentGroup group = gluedGroup(start, cubeId);
+		ComponentGroup group = connectedGroup(start, cubeId);
 		Map<Integer, BitSet> result = new HashMap<>();
 		for (SurgicalSubject subject : subjects) {
 			BitSet included = group.components.get(subject.persistentId());
@@ -1289,6 +1333,75 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (start == null || !start.initializeOrMatchTopology(observedCubeCount, observedSeams))
 			return Map.of();
 		return connectedComponents(subjectId, cubeId);
+	}
+
+	/** The clicked cube and all cubes joined to it by one native or explicit connection edge. */
+	public Map<Integer, BitSet> directConnections(int subjectId, int cubeId, int observedCubeCount,
+		List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject start = getSubject(subjectId);
+		if (start == null || !start.initializeOrMatchTopology(observedCubeCount, observedSeams)
+			|| !start.validPresentCube(cubeId))
+			return Map.of();
+		SurgicalConnectionGraph<UUID> graph = connectionGraph(null);
+		return graph == null ? Map.of()
+			: componentsBySubjectId(new ComponentGroup(
+				graph.directConnections(start.persistentId(), cubeId).members()));
+	}
+
+	/** Connectivity after shift-shears removes every native and glue edge touching {@code cutCube}. */
+	public Map<Integer, BitSet> connectedComponentsAfterCuttingCube(int subjectId, int startCube, int cutCube,
+		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
+			|| !subject.validPresentCube(startCube) || !subject.validPresentCube(cutCube))
+			return Map.of();
+		BitSet proposedCuts = (BitSet) subject.cutSeams.clone();
+		for (int seamId = 0; seamId < subject.seams.size(); seamId++) {
+			SurgicalAssembly.Seam seam = subject.seams.get(seamId);
+			if (seam.first() == cutCube || seam.second() == cutCube)
+				proposedCuts.set(seamId);
+		}
+		Set<SurgicalGlueJoint> removedJoints = new HashSet<>();
+		for (SurgicalGlueJoint joint : allGlueJoints())
+			if (joint.touches(subject.persistentId(), cutCube))
+				removedJoints.add(joint);
+		SurgicalConnectionGraph<UUID> graph = connectionGraph(removedJoints,
+			Map.of(subject.persistentId(), proposedCuts));
+		return graph == null ? Map.of()
+			: componentsBySubjectId(new ComponentGroup(
+				graph.componentContaining(subject.persistentId(), startCube).members()));
+	}
+
+	@Nullable
+	public SeamCutPlan seamCutPlan(int subjectId, int seamId) {
+		SurgicalSubject subject = getSubject(subjectId);
+		SeamCutState state = subject == null ? null : seamCutState(subject, seamId);
+		return state == null ? null : new SeamCutPlan(componentsBySubjectId(state.moving),
+			state.proposedCuts, state.separates);
+	}
+
+	@Nullable
+	private SeamCutState seamCutState(SurgicalSubject subject, int seamId) {
+		if (seamId < 0 || seamId >= subject.seams.size() || subject.cutSeams.get(seamId))
+			return null;
+		SurgicalAssembly.Seam seam = subject.seams.get(seamId);
+		if (!subject.validPresentCube(seam.first()) || !subject.validPresentCube(seam.second())
+			|| isInternalCombinationSeam(subject.id(), seam))
+			return null;
+		BitSet proposedCuts = (BitSet) subject.cutSeams.clone();
+		proposedCuts.set(seamId);
+		SurgicalConnectionGraph<UUID> graph = connectionGraph(Set.of(),
+			Map.of(subject.persistentId(), proposedCuts));
+		if (graph == null)
+			return null;
+		ComponentGroup first = new ComponentGroup(
+			graph.componentContaining(subject.persistentId(), seam.first()).members());
+		ComponentGroup second = new ComponentGroup(
+			graph.componentContaining(subject.persistentId(), seam.second()).members());
+		if (first.intersects(second))
+			return new SeamCutState(proposedCuts, new ComponentGroup(Map.of()), false);
+		ComponentGroup moving = componentSize(first) < componentSize(second) ? first : second;
+		return new SeamCutState(proposedCuts, moving, true);
 	}
 
 	@Nullable
@@ -1314,8 +1427,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			|| !firstSubject.validPresentCube(joint.first().cubeId())
 			|| !secondSubject.validPresentCube(joint.second().cubeId()))
 			return null;
-		ComponentGroup first = gluedGroup(firstSubject, joint.first().cubeId(), joint);
-		ComponentGroup second = gluedGroup(secondSubject, joint.second().cubeId(), joint);
+		ComponentGroup first = connectedGroup(firstSubject, joint.first().cubeId(), joint);
+		ComponentGroup second = connectedGroup(secondSubject, joint.second().cubeId(), joint);
 		if (first.intersects(second))
 			return new GlueCutState(joint, new ComponentGroup(Map.of()), false);
 		ComponentGroup moving = componentSize(first) < componentSize(second) ? first : second;
@@ -1375,44 +1488,45 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return Double.isFinite(x) && Double.isFinite(z) && Math.abs(x) <= bound && Math.abs(z) <= bound;
 	}
 
-	private boolean followJoint(SurgicalGlueJoint.Endpoint from, SurgicalGlueJoint.Endpoint to,
-		Map<UUID, BitSet> components) {
-		BitSet included = components.get(from.subjectKey());
-		if (included == null || !included.get(from.cubeId()))
-			return false;
-		SurgicalSubject target = getSubjectByPersistentId(to.subjectKey());
-		if (target == null || !target.validPresentCube(to.cubeId()))
-			return false;
-		BitSet addition = target.componentContaining(to.cubeId());
-		BitSet existing = components.computeIfAbsent(to.subjectKey(), ignored -> new BitSet());
-		int previous = existing.cardinality();
-		existing.or(addition);
-		return existing.cardinality() != previous;
+	@Nullable
+	private SurgicalConnectionGraph<UUID> connectionGraph(@Nullable SurgicalGlueJoint excluded) {
+		return connectionGraph(excluded == null ? Set.of() : Set.of(excluded), Map.of());
 	}
 
-	private boolean followCombination(SurgicalCombination combination, Map<UUID, BitSet> components) {
-		boolean reached = false;
-		for (SurgicalCombination.Member member : combination.members()) {
-			BitSet included = components.get(member.subjectKey());
-			if (included != null && included.get(member.cubeId())) {
-				reached = true;
-				break;
-			}
-		}
-		if (!reached)
-			return false;
-		boolean changed = false;
-		for (SurgicalCombination.Member member : combination.members()) {
-			SurgicalSubject target = getSubjectByPersistentId(member.subjectKey());
-			if (target == null || !target.validPresentCube(member.cubeId()))
+	@Nullable
+	private SurgicalConnectionGraph<UUID> connectionGraph(Set<SurgicalGlueJoint> excluded,
+		Map<UUID, BitSet> cutOverrides) {
+		return connectionGraph(excluded, cutOverrides, true);
+	}
+
+	@Nullable
+	private SurgicalConnectionGraph<UUID> connectionGraph(Set<SurgicalGlueJoint> excluded,
+		Map<UUID, BitSet> cutOverrides, boolean includeCombinations) {
+		List<SurgicalConnectionGraph.Body<UUID>> bodies = new ArrayList<>();
+		for (SurgicalSubject subject : subjects)
+			if (SurgicalAssembly.validTopology(subject.cubeCount, subject.seams))
+				bodies.add(new SurgicalConnectionGraph.Body<>(subject.persistentId(), subject.cubeCount,
+					subject.presentCubes, subject.seams,
+					cutOverrides.getOrDefault(subject.persistentId(), subject.cutSeams)));
+		if (bodies.isEmpty())
+			return null;
+
+		List<SurgicalConnectionGraph.Link<UUID>> links = new ArrayList<>();
+		for (SurgicalGlueJoint joint : allGlueJoints()) {
+			if (excluded.contains(joint))
 				continue;
-			BitSet addition = target.componentContaining(member.cubeId());
-			BitSet existing = components.computeIfAbsent(member.subjectKey(), ignored -> new BitSet());
-			int previous = existing.cardinality();
-			existing.or(addition);
-			changed |= existing.cardinality() != previous;
+			links.add(new SurgicalConnectionGraph.Link<>(joint.first().subjectKey(), joint.first().cubeId(),
+				joint.second().subjectKey(), joint.second().cubeId()));
 		}
-		return changed;
+		if (includeCombinations)
+			for (SurgicalCombination combination : allCombinations()) {
+				SurgicalCombination.Member anchor = combination.members().getFirst();
+				for (SurgicalCombination.Member member : combination.members().subList(1,
+					combination.members().size()))
+					links.add(new SurgicalConnectionGraph.Link<>(anchor.subjectKey(), anchor.cubeId(),
+						member.subjectKey(), member.cubeId()));
+			}
+		return SurgicalConnectionGraph.create(bodies, links);
 	}
 
 	private Set<SurgicalGlueJoint> allGlueJoints() {
@@ -1467,32 +1581,17 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	/** Subject ids that currently form one logical editing group through glue or combinations. */
-	public Set<Integer> glueConnectedSubjectIds(int subjectId) {
+	public Set<Integer> connectedSubjectIds(int subjectId) {
 		SurgicalSubject start = getSubject(subjectId);
 		if (start == null)
 			return Set.of();
-		Map<UUID, List<UUID>> adjacency = new HashMap<>();
-		for (SurgicalCombination combination : allCombinations()) {
-			UUID anchor = combination.members().getFirst().subjectKey();
-			for (SurgicalCombination.Member member : combination.members()) {
-				adjacency.computeIfAbsent(anchor, ignored -> new ArrayList<>()).add(member.subjectKey());
-				adjacency.computeIfAbsent(member.subjectKey(), ignored -> new ArrayList<>()).add(anchor);
-			}
-		}
-		for (SurgicalGlueJoint joint : allGlueJoints()) {
-			adjacency.computeIfAbsent(joint.first().subjectKey(), ignored -> new ArrayList<>())
-				.add(joint.second().subjectKey());
-			adjacency.computeIfAbsent(joint.second().subjectKey(), ignored -> new ArrayList<>())
-				.add(joint.first().subjectKey());
-		}
+		SurgicalConnectionGraph<UUID> graph = connectionGraph(null);
+		if (graph == null)
+			return Set.of(subjectId);
 		Set<UUID> connected = new HashSet<>();
-		connected.add(start.persistentId());
-		ArrayDeque<UUID> pending = new ArrayDeque<>();
-		pending.add(start.persistentId());
-		while (!pending.isEmpty())
-			for (UUID neighbor : adjacency.getOrDefault(pending.removeFirst(), List.of()))
-				if (connected.add(neighbor))
-					pending.addLast(neighbor);
+		for (int cube = start.presentCubes.nextSetBit(0); cube >= 0;
+			cube = start.presentCubes.nextSetBit(cube + 1))
+			connected.addAll(graph.componentContaining(start.persistentId(), cube).members().keySet());
 		Set<Integer> ids = new HashSet<>();
 		for (SurgicalSubject subject : subjects)
 			if (connected.contains(subject.persistentId()))
@@ -1613,6 +1712,21 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	}
 
 	private record GlueCutState(SurgicalGlueJoint joint, ComponentGroup moving, boolean separates) {}
+	private record SeamCutState(BitSet proposedCuts, ComponentGroup moving, boolean separates) {
+		private SeamCutState {
+			proposedCuts = (BitSet) proposedCuts.clone();
+		}
+	}
+
+	public record SeamCutPlan(Map<Integer, BitSet> movingComponents, BitSet proposedCuts,
+		boolean separates) {
+		public SeamCutPlan {
+			Map<Integer, BitSet> frozen = new HashMap<>();
+			movingComponents.forEach((key, value) -> frozen.put(key, (BitSet) value.clone()));
+			movingComponents = Map.copyOf(frozen);
+			proposedCuts = (BitSet) proposedCuts.clone();
+		}
+	}
 
 	public record GlueCutPlan(SurgicalGlueJoint joint, Map<Integer, BitSet> movingComponents,
 		boolean separates) {

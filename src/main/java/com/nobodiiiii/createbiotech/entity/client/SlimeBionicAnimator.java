@@ -11,6 +11,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalConnectionGraph;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
@@ -137,13 +138,16 @@ public final class SlimeBionicAnimator {
 	 * from pulling the axis away from its physical connection.</p>
 	 */
 	private static List<ResolvedLimb> resolveLimbs(SurgicalAssembly assembly, List<SourceState> sources) {
+		SurgicalConnectionGraph<Integer> connections = connectionGraph(assembly);
+		if (connections == null)
+			return List.of();
 		Map<SurgicalLimbType, List<ResolvedLimb>> byType = new EnumMap<>(SurgicalLimbType.class);
 		for (SurgicalAssembly.Limb limb : assembly.limbs()) {
 			Member selectedChild = new Member(limb.childSource(), limb.childCube());
 			Member selectedParent = new Member(limb.parentSource(), limb.parentCube());
 			List<Member> childMembers = group(assembly, selectedChild.source(), selectedChild.cube());
 			List<Member> parentMembers = group(assembly, selectedParent.source(), selectedParent.cube());
-			Connection connection = connection(assembly, selectedChild, selectedParent,
+			Connection connection = connection(connections, selectedChild, selectedParent,
 				childMembers, parentMembers);
 			if (connection == null)
 				continue;
@@ -207,36 +211,36 @@ public final class SlimeBionicAnimator {
 
 	/** Resolves old arbitrary combination endpoints as well as newly stored physical endpoints. */
 	@Nullable
-	private static Connection connection(SurgicalAssembly assembly, Member selectedChild,
+	private static Connection connection(SurgicalConnectionGraph<Integer> connections, Member selectedChild,
 		Member selectedParent, List<Member> childMembers, List<Member> parentMembers) {
-		if (directlyConnected(assembly, selectedChild, selectedParent))
+		if (directlyConnected(connections, selectedChild, selectedParent))
 			return new Connection(selectedChild, selectedParent);
 		for (Member child : childMembers)
 			for (Member parent : parentMembers)
-				if (directlyConnected(assembly, child, parent))
+				if (directlyConnected(connections, child, parent))
 					return new Connection(child, parent);
 		return null;
 	}
 
-	private static boolean directlyConnected(SurgicalAssembly assembly, Member first, Member second) {
-		if (first.source() == second.source()) {
-			SurgicalAssembly.Source source = assembly.sources().get(first.source());
-			List<SurgicalAssembly.Seam> seams = source.seams();
-			java.util.BitSet cutSeams = source.cutSeams();
-			for (int index = 0; index < seams.size(); index++) {
-				SurgicalAssembly.Seam seam = seams.get(index);
-				if (!cutSeams.get(index) && (seam.first() == first.cube() && seam.second() == second.cube()
-					|| seam.first() == second.cube() && seam.second() == first.cube()))
-					return true;
-			}
+	private static boolean directlyConnected(SurgicalConnectionGraph<Integer> connections,
+		Member first, Member second) {
+		return connections.directConnections(first.source(), first.cube())
+			.contains(second.source(), second.cube());
+	}
+
+	@Nullable
+	private static SurgicalConnectionGraph<Integer> connectionGraph(SurgicalAssembly assembly) {
+		List<SurgicalConnectionGraph.Body<Integer>> bodies = new ArrayList<>(assembly.sources().size());
+		for (int sourceId = 0; sourceId < assembly.sources().size(); sourceId++) {
+			SurgicalAssembly.Source source = assembly.sources().get(sourceId);
+			bodies.add(new SurgicalConnectionGraph.Body<>(sourceId, source.cubeCount(), source.presentCubes(),
+				source.seams(), source.cutSeams()));
 		}
-		for (SurgicalAssembly.Joint joint : assembly.joints())
-			if (joint.firstSource() == first.source() && joint.firstCube() == first.cube()
-				&& joint.secondSource() == second.source() && joint.secondCube() == second.cube()
-				|| joint.firstSource() == second.source() && joint.firstCube() == second.cube()
-				&& joint.secondSource() == first.source() && joint.secondCube() == first.cube())
-				return true;
-		return false;
+		List<SurgicalConnectionGraph.Link<Integer>> links = assembly.joints().stream()
+			.map(joint -> new SurgicalConnectionGraph.Link<>(joint.firstSource(), joint.firstCube(),
+				joint.secondSource(), joint.secondCube()))
+			.toList();
+		return SurgicalConnectionGraph.create(bodies, links);
 	}
 
 	/**

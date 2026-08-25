@@ -85,7 +85,8 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 		switch (action) {
 		case CUT -> {
 			if (targetId < seams.size() && held.is(Items.SHEARS)) {
-				if (!table.cutSeam(player, held, hand, subjectId, targetId, observedCubeCount, seams, plane, layout))
+				if (!table.cutSeam(player, held, hand, subjectId, targetId, observedCubeCount, seams, plane,
+					layout, originOffsetX, originOffsetZ))
 					noSpace(player);
 			}
 		}

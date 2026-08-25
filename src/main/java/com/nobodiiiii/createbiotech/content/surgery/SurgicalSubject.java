@@ -247,15 +247,6 @@ public final class SurgicalSubject {
 		return null;
 	}
 
-	public boolean hasGlueConnection(int cubeId) {
-		if (!validPresentCube(cubeId))
-			return false;
-		for (SurgicalGlueJoint joint : glueJoints)
-			if (joint.touches(persistentId, cubeId))
-				return true;
-		return false;
-	}
-
 	public int clientRenderRevision() {
 		return clientRenderRevision;
 	}
@@ -319,10 +310,6 @@ public final class SurgicalSubject {
 				retainedRotations.remove(cube);
 			componentRotations = Map.copyOf(retainedRotations);
 		}
-	}
-
-	BitSet componentContaining(int cubeId) {
-		return SurgicalAssembly.componentContaining(cubeCount, presentCubes, seams, cutSeams, cubeId);
 	}
 
 	void translateComponent(BitSet component, Vec3 delta) {
