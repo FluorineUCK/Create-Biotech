@@ -19,6 +19,7 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.LargeCardboardBoxItem;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalBodyBounds;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCombination;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalGlueJoint;
@@ -30,6 +31,7 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlockEntity;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableInteractionPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableGluePacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalJointItem;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbJoint;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLimbPacket;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlacementPacket;
@@ -2720,33 +2722,40 @@ public final class SurgicalTableClientHandler {
 		if (components.isEmpty())
 			return null;
 
-		double minX = Double.POSITIVE_INFINITY;
-		double minY = Double.POSITIVE_INFINITY;
-		double minZ = Double.POSITIVE_INFINITY;
-		double maxX = Double.NEGATIVE_INFINITY;
-		double maxY = Double.NEGATIVE_INFINITY;
-		double maxZ = Double.NEGATIVE_INFINITY;
+		Set<SurgicalCombination.Member> armCubes = new java.util.HashSet<>();
+		for (SurgicalLimbJoint limb : table.bodyLimbJoints(selection.subjectId(), selection.targetId())) {
+			if (limb.type() != SurgicalLimbType.SHOULDER)
+				continue;
+			SurgicalSubject child = table.getSubjectByPersistentId(limb.child().subjectKey());
+			SurgicalCombination combination = child == null ? null
+				: child.combinationContaining(limb.child().cubeId());
+			if (combination == null)
+				armCubes.add(new SurgicalCombination.Member(limb.child().subjectKey(),
+					limb.child().cubeId()));
+			else
+				armCubes.addAll(combination.members());
+		}
+
+		List<List<Vec3>> allCubes = new ArrayList<>();
+		List<List<Vec3>> bodyCubes = new ArrayList<>();
 		for (Map.Entry<Integer, BitSet> entry : components.entrySet()) {
+			SurgicalSubject subject = table.getSubject(entry.getKey());
 			TableGeometry geometry = TABLES.get(new SubjectKey(selection.tablePos(), entry.getKey()));
-			if (geometry == null || !geometry.topologyReady())
+			if (subject == null || geometry == null || !geometry.topologyReady())
 				return null;
 			for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
 				cube = entry.getValue().nextSetBit(cube + 1)) {
 				SurgicalModelRenderContext.CubeGeometry cubeGeometry = geometry.cubesById.get(cube);
 				if (cubeGeometry == null)
 					return null;
-				for (Vec3 corner : cubeGeometry.corners()) {
-					Vec3 upright = anchor.layPose().inverseRotate(corner);
-					minX = Math.min(minX, upright.x);
-					minY = Math.min(minY, upright.y);
-					minZ = Math.min(minZ, upright.z);
-					maxX = Math.max(maxX, upright.x);
-					maxY = Math.max(maxY, upright.y);
-					maxZ = Math.max(maxZ, upright.z);
-				}
+				List<Vec3> upright = cubeGeometry.corners().stream()
+					.map(anchor.layPose()::inverseRotate).toList();
+				allCubes.add(upright);
+				if (!armCubes.contains(new SurgicalCombination.Member(subject.persistentId(), cube)))
+					bodyCubes.add(upright);
 			}
 		}
-		return SurgicalAssembly.BodyBounds.create(maxX - minX, maxY - minY, maxZ - minZ);
+		return SurgicalBodyBounds.measure(bodyCubes, allCubes, null);
 	}
 
 	@Nullable

@@ -66,6 +66,9 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			buffer.writeFloat(bodyBounds.width());
 			buffer.writeFloat(bodyBounds.height());
 			buffer.writeFloat(bodyBounds.depth());
+			buffer.writeFloat(bodyBounds.centerX());
+			buffer.writeFloat(bodyBounds.minY());
+			buffer.writeFloat(bodyBounds.centerZ());
 		}
 	}
 
@@ -170,7 +173,8 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 	private static SurgicalAssembly.BodyBounds readBodyBounds(FriendlyByteBuf buffer) {
 		if (!buffer.readBoolean())
 			return null;
-		return SurgicalAssembly.BodyBounds.create(buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
+		return SurgicalAssembly.BodyBounds.create(buffer.readFloat(), buffer.readFloat(), buffer.readFloat(),
+			buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
 	}
 
 	public enum Action {

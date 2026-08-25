@@ -2,9 +2,11 @@ package com.nobodiiiii.createbiotech.entity;
 
 import java.util.ArrayList;
 import java.util.BitSet;
+import java.util.HashSet;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.WeakHashMap;
 
 import org.jetbrains.annotations.Nullable;
@@ -15,8 +17,10 @@ import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalBodyBounds;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalClientTopology;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalSourceModelRenderer;
@@ -151,15 +155,30 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		if (!geometry.hasVertices())
 			return null;
 		EntityGeometry.Bounds bounds = geometry.bounds();
-		updateClientBodyBounds(entity, assembly, bounds);
+		updateClientBodyBounds(entity, assembly, bounds, sources);
 		return new CompositeCachedGeometry(assembly, slimeForm,
 			new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ()), List.copyOf(sources));
 	}
 
 	private static void updateClientBodyBounds(SlimeBionicEntity entity, SurgicalAssembly assembly,
-		EntityGeometry.Bounds bounds) {
-		SurgicalAssembly.BodyBounds bodyBounds = SurgicalAssembly.BodyBounds.create(
-			bounds.sizeX(), bounds.sizeY(), bounds.sizeZ());
+		EntityGeometry.Bounds bounds, List<SlimeBionicAnimator.SourceState> sources) {
+		Set<SurgicalAssembly.CombinationMember> armCubes = new HashSet<>();
+		for (SurgicalAssembly.Limb limb : assembly.limbs())
+			if (limb.type() == SurgicalLimbType.SHOULDER)
+				armCubes.addAll(assembly.rotatingGroup(limb.childSource(), limb.childCube()));
+		List<List<Vec3>> allCubes = new ArrayList<>();
+		List<List<Vec3>> bodyCubes = new ArrayList<>();
+		for (int source = 0; source < sources.size(); source++)
+			for (Map.Entry<Integer, SlimeBionicAnimator.CubeBox> entry
+				: sources.get(source).boxes().entrySet()) {
+				List<Vec3> points = entry.getValue().points();
+				allCubes.add(points);
+				if (!armCubes.contains(new SurgicalAssembly.CombinationMember(source, entry.getKey())))
+					bodyCubes.add(points);
+			}
+		SurgicalBodyBounds.Envelope visible = new SurgicalBodyBounds.Envelope(
+			bounds.minX(), bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ());
+		SurgicalAssembly.BodyBounds bodyBounds = SurgicalBodyBounds.measure(bodyCubes, allCubes, visible);
 		if (bodyBounds != null)
 			entity.setClientBodyBounds(assembly, bodyBounds);
 	}
@@ -268,10 +287,11 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 				offsets, assembly.cubeRotations(),
 				new PoseStack(), measuringBuffer, packedLight, 0.0f, partialTick, true, null, !slimeForm));
 		EntityGeometry.Bounds bounds = bodyGeometry.bounds();
-		updateClientBodyBounds(entity, assembly, bounds);
-		Vec3 modelOffset = new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ());
 		Map<Integer, SlimeBionicAnimator.CubeBox> restBoxes = restPose[0] == null ? Map.of()
 			: SlimeBionicAnimator.measure(restPose[0]);
+		updateClientBodyBounds(entity, assembly, bounds,
+			List.of(new SlimeBionicAnimator.SourceState(restBoxes, offsets, assembly.cubeRotations())));
+		Vec3 modelOffset = new Vec3(-bounds.centerX(), -bounds.minY(), -bounds.centerZ());
 		return new CachedGeometry(assembly, slimeForm, presentCubes, offsets, modelOffset, restBoxes);
 	}
 

@@ -132,8 +132,11 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
 		if (bounds == null)
 			return super.getDefaultDimensions(pose);
-		float width = Math.max(bounds.width(), bounds.depth());
-		return EntityDimensions.fixed(width, bounds.height()).withEyeHeight(bounds.height() * 0.85f);
+		float width = 2.0f * Math.max(Math.abs(bounds.centerX()) + bounds.width() * 0.5f,
+			Math.abs(bounds.centerZ()) + bounds.depth() * 0.5f);
+		float height = bounds.minY() + bounds.height();
+		float eyeHeight = Mth.clamp(bounds.minY() + bounds.height() * 0.85f, 0.0f, height);
+		return EntityDimensions.fixed(width, height).withEyeHeight(eyeHeight);
 	}
 
 	@Nullable
@@ -148,13 +151,18 @@ public class SlimeBionicEntity extends PathfinderMob {
 		SurgicalAssembly.BodyBounds bounds = activeBodyBounds();
 		if (bounds == null)
 			return super.makeBoundingBox();
-		double radians = Math.toRadians(yBodyRot);
+		double radians = Math.toRadians(-yBodyRot);
 		double cosine = Math.abs(Math.cos(radians));
 		double sine = Math.abs(Math.sin(radians));
 		double halfX = (bounds.width() * cosine + bounds.depth() * sine) * 0.5d;
 		double halfZ = (bounds.width() * sine + bounds.depth() * cosine) * 0.5d;
-		return new AABB(getX() - halfX, getY(), getZ() - halfZ,
-			getX() + halfX, getY() + bounds.height(), getZ() + halfZ);
+		double signedCosine = Math.cos(radians);
+		double signedSine = Math.sin(radians);
+		double offsetX = bounds.centerX() * signedCosine + bounds.centerZ() * signedSine;
+		double offsetZ = -bounds.centerX() * signedSine + bounds.centerZ() * signedCosine;
+		double minY = getY() + bounds.minY();
+		return new AABB(getX() + offsetX - halfX, minY, getZ() + offsetZ - halfZ,
+			getX() + offsetX + halfX, minY + bounds.height(), getZ() + offsetZ + halfZ);
 	}
 
 	@Override

@@ -27,8 +27,8 @@ public final class SurgicalAssembly {
 	public static final int MAX_SOURCES = 256;
 	public static final int MAX_LIMBS = 5;
 	public static final double MAX_BODY_SIZE = 64.0d;
-	private static final double MIN_BODY_SIZE = 1.0d / 64.0d;
-	private static final int CURRENT_VERSION = 9;
+	public static final double MIN_BODY_SIZE = 1.0d / 64.0d;
+	private static final int CURRENT_VERSION = 11;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -55,6 +55,9 @@ public final class SurgicalAssembly {
 	private static final String BODY_WIDTH_TAG = "BodyWidth";
 	private static final String BODY_HEIGHT_TAG = "BodyHeight";
 	private static final String BODY_DEPTH_TAG = "BodyDepth";
+	private static final String BODY_CENTER_X_TAG = "BodyCenterX";
+	private static final String BODY_MIN_Y_TAG = "BodyMinY";
+	private static final String BODY_CENTER_Z_TAG = "BodyCenterZ";
 	private static final String FACING_TAG = "Facing";
 	private static final String LAY_POSE_TAG = "LayPose";
 	private static final String POSE_AXIS_TAG = "Axis";
@@ -293,11 +296,18 @@ public final class SurgicalAssembly {
 			: new SurgicalAssembly(assembly.sources, assembly.joints, assembly.combinations,
 				assembly.limbs, false, assembly.layoutFacing,
 				assembly.layoutLayPose, null);
-		if (version >= 9 && (tag.contains(BODY_WIDTH_TAG, Tag.TAG_ANY_NUMERIC)
-			|| tag.contains(BODY_HEIGHT_TAG, Tag.TAG_ANY_NUMERIC)
-			|| tag.contains(BODY_DEPTH_TAG, Tag.TAG_ANY_NUMERIC))) {
+		// Versions 9 and 10 used older bounds. Discard them so those bodies are measured again with
+		// the horizontal-only weighting introduced in version 11.
+		if (version >= 11 && tag.contains(BODY_WIDTH_TAG, Tag.TAG_ANY_NUMERIC)
+			&& tag.contains(BODY_HEIGHT_TAG, Tag.TAG_ANY_NUMERIC)
+			&& tag.contains(BODY_DEPTH_TAG, Tag.TAG_ANY_NUMERIC)
+			&& tag.contains(BODY_CENTER_X_TAG, Tag.TAG_ANY_NUMERIC)
+			&& tag.contains(BODY_MIN_Y_TAG, Tag.TAG_ANY_NUMERIC)
+			&& tag.contains(BODY_CENTER_Z_TAG, Tag.TAG_ANY_NUMERIC)) {
 			BodyBounds bounds = BodyBounds.create(tag.getDouble(BODY_WIDTH_TAG),
-				tag.getDouble(BODY_HEIGHT_TAG), tag.getDouble(BODY_DEPTH_TAG));
+				tag.getDouble(BODY_HEIGHT_TAG), tag.getDouble(BODY_DEPTH_TAG),
+				tag.getDouble(BODY_CENTER_X_TAG), tag.getDouble(BODY_MIN_Y_TAG),
+				tag.getDouble(BODY_CENTER_Z_TAG));
 			if (bounds == null)
 				return null;
 			assembly = assembly.withBodyBounds(bounds);
@@ -382,6 +392,9 @@ public final class SurgicalAssembly {
 			tag.putFloat(BODY_WIDTH_TAG, bodyBounds.width());
 			tag.putFloat(BODY_HEIGHT_TAG, bodyBounds.height());
 			tag.putFloat(BODY_DEPTH_TAG, bodyBounds.depth());
+			tag.putFloat(BODY_CENTER_X_TAG, bodyBounds.centerX());
+			tag.putFloat(BODY_MIN_Y_TAG, bodyBounds.minY());
+			tag.putFloat(BODY_CENTER_Z_TAG, bodyBounds.centerZ());
 		}
 		return tag;
 	}
@@ -401,6 +414,15 @@ public final class SurgicalAssembly {
 			throw new IllegalArgumentException("A surgical body requires valid bounds");
 		return new SurgicalAssembly(sources, joints, combinations, limbs, preserveLayout, layoutFacing,
 			layoutLayPose, bounds);
+	}
+
+	/** The rigid combination moved by a limb endpoint, or just the endpoint cube itself. */
+	public List<CombinationMember> rotatingGroup(int source, int cube) {
+		CombinationMember selected = new CombinationMember(source, cube);
+		for (Combination combination : combinations)
+			if (combination.members().contains(selected))
+				return combination.members();
+		return List.of(selected);
 	}
 
 	public SurgicalLayPose placedLayPose(Direction placementFacing) {
@@ -532,22 +554,41 @@ public final class SurgicalAssembly {
 		return List.copyOf(decoded);
 	}
 
-	/** Upright rest-pose envelope measured from the visible cubes before the body is boxed. */
-	public record BodyBounds(float width, float height, float depth) {
+	/** Volume-weighted upright collision core and its offset from the complete visible body. */
+	public record BodyBounds(float width, float height, float depth,
+		float centerX, float minY, float centerZ) {
 		public BodyBounds {
-			if (!validSize(width) || !validSize(height) || !validSize(depth))
+			if (!validSize(width) || !validSize(height) || !validSize(depth)
+				|| !validOffset(centerX) || !validVerticalOffset(minY) || !validOffset(centerZ))
 				throw new IllegalArgumentException("Invalid surgical body bounds");
 		}
 
 		@Nullable
 		public static BodyBounds create(double width, double height, double depth) {
+			return create(width, height, depth, 0.0d, 0.0d, 0.0d);
+		}
+
+		@Nullable
+		public static BodyBounds create(double width, double height, double depth,
+			double centerX, double minY, double centerZ) {
 			if (!validSize(width) || !validSize(height) || !validSize(depth))
 				return null;
-			return new BodyBounds((float) width, (float) height, (float) depth);
+			if (!validOffset(centerX) || !validVerticalOffset(minY) || !validOffset(centerZ))
+				return null;
+			return new BodyBounds((float) width, (float) height, (float) depth,
+				(float) centerX, (float) minY, (float) centerZ);
 		}
 
 		private static boolean validSize(double value) {
 			return Double.isFinite(value) && value >= MIN_BODY_SIZE && value <= MAX_BODY_SIZE;
+		}
+
+		private static boolean validOffset(double value) {
+			return Double.isFinite(value) && Math.abs(value) <= MAX_BODY_SIZE;
+		}
+
+		private static boolean validVerticalOffset(double value) {
+			return Double.isFinite(value) && value >= 0.0d && value <= MAX_BODY_SIZE;
 		}
 	}
 

@@ -41,6 +41,9 @@ public final class SlimeBionicAnimator {
 	private static final int AXIS_Z = 2;
 	private static final double GEOMETRY_EPSILON = 1.0e-10d;
 	private static final double PRINCIPAL_AXIS_SHARE = 0.55d;
+	private static final double VANILLA_HUMANOID_LEG_LENGTH = 12.0d / 16.0d;
+	private static final float MIN_GAIT_FREQUENCY_SCALE = 0.25f;
+	private static final float MAX_GAIT_FREQUENCY_SCALE = 4.0f;
 	private static final Basis BODY_SPACE = Basis.bodySpace();
 	@Nullable
 	private static HumanoidModel<LivingEntity> zombieModel;
@@ -85,7 +88,7 @@ public final class SlimeBionicAnimator {
 		List<ResolvedLimb> limbs = resolveLimbs(assembly, sources);
 		if (limbs.isEmpty())
 			return frames;
-		Pose pose = pose(entity, partialTick);
+		Pose pose = pose(entity, partialTick, gaitFrequencyScale(limbs, sources));
 		if (pose == null)
 			return frames;
 
@@ -184,6 +187,41 @@ public final class SlimeBionicAnimator {
 					: slot == 1 ? LimbDriver.LEFT : LimbDriver.NONE));
 		});
 		return resolved;
+	}
+
+	/**
+	 * Retargets vanilla's distance-driven gait to the body's actual legs.
+	 *
+	 * <p>A vanilla humanoid's hip is twelve model pixels above its sole. For each installed hip we
+	 * instead measure from the resolved hinge down to the lowest point of the complete rotating leg
+	 * group. Averaging both sides keeps an asymmetric body on one shared alternating gait. The
+	 * resulting inverse length ratio changes only phase frequency: {@link LivingEntity#walkAnimation}
+	 * still supplies vanilla's smoothed, actual-distance-based walk/run speed and swing amount.</p>
+	 */
+	private static float gaitFrequencyScale(List<ResolvedLimb> limbs, List<SourceState> sources) {
+		double totalLength = 0.0d;
+		int measuredLegs = 0;
+		for (ResolvedLimb limb : limbs) {
+			if (limb.type() != SurgicalLimbType.HIP)
+				continue;
+			double pivotHeight = BODY_SPACE.project(limb.pivot(), AXIS_Y);
+			double soleHeight = Double.NEGATIVE_INFINITY;
+			for (Member member : limb.members()) {
+				CubeBox box = box(sources, member);
+				if (box != null)
+					soleHeight = Math.max(soleHeight, box.max()[AXIS_Y]);
+			}
+			double legLength = soleHeight - pivotHeight;
+			if (!Double.isFinite(legLength) || legLength <= GEOMETRY_EPSILON)
+				continue;
+			totalLength += legLength;
+			measuredLegs++;
+		}
+		if (measuredLegs == 0)
+			return 1.0f;
+		double averageLength = totalLength / measuredLegs;
+		return Mth.clamp((float) (VANILLA_HUMANOID_LEG_LENGTH / averageLength),
+			MIN_GAIT_FREQUENCY_SCALE, MAX_GAIT_FREQUENCY_SCALE);
 	}
 
 	/** Centre of the complete rigid part that an installed joint rotates. */
@@ -317,7 +355,7 @@ public final class SlimeBionicAnimator {
 
 	/** Runs one vanilla zombie animation frame and exposes the resulting joint angles. */
 	@Nullable
-	private static Pose pose(SlimeBionicEntity entity, float partialTick) {
+	private static Pose pose(SlimeBionicEntity entity, float partialTick, float gaitFrequencyScale) {
 		HumanoidModel<LivingEntity> model = zombieModel();
 		if (model == null)
 			return null;
@@ -330,7 +368,7 @@ public final class SlimeBionicAnimator {
 		float limbSwingAmount = 0.0f;
 		if (!entity.isPassenger() && entity.isAlive()) {
 			limbSwingAmount = Math.min(entity.walkAnimation.speed(partialTick), 1.0f);
-			limbSwing = entity.walkAnimation.position(partialTick);
+			limbSwing = entity.walkAnimation.position(partialTick) * gaitFrequencyScale;
 		}
 
 		model.attackTime = entity.getAttackAnim(partialTick);
