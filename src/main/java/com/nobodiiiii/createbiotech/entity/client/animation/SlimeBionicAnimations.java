@@ -119,20 +119,32 @@ public final class SlimeBionicAnimations {
 				? SlimeBionicAttackAnimations.weaponSwing(progress)
 				: SlimeBionicAttackAnimations.emptyHandGolemSwing(progress);
 		Rotation body = attack.body();
-		Rotation shoulder = attack.shoulder();
-		Rotation elbow = attack.elbow();
-		Bone shoulderBone = Bone.RIGHT_SHOULDER;
-		Bone elbowBone = Bone.RIGHT_ELBOW;
+		Rotation attackingShoulder = attack.attackingShoulder();
+		Rotation attackingElbow = attack.attackingElbow();
+		Rotation oppositeShoulder = attack.oppositeShoulder();
+		Rotation oppositeElbow = attack.oppositeElbow();
+		Bone attackingShoulderBone = Bone.RIGHT_SHOULDER;
+		Bone attackingElbowBone = Bone.RIGHT_ELBOW;
+		Bone oppositeShoulderBone = Bone.LEFT_SHOULDER;
+		Bone oppositeElbowBone = Bone.LEFT_ELBOW;
 		if (context.attackArm() == Arm.LEFT) {
 			body = body.mirrorLeft();
-			shoulder = shoulder.mirrorLeft();
-			elbow = elbow.mirrorLeft();
-			shoulderBone = Bone.LEFT_SHOULDER;
-			elbowBone = Bone.LEFT_ELBOW;
+			attackingShoulder = attackingShoulder.mirrorLeft();
+			attackingElbow = attackingElbow.mirrorLeft();
+			oppositeShoulder = oppositeShoulder.mirrorLeft();
+			oppositeElbow = oppositeElbow.mirrorLeft();
+			attackingShoulderBone = Bone.LEFT_SHOULDER;
+			attackingElbowBone = Bone.LEFT_ELBOW;
+			oppositeShoulderBone = Bone.RIGHT_SHOULDER;
+			oppositeElbowBone = Bone.RIGHT_ELBOW;
 		}
 		rotations.merge(Bone.BODY, body, Rotation::plus);
-		rotations.merge(shoulderBone, shoulder, Rotation::plus);
-		rotations.merge(elbowBone, elbow, Rotation::plus);
+		rotations.merge(attackingShoulderBone, attackingShoulder, Rotation::plus);
+		rotations.merge(attackingElbowBone, attackingElbow, Rotation::plus);
+		// A body without the opposite elbow still consumes its shoulder channel, making the
+		// complete rigid arm follow the authored upper-arm pose instead of remaining static.
+		rotations.merge(oppositeShoulderBone, oppositeShoulder, Rotation::plus);
+		rotations.merge(oppositeElbowBone, oppositeElbow, Rotation::plus);
 	}
 
 	@Nullable

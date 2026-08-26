@@ -80,7 +80,7 @@ public class SlimeBionicEntity extends PathfinderMob {
 
 	public static AttributeSupplier.Builder createAttributes() {
 		return createMobAttributes()
-			.add(Attributes.MAX_HEALTH, 20.0d)
+			.add(Attributes.MAX_HEALTH, 400.0d)
 			.add(Attributes.MOVEMENT_SPEED, SurgicalGait.VILLAGER_WALK_SPEED)
 			.add(Attributes.ATTACK_DAMAGE, 3.0d)
 			.add(Attributes.ARMOR, 2.0d)
