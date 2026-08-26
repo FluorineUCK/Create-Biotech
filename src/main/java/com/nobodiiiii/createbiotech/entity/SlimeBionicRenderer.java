@@ -15,6 +15,7 @@ import org.joml.Quaternionf;
 import org.joml.Vector3f;
 
 import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.mojang.math.Axis;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
@@ -28,9 +29,12 @@ import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderCo
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalSourceModelRenderer;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalTablePoseResolver;
 import com.nobodiiiii.createbiotech.entity.client.SlimeBionicAnimator;
+import com.nobodiiiii.createbiotech.entity.animation.SlimeBionicAttackTiming;
 import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 
 import net.minecraft.client.renderer.MultiBufferSource;
+import net.minecraft.client.renderer.LevelRenderer;
+import net.minecraft.client.renderer.RenderType;
 import net.minecraft.client.renderer.entity.EntityRenderer;
 import net.minecraft.client.renderer.entity.EntityRendererProvider;
 import net.minecraft.resources.ResourceLocation;
@@ -39,6 +43,7 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
+	private static final boolean RENDER_ATTACK_RANGE = true;
 	private static final float MIN_SHADOW_RADIUS = 0.15f;
 	private static final float MAX_SHADOW_RADIUS = 32.0f;
 	private static final ResourceLocation SLIME_TEXTURE =
@@ -72,6 +77,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			BodyFrame bodyFrame = BodyFrame.of(bodyYaw, poseStack.last().pose());
 			if (assembly.preservesLayout() || assembly.sources().size() > 1) {
 				renderComposite(entity, assembly, bodyFrame, partialTick, poseStack, buffer, packedLight);
+				renderAttackRange(entity, assembly, bodyFrame, poseStack, buffer);
 				super.render(entity, yaw, partialTick, poseStack, buffer, packedLight);
 				return;
 			}
@@ -111,11 +117,51 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 					poseStack, buffer, packedLight, 0.0f, partialTick, false, null, !slimeForm);
 			}
 			poseStack.popPose();
+			renderAttackRange(entity, assembly, bodyFrame, poseStack, buffer);
 		} else {
 			GEOMETRY.remove(entity);
 			COMPOSITE_GEOMETRY.remove(entity);
 		}
 		super.render(entity, yaw, partialTick, poseStack, buffer, packedLight);
+	}
+
+	/** Temporary combat debug view: the complete server-authoritative active sweep in blue. */
+	private static void renderAttackRange(SlimeBionicEntity entity, SurgicalAssembly assembly,
+		BodyFrame bodyFrame, PoseStack poseStack, MultiBufferSource buffer) {
+		if (!RENDER_ATTACK_RANGE || entity.getAttackAnimationTick() <= 0
+			|| assembly.attackGeometry() == null)
+			return;
+		SurgicalAssembly.ArmAttackGeometry arm = assembly.attackGeometry()
+			.arm(entity.isAttackAnimationLeft());
+		if (arm == null)
+			return;
+		boolean weapon = entity.isAttackAnimationWeapon();
+		float startProgress = SlimeBionicAttackTiming.hitWindowStart(weapon);
+		float endProgress = SlimeBionicAttackTiming.hitWindowEnd(weapon);
+		float sampleScale = SurgicalAssembly.AttackGeometry.PATH_SAMPLES - 1;
+		float cursor = startProgress;
+		Vec3 start = arm.sample(weapon, cursor);
+		VertexConsumer vertices = buffer.getBuffer(RenderType.debugFilledBox());
+		poseStack.pushPose();
+		bodyFrame.apply(poseStack);
+		while (cursor < endProgress - 1.0e-6f) {
+			float nextBoundary = ((float) Math.floor(cursor * sampleScale) + 1.0f) / sampleScale;
+			float next = Math.min(endProgress, nextBoundary);
+			Vec3 end = arm.sample(weapon, next);
+			double spacing = Math.max(arm.radius() * 0.75d, 0.025d);
+			int subdivisions = Mth.clamp((int) Math.ceil(start.distanceTo(end) / spacing), 1, 24);
+			for (int step = 0; step <= subdivisions; step++) {
+				Vec3 point = start.lerp(end, (double) step / subdivisions);
+				double radius = arm.radius();
+				LevelRenderer.addChainedFilledBoxVertices(poseStack, vertices,
+					point.x - radius, point.y - radius, point.z - radius,
+					point.x + radius, point.y + radius, point.z + radius,
+					0.08f, 0.42f, 1.0f, 0.20f);
+			}
+			cursor = next;
+			start = end;
+		}
+		poseStack.popPose();
 	}
 
 	private static void renderComposite(SlimeBionicEntity entity, SurgicalAssembly assembly,

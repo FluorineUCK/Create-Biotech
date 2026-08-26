@@ -14,7 +14,7 @@ final class SlimeBionicAttackAnimations {
 	private static final Rotation ENDER_GOLEM_WINDUP_SHOULDER = Rotation.degrees(40.0f, 20.0f, 0.0f);
 	private static final Rotation ENDER_GOLEM_WINDUP_ELBOW = Rotation.degrees(-80.0f, 0.0f, 0.0f);
 	private static final Rotation ENDER_GOLEM_WINDUP_OPPOSITE_SHOULDER =
-		Rotation.degrees(20.0f, 0.0f, -10.0f);
+		Rotation.degrees(35.0f, 0.0f, -10.0f);
 	private static final Rotation ENDER_GOLEM_WINDUP_OPPOSITE_ELBOW =
 		Rotation.degrees(-30.0f, 0.0f, 0.0f);
 	// lowerbody -20 degrees + its child upperbody -40 degrees in the source hierarchy.
@@ -85,26 +85,40 @@ final class SlimeBionicAttackAnimations {
 	 */
 	static AttackPose emptyHandGolemSwing(float progress) {
 		float tick = Mth.clamp(progress, 0.0f, 1.0f) * ENDER_GOLEM_ATTACK_TICKS;
+		AttackPose pose;
 		if (tick < 10.0f)
-			return interpolate(AttackPose.IDENTITY,
+			pose = interpolate(AttackPose.IDENTITY,
 				new AttackPose(ENDER_GOLEM_WINDUP_BODY, ENDER_GOLEM_WINDUP_SHOULDER,
 					ENDER_GOLEM_WINDUP_ELBOW, ENDER_GOLEM_WINDUP_OPPOSITE_SHOULDER,
 					ENDER_GOLEM_WINDUP_OPPOSITE_ELBOW), tick / 10.0f);
-		if (tick < 15.0f)
-			return interpolate(new AttackPose(ENDER_GOLEM_WINDUP_BODY, ENDER_GOLEM_WINDUP_SHOULDER,
+		else if (tick < 15.0f)
+			pose = interpolate(new AttackPose(ENDER_GOLEM_WINDUP_BODY, ENDER_GOLEM_WINDUP_SHOULDER,
 					ENDER_GOLEM_WINDUP_ELBOW, ENDER_GOLEM_WINDUP_OPPOSITE_SHOULDER,
 					ENDER_GOLEM_WINDUP_OPPOSITE_ELBOW),
 				new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
 					ENDER_GOLEM_STRIKE_ELBOW, Rotation.IDENTITY,
 					ENDER_GOLEM_STRIKE_OPPOSITE_ELBOW),
 				(tick - 10.0f) / 5.0f);
-		if (tick < 20.0f)
-			return new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
+		else if (tick < 20.0f)
+			pose = new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
 				ENDER_GOLEM_STRIKE_ELBOW, Rotation.IDENTITY,
 				ENDER_GOLEM_STRIKE_OPPOSITE_ELBOW);
-		return interpolate(new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
-			ENDER_GOLEM_STRIKE_ELBOW, Rotation.IDENTITY, ENDER_GOLEM_STRIKE_OPPOSITE_ELBOW),
-			AttackPose.IDENTITY, (tick - 20.0f) / 5.0f);
+		else
+			pose = interpolate(new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
+				ENDER_GOLEM_STRIKE_ELBOW, Rotation.IDENTITY, ENDER_GOLEM_STRIKE_OPPOSITE_ELBOW),
+				AttackPose.IDENTITY, (tick - 20.0f) / 5.0f);
+		return pose.withOppositeShoulder(emptyHandOppositeShoulder(tick));
+	}
+
+	/** Moves the balancing upper arm back early, holds it through impact, then joins recovery. */
+	private static Rotation emptyHandOppositeShoulder(float tick) {
+		if (tick < 6.0f)
+			return interpolateEased(Rotation.IDENTITY, ENDER_GOLEM_WINDUP_OPPOSITE_SHOULDER,
+				tick / 6.0f);
+		if (tick < 20.0f)
+			return ENDER_GOLEM_WINDUP_OPPOSITE_SHOULDER;
+		return interpolateEased(ENDER_GOLEM_WINDUP_OPPOSITE_SHOULDER, Rotation.IDENTITY,
+			(tick - 20.0f) / 5.0f);
 	}
 
 	private static AttackPose interpolate(AttackPose start, AttackPose end, float progress) {
@@ -121,11 +135,20 @@ final class SlimeBionicAttackAnimations {
 			Mth.lerp(progress, start.y(), end.y()), Mth.lerp(progress, start.z(), end.z()));
 	}
 
+	private static Rotation interpolateEased(Rotation start, Rotation end, float progress) {
+		float eased = Mth.sin(Mth.clamp(progress, 0.0f, 1.0f) * Mth.HALF_PI);
+		return interpolate(start, end, eased);
+	}
+
 	record AttackPose(Rotation body, Rotation attackingShoulder, Rotation attackingElbow,
 		Rotation oppositeShoulder, Rotation oppositeElbow) {
 		private static final AttackPose IDENTITY =
 			new AttackPose(Rotation.IDENTITY, Rotation.IDENTITY, Rotation.IDENTITY,
 				Rotation.IDENTITY, Rotation.IDENTITY);
+
+		private AttackPose withOppositeShoulder(Rotation rotation) {
+			return new AttackPose(body, attackingShoulder, attackingElbow, rotation, oppositeElbow);
+		}
 	}
 
 	private record RotationKeyframe(float time, Rotation rotation) {}

@@ -71,6 +71,111 @@ public final class SlimeBionicAnimator {
 	}
 
 	/**
+	 * Bakes all authored hand paths once while the surgical body still has exact cube corners.
+	 * Runtime combat can then use immutable samples without resolving a skeleton or quaternions.
+	 */
+	@Nullable
+	public static SurgicalAssembly.AttackGeometry bakeAttackGeometry(SurgicalAssembly assembly,
+		List<SourceState> sources, Vec3 bodyOrigin) {
+		if (assembly == null || sources == null || bodyOrigin == null
+			|| sources.size() != assembly.sources().size())
+			return null;
+		List<ResolvedLimb> limbs = resolveLimbs(assembly, sources);
+		if (limbs.isEmpty())
+			return null;
+		SurgicalAssembly.ArmAttackGeometry right = bakeArm(limbs, sources, bodyOrigin,
+			Bone.RIGHT_ELBOW, Arm.RIGHT);
+		SurgicalAssembly.ArmAttackGeometry left = bakeArm(limbs, sources, bodyOrigin,
+			Bone.LEFT_ELBOW, Arm.LEFT);
+		return SurgicalAssembly.AttackGeometry.create(right, left);
+	}
+
+	@Nullable
+	private static SurgicalAssembly.ArmAttackGeometry bakeArm(List<ResolvedLimb> limbs,
+		List<SourceState> sources, Vec3 origin, Bone elbowBone, Arm arm) {
+		int elbowIndex = -1;
+		for (int index = 0; index < limbs.size(); index++)
+			if (limbs.get(index).type() == SurgicalLimbType.ELBOW
+				&& limbs.get(index).bone() == elbowBone) {
+				elbowIndex = index;
+				break;
+			}
+		if (elbowIndex < 0)
+			return null;
+		ResolvedLimb elbow = limbs.get(elbowIndex);
+		TipGeometry tip = distalTip(elbow, sources);
+		if (tip == null)
+			return null;
+		List<Vec3> emptyHand = bakePath(elbowIndex, limbs, sources, origin, tip.center(), arm,
+			AttackStyle.EMPTY_HAND);
+		List<Vec3> weapon = bakePath(elbowIndex, limbs, sources, origin, tip.center(), arm,
+			AttackStyle.WEAPON);
+		return SurgicalAssembly.ArmAttackGeometry.create(tip.radius(), emptyHand, weapon);
+	}
+
+	private static List<Vec3> bakePath(int elbowIndex, List<ResolvedLimb> limbs,
+		List<SourceState> sources, Vec3 origin, Vec3 handPoint, Arm arm, AttackStyle style) {
+		List<Vec3> path = new ArrayList<>(SurgicalAssembly.AttackGeometry.PATH_SAMPLES);
+		for (int sample = 0; sample < SurgicalAssembly.AttackGeometry.PATH_SAMPLES; sample++) {
+			float progress = (float) sample / (SurgicalAssembly.AttackGeometry.PATH_SAMPLES - 1);
+			Pose pose = SlimeBionicAnimations.sampleAttack(progress, arm, style);
+			Rotation bodyPose = pose.rotation(Bone.BODY);
+			SurgicalCubeRotation bodyRotation = BODY_SPACE.reframe(SurgicalCubeRotation.IDENTITY,
+				bodyPose.z(), bodyPose.y(), bodyPose.x());
+			Transform bodyTransform = Transform.IDENTITY.rotateAround(bodyPivot(sources), bodyRotation);
+			Transform transform = resolveTransform(elbowIndex, limbs, pose, bodyTransform,
+				new Transform[limbs.size()], new boolean[limbs.size()]);
+			path.add(transform.apply(handPoint).subtract(origin));
+		}
+		return List.copyOf(path);
+	}
+
+	@Nullable
+	private static TipGeometry distalTip(ResolvedLimb limb, List<SourceState> sources) {
+		Vec3 center = groupCenter(limb.members(), sources);
+		if (center == null)
+			return null;
+		Vec3 direction = center.subtract(limb.pivot());
+		if (direction.lengthSqr() < GEOMETRY_EPSILON)
+			return null;
+		direction = direction.normalize();
+		double minimum = Double.POSITIVE_INFINITY;
+		double maximum = Double.NEGATIVE_INFINITY;
+		List<Vec3> points = new ArrayList<>();
+		for (Member member : limb.members()) {
+			CubeBox box = box(sources, member);
+			if (box == null)
+				continue;
+			for (Vec3 point : box.points()) {
+				points.add(point);
+				double projection = point.subtract(limb.pivot()).dot(direction);
+				minimum = Math.min(minimum, projection);
+				maximum = Math.max(maximum, projection);
+			}
+		}
+		if (points.isEmpty() || !Double.isFinite(minimum) || !Double.isFinite(maximum))
+			return null;
+		// An irregular multi-cube forearm may have only one mathematically furthest corner. Treat its
+		// distal tenth as the hand so the baked radius remains representative instead of collapsing.
+		double tolerance = Math.max(1.0e-5d, (maximum - minimum) * 0.10d);
+		Vec3 sum = Vec3.ZERO;
+		int tipPoints = 0;
+		for (Vec3 point : points)
+			if (maximum - point.subtract(limb.pivot()).dot(direction) <= tolerance) {
+				sum = sum.add(point);
+				tipPoints++;
+			}
+		if (tipPoints == 0)
+			return null;
+		Vec3 tipCenter = sum.scale(1.0d / tipPoints);
+		double radius = 0.0d;
+		for (Vec3 point : points)
+			if (maximum - point.subtract(limb.pivot()).dot(direction) <= tolerance)
+				radius = Math.max(radius, point.distanceTo(tipCenter));
+		return new TipGeometry(tipCenter, (float) Mth.clamp(radius, 0.05d, 8.0d));
+	}
+
+	/**
 	 * Resolves one animation frame into per-source cube transforms.
 	 *
 	 * <p>{@code sources} is indexed like {@link SurgicalAssembly#sources()}; each returned frame only
@@ -556,6 +661,7 @@ public final class SlimeBionicAnimator {
 
 	private record Member(int source, int cube) {}
 	private record Connection(Member child, Member parent) {}
+	private record TipGeometry(Vec3 center, float radius) {}
 
 	private record ResolvedLimb(SurgicalLimbType type, List<Member> members, Member parent,
 		Vec3 pivot, double side, SurgicalCubeRotation restAlignment, @Nullable Bone bone,

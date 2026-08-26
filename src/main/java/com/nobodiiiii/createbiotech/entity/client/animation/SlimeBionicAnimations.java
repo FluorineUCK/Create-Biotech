@@ -114,8 +114,22 @@ public final class SlimeBionicAnimations {
 		float remainingTicks = Mth.clamp(context.attackAnimationTick() - context.partialTick(),
 			0.0f, duration);
 		float progress = 1.0f - remainingTicks / duration;
+		addArticulatedAttackPose(rotations, context.attackArm(), context.attackStyle(), progress);
+	}
+
+	/** Samples only the authored attack channels for generation-time combat-path baking. */
+	public static Pose sampleAttack(float progress, Arm arm, AttackStyle style) {
+		if (arm == null || arm == Arm.NONE || style == null)
+			return Pose.EMPTY;
+		EnumMap<Bone, Rotation> rotations = new EnumMap<>(Bone.class);
+		addArticulatedAttackPose(rotations, arm, style, Mth.clamp(progress, 0.0f, 1.0f));
+		return new Pose(rotations);
+	}
+
+	private static void addArticulatedAttackPose(EnumMap<Bone, Rotation> rotations,
+		Arm arm, AttackStyle style, float progress) {
 		SlimeBionicAttackAnimations.AttackPose attack =
-			context.attackStyle() == AttackStyle.WEAPON
+			style == AttackStyle.WEAPON
 				? SlimeBionicAttackAnimations.weaponSwing(progress)
 				: SlimeBionicAttackAnimations.emptyHandGolemSwing(progress);
 		Rotation body = attack.body();
@@ -127,7 +141,7 @@ public final class SlimeBionicAnimations {
 		Bone attackingElbowBone = Bone.RIGHT_ELBOW;
 		Bone oppositeShoulderBone = Bone.LEFT_SHOULDER;
 		Bone oppositeElbowBone = Bone.LEFT_ELBOW;
-		if (context.attackArm() == Arm.LEFT) {
+		if (arm == Arm.LEFT) {
 			body = body.mirrorLeft();
 			attackingShoulder = attackingShoulder.mirrorLeft();
 			attackingElbow = attackingElbow.mirrorLeft();

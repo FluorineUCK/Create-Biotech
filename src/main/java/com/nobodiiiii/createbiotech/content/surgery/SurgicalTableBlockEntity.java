@@ -556,7 +556,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	public boolean packComponent(Player player, ItemStack boxes, int subjectId, int cubeId,
 		int observedCubeCount, List<SurgicalAssembly.Seam> observedSeams,
-		@Nullable SurgicalAssembly.BodyBounds bodyBounds) {
+		@Nullable SurgicalAssembly.BodyBounds bodyBounds,
+		@Nullable SurgicalAssembly.AttackGeometry attackGeometry) {
 		SurgicalSubject subject = getSubject(subjectId);
 		if (subject == null || !subject.initializeOrMatchTopology(observedCubeCount, observedSeams)
 			|| !subject.validPresentCube(cubeId) || !CapturedEntityBoxItem.isBox(boxes)
@@ -570,14 +571,19 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		Set<SurgicalGlueJoint> groupJoints = jointsWithin(group);
 		Set<SurgicalCombination> groupCombinations = combinationsWithin(group);
 		Set<SurgicalLimbJoint> groupLimbs = limbsWithin(group);
-		SurgicalAssembly assembly = groupJoints.isEmpty() && groupCombinations.isEmpty()
-			&& groupLimbs.isEmpty()
-			? SurgicalAssembly.create(subject.profile(), subject.cubeCount, component,
-				subject.seams, subject.cutSeams, subject.cutOrder)
-			: compositeAssembly(group, groupJoints, groupCombinations, groupLimbs, subject);
+		int animatedElbows = Math.min(2, (int) groupLimbs.stream()
+			.filter(limb -> limb.type() == SurgicalLimbType.ELBOW).count());
+		int encodedArms = attackGeometry == null ? 0
+			: (attackGeometry.right() == null ? 0 : 1) + (attackGeometry.left() == null ? 0 : 1);
+		if (encodedArms != animatedElbows)
+			return false;
+		SurgicalAssembly assembly = packedAssembly(subject, component, group, groupJoints,
+			groupCombinations, groupLimbs);
 		if (assembly == null)
 			return false;
 		assembly = assembly.withBodyBounds(bodyBounds);
+		if (attackGeometry != null)
+			assembly = assembly.withAttackGeometry(attackGeometry);
 		SlimeBionicEntity bionic = CBEntityTypes.SLIME_BIONIC.get().create(level);
 		if (bionic == null)
 			return false;
@@ -907,6 +913,35 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			level.playSound(null, worldPosition, SoundEvents.SLIME_BLOCK_PLACE, SoundSource.BLOCKS, 0.5f, 0.9f);
 		}
 		return true;
+	}
+
+	/**
+	 * Builds the immutable assembly that packing would create, without changing table state.
+	 * The client uses this exact source ordering while baking generated combat geometry.
+	 */
+	@Nullable
+	public SurgicalAssembly previewPackedAssembly(int subjectId, int cubeId, int observedCubeCount,
+		List<SurgicalAssembly.Seam> observedSeams) {
+		SurgicalSubject subject = getSubject(subjectId);
+		if (subject == null || !subject.matchesObservedTopology(observedCubeCount, observedSeams)
+			|| !subject.validPresentCube(cubeId))
+			return null;
+		ComponentGroup group = connectedGroup(subject, cubeId);
+		BitSet component = group.components.get(subject.persistentId());
+		if (component == null || component.isEmpty())
+			return null;
+		return packedAssembly(subject, component, group, jointsWithin(group), combinationsWithin(group),
+			limbsWithin(group));
+	}
+
+	@Nullable
+	private SurgicalAssembly packedAssembly(SurgicalSubject subject, BitSet component,
+		ComponentGroup group, Set<SurgicalGlueJoint> groupJoints,
+		Set<SurgicalCombination> groupCombinations, Set<SurgicalLimbJoint> groupLimbs) {
+		return groupJoints.isEmpty() && groupCombinations.isEmpty() && groupLimbs.isEmpty()
+			? SurgicalAssembly.create(subject.profile(), subject.cubeCount, component,
+				subject.seams, subject.cutSeams, subject.cutOrder)
+			: compositeAssembly(group, groupJoints, groupCombinations, groupLimbs, subject);
 	}
 
 	public boolean canApplyGlueCut(int subjectId, int glueJointId, double moveX, double moveZ,

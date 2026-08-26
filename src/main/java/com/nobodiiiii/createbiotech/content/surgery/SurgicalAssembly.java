@@ -13,11 +13,13 @@ import java.util.UUID;
 import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
+import com.nobodiiiii.createbiotech.entity.animation.SlimeBionicAttackTiming;
 
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
+import net.minecraft.network.FriendlyByteBuf;
 import net.minecraft.world.phys.Vec3;
 
 /** Immutable, side-safe topology and source-model state for one packed surgical body. */
@@ -28,7 +30,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_LIMBS = 9;
 	public static final double MAX_BODY_SIZE = 64.0d;
 	public static final double MIN_BODY_SIZE = 1.0d / 64.0d;
-	private static final int CURRENT_VERSION = 12;
+	private static final int CURRENT_VERSION = 13;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -59,6 +61,12 @@ public final class SurgicalAssembly {
 	private static final String BODY_MIN_Y_TAG = "BodyMinY";
 	private static final String BODY_CENTER_Z_TAG = "BodyCenterZ";
 	private static final String BODY_LEG_LENGTH_TAG = "BodyLegLength";
+	private static final String ATTACK_GEOMETRY_TAG = "AttackGeometry";
+	private static final String RIGHT_ARM_TAG = "RightArm";
+	private static final String LEFT_ARM_TAG = "LeftArm";
+	private static final String ATTACK_RADIUS_TAG = "Radius";
+	private static final String EMPTY_HAND_PATH_TAG = "EmptyHandPath";
+	private static final String WEAPON_PATH_TAG = "WeaponPath";
 	private static final String FACING_TAG = "Facing";
 	private static final String LAY_POSE_TAG = "LayPose";
 	private static final String POSE_AXIS_TAG = "Axis";
@@ -90,10 +98,13 @@ public final class SurgicalAssembly {
 	private final SurgicalLayPose layoutLayPose;
 	@Nullable
 	private final BodyBounds bodyBounds;
+	@Nullable
+	private final AttackGeometry attackGeometry;
 
 	private SurgicalAssembly(List<Source> sources, List<Joint> joints, List<Combination> combinations,
 		List<Limb> limbs, boolean preserveLayout,
-		Direction layoutFacing, SurgicalLayPose layoutLayPose, @Nullable BodyBounds bodyBounds) {
+		Direction layoutFacing, SurgicalLayPose layoutLayPose, @Nullable BodyBounds bodyBounds,
+		@Nullable AttackGeometry attackGeometry) {
 		this.sources = List.copyOf(sources);
 		this.joints = List.copyOf(joints);
 		this.combinations = List.copyOf(combinations);
@@ -102,6 +113,7 @@ public final class SurgicalAssembly {
 		this.layoutFacing = horizontal(layoutFacing);
 		this.layoutLayPose = layoutLayPose == null ? SurgicalLayPose.IDENTITY : layoutLayPose;
 		this.bodyBounds = bodyBounds;
+		this.attackGeometry = attackGeometry;
 	}
 
 	@Nullable
@@ -117,7 +129,7 @@ public final class SurgicalAssembly {
 			Direction.NORTH, SurgicalLayPose.IDENTITY, Vec3.ZERO, Map.of());
 		return source == null ? null
 			: new SurgicalAssembly(List.of(source), List.of(), List.of(), List.of(), false, Direction.NORTH,
-				SurgicalLayPose.IDENTITY, null);
+				SurgicalLayPose.IDENTITY, null, null);
 	}
 
 	@Nullable
@@ -186,7 +198,7 @@ public final class SurgicalAssembly {
 		if (frozenLimbs == null)
 			return null;
 		return new SurgicalAssembly(frozenSources, frozenJoints, frozenCombinations, frozenLimbs, true,
-			layoutFacing, layoutLayPose, null);
+			layoutFacing, layoutLayPose, null, null);
 	}
 
 	/**
@@ -296,7 +308,7 @@ public final class SurgicalAssembly {
 		assembly = tag.getBoolean(PRESERVE_LAYOUT_TAG) ? assembly
 			: new SurgicalAssembly(assembly.sources, assembly.joints, assembly.combinations,
 				assembly.limbs, false, assembly.layoutFacing,
-				assembly.layoutLayPose, null);
+				assembly.layoutLayPose, null, null);
 		// Versions 9 and 10 used older bounds. Discard them so those bodies are measured again with
 		// the horizontal-only weighting introduced in version 11. Version 11 bounds remain usable;
 		// their absent leg length defaults to zero until a rendering client measures it.
@@ -315,6 +327,12 @@ public final class SurgicalAssembly {
 			if (bounds == null)
 				return null;
 			assembly = assembly.withBodyBounds(bounds);
+		}
+		if (version >= 13 && tag.contains(ATTACK_GEOMETRY_TAG, Tag.TAG_COMPOUND)) {
+			AttackGeometry geometry = AttackGeometry.load(tag.getCompound(ATTACK_GEOMETRY_TAG));
+			if (geometry == null)
+				return null;
+			assembly = assembly.withAttackGeometry(geometry);
 		}
 		return assembly;
 	}
@@ -401,6 +419,8 @@ public final class SurgicalAssembly {
 			tag.putFloat(BODY_CENTER_Z_TAG, bodyBounds.centerZ());
 			tag.putFloat(BODY_LEG_LENGTH_TAG, bodyBounds.legLength());
 		}
+		if (attackGeometry != null)
+			tag.put(ATTACK_GEOMETRY_TAG, attackGeometry.save());
 		return tag;
 	}
 
@@ -413,12 +433,21 @@ public final class SurgicalAssembly {
 	public SurgicalLayPose layoutLayPose() { return layoutLayPose; }
 	@Nullable
 	public BodyBounds bodyBounds() { return bodyBounds; }
+	@Nullable
+	public AttackGeometry attackGeometry() { return attackGeometry; }
 
 	public SurgicalAssembly withBodyBounds(BodyBounds bounds) {
 		if (bounds == null)
 			throw new IllegalArgumentException("A surgical body requires valid bounds");
 		return new SurgicalAssembly(sources, joints, combinations, limbs, preserveLayout, layoutFacing,
-			layoutLayPose, bounds);
+			layoutLayPose, bounds, attackGeometry);
+	}
+
+	public SurgicalAssembly withAttackGeometry(AttackGeometry geometry) {
+		if (geometry == null)
+			throw new IllegalArgumentException("A surgical attack geometry cannot be null");
+		return new SurgicalAssembly(sources, joints, combinations, limbs, preserveLayout, layoutFacing,
+			layoutLayPose, bodyBounds, geometry);
 	}
 
 	/** The rigid combination moved by a limb endpoint, or just the endpoint cube itself. */
@@ -558,6 +587,249 @@ public final class SurgicalAssembly {
 			decoded.add(seamId);
 		return List.copyOf(decoded);
 	}
+
+	/** Immutable hand paths baked once from the assembled model's rest geometry. */
+	public record AttackGeometry(@Nullable ArmAttackGeometry right,
+		@Nullable ArmAttackGeometry left) {
+		public static final int PATH_SAMPLES = 16;
+		private static final double MAX_COORDINATE = MAX_BODY_SIZE * 2.0d;
+
+		public AttackGeometry {
+			if (right == null && left == null)
+				throw new IllegalArgumentException("Attack geometry requires at least one arm");
+		}
+
+		@Nullable
+		public static AttackGeometry create(@Nullable ArmAttackGeometry right,
+			@Nullable ArmAttackGeometry left) {
+			try {
+				return new AttackGeometry(right, left);
+			} catch (IllegalArgumentException ignored) {
+				return null;
+			}
+		}
+
+		@Nullable
+		public ArmAttackGeometry arm(boolean leftSide) {
+			ArmAttackGeometry preferred = leftSide ? left : right;
+			return preferred != null ? preferred : leftSide ? right : left;
+		}
+
+		private CompoundTag save() {
+			CompoundTag tag = new CompoundTag();
+			if (right != null)
+				tag.put(RIGHT_ARM_TAG, right.save());
+			if (left != null)
+				tag.put(LEFT_ARM_TAG, left.save());
+			return tag;
+		}
+
+		public void write(FriendlyByteBuf buffer) {
+			buffer.writeBoolean(right != null);
+			if (right != null)
+				right.write(buffer);
+			buffer.writeBoolean(left != null);
+			if (left != null)
+				left.write(buffer);
+		}
+
+		@Nullable
+		public static AttackGeometry read(FriendlyByteBuf buffer) {
+			boolean hasRight = buffer.readBoolean();
+			ArmAttackGeometry right = hasRight ? ArmAttackGeometry.read(buffer) : null;
+			boolean hasLeft = buffer.readBoolean();
+			ArmAttackGeometry left = hasLeft ? ArmAttackGeometry.read(buffer) : null;
+			if (hasRight && right == null || hasLeft && left == null)
+				return null;
+			return create(right, left);
+		}
+
+		@Nullable
+		private static AttackGeometry load(CompoundTag tag) {
+			ArmAttackGeometry right = tag.contains(RIGHT_ARM_TAG, Tag.TAG_COMPOUND)
+				? ArmAttackGeometry.load(tag.getCompound(RIGHT_ARM_TAG)) : null;
+			ArmAttackGeometry left = tag.contains(LEFT_ARM_TAG, Tag.TAG_COMPOUND)
+				? ArmAttackGeometry.load(tag.getCompound(LEFT_ARM_TAG)) : null;
+			if (tag.contains(RIGHT_ARM_TAG, Tag.TAG_COMPOUND) && right == null
+				|| tag.contains(LEFT_ARM_TAG, Tag.TAG_COMPOUND) && left == null)
+				return null;
+			return create(right, left);
+		}
+
+		private static boolean validPoint(Vec3 point) {
+			return point != null && Double.isFinite(point.x) && Double.isFinite(point.y)
+				&& Double.isFinite(point.z) && Math.abs(point.x) <= MAX_COORDINATE
+				&& Math.abs(point.y) <= MAX_COORDINATE && Math.abs(point.z) <= MAX_COORDINATE;
+		}
+	}
+
+	public record ArmAttackGeometry(float radius, List<Vec3> emptyHandPath,
+		List<Vec3> weaponPath, float emptyHandMaximumHorizontalReach, float emptyHandMinimumY,
+		float emptyHandMaximumY, float weaponMaximumHorizontalReach, float weaponMinimumY,
+		float weaponMaximumY) {
+		private static final float MIN_RADIUS = 0.05f;
+		private static final float MAX_RADIUS = 8.0f;
+
+		public ArmAttackGeometry {
+			if (!Float.isFinite(radius) || radius < MIN_RADIUS || radius > MAX_RADIUS
+				|| !validPath(emptyHandPath) || !validPath(weaponPath))
+				throw new IllegalArgumentException("Invalid arm attack geometry");
+			emptyHandPath = List.copyOf(emptyHandPath);
+			weaponPath = List.copyOf(weaponPath);
+			PathEnvelope emptyHand = envelope(emptyHandPath, radius, false);
+			PathEnvelope weapon = envelope(weaponPath, radius, true);
+			emptyHandMaximumHorizontalReach = emptyHand.reach();
+			emptyHandMinimumY = emptyHand.minimumY();
+			emptyHandMaximumY = emptyHand.maximumY();
+			weaponMaximumHorizontalReach = weapon.reach();
+			weaponMinimumY = weapon.minimumY();
+			weaponMaximumY = weapon.maximumY();
+		}
+
+		private ArmAttackGeometry(float radius, List<Vec3> emptyHandPath, List<Vec3> weaponPath) {
+			this(radius, emptyHandPath, weaponPath, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+		}
+
+		@Nullable
+		public static ArmAttackGeometry create(float radius, List<Vec3> emptyHandPath,
+			List<Vec3> weaponPath) {
+			try {
+				return new ArmAttackGeometry(radius, emptyHandPath, weaponPath);
+			} catch (IllegalArgumentException ignored) {
+				return null;
+			}
+		}
+
+		public Vec3 sample(boolean weapon, float progress) {
+			List<Vec3> path = weapon ? weaponPath : emptyHandPath;
+			float scaled = Math.max(0.0f, Math.min(1.0f, progress)) * (path.size() - 1);
+			int lower = Math.min((int) scaled, path.size() - 1);
+			int upper = Math.min(lower + 1, path.size() - 1);
+			return path.get(lower).lerp(path.get(upper), scaled - lower);
+		}
+
+		private PathEnvelope envelope(boolean weapon) {
+			return new PathEnvelope(maximumHorizontalReach(weapon), minimumY(weapon), maximumY(weapon));
+		}
+
+		public float maximumHorizontalReach(boolean weapon) {
+			return weapon ? weaponMaximumHorizontalReach : emptyHandMaximumHorizontalReach;
+		}
+
+		public float minimumY(boolean weapon) {
+			return weapon ? weaponMinimumY : emptyHandMinimumY;
+		}
+
+		public float maximumY(boolean weapon) {
+			return weapon ? weaponMaximumY : emptyHandMaximumY;
+		}
+
+		private static PathEnvelope envelope(List<Vec3> path, float radius, boolean weapon) {
+			float start = SlimeBionicAttackTiming.hitWindowStart(weapon);
+			float end = SlimeBionicAttackTiming.hitWindowEnd(weapon);
+			float reach = 0.0f;
+			float minY = Float.POSITIVE_INFINITY;
+			float maxY = Float.NEGATIVE_INFINITY;
+			for (int index = 0; index <= AttackGeometry.PATH_SAMPLES; index++) {
+				float progress = index == 0 ? start : index == AttackGeometry.PATH_SAMPLES ? end
+					: (float) index / (AttackGeometry.PATH_SAMPLES - 1);
+				if (progress < start || progress > end)
+					continue;
+				float scaled = progress * (path.size() - 1);
+				int lower = Math.min((int) scaled, path.size() - 1);
+				int upper = Math.min(lower + 1, path.size() - 1);
+				Vec3 point = path.get(lower).lerp(path.get(upper), scaled - lower);
+				reach = Math.max(reach,
+					(float) Math.sqrt(point.x * point.x + point.z * point.z) + radius);
+				minY = Math.min(minY, (float) point.y - radius);
+				maxY = Math.max(maxY, (float) point.y + radius);
+			}
+			return new PathEnvelope(reach, minY, maxY);
+		}
+
+		private CompoundTag save() {
+			CompoundTag tag = new CompoundTag();
+			tag.putFloat(ATTACK_RADIUS_TAG, radius);
+			tag.putIntArray(EMPTY_HAND_PATH_TAG, savePath(emptyHandPath));
+			tag.putIntArray(WEAPON_PATH_TAG, savePath(weaponPath));
+			return tag;
+		}
+
+		private void write(FriendlyByteBuf buffer) {
+			buffer.writeFloat(radius);
+			writePath(buffer, emptyHandPath);
+			writePath(buffer, weaponPath);
+		}
+
+		@Nullable
+		private static ArmAttackGeometry read(FriendlyByteBuf buffer) {
+			float radius = buffer.readFloat();
+			List<Vec3> emptyHand = readPath(buffer);
+			List<Vec3> weapon = readPath(buffer);
+			return create(radius, emptyHand, weapon);
+		}
+
+		@Nullable
+		private static ArmAttackGeometry load(CompoundTag tag) {
+			if (!tag.contains(ATTACK_RADIUS_TAG, Tag.TAG_ANY_NUMERIC)
+				|| !tag.contains(EMPTY_HAND_PATH_TAG, Tag.TAG_INT_ARRAY)
+				|| !tag.contains(WEAPON_PATH_TAG, Tag.TAG_INT_ARRAY))
+				return null;
+			List<Vec3> emptyHand = loadPath(tag.getIntArray(EMPTY_HAND_PATH_TAG));
+			List<Vec3> weapon = loadPath(tag.getIntArray(WEAPON_PATH_TAG));
+			return emptyHand == null || weapon == null ? null
+				: create(tag.getFloat(ATTACK_RADIUS_TAG), emptyHand, weapon);
+		}
+
+		private static boolean validPath(List<Vec3> path) {
+			if (path == null || path.size() != AttackGeometry.PATH_SAMPLES)
+				return false;
+			for (Vec3 point : path)
+				if (!AttackGeometry.validPoint(point))
+					return false;
+			return true;
+		}
+
+		private static int[] savePath(List<Vec3> path) {
+			int[] encoded = new int[path.size() * 3];
+			for (int index = 0; index < path.size(); index++) {
+				Vec3 point = path.get(index);
+				encoded[index * 3] = Float.floatToRawIntBits((float) point.x);
+				encoded[index * 3 + 1] = Float.floatToRawIntBits((float) point.y);
+				encoded[index * 3 + 2] = Float.floatToRawIntBits((float) point.z);
+			}
+			return encoded;
+		}
+
+		private static void writePath(FriendlyByteBuf buffer, List<Vec3> path) {
+			for (Vec3 point : path) {
+				buffer.writeFloat((float) point.x);
+				buffer.writeFloat((float) point.y);
+				buffer.writeFloat((float) point.z);
+			}
+		}
+
+		private static List<Vec3> readPath(FriendlyByteBuf buffer) {
+			List<Vec3> path = new ArrayList<>(AttackGeometry.PATH_SAMPLES);
+			for (int index = 0; index < AttackGeometry.PATH_SAMPLES; index++)
+				path.add(new Vec3(buffer.readFloat(), buffer.readFloat(), buffer.readFloat()));
+			return List.copyOf(path);
+		}
+
+		@Nullable
+		private static List<Vec3> loadPath(int[] encoded) {
+			if (encoded.length != AttackGeometry.PATH_SAMPLES * 3)
+				return null;
+			List<Vec3> path = new ArrayList<>(AttackGeometry.PATH_SAMPLES);
+			for (int index = 0; index < AttackGeometry.PATH_SAMPLES; index++)
+				path.add(new Vec3(Float.intBitsToFloat(encoded[index * 3]),
+					Float.intBitsToFloat(encoded[index * 3 + 1]),
+					Float.intBitsToFloat(encoded[index * 3 + 2])));
+			return validPath(path) ? List.copyOf(path) : null;
+		}
+	}
+
+	private record PathEnvelope(float reach, float minimumY, float maximumY) {}
 
 	/** Volume-weighted upright collision core, visible offset and measured effective leg length. */
 	public record BodyBounds(float width, float height, float depth,

@@ -8,6 +8,10 @@ public final class SlimeBionicAttackTiming {
 	public static final float ENDER_GOLEM_SOURCE_TICKS = 25.0f;
 	private static final float ENDER_GOLEM_IMPACT_PROGRESS = 13.0f / ENDER_GOLEM_SOURCE_TICKS;
 	private static final float MALEDICTUS_IMPACT_PROGRESS = 0.5833f / 1.125f;
+	private static final float ENDER_GOLEM_HIT_START = 10.0f / ENDER_GOLEM_SOURCE_TICKS;
+	private static final float ENDER_GOLEM_HIT_END = 15.0f / ENDER_GOLEM_SOURCE_TICKS;
+	private static final float MALEDICTUS_HIT_START = 0.3333f / 1.125f;
+	private static final float MALEDICTUS_HIT_END = 0.6667f / 1.125f;
 
 	private SlimeBionicAttackTiming() {}
 
@@ -19,5 +23,14 @@ public final class SlimeBionicAttackTiming {
 	public static int impactTick(int playbackTicks, boolean weaponAttack) {
 		float progress = weaponAttack ? MALEDICTUS_IMPACT_PROGRESS : ENDER_GOLEM_IMPACT_PROGRESS;
 		return Math.max(1, Math.min(playbackTicks, Math.round(playbackTicks * progress)));
+	}
+
+	/** Normalized part of the curve whose swept hand is allowed to deal damage. */
+	public static float hitWindowStart(boolean weaponAttack) {
+		return weaponAttack ? MALEDICTUS_HIT_START : ENDER_GOLEM_HIT_START;
+	}
+
+	public static float hitWindowEnd(boolean weaponAttack) {
+		return weaponAttack ? MALEDICTUS_HIT_END : ENDER_GOLEM_HIT_END;
 	}
 }

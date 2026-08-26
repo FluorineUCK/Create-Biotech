@@ -17,6 +17,7 @@ import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxHelper
 import com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.LargeCardboardBoxItem;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
+import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicHandler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalBodyBounds;
@@ -38,6 +39,7 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlacementPacket
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalSubject;
 import com.nobodiiiii.createbiotech.content.smartglue.SmartSuperGlueItem;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
+import com.nobodiiiii.createbiotech.entity.client.SlimeBionicAnimator;
 import com.nobodiiiii.createbiotech.foundation.render.EntityGeometry;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 import com.simibubi.create.AllSoundEvents;
@@ -945,14 +947,14 @@ public final class SurgicalTableClientHandler {
 			cubeSelection = selected;
 			if (selected == null)
 				return;
-			SurgicalAssembly.BodyBounds bodyBounds = selectedBodyBounds(selected);
-			if (bodyBounds == null) {
+			PackedBodyMetrics metrics = selectedBodyMetrics(selected);
+			if (metrics == null) {
 				showNoSpace(minecraft.player);
 				consumeInteraction(event, hand);
 				return;
 			}
 			sendInteraction(selected, hand, SurgicalTableInteractionPacket.Action.PACK,
-				SurgicalTableLayout.Proposal.EMPTY, bodyBounds);
+				SurgicalTableLayout.Proposal.EMPTY, metrics.bodyBounds(), metrics.attackGeometry());
 		} else {
 			return;
 		}
@@ -1899,27 +1901,29 @@ public final class SurgicalTableClientHandler {
 
 	private static void sendInteraction(Selection selected, InteractionHand hand,
 		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal) {
-		sendInteraction(selected, hand, action, proposal, 0.0d, 0.0d, null);
+		sendInteraction(selected, hand, action, proposal, 0.0d, 0.0d, null, null);
 	}
 
 	private static void sendInteraction(Selection selected, InteractionHand hand,
 		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal,
-		@Nullable SurgicalAssembly.BodyBounds bodyBounds) {
-		sendInteraction(selected, hand, action, proposal, 0.0d, 0.0d, bodyBounds);
+		@Nullable SurgicalAssembly.BodyBounds bodyBounds,
+		@Nullable SurgicalAssembly.AttackGeometry attackGeometry) {
+		sendInteraction(selected, hand, action, proposal, 0.0d, 0.0d, bodyBounds, attackGeometry);
 	}
 
 	private static void sendInteraction(Selection selected, InteractionHand hand,
 		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal,
 		double originOffsetX, double originOffsetZ) {
-		sendInteraction(selected, hand, action, proposal, originOffsetX, originOffsetZ, null);
+		sendInteraction(selected, hand, action, proposal, originOffsetX, originOffsetZ, null, null);
 	}
 
 	private static void sendInteraction(Selection selected, InteractionHand hand,
 		SurgicalTableInteractionPacket.Action action, SurgicalTableLayout.Proposal proposal,
-		double originOffsetX, double originOffsetZ, @Nullable SurgicalAssembly.BodyBounds bodyBounds) {
+		double originOffsetX, double originOffsetZ, @Nullable SurgicalAssembly.BodyBounds bodyBounds,
+		@Nullable SurgicalAssembly.AttackGeometry attackGeometry) {
 		CBPackets.sendToServer(new SurgicalTableInteractionPacket(selected.tablePos, hand, action,
 			selected.subjectId, selected.targetId, selected.observedCubeCount, selected.seams,
-			originOffsetX, originOffsetZ, proposal, bodyBounds));
+			originOffsetX, originOffsetZ, proposal, bodyBounds, attackGeometry));
 	}
 
 	private static boolean tryPlaceSubject(LocalPlayer player, ClientLevel level, InteractionHand hand,
@@ -2707,56 +2711,110 @@ public final class SurgicalTableClientHandler {
 		return selection;
 	}
 
-	/** Measures the selected connected body in the upright frame used by the packed entity. */
+	/** Measures and permanently bakes the selected body's invariant physical data. */
 	@Nullable
-	private static SurgicalAssembly.BodyBounds selectedBodyBounds(Selection selection) {
+	private static PackedBodyMetrics selectedBodyMetrics(Selection selection) {
 		ClientLevel level = Minecraft.getInstance().level;
 		if (level == null
 			|| !(level.getBlockEntity(selection.tablePos()) instanceof SurgicalTableBlockEntity table))
-			return null;
-		SurgicalSubject anchor = table.getSubject(selection.subjectId());
-		if (anchor == null)
 			return null;
 		Map<Integer, BitSet> components = table.connectedComponents(selection.subjectId(),
 			selection.targetId(), selection.observedCubeCount(), selection.seams());
 		if (components.isEmpty())
 			return null;
+		SurgicalAssembly preview = table.previewPackedAssembly(selection.subjectId(),
+			selection.targetId(), selection.observedCubeCount(), selection.seams());
+		if (preview == null)
+			return null;
 
-		Set<SurgicalCombination.Member> armCubes = new java.util.HashSet<>();
-		for (SurgicalLimbJoint limb : table.bodyLimbJoints(selection.subjectId(), selection.targetId())) {
-			if (limb.type() != SurgicalLimbType.SHOULDER
-				&& limb.type() != SurgicalLimbType.ELBOW)
-				continue;
-			SurgicalSubject child = table.getSubjectByPersistentId(limb.child().subjectKey());
-			SurgicalCombination combination = child == null ? null
-				: child.combinationContaining(limb.child().cubeId());
-			if (combination == null)
-				armCubes.add(new SurgicalCombination.Member(limb.child().subjectKey(),
-					limb.child().cubeId()));
-			else
-				armCubes.addAll(combination.members());
-		}
-
+		PackedBodyMeasurement measured = measurePackedBody(preview);
+		if (measured == null)
+			return null;
+		Set<SurgicalAssembly.CombinationMember> armCubes = new java.util.HashSet<>();
+		for (SurgicalAssembly.Limb limb : preview.limbs())
+			if (limb.type() == SurgicalLimbType.SHOULDER || limb.type() == SurgicalLimbType.ELBOW)
+				armCubes.addAll(preview.rotatingGroup(limb.childSource(), limb.childCube()));
 		List<List<Vec3>> allCubes = new ArrayList<>();
 		List<List<Vec3>> bodyCubes = new ArrayList<>();
-		for (Map.Entry<Integer, BitSet> entry : components.entrySet()) {
-			SurgicalSubject subject = table.getSubject(entry.getKey());
-			TableGeometry geometry = TABLES.get(new SubjectKey(selection.tablePos(), entry.getKey()));
-			if (subject == null || geometry == null || !geometry.topologyReady())
-				return null;
-			for (int cube = entry.getValue().nextSetBit(0); cube >= 0;
-				cube = entry.getValue().nextSetBit(cube + 1)) {
-				SurgicalModelRenderContext.CubeGeometry cubeGeometry = geometry.cubesById.get(cube);
-				if (cubeGeometry == null)
-					return null;
-				List<Vec3> upright = cubeGeometry.corners().stream()
-					.map(anchor.layPose()::inverseRotate).toList();
-				allCubes.add(upright);
-				if (!armCubes.contains(new SurgicalCombination.Member(subject.persistentId(), cube)))
-					bodyCubes.add(upright);
+		for (int source = 0; source < measured.sources().size(); source++)
+			for (Map.Entry<Integer, SlimeBionicAnimator.CubeBox> entry
+				: measured.sources().get(source).boxes().entrySet()) {
+				allCubes.add(entry.getValue().points());
+				if (!armCubes.contains(new SurgicalAssembly.CombinationMember(source, entry.getKey())))
+					bodyCubes.add(entry.getValue().points());
 			}
+		SurgicalAssembly.BodyBounds bodyBounds = SurgicalBodyBounds.measure(bodyCubes, allCubes,
+			measured.visible());
+		if (bodyBounds == null)
+			return null;
+		float legLength = SlimeBionicAnimator.effectiveLegLength(preview, measured.sources());
+		if (legLength >= SurgicalAssembly.MIN_BODY_SIZE && legLength <= SurgicalAssembly.MAX_BODY_SIZE)
+			bodyBounds = bodyBounds.withLegLength(legLength);
+		SurgicalBodyBounds.Envelope visible = measured.visible();
+		Vec3 bodyOrigin = new Vec3((visible.minX() + visible.maxX()) * 0.5d + bodyBounds.centerX(),
+			visible.minY(), (visible.minZ() + visible.maxZ()) * 0.5d + bodyBounds.centerZ());
+		SurgicalAssembly.AttackGeometry attackGeometry =
+			SlimeBionicAnimator.bakeAttackGeometry(preview, measured.sources(), bodyOrigin);
+		int animatedElbows = Math.min(2, (int) preview.limbs().stream()
+			.filter(limb -> limb.type() == SurgicalLimbType.ELBOW).count());
+		int bakedArms = attackGeometry == null ? 0
+			: (attackGeometry.right() == null ? 0 : 1) + (attackGeometry.left() == null ? 0 : 1);
+		if (bakedArms != animatedElbows)
+			return null;
+		return new PackedBodyMetrics(bodyBounds, attackGeometry);
+	}
+
+	/** Runs the same rest-pose render used by the packed entity, once, while generating it. */
+	@Nullable
+	private static PackedBodyMeasurement measurePackedBody(SurgicalAssembly assembly) {
+		EntityGeometry.Collector visible = EntityGeometry.Collector.boundsOnly();
+		MultiBufferSource measuringBuffer = renderType -> visible;
+		List<SlimeBionicAnimator.SourceState> sources = new ArrayList<>(assembly.sources().size());
+		PoseStack poseStack = new PoseStack();
+		SurgicalTablePoseResolver.applyInverseRotation(poseStack, assembly.layoutLayPose());
+		for (SurgicalAssembly.Source source : assembly.sources()) {
+			LivingEntity entity = SurgicalSourceModelRenderer.preview(assembly, source.profile());
+			if (entity == null)
+				return null;
+			((SlimeMimicAccess) (Object) entity).createBiotech$setSlimeMimic(true);
+			Map<Integer, Vec3> offsets = packedUprightOffsets(assembly, source);
+			Map<Integer, SurgicalCubeRotation> rotations = packedUprightRotations(assembly, source);
+			poseStack.pushPose();
+			poseStack.translate(source.originOffset().x, source.originOffset().y, source.originOffset().z);
+			if (assembly.preservesLayout())
+				SurgicalTablePoseResolver.resolve(source.layPose()).apply(poseStack);
+			SurgicalModelRenderContext.Snapshot snapshot = SurgicalSourceModelRenderer.render(entity,
+				source.cubeCount(), source.presentCubes(), offsets, rotations, poseStack, measuringBuffer,
+				LightTexture.FULL_BRIGHT, 0.0f, 0.0f, true, null, false);
+			poseStack.popPose();
+			if (snapshot.observedCubeCount() != source.cubeCount()
+				|| snapshot.cubes().size() != source.presentCubes().cardinality())
+				return null;
+			sources.add(new SlimeBionicAnimator.SourceState(
+				SlimeBionicAnimator.measure(snapshot), offsets, rotations));
 		}
-		return SurgicalBodyBounds.measure(bodyCubes, allCubes, null);
+		if (!visible.hasVertices())
+			return null;
+		EntityGeometry.Bounds bounds = visible.bounds();
+		SurgicalBodyBounds.Envelope envelope = new SurgicalBodyBounds.Envelope(bounds.minX(),
+			bounds.minY(), bounds.minZ(), bounds.maxX(), bounds.maxY(), bounds.maxZ());
+		return new PackedBodyMeasurement(List.copyOf(sources), envelope);
+	}
+
+	private static Map<Integer, Vec3> packedUprightOffsets(SurgicalAssembly assembly,
+		SurgicalAssembly.Source source) {
+		Map<Integer, Vec3> transformed = new HashMap<>();
+		source.cubeOffsets().forEach((cube, offset) ->
+			transformed.put(cube, assembly.layoutLayPose().inverseRotate(offset)));
+		return Map.copyOf(transformed);
+	}
+
+	private static Map<Integer, SurgicalCubeRotation> packedUprightRotations(
+		SurgicalAssembly assembly, SurgicalAssembly.Source source) {
+		Map<Integer, SurgicalCubeRotation> transformed = new HashMap<>();
+		source.cubeRotations().forEach((cube, rotation) ->
+			transformed.put(cube, rotation.inverseRotate(assembly.layoutLayPose())));
+		return Map.copyOf(transformed);
 	}
 
 	@Nullable
@@ -3717,6 +3775,10 @@ public final class SurgicalTableClientHandler {
 	}
 
 	private record SubjectKey(BlockPos tablePos, int subjectId) {}
+	private record PackedBodyMetrics(SurgicalAssembly.BodyBounds bodyBounds,
+		@Nullable SurgicalAssembly.AttackGeometry attackGeometry) {}
+	private record PackedBodyMeasurement(List<SlimeBionicAnimator.SourceState> sources,
+		SurgicalBodyBounds.Envelope visible) {}
 
 	private record CombinationOutlineKey(BlockPos tablePos, UUID combinationId) {}
 

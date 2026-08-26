@@ -39,6 +39,8 @@ import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.Tags;
 
 /** A real, walking entity whose visible body is supplied by a surgical assembly. */
@@ -198,7 +200,25 @@ public class SlimeBionicEntity extends PathfinderMob {
 
 	@Override
 	public boolean isWithinMeleeAttackRange(LivingEntity target) {
-		return distanceToSqr(target) <= DEFAULT_ATTACK_DISTANCE_SQR;
+		SurgicalAssembly assembly = getAssembly();
+		SurgicalAssembly.AttackGeometry geometry = assembly == null ? null : assembly.attackGeometry();
+		if (geometry == null)
+			return distanceToSqr(target) <= DEFAULT_ATTACK_DISTANCE_SQR;
+		AABB targetBounds = target.getBoundingBox();
+		double x = getX();
+		double z = getZ();
+		double dx = x < targetBounds.minX ? targetBounds.minX - x
+			: x > targetBounds.maxX ? x - targetBounds.maxX : 0.0d;
+		double dz = z < targetBounds.minZ ? targetBounds.minZ - z
+			: z > targetBounds.maxZ ? z - targetBounds.maxZ : 0.0d;
+		boolean weapon = hasAttackWeapon();
+		SurgicalAssembly.ArmAttackGeometry arm = geometry.arm(preferredAttackLeft(weapon));
+		if (arm == null)
+			return false;
+		double reach = arm.maximumHorizontalReach(weapon);
+		return dx * dx + dz * dz <= reach * reach
+			&& targetBounds.maxY >= getY() + arm.minimumY(weapon)
+			&& targetBounds.minY <= getY() + arm.maximumY(weapon);
 	}
 
 	@Override
@@ -214,9 +234,7 @@ public class SlimeBionicEntity extends PathfinderMob {
 		attackAnimationTick = attackAnimationDuration;
 		attackAnimationWeapon = hasAttackWeapon();
 		if (attackAnimationWeapon) {
-			boolean mainHand = isAttackWeapon(getMainHandItem());
-			HumanoidArm arm = mainHand ? getMainArm() : getMainArm().getOpposite();
-			attackAnimationLeft = arm == HumanoidArm.LEFT;
+			attackAnimationLeft = preferredAttackLeft(true);
 		} else {
 			attackAnimationLeft = nextEmptyHandAttackLeft;
 			nextEmptyHandAttackLeft = !nextEmptyHandAttackLeft;
@@ -227,9 +245,66 @@ public class SlimeBionicEntity extends PathfinderMob {
 		return attackAnimationDuration;
 	}
 
+	/** Side the next attack will request before the renderer/geometry applies single-arm fallback. */
+	private boolean preferredAttackLeft(boolean weapon) {
+		if (!weapon)
+			return nextEmptyHandAttackLeft;
+		boolean mainHand = isAttackWeapon(getMainHandItem());
+		HumanoidArm arm = mainHand ? getMainArm() : getMainArm().getOpposite();
+		return arm == HumanoidArm.LEFT;
+	}
+
 	/** Applies the scheduled hit without restarting its already-running animation. */
 	private boolean performAnimatedAttackDamage(Entity target) {
 		return super.doHurtTarget(target);
+	}
+
+	/** Tests only the current target against the baked hand curve; no world entity scan is needed. */
+	private boolean sweptAttackIntersects(LivingEntity target,
+		SurgicalAssembly.ArmAttackGeometry arm, int previousTick, int currentTick, int duration,
+		boolean weaponAttack, float previousBodyYaw, float currentBodyYaw) {
+		float tickFrom = (float) previousTick / duration;
+		float tickTo = (float) currentTick / duration;
+		float from = Math.max(tickFrom,
+			SlimeBionicAttackTiming.hitWindowStart(weaponAttack));
+		float to = Math.min(tickTo,
+			SlimeBionicAttackTiming.hitWindowEnd(weaponAttack));
+		if (to < from)
+			return false;
+		AABB targetBounds = target.getBoundingBox().inflate(arm.radius());
+		float cursor = from;
+		Vec3 start = attackPoint(arm.sample(weaponAttack, cursor), attackYaw(cursor, tickFrom, tickTo,
+			previousBodyYaw, currentBodyYaw));
+		while (true) {
+			float nextBoundary = ((float) Math.floor(cursor
+				* (SurgicalAssembly.AttackGeometry.PATH_SAMPLES - 1)) + 1.0f)
+				/ (SurgicalAssembly.AttackGeometry.PATH_SAMPLES - 1);
+			float next = Math.min(to, nextBoundary);
+			if (next <= cursor + 1.0e-6f)
+				next = to;
+			Vec3 end = attackPoint(arm.sample(weaponAttack, next), attackYaw(next, tickFrom, tickTo,
+				previousBodyYaw, currentBodyYaw));
+			AABB segmentBounds = new AABB(start, end).inflate(1.0e-6d);
+			if (targetBounds.intersects(segmentBounds)
+				&& (targetBounds.contains(start) || targetBounds.contains(end)
+					|| targetBounds.clip(start, end).isPresent()))
+				return true;
+			if (next >= to - 1.0e-6f)
+				return false;
+			cursor = next;
+			start = end;
+		}
+	}
+
+	private static float attackYaw(float progress, float tickFrom, float tickTo,
+		float previousBodyYaw, float currentBodyYaw) {
+		float fraction = tickTo <= tickFrom ? 1.0f
+			: Mth.clamp((progress - tickFrom) / (tickTo - tickFrom), 0.0f, 1.0f);
+		return Mth.rotLerp(fraction, previousBodyYaw, currentBodyYaw);
+	}
+
+	private Vec3 attackPoint(Vec3 local, float bodyYaw) {
+		return local.yRot(-bodyYaw * Mth.DEG_TO_RAD).add(position());
 	}
 
 	@Override
@@ -322,6 +397,9 @@ public class SlimeBionicEntity extends PathfinderMob {
 		private int pendingAttackDuration;
 		private int pendingImpactTick;
 		private boolean pendingImpactApplied;
+		@Nullable
+		private SurgicalAssembly.ArmAttackGeometry pendingArmGeometry;
+		private float pendingPreviousBodyYaw;
 
 		private BionicAttackGoal(SlimeBionicEntity bionic, double speedModifier, boolean followingTargetEvenIfNotSeen) {
 			super(bionic, speedModifier, followingTargetEvenIfNotSeen);
@@ -343,12 +421,15 @@ public class SlimeBionicEntity extends PathfinderMob {
 		}
 
 		@Override
+		public boolean canContinueToUse() {
+			return (pendingAttackTarget != null && pendingAttackTarget.isAlive())
+				|| super.canContinueToUse();
+		}
+
+		@Override
 		protected void checkAndPerformAttack(LivingEntity target) {
-			if (pendingAttackTarget != null) {
-				advancePendingAttack();
-				if (pendingAttackTarget != null)
-					return;
-			}
+			if (pendingAttackTarget != null)
+				return;
 			if (!canPerformAttack(target))
 				return;
 			resetAttackCooldown();
@@ -360,20 +441,36 @@ public class SlimeBionicEntity extends PathfinderMob {
 			pendingAttackDuration = bionic.beginAttackAnimation(getAttackInterval());
 			pendingImpactTick = SlimeBionicAttackTiming.impactTick(pendingAttackDuration,
 				bionic.isAttackAnimationWeapon());
+			SurgicalAssembly assembly = bionic.getAssembly();
+			SurgicalAssembly.AttackGeometry attackGeometry = assembly == null
+				? null : assembly.attackGeometry();
+			pendingArmGeometry = attackGeometry == null ? null
+				: attackGeometry.arm(bionic.isAttackAnimationLeft());
 			pendingAttackTarget = target;
 			pendingAttackElapsed = 0;
 			pendingImpactApplied = false;
+			pendingPreviousBodyYaw = bionic.yBodyRot;
 		}
 
 		private void advancePendingAttack() {
+			int previousElapsed = pendingAttackElapsed;
 			pendingAttackElapsed++;
-			if (!pendingImpactApplied && pendingAttackElapsed >= pendingImpactTick) {
-				pendingImpactApplied = true;
-				LivingEntity target = pendingAttackTarget;
-				if (target != null && target.isAlive() && bionic.isWithinMeleeAttackRange(target)
-					&& bionic.getSensing().hasLineOfSight(target))
-					bionic.performAnimatedAttackDamage(target);
+			LivingEntity target = pendingAttackTarget;
+			if (!pendingImpactApplied && target != null && target.isAlive()) {
+				if (pendingArmGeometry != null) {
+					if (bionic.sweptAttackIntersects(target, pendingArmGeometry, previousElapsed,
+						pendingAttackElapsed, pendingAttackDuration, bionic.isAttackAnimationWeapon(),
+						pendingPreviousBodyYaw, bionic.yBodyRot)) {
+						pendingImpactApplied = true;
+						bionic.performAnimatedAttackDamage(target);
+					}
+				} else if (pendingAttackElapsed >= pendingImpactTick) {
+					pendingImpactApplied = true;
+					if (bionic.isWithinMeleeAttackRange(target))
+						bionic.performAnimatedAttackDamage(target);
+				}
 			}
+			pendingPreviousBodyYaw = bionic.yBodyRot;
 			if (pendingAttackElapsed >= pendingAttackDuration)
 				clearPendingAttack();
 		}
@@ -384,10 +481,14 @@ public class SlimeBionicEntity extends PathfinderMob {
 			pendingAttackDuration = 0;
 			pendingImpactTick = 0;
 			pendingImpactApplied = false;
+			pendingArmGeometry = null;
+			pendingPreviousBodyYaw = bionic.yBodyRot;
 		}
 
 		@Override
 		public void tick() {
+			if (pendingAttackTarget != null)
+				advancePendingAttack();
 			super.tick();
 			raiseArmTicks++;
 			bionic.setAggressive(raiseArmTicks >= 5 && getTicksUntilNextAttack() < getAttackInterval() / 2);

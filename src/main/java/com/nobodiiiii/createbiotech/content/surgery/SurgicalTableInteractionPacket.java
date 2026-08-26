@@ -17,7 +17,8 @@ import org.jetbrains.annotations.Nullable;
 public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand, Action action,
 	int subjectId, int targetId, int observedCubeCount, List<SurgicalAssembly.Seam> seams,
 	double originOffsetX, double originOffsetZ, SurgicalTableLayout.Proposal layout,
-	@Nullable SurgicalAssembly.BodyBounds bodyBounds) {
+	@Nullable SurgicalAssembly.BodyBounds bodyBounds,
+	@Nullable SurgicalAssembly.AttackGeometry attackGeometry) {
 
 	public SurgicalTableInteractionPacket {
 		seams = List.copyOf(seams);
@@ -27,7 +28,7 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 	public SurgicalTableInteractionPacket(FriendlyByteBuf buffer) {
 		this(buffer.readBlockPos(), buffer.readEnum(InteractionHand.class), buffer.readEnum(Action.class),
 			buffer.readVarInt(), buffer.readVarInt(), buffer.readVarInt(), readSeams(buffer), buffer.readDouble(),
-			buffer.readDouble(), readLayout(buffer), readBodyBounds(buffer));
+			buffer.readDouble(), readLayout(buffer), readBodyBounds(buffer), readAttackGeometry(buffer));
 	}
 
 	public void write(FriendlyByteBuf buffer) {
@@ -71,6 +72,9 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			buffer.writeFloat(bodyBounds.centerZ());
 			buffer.writeFloat(bodyBounds.legLength());
 		}
+		buffer.writeBoolean(attackGeometry != null);
+		if (attackGeometry != null)
+			attackGeometry.write(buffer);
 	}
 
 	public void handle(ServerPlayer player) {
@@ -113,7 +117,8 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			if (targetId < observedCubeCount
 				&& com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.isBox(held)
 				&& !com.nobodiiiii.createbiotech.content.cardboardbox.CapturedEntityBoxItem.hasCapturedEntity(held))
-				table.packComponent(player, held, subjectId, targetId, observedCubeCount, seams, bodyBounds);
+				table.packComponent(player, held, subjectId, targetId, observedCubeCount, seams, bodyBounds,
+					attackGeometry);
 		}
 		case CUT_CUBE_CONNECTIONS -> {
 			if (targetId < observedCubeCount && held.is(Items.SHEARS)) {
@@ -176,6 +181,16 @@ public record SurgicalTableInteractionPacket(BlockPos pos, InteractionHand hand,
 			return null;
 		return SurgicalAssembly.BodyBounds.create(buffer.readFloat(), buffer.readFloat(), buffer.readFloat(),
 			buffer.readFloat(), buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
+	}
+
+	@Nullable
+	private static SurgicalAssembly.AttackGeometry readAttackGeometry(FriendlyByteBuf buffer) {
+		if (!buffer.readBoolean())
+			return null;
+		SurgicalAssembly.AttackGeometry geometry = SurgicalAssembly.AttackGeometry.read(buffer);
+		if (geometry == null)
+			throw new IllegalArgumentException("Invalid surgical attack geometry");
+		return geometry;
 	}
 
 	public enum Action {
