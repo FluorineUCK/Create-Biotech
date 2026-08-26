@@ -18,7 +18,7 @@ public final class SurgicalBodyBounds {
 
 	/**
 	 * Measures the horizontally weighted core and complete vertical span of {@code bodyCubes}, then
-	 * expresses them relative to the complete visible envelope. Callers leave shoulder-driven cubes
+	 * expresses them relative to the complete visible envelope. Callers leave arm-driven cubes
 	 * out of {@code bodyCubes}, while keeping them in {@code allCubes}, so arms neither enlarge nor
 	 * recenter the physical body.
 	 */

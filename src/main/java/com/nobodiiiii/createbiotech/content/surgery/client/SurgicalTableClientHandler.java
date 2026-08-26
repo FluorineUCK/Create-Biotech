@@ -2724,7 +2724,8 @@ public final class SurgicalTableClientHandler {
 
 		Set<SurgicalCombination.Member> armCubes = new java.util.HashSet<>();
 		for (SurgicalLimbJoint limb : table.bodyLimbJoints(selection.subjectId(), selection.targetId())) {
-			if (limb.type() != SurgicalLimbType.SHOULDER)
+			if (limb.type() != SurgicalLimbType.SHOULDER
+				&& limb.type() != SurgicalLimbType.ELBOW)
 				continue;
 			SurgicalSubject child = table.getSubjectByPersistentId(limb.child().subjectKey());
 			SurgicalCombination combination = child == null ? null

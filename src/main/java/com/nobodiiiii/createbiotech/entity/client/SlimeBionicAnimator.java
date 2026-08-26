@@ -17,13 +17,13 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalGait;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
+import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations;
+import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Bone;
+import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Context;
+import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Pose;
+import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Rotation;
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.model.HumanoidModel;
-import net.minecraft.client.model.geom.ModelLayers;
-import net.minecraft.client.model.geom.ModelPart;
 import net.minecraft.util.Mth;
-import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -32,9 +32,8 @@ import net.minecraft.world.phys.Vec3;
  * <p>The captured source geometry stays a still frame. Every joint instead contributes a rigid
  * rotation of one cube group around a pivot, expressed through the per-cube offset and rotation
  * maps the surgical render path already understands, so no part of the capture pipeline has to run
- * again per frame. Angles come straight from the vanilla humanoid model a zombie uses, so walking,
- * attacking and head tracking all match, but its raised-arm pose is deliberately left out: limbs
- * rest where the surgery put them.</p>
+ * again per frame. Animation sampling lives in {@link SlimeBionicAnimations}; this class only
+ * resolves geometry and retargets the sampled bone hierarchy onto the installed joints.</p>
  */
 public final class SlimeBionicAnimator {
 	private static final int AXIS_X = 0;
@@ -43,13 +42,11 @@ public final class SlimeBionicAnimator {
 	private static final double GEOMETRY_EPSILON = 1.0e-10d;
 	private static final double PRINCIPAL_AXIS_SHARE = 0.55d;
 	private static final Basis BODY_SPACE = Basis.bodySpace();
-	@Nullable
-	private static HumanoidModel<LivingEntity> zombieModel;
 
 	private SlimeBionicAnimator() {}
 
 	public static void clearCache() {
-		zombieModel = null;
+		SlimeBionicAnimations.clearCache();
 	}
 
 	/**
@@ -86,37 +83,42 @@ public final class SlimeBionicAnimator {
 		List<ResolvedLimb> limbs = resolveLimbs(assembly, sources);
 		if (limbs.isEmpty())
 			return frames;
-		Pose pose = pose(entity, partialTick, effectiveLegLength(limbs, sources));
-		if (pose == null)
-			return frames;
+		Pose pose = SlimeBionicAnimations.sample(animationContext(entity, partialTick,
+			effectiveLegLength(limbs, sources)));
 
 		Map<Integer, Map<Integer, Vec3>> offsets = new HashMap<>();
 		Map<Integer, Map<Integer, SurgicalCubeRotation>> rotations = new HashMap<>();
-		for (ResolvedLimb limb : limbs) {
-			ModelPart driver = pose.driver(limb);
-			if (driver == null)
+		Transform[] transforms = new Transform[limbs.size()];
+		boolean[] resolving = new boolean[limbs.size()];
+		Map<Member, Integer> appliedDepths = new HashMap<>();
+		for (int limbIndex = 0; limbIndex < limbs.size(); limbIndex++) {
+			ResolvedLimb limb = limbs.get(limbIndex);
+			if (limb.bone() == null)
 				continue;
-			SurgicalCubeRotation rotation = BODY_SPACE.reframe(limb.restAlignment(),
-				driver.zRot, driver.yRot, driver.xRot);
-			if (rotation.isIdentity())
+			Transform transform = resolveTransform(limbIndex, limbs, pose, transforms, resolving);
+			if (transform.isIdentity())
 				continue;
+			int depth = hierarchyDepth(limbIndex, limbs);
 			for (Member member : limb.members()) {
+				Integer appliedDepth = appliedDepths.get(member);
+				if (appliedDepth != null && appliedDepth > depth)
+					continue;
 				if (member.source() < 0 || member.source() >= sources.size())
 					continue;
 				SourceState state = sources.get(member.source());
 				CubeBox box = state.boxes().get(member.cube());
 				if (box == null)
 					continue;
-				// The rest centre already carries the static offset, so rotating around the pivot only
-				// adds the lever arm the pivot swings the cube along.
-				Vec3 lever = limb.pivot().subtract(box.center());
+				// The measured centre already includes its static offset. The animation frame therefore
+				// contributes only the hierarchical centre delta plus the inherited final orientation.
 				Vec3 staticOffset = state.offsets().getOrDefault(member.cube(), Vec3.ZERO);
 				SurgicalCubeRotation staticRotation = state.rotations()
 					.getOrDefault(member.cube(), SurgicalCubeRotation.IDENTITY);
 				offsets.computeIfAbsent(member.source(), ignored -> new HashMap<>())
-					.put(member.cube(), staticOffset.add(lever).subtract(rotation.rotate(lever)));
+					.put(member.cube(), staticOffset.add(transform.apply(box.center()).subtract(box.center())));
 				rotations.computeIfAbsent(member.source(), ignored -> new HashMap<>())
-					.put(member.cube(), staticRotation.then(rotation));
+					.put(member.cube(), staticRotation.then(transform.rotation()));
+				appliedDepths.put(member, depth);
 			}
 		}
 		for (int source = 0; source < sourceCount; source++) {
@@ -143,7 +145,7 @@ public final class SlimeBionicAnimator {
 		if (connections == null)
 			return List.of();
 		double bodyCenterX = bodyCenter(sources, AXIS_X);
-		Map<SurgicalLimbType, List<ResolvedLimb>> byType = new EnumMap<>(SurgicalLimbType.class);
+		List<ResolvedLimb> resolved = new ArrayList<>();
 		for (SurgicalAssembly.Limb limb : assembly.limbs()) {
 			Member selectedChild = new Member(limb.childSource(), limb.childCube());
 			Member selectedParent = new Member(limb.parentSource(), limb.parentCube());
@@ -162,29 +164,125 @@ public final class SlimeBionicAnimator {
 			Vec3 restDirection = (drivenCenter == null ? child.center() : drivenCenter).subtract(pivot);
 			if (restDirection.lengthSqr() < GEOMETRY_EPSILON)
 				continue;
-			byType.computeIfAbsent(limb.type(), ignored -> new ArrayList<>())
-				.add(new ResolvedLimb(limb.type(), childMembers, pivot,
-					BODY_SPACE.project(child.center(), AXIS_X) - bodyCenterX,
-					BODY_SPACE.restAlignment(limb.type(), restDirection), LimbDriver.NONE));
+			resolved.add(new ResolvedLimb(limb.type(), childMembers, connection.parent(), pivot,
+				BODY_SPACE.project(child.center(), AXIS_X) - bodyCenterX,
+				BODY_SPACE.restAlignment(limb.type(), restDirection), null, -1));
 		}
-		List<ResolvedLimb> resolved = new ArrayList<>();
-		byType.forEach((type, limbs) -> {
-			limbs.sort((first, second) -> Double.compare(first.side(), second.side()));
+		return linkHierarchy(assignBones(resolved));
+	}
+
+	/** Assigns stable left/right animation channels independently at every anatomical level. */
+	private static List<ResolvedLimb> assignBones(List<ResolvedLimb> limbs) {
+		List<ResolvedLimb> assigned = new ArrayList<>(limbs);
+		Map<SurgicalLimbType, List<Integer>> byType = new EnumMap<>(SurgicalLimbType.class);
+		for (int index = 0; index < limbs.size(); index++)
+			byType.computeIfAbsent(limbs.get(index).type(), ignored -> new ArrayList<>()).add(index);
+		byType.forEach((type, indices) -> {
+			indices.sort((first, second) -> Double.compare(limbs.get(first).side(), limbs.get(second).side()));
 			if (type == SurgicalLimbType.NECK) {
-				if (!limbs.isEmpty())
-					resolved.add(limbs.getFirst().withDriver(LimbDriver.HEAD));
+				if (!indices.isEmpty()) {
+					int index = indices.getFirst();
+					assigned.set(index, assigned.get(index).withBone(Bone.HEAD));
+				}
 				return;
 			}
-			if (limbs.size() == 1) {
-				ResolvedLimb limb = limbs.getFirst();
-				resolved.add(limb.withDriver(limb.side() > 0.0d ? LimbDriver.LEFT : LimbDriver.RIGHT));
+			if (indices.size() == 1) {
+				int index = indices.getFirst();
+				assigned.set(index, assigned.get(index).withBone(bone(type, limbs.get(index).side() > 0.0d)));
 				return;
 			}
-			for (int slot = 0; slot < limbs.size(); slot++)
-				resolved.add(limbs.get(slot).withDriver(slot == 0 ? LimbDriver.RIGHT
-					: slot == 1 ? LimbDriver.LEFT : LimbDriver.NONE));
+			for (int slot = 0; slot < indices.size() && slot < 2; slot++) {
+				int index = indices.get(slot);
+				assigned.set(index, assigned.get(index).withBone(bone(type, slot == 1)));
+			}
 		});
+		return List.copyOf(assigned);
+	}
+
+	@Nullable
+	private static Bone bone(SurgicalLimbType type, boolean left) {
+		return switch (type) {
+		case SHOULDER -> left ? Bone.LEFT_SHOULDER : Bone.RIGHT_SHOULDER;
+		case ELBOW -> left ? Bone.LEFT_ELBOW : Bone.RIGHT_ELBOW;
+		case HIP -> left ? Bone.LEFT_HIP : Bone.RIGHT_HIP;
+		case KNEE -> left ? Bone.LEFT_KNEE : Bone.RIGHT_KNEE;
+		case NECK -> Bone.HEAD;
+		};
+	}
+
+	/**
+	 * Connects the Maledictus-style lower bones to the installed upper bone whose driven group owns
+	 * their physical parent endpoint. An elbow or knee still animates independently when no matching
+	 * shoulder or hip was installed.
+	 */
+	private static List<ResolvedLimb> linkHierarchy(List<ResolvedLimb> limbs) {
+		List<ResolvedLimb> linked = new ArrayList<>(limbs);
+		for (int index = 0; index < limbs.size(); index++) {
+			ResolvedLimb limb = limbs.get(index);
+			SurgicalLimbType parentType = switch (limb.type()) {
+			case ELBOW -> SurgicalLimbType.SHOULDER;
+			case KNEE -> SurgicalLimbType.HIP;
+			default -> null;
+			};
+			if (parentType == null)
+				continue;
+			for (int candidateIndex = 0; candidateIndex < limbs.size(); candidateIndex++) {
+				ResolvedLimb candidate = limbs.get(candidateIndex);
+				if (candidate.type() == parentType && candidate.bone() != null
+					&& candidate.members().contains(limb.parent())) {
+					linked.set(index, limb.withBone(childBone(limb.type(), candidate.bone()))
+						.withParent(candidateIndex));
+					break;
+				}
+			}
+		}
+		return List.copyOf(linked);
+	}
+
+	private static Bone childBone(SurgicalLimbType type, Bone parent) {
+		if (type == SurgicalLimbType.ELBOW)
+			return parent == Bone.LEFT_SHOULDER ? Bone.LEFT_ELBOW : Bone.RIGHT_ELBOW;
+		if (type == SurgicalLimbType.KNEE)
+			return parent == Bone.LEFT_HIP ? Bone.LEFT_KNEE : Bone.RIGHT_KNEE;
+		return parent;
+	}
+
+	private static Transform resolveTransform(int index, List<ResolvedLimb> limbs, Pose pose,
+		Transform[] cache, boolean[] resolving) {
+		if (cache[index] != null)
+			return cache[index];
+		if (resolving[index])
+			return Transform.IDENTITY;
+		resolving[index] = true;
+		ResolvedLimb limb = limbs.get(index);
+		Transform parent = limb.parentIndex() < 0 ? Transform.IDENTITY
+			: resolveTransform(limb.parentIndex(), limbs, pose, cache, resolving);
+		Rotation sampled = pose.rotation(limb.bone());
+		SurgicalCubeRotation local = BODY_SPACE.reframe(limb.restAlignment(),
+			sampled.z(), sampled.y(), sampled.x());
+		SurgicalCubeRotation inheritedLocal = conjugate(parent.rotation(), local);
+		Transform resolved = parent.rotateAround(parent.apply(limb.pivot()), inheritedLocal);
+		resolving[index] = false;
+		cache[index] = resolved;
 		return resolved;
+	}
+
+	/** Changes a child-local rotation into the already rotated parent frame. */
+	private static SurgicalCubeRotation conjugate(SurgicalCubeRotation parent,
+		SurgicalCubeRotation local) {
+		if (parent.isIdentity() || local.isIdentity())
+			return local;
+		SurgicalCubeRotation inverse = new SurgicalCubeRotation(
+			-parent.x(), -parent.y(), -parent.z(), parent.w());
+		return inverse.then(local).then(parent);
+	}
+
+	private static int hierarchyDepth(int index, List<ResolvedLimb> limbs) {
+		int depth = 0;
+		for (int cursor = limbs.get(index).parentIndex(); cursor >= 0 && depth < limbs.size();
+			cursor = limbs.get(cursor).parentIndex())
+			depth++;
+		return depth;
 	}
 
 	/**
@@ -203,16 +301,19 @@ public final class SlimeBionicAnimator {
 	private static float effectiveLegLength(List<ResolvedLimb> limbs, List<SourceState> sources) {
 		double totalLength = 0.0d;
 		int measuredLegs = 0;
-		for (ResolvedLimb limb : limbs) {
+		for (int hipIndex = 0; hipIndex < limbs.size(); hipIndex++) {
+			ResolvedLimb limb = limbs.get(hipIndex);
 			if (limb.type() != SurgicalLimbType.HIP)
 				continue;
 			double pivotHeight = BODY_SPACE.project(limb.pivot(), AXIS_Y);
 			double soleHeight = Double.NEGATIVE_INFINITY;
-			for (Member member : limb.members()) {
-				CubeBox box = box(sources, member);
-				if (box != null)
-					soleHeight = Math.max(soleHeight, box.max()[AXIS_Y]);
-			}
+			for (int candidateIndex = 0; candidateIndex < limbs.size(); candidateIndex++)
+				if (isDescendantOrSelf(candidateIndex, hipIndex, limbs))
+					for (Member member : limbs.get(candidateIndex).members()) {
+						CubeBox box = box(sources, member);
+						if (box != null)
+							soleHeight = Math.max(soleHeight, box.max()[AXIS_Y]);
+					}
 			double legLength = soleHeight - pivotHeight;
 			if (!Double.isFinite(legLength) || legLength <= GEOMETRY_EPSILON)
 				continue;
@@ -222,6 +323,17 @@ public final class SlimeBionicAnimator {
 		if (measuredLegs == 0)
 			return 0.0f;
 		return (float) (totalLength / measuredLegs);
+	}
+
+	private static boolean isDescendantOrSelf(int candidate, int ancestor,
+		List<ResolvedLimb> limbs) {
+		int cursor = candidate;
+		for (int depth = 0; cursor >= 0 && depth <= limbs.size(); depth++) {
+			if (cursor == ancestor)
+				return true;
+			cursor = limbs.get(cursor).parentIndex();
+		}
+		return false;
 	}
 
 	/** Centre of the complete rigid part that an installed joint rotates. */
@@ -353,12 +465,8 @@ public final class SlimeBionicAnimator {
 	}
 
 
-	/** Runs one vanilla zombie animation frame and exposes the resulting joint angles. */
-	@Nullable
-	private static Pose pose(SlimeBionicEntity entity, float partialTick, float legLength) {
-		HumanoidModel<LivingEntity> model = zombieModel();
-		if (model == null)
-			return null;
+	/** Adapts entity state to the animation-only module's narrow, immutable input contract. */
+	private static Context animationContext(SlimeBionicEntity entity, float partialTick, float legLength) {
 		float bodyRot = Mth.rotLerp(partialTick, entity.yBodyRotO, entity.yBodyRot);
 		float headRot = Mth.rotLerp(partialTick, entity.yHeadRotO, entity.yHeadRot);
 		float netHeadYaw = Mth.wrapDegrees(headRot - bodyRot);
@@ -366,67 +474,54 @@ public final class SlimeBionicAnimator {
 		float ageInTicks = entity.tickCount + partialTick;
 		float limbSwing = 0.0f;
 		float limbSwingAmount = 0.0f;
+		float walkWeight = 0.0f;
 		if (!entity.isPassenger() && entity.isAlive()) {
 			// WalkAnimation.position keeps accumulating at the full movement-derived speed. Capping only
 			// the amount therefore converts speed beyond this point into faster steps, not wider swings.
-			limbSwingAmount = Math.min(entity.walkAnimation.speed(partialTick),
-				SurgicalGait.maximumHumanoidSwingAmount(legLength));
+			float maximumAmount = SurgicalGait.maximumHumanoidSwingAmount(legLength);
+			limbSwingAmount = Math.min(entity.walkAnimation.speed(partialTick), maximumAmount);
+			walkWeight = maximumAmount <= 0.0f ? 0.0f : limbSwingAmount / maximumAmount;
 			limbSwing = entity.walkAnimation.position(partialTick)
 				* SurgicalGait.animationFrequencyScale(legLength);
 		}
-
-		model.attackTime = entity.getAttackAnim(partialTick);
-		model.riding = entity.isPassenger();
-		model.young = false;
-		model.crouching = false;
-		model.swimAmount = entity.getSwimAmount(partialTick);
-		model.leftArmPose = HumanoidModel.ArmPose.EMPTY;
-		model.rightArmPose = HumanoidModel.ArmPose.EMPTY;
-		// Deliberately stopping at the shared humanoid pass. AbstractZombieModel would layer its
-		// raised-arm pose on top, which both forces a resting angle onto every shoulder and discards
-		// the walk swing computed here.
-		model.setupAnim(entity, limbSwing, limbSwingAmount, ageInTicks, netHeadYaw, headPitch);
-		int attackAnimationTick = entity.getAttackAnimationTick();
-		if (attackAnimationTick > 0) {
-			float attackArmPitch = -2.0f
-				+ 1.5f * Mth.triangleWave(attackAnimationTick - partialTick, 10.0f);
-			model.rightArm.xRot = attackArmPitch;
-			model.leftArm.xRot = attackArmPitch;
-		}
-		return new Pose(model);
-	}
-
-	@Nullable
-	private static HumanoidModel<LivingEntity> zombieModel() {
-		if (zombieModel != null)
-			return zombieModel;
-		Minecraft minecraft = Minecraft.getInstance();
-		if (minecraft.getEntityModels() == null)
-			return null;
-		zombieModel = new HumanoidModel<>(minecraft.getEntityModels().bakeLayer(ModelLayers.ZOMBIE));
-		return zombieModel;
-	}
-
-	private record Pose(HumanoidModel<LivingEntity> model) {
-		@Nullable
-		private ModelPart driver(ResolvedLimb limb) {
-			return switch (limb.driver()) {
-			case HEAD -> model.head;
-			case RIGHT -> limb.type() == SurgicalLimbType.SHOULDER ? model.rightArm : model.rightLeg;
-			case LEFT -> limb.type() == SurgicalLimbType.SHOULDER ? model.leftArm : model.leftLeg;
-			case NONE -> null;
-			};
-		}
+		return new Context(entity, limbSwing, limbSwingAmount, walkWeight, ageInTicks,
+			netHeadYaw, headPitch, entity.getAttackAnim(partialTick), entity.isPassenger(),
+			entity.getSwimAmount(partialTick), entity.getAttackAnimationTick(), partialTick);
 	}
 
 	private record Member(int source, int cube) {}
 	private record Connection(Member child, Member parent) {}
-	private enum LimbDriver { NONE, HEAD, RIGHT, LEFT }
 
-	private record ResolvedLimb(SurgicalLimbType type, List<Member> members, Vec3 pivot, double side,
-		SurgicalCubeRotation restAlignment, LimbDriver driver) {
-		private ResolvedLimb withDriver(LimbDriver driver) {
-			return new ResolvedLimb(type, members, pivot, side, restAlignment, driver);
+	private record ResolvedLimb(SurgicalLimbType type, List<Member> members, Member parent,
+		Vec3 pivot, double side, SurgicalCubeRotation restAlignment, @Nullable Bone bone,
+		int parentIndex) {
+		private ResolvedLimb withBone(@Nullable Bone bone) {
+			return new ResolvedLimb(type, members, parent, pivot, side, restAlignment, bone, parentIndex);
+		}
+
+		private ResolvedLimb withParent(int parentIndex) {
+			return new ResolvedLimb(type, members, parent, pivot, side, restAlignment, bone, parentIndex);
+		}
+	}
+
+	/** One affine body-space transform accumulated through a parent-to-child joint chain. */
+	private record Transform(SurgicalCubeRotation rotation, Vec3 translation) {
+		private static final Transform IDENTITY =
+			new Transform(SurgicalCubeRotation.IDENTITY, Vec3.ZERO);
+
+		private Vec3 apply(Vec3 point) {
+			return rotation.rotate(point).add(translation);
+		}
+
+		private Transform rotateAround(Vec3 pivot, SurgicalCubeRotation delta) {
+			if (delta.isIdentity())
+				return this;
+			Vec3 nextTranslation = pivot.add(delta.rotate(translation.subtract(pivot)));
+			return new Transform(rotation.then(delta), nextTranslation);
+		}
+
+		private boolean isIdentity() {
+			return rotation.isIdentity() && translation.lengthSqr() < GEOMETRY_EPSILON;
 		}
 	}
 

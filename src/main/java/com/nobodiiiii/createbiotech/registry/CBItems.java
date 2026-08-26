@@ -115,8 +115,14 @@ public class CBItems {
 	public static final DeferredHolder<Item, SurgicalJointItem> SHOULDER_JOINT = ITEMS.register("shoulder_joint",
 		() -> new SurgicalJointItem(SurgicalLimbType.SHOULDER, new Item.Properties()));
 
+	public static final DeferredHolder<Item, SurgicalJointItem> ELBOW_JOINT = ITEMS.register("elbow_joint",
+		() -> new SurgicalJointItem(SurgicalLimbType.ELBOW, new Item.Properties()));
+
 	public static final DeferredHolder<Item, SurgicalJointItem> HIP_JOINT = ITEMS.register("hip_joint",
 		() -> new SurgicalJointItem(SurgicalLimbType.HIP, new Item.Properties()));
+
+	public static final DeferredHolder<Item, SurgicalJointItem> KNEE_JOINT = ITEMS.register("knee_joint",
+		() -> new SurgicalJointItem(SurgicalLimbType.KNEE, new Item.Properties()));
 
 	public static final DeferredHolder<Item, EnchantmentBookCopyItem> ENCHANTMENT_BOOK_COPY =
 		ITEMS.register("enchantment_book_copy", () -> new EnchantmentBookCopyItem(new Item.Properties()));

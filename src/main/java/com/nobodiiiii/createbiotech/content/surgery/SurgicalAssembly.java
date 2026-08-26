@@ -25,7 +25,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_CUBES = 1024;
 	public static final int MAX_SEAMS = 4096;
 	public static final int MAX_SOURCES = 256;
-	public static final int MAX_LIMBS = 5;
+	public static final int MAX_LIMBS = 9;
 	public static final double MAX_BODY_SIZE = 64.0d;
 	public static final double MIN_BODY_SIZE = 1.0d / 64.0d;
 	private static final int CURRENT_VERSION = 12;
