@@ -42,8 +42,6 @@ public final class SlimeBionicAnimator {
 	private static final int AXIS_Z = 2;
 	private static final double GEOMETRY_EPSILON = 1.0e-10d;
 	private static final double PRINCIPAL_AXIS_SHARE = 0.55d;
-	/** HumanoidModel multiplies this by 1.4, giving the villager-like maximum of 0.7 rad (~40 degrees). */
-	private static final float MAX_LIMB_SWING_AMOUNT = 0.5f;
 	private static final Basis BODY_SPACE = Basis.bodySpace();
 	@Nullable
 	private static HumanoidModel<LivingEntity> zombieModel;
@@ -88,8 +86,7 @@ public final class SlimeBionicAnimator {
 		List<ResolvedLimb> limbs = resolveLimbs(assembly, sources);
 		if (limbs.isEmpty())
 			return frames;
-		Pose pose = pose(entity, partialTick,
-			SurgicalGait.animationFrequencyScale(effectiveLegLength(limbs, sources)));
+		Pose pose = pose(entity, partialTick, effectiveLegLength(limbs, sources));
 		if (pose == null)
 			return frames;
 
@@ -358,7 +355,7 @@ public final class SlimeBionicAnimator {
 
 	/** Runs one vanilla zombie animation frame and exposes the resulting joint angles. */
 	@Nullable
-	private static Pose pose(SlimeBionicEntity entity, float partialTick, float gaitFrequencyScale) {
+	private static Pose pose(SlimeBionicEntity entity, float partialTick, float legLength) {
 		HumanoidModel<LivingEntity> model = zombieModel();
 		if (model == null)
 			return null;
@@ -372,8 +369,10 @@ public final class SlimeBionicAnimator {
 		if (!entity.isPassenger() && entity.isAlive()) {
 			// WalkAnimation.position keeps accumulating at the full movement-derived speed. Capping only
 			// the amount therefore converts speed beyond this point into faster steps, not wider swings.
-			limbSwingAmount = Math.min(entity.walkAnimation.speed(partialTick), MAX_LIMB_SWING_AMOUNT);
-			limbSwing = entity.walkAnimation.position(partialTick) * gaitFrequencyScale;
+			limbSwingAmount = Math.min(entity.walkAnimation.speed(partialTick),
+				SurgicalGait.maximumHumanoidSwingAmount(legLength));
+			limbSwing = entity.walkAnimation.position(partialTick)
+				* SurgicalGait.animationFrequencyScale(legLength);
 		}
 
 		model.attackTime = entity.getAttackAnim(partialTick);

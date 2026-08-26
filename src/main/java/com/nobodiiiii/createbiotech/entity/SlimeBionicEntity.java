@@ -99,6 +99,14 @@ public class SlimeBionicEntity extends PathfinderMob {
 	}
 
 	@Override
+	protected void updateWalkAnimation(float movement) {
+		// Vanilla clamps movement * 4 to 1, so speeds above roughly 0.25 blocks/tick cannot raise
+		// cadence. Preserve the full configured bionic range and let the renderer cap swing angle.
+		float animationSpeed = Math.min(movement * 4.0f, SurgicalGait.MAX_WALK_ANIMATION_SPEED);
+		walkAnimation.update(animationSpeed, 0.4f);
+	}
+
+	@Override
 	protected void defineSynchedData(SynchedEntityData.Builder builder) {
 		super.defineSynchedData(builder);
 		builder.define(ASSEMBLY, new CompoundTag());

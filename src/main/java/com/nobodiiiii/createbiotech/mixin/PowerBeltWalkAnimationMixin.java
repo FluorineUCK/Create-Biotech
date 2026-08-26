@@ -9,6 +9,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 import com.nobodiiiii.createbiotech.content.powerbelt.PowerBeltWalkAnimation;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalGait;
+import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.LivingEntity;
@@ -34,11 +36,13 @@ public abstract class PowerBeltWalkAnimationMixin {
 		WalkAnimationStateAccessor animation = (WalkAnimationStateAccessor) (Object) walkAnimation;
 		float previousSpeed = animation.createBiotech$getSpeedOld();
 		float currentSpeed = animation.createBiotech$getSpeed();
+		float maximumSpeed = entity instanceof SlimeBionicEntity
+			? SurgicalGait.MAX_WALK_ANIMATION_SPEED : 1.0f;
 		float baseTarget = (currentSpeed - previousSpeed * (1 - CREATE_BIOTECH_WALK_RESPONSE))
 			/ CREATE_BIOTECH_WALK_RESPONSE;
-		float baseMovement = Mth.clamp(baseTarget, 0, 1) / 4;
+		float baseMovement = Mth.clamp(baseTarget, 0, maximumSpeed) / 4;
 		float adjustedMovement = PowerBeltWalkAnimation.includeSurfaceMovement(baseMovement, surfaceMovement);
-		float adjustedTarget = Math.min(adjustedMovement * 4, 1);
+		float adjustedTarget = Math.min(adjustedMovement * 4, maximumSpeed);
 		float adjustedSpeed = previousSpeed
 			+ (adjustedTarget - previousSpeed) * CREATE_BIOTECH_WALK_RESPONSE;
 
