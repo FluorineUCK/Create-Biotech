@@ -18,6 +18,7 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.content.surgery.client.SurgicalModelRenderContext;
 import com.nobodiiiii.createbiotech.entity.SlimeBionicEntity;
 import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations;
+import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Arm;
 import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Bone;
 import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Context;
 import com.nobodiiiii.createbiotech.entity.client.animation.SlimeBionicAnimations.Pose;
@@ -84,7 +85,7 @@ public final class SlimeBionicAnimator {
 		if (limbs.isEmpty())
 			return frames;
 		Pose pose = SlimeBionicAnimations.sample(animationContext(entity, partialTick,
-			effectiveLegLength(limbs, sources)));
+			effectiveLegLength(limbs, sources), attackArm(limbs)));
 
 		Map<Integer, Map<Integer, Vec3>> offsets = new HashMap<>();
 		Map<Integer, Map<Integer, SurgicalCubeRotation>> rotations = new HashMap<>();
@@ -245,6 +246,20 @@ public final class SlimeBionicAnimator {
 		if (type == SurgicalLimbType.KNEE)
 			return parent == Bone.LEFT_HIP ? Bone.LEFT_KNEE : Bone.RIGHT_KNEE;
 		return parent;
+	}
+
+	/** Prefers the right articulated arm, falling back to a lone left elbow when necessary. */
+	private static Arm attackArm(List<ResolvedLimb> limbs) {
+		Arm available = Arm.NONE;
+		for (ResolvedLimb limb : limbs) {
+			if (limb.type() != SurgicalLimbType.ELBOW)
+				continue;
+			if (limb.bone() == Bone.RIGHT_ELBOW)
+				return Arm.RIGHT;
+			if (limb.bone() == Bone.LEFT_ELBOW)
+				available = Arm.LEFT;
+		}
+		return available;
 	}
 
 	private static Transform resolveTransform(int index, List<ResolvedLimb> limbs, Pose pose,
@@ -466,7 +481,8 @@ public final class SlimeBionicAnimator {
 
 
 	/** Adapts entity state to the animation-only module's narrow, immutable input contract. */
-	private static Context animationContext(SlimeBionicEntity entity, float partialTick, float legLength) {
+	private static Context animationContext(SlimeBionicEntity entity, float partialTick,
+		float legLength, Arm attackArm) {
 		float bodyRot = Mth.rotLerp(partialTick, entity.yBodyRotO, entity.yBodyRot);
 		float headRot = Mth.rotLerp(partialTick, entity.yHeadRotO, entity.yHeadRot);
 		float netHeadYaw = Mth.wrapDegrees(headRot - bodyRot);
@@ -486,7 +502,7 @@ public final class SlimeBionicAnimator {
 		}
 		return new Context(entity, limbSwing, limbSwingAmount, walkWeight, ageInTicks,
 			netHeadYaw, headPitch, entity.getAttackAnim(partialTick), entity.isPassenger(),
-			entity.getSwimAmount(partialTick), entity.getAttackAnimationTick(), partialTick);
+			entity.getSwimAmount(partialTick), entity.getAttackAnimationTick(), partialTick, attackArm);
 	}
 
 	private record Member(int source, int cube) {}

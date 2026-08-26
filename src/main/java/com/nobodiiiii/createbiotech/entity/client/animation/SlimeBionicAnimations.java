@@ -27,7 +27,8 @@ import net.minecraft.world.entity.LivingEntity;
  * {@code ref/1.21.1/Cataclysm/src/main/java/com/github/L_Ender/cataclysm/client/animation/Maledictus_Animation.java}:
  * front arms are children of upper arms, and front legs are children of upper legs. The lightweight
  * bend curves below preserve that hierarchy without copying Cataclysm's boss-specific animation
- * catalogue.</p>
+ * catalogue. Authored attacks live beside this sampler in their own catalogue class so adding more
+ * of them does not grow the geometry solver or its integration contract.</p>
  */
 public final class SlimeBionicAnimations {
 	private static final float WALK_PHASE_SCALE = 0.6662f;
@@ -35,6 +36,7 @@ public final class SlimeBionicAnimations {
 	private static final float MAX_WALK_ELBOW_DEGREES = 37.5f;
 	private static final float MIN_WALK_KNEE_DEGREES = 3.0f;
 	private static final float MAX_WALK_KNEE_DEGREES = 51.0f;
+	private static final float ATTACK_DURATION_TICKS = 10.0f;
 	@Nullable
 	private static HumanoidModel<LivingEntity> humanoidModel;
 
@@ -51,7 +53,9 @@ public final class SlimeBionicAnimations {
 		if (model == null)
 			return Pose.EMPTY;
 
-		model.attackTime = context.attackTime();
+		boolean articulatedAttack = context.attackAnimationTick() > 0
+			&& context.attackArm() != Arm.NONE;
+		model.attackTime = articulatedAttack ? 0.0f : context.attackTime();
 		model.riding = context.riding();
 		model.young = false;
 		model.crouching = false;
@@ -62,7 +66,7 @@ public final class SlimeBionicAnimations {
 		// walking shoulder swing and force a non-neutral rest pose onto every installed arm.
 		model.setupAnim(context.entity(), context.limbSwing(), context.limbSwingAmount(),
 			context.ageInTicks(), context.netHeadYaw(), context.headPitch());
-		if (context.attackAnimationTick() > 0) {
+		if (context.attackAnimationTick() > 0 && !articulatedAttack) {
 			float attackArmPitch = -2.0f + 1.5f * Mth.triangleWave(
 				context.attackAnimationTick() - context.partialTick(), 10.0f);
 			model.rightArm.xRot = attackArmPitch;
@@ -76,6 +80,7 @@ public final class SlimeBionicAnimations {
 		rotations.put(Bone.RIGHT_HIP, Rotation.of(model.rightLeg));
 		rotations.put(Bone.LEFT_HIP, Rotation.of(model.leftLeg));
 		addLowerLimbPose(rotations, context);
+		addArticulatedAttackPose(rotations, context);
 		return new Pose(rotations);
 	}
 
@@ -107,6 +112,30 @@ public final class SlimeBionicAnimations {
 		rotations.put(Bone.LEFT_KNEE, Rotation.x(leftKneeDegrees * Mth.DEG_TO_RAD * weight));
 	}
 
+	/** Retimes Maledictus's short right-hand swing to the entity's ten-tick melee event. */
+	private static void addArticulatedAttackPose(EnumMap<Bone, Rotation> rotations,
+		Context context) {
+		if (context.attackArm() == Arm.NONE || context.attackAnimationTick() <= 0)
+			return;
+		float remainingTicks = Mth.clamp(context.attackAnimationTick() - context.partialTick(),
+			0.0f, ATTACK_DURATION_TICKS);
+		float progress = 1.0f - remainingTicks / ATTACK_DURATION_TICKS;
+		SlimeBionicAttackAnimations.AttackPose attack =
+			SlimeBionicAttackAnimations.emptyHandSwing(progress);
+		Rotation shoulder = attack.shoulder();
+		Rotation elbow = attack.elbow();
+		Bone shoulderBone = Bone.RIGHT_SHOULDER;
+		Bone elbowBone = Bone.RIGHT_ELBOW;
+		if (context.attackArm() == Arm.LEFT) {
+			shoulder = shoulder.mirrorLeft();
+			elbow = elbow.mirrorLeft();
+			shoulderBone = Bone.LEFT_SHOULDER;
+			elbowBone = Bone.LEFT_ELBOW;
+		}
+		rotations.merge(shoulderBone, shoulder, Rotation::plus);
+		rotations.merge(elbowBone, elbow, Rotation::plus);
+	}
+
 	@Nullable
 	private static HumanoidModel<LivingEntity> humanoidModel() {
 		if (humanoidModel != null)
@@ -130,10 +159,21 @@ public final class SlimeBionicAnimations {
 		LEFT_KNEE
 	}
 
+	/** Which installed articulated arm performs the current one-handed attack. */
+	public enum Arm {
+		NONE,
+		RIGHT,
+		LEFT
+	}
+
 	/** All time-varying inputs needed to sample one pose; no assembly or renderer state leaks in. */
 	public record Context(LivingEntity entity, float limbSwing, float limbSwingAmount,
 		float walkWeight, float ageInTicks, float netHeadYaw, float headPitch, float attackTime,
-		boolean riding, float swimAmount, int attackAnimationTick, float partialTick) {}
+		boolean riding, float swimAmount, int attackAnimationTick, float partialTick, Arm attackArm) {
+		public Context {
+			attackArm = attackArm == null ? Arm.NONE : attackArm;
+		}
+	}
 
 	/** Euler rotation in the same Z-Y-X order used by vanilla model parts. */
 	public record Rotation(float x, float y, float z) {
@@ -145,6 +185,19 @@ public final class SlimeBionicAnimations {
 
 		private static Rotation x(float radians) {
 			return new Rotation(radians, 0.0f, 0.0f);
+		}
+
+		static Rotation degrees(float x, float y, float z) {
+			return new Rotation(x * Mth.DEG_TO_RAD, y * Mth.DEG_TO_RAD, z * Mth.DEG_TO_RAD);
+		}
+
+		private Rotation plus(Rotation other) {
+			return new Rotation(x + other.x, y + other.y, z + other.z);
+		}
+
+		/** Mirrors a right-arm rotation across the body's sagittal plane. */
+		Rotation mirrorLeft() {
+			return new Rotation(x, -y, -z);
 		}
 	}
 
