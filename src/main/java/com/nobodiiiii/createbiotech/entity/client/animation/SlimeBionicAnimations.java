@@ -118,16 +118,19 @@ public final class SlimeBionicAnimations {
 			context.attackStyle() == AttackStyle.WEAPON
 				? SlimeBionicAttackAnimations.weaponSwing(progress)
 				: SlimeBionicAttackAnimations.emptyHandGolemSwing(progress);
+		Rotation body = attack.body();
 		Rotation shoulder = attack.shoulder();
 		Rotation elbow = attack.elbow();
 		Bone shoulderBone = Bone.RIGHT_SHOULDER;
 		Bone elbowBone = Bone.RIGHT_ELBOW;
 		if (context.attackArm() == Arm.LEFT) {
+			body = body.mirrorLeft();
 			shoulder = shoulder.mirrorLeft();
 			elbow = elbow.mirrorLeft();
 			shoulderBone = Bone.LEFT_SHOULDER;
 			elbowBone = Bone.LEFT_ELBOW;
 		}
+		rotations.merge(Bone.BODY, body, Rotation::plus);
 		rotations.merge(shoulderBone, shoulder, Rotation::plus);
 		rotations.merge(elbowBone, elbow, Rotation::plus);
 	}
@@ -144,6 +147,7 @@ public final class SlimeBionicAnimations {
 	}
 
 	public enum Bone {
+		BODY,
 		HEAD,
 		RIGHT_SHOULDER,
 		LEFT_SHOULDER,

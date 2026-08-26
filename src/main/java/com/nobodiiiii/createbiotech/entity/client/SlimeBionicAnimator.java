@@ -3,8 +3,10 @@ package com.nobodiiiii.createbiotech.entity.client;
 import java.util.ArrayList;
 import java.util.EnumMap;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
@@ -93,6 +95,19 @@ public final class SlimeBionicAnimator {
 
 		Map<Integer, Map<Integer, Vec3>> offsets = new HashMap<>();
 		Map<Integer, Map<Integer, SurgicalCubeRotation>> rotations = new HashMap<>();
+		Rotation bodyPose = pose.rotation(Bone.BODY);
+		SurgicalCubeRotation bodyRotation = BODY_SPACE.reframe(SurgicalCubeRotation.IDENTITY,
+			bodyPose.z(), bodyPose.y(), bodyPose.x());
+		Transform bodyTransform = Transform.IDENTITY.rotateAround(bodyPivot(sources), bodyRotation);
+		if (!bodyTransform.isIdentity()) {
+			Set<Member> legMembers = legMembers(limbs);
+			for (int source = 0; source < sources.size(); source++)
+				for (int cube : sources.get(source).boxes().keySet()) {
+					Member member = new Member(source, cube);
+					if (!legMembers.contains(member))
+						applyTransform(member, bodyTransform, sources, offsets, rotations);
+				}
+		}
 		Transform[] transforms = new Transform[limbs.size()];
 		boolean[] resolving = new boolean[limbs.size()];
 		Map<Member, Integer> appliedDepths = new HashMap<>();
@@ -100,7 +115,8 @@ public final class SlimeBionicAnimator {
 			ResolvedLimb limb = limbs.get(limbIndex);
 			if (limb.bone() == null)
 				continue;
-			Transform transform = resolveTransform(limbIndex, limbs, pose, transforms, resolving);
+			Transform transform = resolveTransform(limbIndex, limbs, pose, bodyTransform,
+				transforms, resolving);
 			if (transform.isIdentity())
 				continue;
 			int depth = hierarchyDepth(limbIndex, limbs);
@@ -108,21 +124,7 @@ public final class SlimeBionicAnimator {
 				Integer appliedDepth = appliedDepths.get(member);
 				if (appliedDepth != null && appliedDepth > depth)
 					continue;
-				if (member.source() < 0 || member.source() >= sources.size())
-					continue;
-				SourceState state = sources.get(member.source());
-				CubeBox box = state.boxes().get(member.cube());
-				if (box == null)
-					continue;
-				// The measured centre already includes its static offset. The animation frame therefore
-				// contributes only the hierarchical centre delta plus the inherited final orientation.
-				Vec3 staticOffset = state.offsets().getOrDefault(member.cube(), Vec3.ZERO);
-				SurgicalCubeRotation staticRotation = state.rotations()
-					.getOrDefault(member.cube(), SurgicalCubeRotation.IDENTITY);
-				offsets.computeIfAbsent(member.source(), ignored -> new HashMap<>())
-					.put(member.cube(), staticOffset.add(transform.apply(box.center()).subtract(box.center())));
-				rotations.computeIfAbsent(member.source(), ignored -> new HashMap<>())
-					.put(member.cube(), staticRotation.then(transform.rotation()));
+				applyTransform(member, transform, sources, offsets, rotations);
 				appliedDepths.put(member, depth);
 			}
 		}
@@ -135,6 +137,35 @@ public final class SlimeBionicAnimator {
 					sourceRotations == null ? Map.of() : Map.copyOf(sourceRotations)));
 		}
 		return frames;
+	}
+
+	/** Ender Golem's torso twists above planted legs, so hip and knee groups stay outside this set. */
+	private static Set<Member> legMembers(List<ResolvedLimb> limbs) {
+		Set<Member> members = new HashSet<>();
+		for (ResolvedLimb limb : limbs)
+			if (limb.type() == SurgicalLimbType.HIP || limb.type() == SurgicalLimbType.KNEE)
+				members.addAll(limb.members());
+		return members;
+	}
+
+	private static void applyTransform(Member member, Transform transform, List<SourceState> sources,
+		Map<Integer, Map<Integer, Vec3>> offsets,
+		Map<Integer, Map<Integer, SurgicalCubeRotation>> rotations) {
+		if (member.source() < 0 || member.source() >= sources.size())
+			return;
+		SourceState state = sources.get(member.source());
+		CubeBox box = state.boxes().get(member.cube());
+		if (box == null)
+			return;
+		// The measured centre already includes its static offset. The animation frame therefore
+		// contributes only the hierarchical centre delta plus the inherited final orientation.
+		Vec3 staticOffset = state.offsets().getOrDefault(member.cube(), Vec3.ZERO);
+		SurgicalCubeRotation staticRotation = state.rotations()
+			.getOrDefault(member.cube(), SurgicalCubeRotation.IDENTITY);
+		offsets.computeIfAbsent(member.source(), ignored -> new HashMap<>())
+			.put(member.cube(), staticOffset.add(transform.apply(box.center()).subtract(box.center())));
+		rotations.computeIfAbsent(member.source(), ignored -> new HashMap<>())
+			.put(member.cube(), staticRotation.then(transform.rotation()));
 	}
 
 	/**
@@ -270,15 +301,16 @@ public final class SlimeBionicAnimator {
 	}
 
 	private static Transform resolveTransform(int index, List<ResolvedLimb> limbs, Pose pose,
-		Transform[] cache, boolean[] resolving) {
+		Transform bodyTransform, Transform[] cache, boolean[] resolving) {
 		if (cache[index] != null)
 			return cache[index];
 		if (resolving[index])
 			return Transform.IDENTITY;
 		resolving[index] = true;
 		ResolvedLimb limb = limbs.get(index);
-		Transform parent = limb.parentIndex() < 0 ? Transform.IDENTITY
-			: resolveTransform(limb.parentIndex(), limbs, pose, cache, resolving);
+		Transform parent = limb.parentIndex() < 0
+			? inheritsBodyRotation(limb) ? bodyTransform : Transform.IDENTITY
+			: resolveTransform(limb.parentIndex(), limbs, pose, bodyTransform, cache, resolving);
 		Rotation sampled = pose.rotation(limb.bone());
 		SurgicalCubeRotation local = BODY_SPACE.reframe(limb.restAlignment(),
 			sampled.z(), sampled.y(), sampled.x());
@@ -287,6 +319,10 @@ public final class SlimeBionicAnimator {
 		resolving[index] = false;
 		cache[index] = resolved;
 		return resolved;
+	}
+
+	private static boolean inheritsBodyRotation(ResolvedLimb limb) {
+		return limb.type() != SurgicalLimbType.HIP && limb.type() != SurgicalLimbType.KNEE;
 	}
 
 	/** Changes a child-local rotation into the already rotated parent frame. */
@@ -388,6 +424,11 @@ public final class SlimeBionicAnimator {
 				max = Math.max(max, box.max()[axis]);
 			}
 		return Double.isFinite(min) && Double.isFinite(max) ? (min + max) * 0.5d : 0.0d;
+	}
+
+	private static Vec3 bodyPivot(List<SourceState> sources) {
+		return BODY_SPACE.point(bodyCenter(sources, AXIS_X), bodyCenter(sources, AXIS_Y),
+			bodyCenter(sources, AXIS_Z));
 	}
 
 	/** The cubes that rotate with {@code cube}: its honey combination, or the cube on its own. */

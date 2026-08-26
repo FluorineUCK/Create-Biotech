@@ -10,8 +10,11 @@ final class SlimeBionicAttackAnimations {
 	private static final float MALEDICTUS_SWING_DURATION_SECONDS = 1.125f;
 	private static final float ENDER_GOLEM_ATTACK_TICKS =
 		SlimeBionicAttackTiming.ENDER_GOLEM_SOURCE_TICKS;
+	private static final Rotation ENDER_GOLEM_WINDUP_BODY = Rotation.degrees(0.0f, 50.0f, 0.0f);
 	private static final Rotation ENDER_GOLEM_WINDUP_SHOULDER = Rotation.degrees(40.0f, 20.0f, 0.0f);
 	private static final Rotation ENDER_GOLEM_WINDUP_ELBOW = Rotation.degrees(-80.0f, 0.0f, 0.0f);
+	// lowerbody -20 degrees + its child upperbody -40 degrees in the source hierarchy.
+	private static final Rotation ENDER_GOLEM_STRIKE_BODY = Rotation.degrees(0.0f, -60.0f, 0.0f);
 	private static final Rotation ENDER_GOLEM_STRIKE_SHOULDER = Rotation.degrees(-20.0f, 20.0f, 20.0f);
 	private static final Rotation ENDER_GOLEM_STRIKE_ELBOW = Rotation.degrees(-20.0f, 0.0f, 0.0f);
 
@@ -40,16 +43,18 @@ final class SlimeBionicAttackAnimations {
 	static AttackPose weaponSwing(float progress) {
 		float sourceTime = Mth.clamp(progress, 0.0f, 1.0f)
 			* MALEDICTUS_SWING_DURATION_SECONDS;
-		return new AttackPose(WEAPON_SWING_SHOULDER.sample(sourceTime),
+		return new AttackPose(Rotation.IDENTITY, WEAPON_SWING_SHOULDER.sample(sourceTime),
 			WEAPON_SWING_ELBOW.sample(sourceTime));
 	}
 
 	/**
-	 * Ender Golem's Attack 1 curve, reduced to its attacking upper/lower arm and retimed externally.
-	 * Attack 2 is the exact left/right mirror and is produced by the caller.
+	 * Ender Golem's Attack 1 curve, reduced to its torso and attacking upper/lower arm, then
+	 * retimed externally. Attack 2 is the exact left/right mirror and is produced by the caller.
 	 *
 	 * <p>Pose source:
 	 * {@code ref/1.21.1/Cataclysm/src/main/java/com/github/L_Ender/cataclysm/client/model/entity/Ender_Golem_Model.java}.
+	 * The torso channel uses the source hierarchy's effective upper-body yaw: {@code +50} degrees
+	 * during wind-up and {@code -60} during the strike ({@code -20} lower plus {@code -40} upper).
 	 * The complete source curve remains intact: 10 ticks into wind-up, 5 into strike, 5 held, then
 	 * 5 back to rest. The common timing contract maps it into the normal 15-tick playback window and
 	 * compresses that window further only when the real attack interval is faster.</p>
@@ -58,20 +63,26 @@ final class SlimeBionicAttackAnimations {
 		float tick = Mth.clamp(progress, 0.0f, 1.0f) * ENDER_GOLEM_ATTACK_TICKS;
 		if (tick < 10.0f)
 			return interpolate(AttackPose.IDENTITY,
-				new AttackPose(ENDER_GOLEM_WINDUP_SHOULDER, ENDER_GOLEM_WINDUP_ELBOW), tick / 10.0f);
+				new AttackPose(ENDER_GOLEM_WINDUP_BODY, ENDER_GOLEM_WINDUP_SHOULDER,
+					ENDER_GOLEM_WINDUP_ELBOW), tick / 10.0f);
 		if (tick < 15.0f)
-			return interpolate(new AttackPose(ENDER_GOLEM_WINDUP_SHOULDER, ENDER_GOLEM_WINDUP_ELBOW),
-				new AttackPose(ENDER_GOLEM_STRIKE_SHOULDER, ENDER_GOLEM_STRIKE_ELBOW),
+			return interpolate(new AttackPose(ENDER_GOLEM_WINDUP_BODY, ENDER_GOLEM_WINDUP_SHOULDER,
+					ENDER_GOLEM_WINDUP_ELBOW),
+				new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
+					ENDER_GOLEM_STRIKE_ELBOW),
 				(tick - 10.0f) / 5.0f);
 		if (tick < 20.0f)
-			return new AttackPose(ENDER_GOLEM_STRIKE_SHOULDER, ENDER_GOLEM_STRIKE_ELBOW);
-		return interpolate(new AttackPose(ENDER_GOLEM_STRIKE_SHOULDER, ENDER_GOLEM_STRIKE_ELBOW),
+			return new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
+				ENDER_GOLEM_STRIKE_ELBOW);
+		return interpolate(new AttackPose(ENDER_GOLEM_STRIKE_BODY, ENDER_GOLEM_STRIKE_SHOULDER,
+			ENDER_GOLEM_STRIKE_ELBOW),
 			AttackPose.IDENTITY, (tick - 20.0f) / 5.0f);
 	}
 
 	private static AttackPose interpolate(AttackPose start, AttackPose end, float progress) {
 		float eased = Mth.sin(Mth.clamp(progress, 0.0f, 1.0f) * Mth.HALF_PI);
-		return new AttackPose(interpolate(start.shoulder(), end.shoulder(), eased),
+		return new AttackPose(interpolate(start.body(), end.body(), eased),
+			interpolate(start.shoulder(), end.shoulder(), eased),
 			interpolate(start.elbow(), end.elbow(), eased));
 	}
 
@@ -80,9 +91,9 @@ final class SlimeBionicAttackAnimations {
 			Mth.lerp(progress, start.y(), end.y()), Mth.lerp(progress, start.z(), end.z()));
 	}
 
-	record AttackPose(Rotation shoulder, Rotation elbow) {
+	record AttackPose(Rotation body, Rotation shoulder, Rotation elbow) {
 		private static final AttackPose IDENTITY =
-			new AttackPose(Rotation.IDENTITY, Rotation.IDENTITY);
+			new AttackPose(Rotation.IDENTITY, Rotation.IDENTITY, Rotation.IDENTITY);
 	}
 
 	private record RotationKeyframe(float time, Rotation rotation) {}
