@@ -5,8 +5,10 @@ import org.jetbrains.annotations.Nullable;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalGait;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.entity.ai.SlimeBionicBodyRotationControl;
 import com.nobodiiiii.createbiotech.entity.ai.SlimeBionicGroundNavigation;
+import com.nobodiiiii.createbiotech.entity.animation.SlimeBionicAttackTiming;
 import com.nobodiiiii.createbiotech.network.CBPackets;
 
 import net.minecraft.nbt.CompoundTag;
@@ -18,6 +20,7 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityDimensions;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.entity.Pose;
@@ -34,13 +37,19 @@ import net.minecraft.world.entity.ai.goal.target.NearestAttackableTargetGoal;
 import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import net.minecraft.world.entity.npc.Villager;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
+import net.neoforged.neoforge.common.Tags;
 
 /** A real, walking entity whose visible body is supplied by a surgical assembly. */
 public class SlimeBionicEntity extends PathfinderMob {
 	private static final String ASSEMBLY_TAG = "SurgicalAssembly";
 	private static final String SOURCE_FORM_TAG = "BionicSourceForm";
 	private static final double DEFAULT_ATTACK_DISTANCE_SQR = 5.0d * 5.0d;
+	private static final int ATTACK_EVENT_STRIDE = 4;
+	private static final int ATTACK_EVENT_VARIANTS =
+		SlimeBionicAttackTiming.PLAYBACK_TICKS * ATTACK_EVENT_STRIDE;
+	private static final byte ATTACK_EVENT_BASE = -64;
 	private static final EntityDataAccessor<CompoundTag> ASSEMBLY = SynchedEntityData.defineId(
 		SlimeBionicEntity.class, EntityDataSerializers.COMPOUND_TAG);
 	@Nullable
@@ -56,6 +65,10 @@ public class SlimeBionicEntity extends PathfinderMob {
 	@Nullable
 	private SurgicalAssembly.BodyBounds reportedBodyBounds;
 	private int attackAnimationTick;
+	private int attackAnimationDuration = SlimeBionicAttackTiming.PLAYBACK_TICKS;
+	private boolean attackAnimationLeft;
+	private boolean attackAnimationWeapon;
+	private boolean nextEmptyHandAttackLeft;
 
 	public SlimeBionicEntity(EntityType<? extends SlimeBionicEntity> type, Level level) {
 		super(type, level);
@@ -195,23 +208,71 @@ public class SlimeBionicEntity extends PathfinderMob {
 			attackAnimationTick--;
 	}
 
-	@Override
-	public boolean doHurtTarget(Entity target) {
-		attackAnimationTick = 10;
-		level().broadcastEntityEvent(this, (byte) 4);
+	/** Starts one telegraphed attack and atomically sends its duration, style and side to clients. */
+	private int beginAttackAnimation(int attackInterval) {
+		attackAnimationDuration = SlimeBionicAttackTiming.playbackTicks(attackInterval);
+		attackAnimationTick = attackAnimationDuration;
+		attackAnimationWeapon = hasAttackWeapon();
+		if (attackAnimationWeapon) {
+			boolean mainHand = isAttackWeapon(getMainHandItem());
+			HumanoidArm arm = mainHand ? getMainArm() : getMainArm().getOpposite();
+			attackAnimationLeft = arm == HumanoidArm.LEFT;
+		} else {
+			attackAnimationLeft = nextEmptyHandAttackLeft;
+			nextEmptyHandAttackLeft = !nextEmptyHandAttackLeft;
+		}
+		int encoded = (attackAnimationDuration - 1) * ATTACK_EVENT_STRIDE
+			+ (attackAnimationWeapon ? 2 : 0) + (attackAnimationLeft ? 1 : 0);
+		level().broadcastEntityEvent(this, (byte) (ATTACK_EVENT_BASE + encoded));
+		return attackAnimationDuration;
+	}
+
+	/** Applies the scheduled hit without restarting its already-running animation. */
+	private boolean performAnimatedAttackDamage(Entity target) {
 		return super.doHurtTarget(target);
 	}
 
 	@Override
 	public void handleEntityEvent(byte id) {
-		if (id == 4)
-			attackAnimationTick = 10;
-		else
+		int encoded = id - ATTACK_EVENT_BASE;
+		if (encoded >= 0 && encoded < ATTACK_EVENT_VARIANTS) {
+			attackAnimationDuration = encoded / ATTACK_EVENT_STRIDE + 1;
+			attackAnimationTick = attackAnimationDuration;
+			attackAnimationLeft = (encoded & 1) != 0;
+			attackAnimationWeapon = (encoded & 2) != 0;
+		} else
 			super.handleEntityEvent(id);
 	}
 
 	public int getAttackAnimationTick() {
 		return attackAnimationTick;
+	}
+
+	public int getAttackAnimationDuration() {
+		return attackAnimationDuration;
+	}
+
+	public boolean isAttackAnimationLeft() {
+		return attackAnimationLeft;
+	}
+
+	public boolean isAttackAnimationWeapon() {
+		return attackAnimationWeapon;
+	}
+
+	public boolean hasAttackWeapon() {
+		return isAttackWeapon(getMainHandItem()) || isAttackWeapon(getOffhandItem());
+	}
+
+	/** Authored attack timing is only valid when the body can visibly bend an attacking arm. */
+	private boolean hasArticulatedAttackArm() {
+		SurgicalAssembly assembly = getAssembly();
+		return assembly != null && assembly.limbs().stream()
+			.anyMatch(limb -> limb.type() == SurgicalLimbType.ELBOW);
+	}
+
+	public static boolean isAttackWeapon(ItemStack stack) {
+		return stack != null && stack.is(Tags.Items.MELEE_WEAPON_TOOLS);
 	}
 
 	@Override
@@ -255,6 +316,12 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private static class BionicAttackGoal extends MeleeAttackGoal {
 		private final SlimeBionicEntity bionic;
 		private int raiseArmTicks;
+		@Nullable
+		private LivingEntity pendingAttackTarget;
+		private int pendingAttackElapsed;
+		private int pendingAttackDuration;
+		private int pendingImpactTick;
+		private boolean pendingImpactApplied;
 
 		private BionicAttackGoal(SlimeBionicEntity bionic, double speedModifier, boolean followingTargetEvenIfNotSeen) {
 			super(bionic, speedModifier, followingTargetEvenIfNotSeen);
@@ -265,12 +332,58 @@ public class SlimeBionicEntity extends PathfinderMob {
 		public void start() {
 			super.start();
 			raiseArmTicks = 0;
+			clearPendingAttack();
 		}
 
 		@Override
 		public void stop() {
 			super.stop();
+			clearPendingAttack();
 			bionic.setAggressive(false);
+		}
+
+		@Override
+		protected void checkAndPerformAttack(LivingEntity target) {
+			if (pendingAttackTarget != null) {
+				advancePendingAttack();
+				if (pendingAttackTarget != null)
+					return;
+			}
+			if (!canPerformAttack(target))
+				return;
+			resetAttackCooldown();
+			bionic.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
+			if (!bionic.hasArticulatedAttackArm()) {
+				bionic.doHurtTarget(target);
+				return;
+			}
+			pendingAttackDuration = bionic.beginAttackAnimation(getAttackInterval());
+			pendingImpactTick = SlimeBionicAttackTiming.impactTick(pendingAttackDuration,
+				bionic.isAttackAnimationWeapon());
+			pendingAttackTarget = target;
+			pendingAttackElapsed = 0;
+			pendingImpactApplied = false;
+		}
+
+		private void advancePendingAttack() {
+			pendingAttackElapsed++;
+			if (!pendingImpactApplied && pendingAttackElapsed >= pendingImpactTick) {
+				pendingImpactApplied = true;
+				LivingEntity target = pendingAttackTarget;
+				if (target != null && target.isAlive() && bionic.isWithinMeleeAttackRange(target)
+					&& bionic.getSensing().hasLineOfSight(target))
+					bionic.performAnimatedAttackDamage(target);
+			}
+			if (pendingAttackElapsed >= pendingAttackDuration)
+				clearPendingAttack();
+		}
+
+		private void clearPendingAttack() {
+			pendingAttackTarget = null;
+			pendingAttackElapsed = 0;
+			pendingAttackDuration = 0;
+			pendingImpactTick = 0;
+			pendingImpactApplied = false;
 		}
 
 		@Override
