@@ -177,7 +177,7 @@ public class SlimeBionicEntity extends PathfinderMob {
 	}
 
 	@Nullable
-	private SurgicalAssembly.BodyBounds activeBodyBounds() {
+	SurgicalAssembly.BodyBounds activeBodyBounds() {
 		SurgicalAssembly assembly = getAssembly();
 		return level().isClientSide && clientBoundsAssembly == assembly
 			? clientBodyBounds : assembly == null ? null : assembly.bodyBounds();

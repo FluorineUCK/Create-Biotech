@@ -10,7 +10,9 @@ import java.util.Set;
 import java.util.WeakHashMap;
 
 import org.jetbrains.annotations.Nullable;
+import org.joml.Matrix4f;
 import org.joml.Quaternionf;
+import org.joml.Vector3f;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.math.Axis;
@@ -37,6 +39,8 @@ import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.phys.Vec3;
 
 public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
+	private static final float MIN_SHADOW_RADIUS = 0.15f;
+	private static final float MAX_SHADOW_RADIUS = 32.0f;
 	private static final ResourceLocation SLIME_TEXTURE =
 		ResourceLocation.withDefaultNamespace("textures/entity/slime/slime.png");
 	private static final Map<SlimeBionicEntity, CachedGeometry> GEOMETRY = new WeakHashMap<>();
@@ -65,7 +69,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		SurgicalAssembly assembly = entity.getAssembly();
 		if (assembly != null) {
 			float bodyYaw = Mth.rotLerp(partialTick, entity.yBodyRotO, entity.yBodyRot);
-			BodyFrame bodyFrame = BodyFrame.of(bodyYaw);
+			BodyFrame bodyFrame = BodyFrame.of(bodyYaw, poseStack.last().pose());
 			if (assembly.preservesLayout() || assembly.sources().size() > 1) {
 				renderComposite(entity, assembly, bodyFrame, partialTick, poseStack, buffer, packedLight);
 				super.render(entity, yaw, partialTick, poseStack, buffer, packedLight);
@@ -332,6 +336,15 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		return SLIME_TEXTURE;
 	}
 
+	@Override
+	protected float getShadowRadius(SlimeBionicEntity entity) {
+		SurgicalAssembly.BodyBounds bounds = entity.activeBodyBounds();
+		if (bounds == null)
+			return super.getShadowRadius(entity);
+		float horizontalRadius = Math.max(bounds.width(), bounds.depth()) * 0.5f;
+		return Mth.clamp(horizontalRadius, MIN_SHADOW_RADIUS, MAX_SHADOW_RADIUS);
+	}
+
 	private record CachedGeometry(SurgicalAssembly assembly, boolean slimeForm, BitSet presentCubes,
 		Map<Integer, Vec3> offsets, Vec3 modelOffset,
 		Map<Integer, SlimeBionicAnimator.CubeBox> restBoxes) {
@@ -345,23 +358,31 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 		Vec3 modelOffset, List<SlimeBionicAnimator.SourceState> sources) {}
 
 	/**
-	 * Converts cached yaw-zero component transforms into the final render axes. Base geometry and
-	 * source origins are rotated by the pose stack; component offsets and quaternions are applied
-	 * after that pose, so they must be reframed explicitly by the same body rotation.
+	 * Converts cached yaw-zero component transforms into the final render-pass axes. Base geometry
+	 * and source origins are transformed by the pose stack, while component offsets and quaternions
+	 * are deliberately applied after that pose so they remain in the assembly-wide frame instead of
+	 * inheriting an individual source's lay pose.
+	 *
+	 * <p>The incoming pose can already contain a view rotation. Iris does this for its shadow pass,
+	 * where it supplies the light-space model-view stack directly to entity rendering. Reframing only
+	 * by body yaw therefore leaves component transforms in camera-space axes while their base vertices
+	 * are in light-space axes. Capture the incoming linear transform and include it here so both passes
+	 * produce the same articulated silhouette.</p>
 	 */
-	private record BodyFrame(float yaw, SurgicalCubeRotation rotation) {
-		private static final BodyFrame IDENTITY = new BodyFrame(0.0f, SurgicalCubeRotation.IDENTITY);
+	private record BodyFrame(float yaw, Matrix4f axes, Quaternionf rotation) {
+		private static final BodyFrame IDENTITY = new BodyFrame(0.0f, new Matrix4f(), new Quaternionf());
 
-		private static BodyFrame of(float yaw) {
+		private static BodyFrame of(float yaw, Matrix4f incomingPose) {
 			float wrapped = Mth.wrapDegrees(yaw);
-			if (Math.abs(wrapped) <= 1.0e-6f)
-				return IDENTITY;
-			return new BodyFrame(wrapped,
-				SurgicalCubeRotation.around(new Vec3(0.0d, 1.0d, 0.0d), -wrapped));
+			Matrix4f axes = new Matrix4f(incomingPose);
+			if (Math.abs(wrapped) > 1.0e-6f)
+				axes.rotateY((float) Math.toRadians(-wrapped));
+			return new BodyFrame(wrapped, axes,
+				axes.getUnnormalizedRotation(new Quaternionf()));
 		}
 
 		private void apply(PoseStack poseStack) {
-			if (this != IDENTITY)
+			if (Math.abs(yaw) > 1.0e-6f)
 				poseStack.mulPose(Axis.YP.rotationDegrees(-yaw));
 		}
 
@@ -369,7 +390,11 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			if (this == IDENTITY || offsets.isEmpty())
 				return offsets;
 			Map<Integer, Vec3> rotated = new java.util.HashMap<>(offsets.size());
-			offsets.forEach((cube, offset) -> rotated.put(cube, rotation.rotate(offset)));
+			offsets.forEach((cube, offset) -> {
+				Vector3f transformed = axes.transformDirection(
+					(float) offset.x, (float) offset.y, (float) offset.z, new Vector3f());
+				rotated.put(cube, new Vec3(transformed.x, transformed.y, transformed.z));
+			});
 			return Map.copyOf(rotated);
 		}
 
@@ -377,7 +402,7 @@ public class SlimeBionicRenderer extends EntityRenderer<SlimeBionicEntity> {
 			Map<Integer, SurgicalCubeRotation> rotations) {
 			if (this == IDENTITY || rotations.isEmpty())
 				return rotations;
-			Quaternionf frame = quaternion(rotation);
+			Quaternionf frame = new Quaternionf(rotation);
 			Quaternionf inverse = new Quaternionf(frame).conjugate();
 			Map<Integer, SurgicalCubeRotation> rotated = new java.util.HashMap<>(rotations.size());
 			rotations.forEach((cube, local) -> {
