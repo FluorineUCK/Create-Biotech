@@ -36,7 +36,8 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 	private EvokerEnchantingChamberBlockEntity cachedBlockEntity;
 	@Nullable
 	private ClientLevel cachedLevel;
-	private final JeiSceneParticles enchantParticles = new JeiSceneParticles();
+	@Nullable
+	private JeiSceneParticles enchantParticles;
 
 	public AnimatedEvokerEnchanting withItems(ItemStack input, ItemStack output) {
 		inputCopy = input.copy();
@@ -99,7 +100,8 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 
 	private void renderStraightEnchantParticles(GuiGraphics graphics, ClientLevel level,
 		EvokerEnchantingChamberBlockEntity blockEntity) {
-		syncStraightEnchantParticles(level, blockEntity);
+		JeiSceneParticles enchantParticles = getOrCreateEnchantParticles();
+		syncStraightEnchantParticles(level, blockEntity, enchantParticles);
 		enchantParticles.render(graphics, RENDER_SCALE, 0.0d, RENDER_Y_OFFSET_BLOCKS, 0.0d);
 	}
 
@@ -107,7 +109,8 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 	 * Emits exactly what {@link EvokerEnchantingChamberBlockEntity} emits in the
 	 * world while a spell is being cast.
 	 */
-	private void syncStraightEnchantParticles(ClientLevel level, EvokerEnchantingChamberBlockEntity blockEntity) {
+	private void syncStraightEnchantParticles(ClientLevel level, EvokerEnchantingChamberBlockEntity blockEntity,
+		JeiSceneParticles enchantParticles) {
 		if (!enchantParticles.advanceOnce(level) || !blockEntity.isCastingSpell())
 			return;
 
@@ -115,6 +118,15 @@ public class AnimatedEvokerEnchanting extends AnimatedKineticsWithEntities {
 			blockEntity.getBlockState(), (x, y, z, dx, dy, dz) -> enchantParticles.add(
 				CatnipClientServices.CLIENT_HOOKS.createParticleFromData(CBParticleTypes.STRAIGHT_ENCHANT.get(),
 					level, x, y, z, dx, dy, dz)));
+	}
+
+	private JeiSceneParticles getOrCreateEnchantParticles() {
+		JeiSceneParticles enchantParticles = this.enchantParticles;
+		if (enchantParticles == null) {
+			enchantParticles = new JeiSceneParticles();
+			this.enchantParticles = enchantParticles;
+		}
+		return enchantParticles;
 	}
 
 	private static BlockState createRenderState() {

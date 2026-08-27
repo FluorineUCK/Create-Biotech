@@ -53,7 +53,10 @@ public final class JeiSceneParticles {
 		ParticleRenderType.CUSTOM);
 
 	private final List<Particle> active = new ArrayList<>();
-	private final SceneCamera camera = new SceneCamera();
+	@Nullable
+	private ClientLevel activeLevel;
+	@Nullable
+	private SceneCamera camera;
 	private long lastTick = Long.MIN_VALUE;
 
 	/**
@@ -62,6 +65,9 @@ public final class JeiSceneParticles {
 	 * so callers can gate emission on it.
 	 */
 	public boolean advanceOnce(ClientLevel level) {
+		if (activeLevel != level)
+			resetForLevel(level);
+
 		long now = level.getGameTime();
 		if (now == lastTick)
 			return false;
@@ -88,6 +94,9 @@ public final class JeiSceneParticles {
 
 	public void clear() {
 		active.clear();
+		activeLevel = null;
+		camera = null;
+		lastTick = Long.MIN_VALUE;
 	}
 
 	/**
@@ -99,6 +108,7 @@ public final class JeiSceneParticles {
 			return;
 
 		Minecraft minecraft = Minecraft.getInstance();
+		SceneCamera camera = getOrCreateCamera();
 		PoseStack poseStack = graphics.pose();
 		poseStack.pushPose();
 		poseStack.scale((float) sceneScale, (float) sceneScale, (float) sceneScale);
@@ -143,6 +153,22 @@ public final class JeiSceneParticles {
 			lightTexture.turnOffLightLayer();
 			poseStack.popPose();
 		}
+	}
+
+	private void resetForLevel(ClientLevel level) {
+		active.clear();
+		activeLevel = level;
+		camera = null;
+		lastTick = Long.MIN_VALUE;
+	}
+
+	private SceneCamera getOrCreateCamera() {
+		SceneCamera camera = this.camera;
+		if (camera == null) {
+			camera = new SceneCamera();
+			this.camera = camera;
+		}
+		return camera;
 	}
 
 	private boolean hasAnyOfType(ParticleRenderType renderType) {
@@ -217,10 +243,6 @@ public final class JeiSceneParticles {
 			.rotateY((float) Math.toRadians(-AnimatedKineticsWithEntities.SCENE_Y_ROTATION))
 			.rotateX((float) Math.toRadians(-AnimatedKineticsWithEntities.SCENE_X_ROTATION))
 			.normalize();
-
-		private SceneCamera() {
-			setPosition(0.0d, 0.0d, 0.0d);
-		}
 
 		/**
 		 * Returned normalized and as a fresh instance: Embeddium scales particle quads

@@ -4,6 +4,7 @@ import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.simibubi.create.compat.jei.category.CreateRecipeCategory;
 import com.simibubi.create.foundation.gui.AllGuiTextures;
+import org.jetbrains.annotations.Nullable;
 
 import mezz.jei.api.gui.builder.IRecipeSlotBuilder;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
@@ -30,7 +31,8 @@ public class SquidPrinterJeiCategory extends AbstractRecipeCategory<SquidPrinter
 	private static final int TEMPLATE_SLOT_Y = 5;
 	private static final Component NOT_CONSUMED = Component.translatable("create.recipe.deploying.not_consumed");
 
-	private final AnimatedSquidSpout spout = new AnimatedSquidSpout();
+	@Nullable
+	private AnimatedSquidSpout spout;
 
 	public SquidPrinterJeiCategory() {
 		super(TYPE, Component.translatable("create_biotech.recipe.printing"),
@@ -62,9 +64,18 @@ public class SquidPrinterJeiCategory extends AbstractRecipeCategory<SquidPrinter
 		double mouseX, double mouseY) {
 		AllGuiTextures.JEI_SHADOW.render(graphics, 62, 57);
 		AllGuiTextures.JEI_DOWN_ARROW.render(graphics, 126, 29);
-		spout.withFluids(recipe.requiredFluid()
+		getOrCreateSpout().withFluids(recipe.requiredFluid()
 			.getFluids() == null ? java.util.List.of() : Arrays.asList(recipe.requiredFluid().getFluids()))
 			.draw(graphics, WIDTH / 2 - 13, 22);
+	}
+
+	private AnimatedSquidSpout getOrCreateSpout() {
+		AnimatedSquidSpout spout = this.spout;
+		if (spout == null) {
+			spout = new AnimatedSquidSpout();
+			this.spout = spout;
+		}
+		return spout;
 	}
 
 	@Override

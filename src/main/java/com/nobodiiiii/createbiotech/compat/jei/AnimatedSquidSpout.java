@@ -2,6 +2,8 @@ package com.nobodiiiii.createbiotech.compat.jei;
 
 import java.util.List;
 
+import org.jetbrains.annotations.Nullable;
+
 import com.mojang.blaze3d.platform.Lighting;
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.nobodiiiii.createbiotech.content.squidprinter.SquidPrinterBlock;
@@ -33,7 +35,8 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 	private static final int CYCLE_LENGTH_TICKS = 30;
 
 	private List<FluidStack> fluids;
-	private final JeiSceneParticles inkParticles = new JeiSceneParticles();
+	@Nullable
+	private JeiSceneParticles inkParticles;
 
 	public AnimatedSquidSpout withFluids(List<FluidStack> fluids) {
 		this.fluids = fluids;
@@ -83,7 +86,8 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 		if (level == null)
 			return;
 
-		syncInkParticles(level);
+		JeiSceneParticles inkParticles = getOrCreateInkParticles();
+		syncInkParticles(level, inkParticles);
 		inkParticles.render(graphics, SCENE_SCALE, 0.0d, 0.0d, 0.0d);
 	}
 
@@ -92,7 +96,7 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 	 * same cadence: a burst every tick once the cycle is under way, and a slower
 	 * ambient drip every third tick.
 	 */
-	private void syncInkParticles(ClientLevel level) {
+	private void syncInkParticles(ClientLevel level, JeiSceneParticles inkParticles) {
 		if (!inkParticles.advanceOnce(level))
 			return;
 
@@ -102,13 +106,24 @@ public class AnimatedSquidSpout extends AnimatedKineticsWithEntities {
 		if (cycleTick < BURST_PHASE_TICKS)
 			return;
 
-		SquidPrinterBlockEntity.forEachBurstInkParticle(level, PARTICLE_ORIGIN, this::spawnInkParticle);
+		SquidPrinterBlockEntity.forEachBurstInkParticle(level, PARTICLE_ORIGIN,
+			(options, x, y, z, dx, dy, dz) -> spawnInkParticle(inkParticles, options, x, y, z, dx, dy, dz));
 		if (level.getGameTime() % 3 == 0)
-			SquidPrinterBlockEntity.forEachAmbientInkParticle(level, PARTICLE_ORIGIN, this::spawnInkParticle);
+			SquidPrinterBlockEntity.forEachAmbientInkParticle(level, PARTICLE_ORIGIN,
+				(options, x, y, z, dx, dy, dz) -> spawnInkParticle(inkParticles, options, x, y, z, dx, dy, dz));
 	}
 
-	private void spawnInkParticle(SquidPrinterInkParticleOption options, double x, double y, double z, double dx,
-		double dy, double dz) {
+	private JeiSceneParticles getOrCreateInkParticles() {
+		JeiSceneParticles inkParticles = this.inkParticles;
+		if (inkParticles == null) {
+			inkParticles = new JeiSceneParticles();
+			this.inkParticles = inkParticles;
+		}
+		return inkParticles;
+	}
+
+	private static void spawnInkParticle(JeiSceneParticles inkParticles, SquidPrinterInkParticleOption options,
+		double x, double y, double z, double dx, double dy, double dz) {
 		inkParticles.add(Minecraft.getInstance().particleEngine.createParticle(options, x, y, z, dx, dy, dz));
 	}
 }

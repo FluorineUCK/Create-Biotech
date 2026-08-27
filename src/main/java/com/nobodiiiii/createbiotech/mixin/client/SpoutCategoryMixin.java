@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.mixin.client;
 
 import com.simibubi.create.content.fluids.transfer.FillingRecipe;
 import com.simibubi.create.foundation.gui.AllGuiTextures;
+import org.jetbrains.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Pseudo;
 import org.spongepowered.asm.mixin.Unique;
@@ -20,7 +21,8 @@ import java.util.Arrays;
 @Mixin(targets = "com.simibubi.create.compat.jei.category.SpoutCategory")
 public abstract class SpoutCategoryMixin {
 	@Unique
-	private final AnimatedSquidSpout createBiotech$squidSpout = new AnimatedSquidSpout();
+	@Nullable
+	private AnimatedSquidSpout createBiotech$squidSpout;
 
 	@Inject(method = "draw", at = @At("HEAD"), cancellable = true)
 	private void createBiotech$drawSquid(FillingRecipe recipe, IRecipeSlotsView recipeSlotsView, GuiGraphics graphics, double mouseX,
@@ -32,10 +34,20 @@ public abstract class SpoutCategoryMixin {
 
 		AllGuiTextures.JEI_SHADOW.render(graphics, 62, 57);
 		AllGuiTextures.JEI_DOWN_ARROW.render(graphics, 126, 29);
-		createBiotech$squidSpout.withFluids(recipe.getRequiredFluid()
+		createBiotech$getSquidSpout().withFluids(recipe.getRequiredFluid()
 			.getFluids()
 			.length == 0 ? java.util.List.of() : Arrays.asList(recipe.getRequiredFluid().getFluids()))
 			.draw(graphics, 75, 22);
 		ci.cancel();
+	}
+
+	@Unique
+	private AnimatedSquidSpout createBiotech$getSquidSpout() {
+		AnimatedSquidSpout squidSpout = createBiotech$squidSpout;
+		if (squidSpout == null) {
+			squidSpout = new AnimatedSquidSpout();
+			createBiotech$squidSpout = squidSpout;
+		}
+		return squidSpout;
 	}
 }

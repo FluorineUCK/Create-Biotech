@@ -4,6 +4,7 @@ import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.simibubi.create.AllItems;
 import com.simibubi.create.compat.jei.category.CreateRecipeCategory;
 import com.simibubi.create.foundation.gui.AllGuiTextures;
+import org.jetbrains.annotations.Nullable;
 
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
 import mezz.jei.api.gui.ingredient.IRecipeSlotsView;
@@ -28,7 +29,8 @@ public class BiologicalItemApplicationJeiCategory
 	private static final int ENTITY_X = 74;
 	private static final int ENTITY_Y = 51;
 
-	private final AnimatedBiologicalItemApplication entity = new AnimatedBiologicalItemApplication();
+	@Nullable
+	private AnimatedBiologicalItemApplication entity;
 
 	public BiologicalItemApplicationJeiCategory() {
 		super(TYPE, Component.translatable("create_biotech.recipe.biological_item_application"),
@@ -67,8 +69,17 @@ public class BiologicalItemApplicationJeiCategory
 		AllGuiTextures.JEI_SHADOW.render(graphics, 62, 47);
 		AllGuiTextures.JEI_DOWN_ARROW.render(graphics, 74, 10);
 
-		entity.withEntityType(recipe.displayedEntityType())
+		getOrCreateEntityAnimation().withEntityType(recipe.displayedEntityType())
 			.draw(graphics, ENTITY_X, ENTITY_Y);
+	}
+
+	private AnimatedBiologicalItemApplication getOrCreateEntityAnimation() {
+		AnimatedBiologicalItemApplication entity = this.entity;
+		if (entity == null) {
+			entity = new AnimatedBiologicalItemApplication();
+			this.entity = entity;
+		}
+		return entity;
 	}
 
 	@Override

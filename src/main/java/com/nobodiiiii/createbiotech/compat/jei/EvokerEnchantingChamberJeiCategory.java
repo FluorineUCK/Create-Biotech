@@ -5,6 +5,7 @@ import com.nobodiiiii.createbiotech.content.experience.ExperienceFluidHelper;
 import com.nobodiiiii.createbiotech.registry.CBBlocks;
 import com.simibubi.create.compat.jei.category.CreateRecipeCategory;
 import com.simibubi.create.foundation.gui.AllGuiTextures;
+import org.jetbrains.annotations.Nullable;
 
 import mezz.jei.api.neoforge.NeoForgeTypes;
 import mezz.jei.api.gui.builder.IRecipeLayoutBuilder;
@@ -37,7 +38,8 @@ public class EvokerEnchantingChamberJeiCategory extends AbstractRecipeCategory<E
 	private static final int FLUID_X = 51;
 	private static final int FLUID_Y = 5;
 
-	private final AnimatedEvokerEnchanting enchanting = new AnimatedEvokerEnchanting();
+	@Nullable
+	private AnimatedEvokerEnchanting enchanting;
 
 	public EvokerEnchantingChamberJeiCategory() {
 		super(TYPE, Component.translatable("block.create_biotech.evoker_enchanting_chamber"),
@@ -79,8 +81,17 @@ public class EvokerEnchantingChamberJeiCategory extends AbstractRecipeCategory<E
 
 		AllGuiTextures.JEI_SHADOW.render(graphics, 62, 57);
 		AllGuiTextures.JEI_DOWN_ARROW.render(graphics, 126, 29);
-		enchanting.withItems(currentInput, currentOutput)
+		getOrCreateEnchanting().withItems(currentInput, currentOutput)
 			.draw(graphics, WIDTH / 2 - 13, 22);
+	}
+
+	private AnimatedEvokerEnchanting getOrCreateEnchanting() {
+		AnimatedEvokerEnchanting enchanting = this.enchanting;
+		if (enchanting == null) {
+			enchanting = new AnimatedEvokerEnchanting();
+			this.enchanting = enchanting;
+		}
+		return enchanting;
 	}
 
 	private static int displayedLevel(IRecipeSlotsView slotsView, EvokerEnchantingChamberJeiRecipe recipe) {
