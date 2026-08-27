@@ -5,7 +5,6 @@ import org.jetbrains.annotations.Nullable;
 import com.nobodiiiii.createbiotech.content.slimemimic.SlimeMimicAccess;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalAssembly;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalGait;
-import com.nobodiiiii.createbiotech.content.surgery.SurgicalLimbType;
 import com.nobodiiiii.createbiotech.entity.ai.SlimeBionicBodyRotationControl;
 import com.nobodiiiii.createbiotech.entity.ai.SlimeBionicGroundNavigation;
 import com.nobodiiiii.createbiotech.entity.animation.SlimeBionicAttackTiming;
@@ -40,7 +39,6 @@ import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
-import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.Tags;
 
 /** A real, walking entity whose visible body is supplied by a surgical assembly. */
@@ -50,7 +48,7 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private static final double DEFAULT_ATTACK_DISTANCE_SQR = 5.0d * 5.0d;
 	private static final int ATTACK_EVENT_STRIDE = 4;
 	private static final int ATTACK_EVENT_VARIANTS =
-		SlimeBionicAttackTiming.PLAYBACK_TICKS * ATTACK_EVENT_STRIDE;
+		SlimeBionicCombat.NORMAL_ATTACK_TICKS * ATTACK_EVENT_STRIDE;
 	private static final byte ATTACK_EVENT_BASE = -64;
 	private static final EntityDataAccessor<CompoundTag> ASSEMBLY = SynchedEntityData.defineId(
 		SlimeBionicEntity.class, EntityDataSerializers.COMPOUND_TAG);
@@ -70,6 +68,10 @@ public class SlimeBionicEntity extends PathfinderMob {
 	private int attackAnimationDuration = SlimeBionicAttackTiming.PLAYBACK_TICKS;
 	private boolean attackAnimationLeft;
 	private boolean attackAnimationWeapon;
+	private int attackActionTick;
+	private int attackActionDuration = SlimeBionicCombat.NORMAL_ATTACK_TICKS;
+	private boolean attackActionLeft;
+	private boolean attackActionWeapon;
 	private boolean nextEmptyHandAttackLeft;
 
 	public SlimeBionicEntity(EntityType<? extends SlimeBionicEntity> type, Level level) {
@@ -205,20 +207,11 @@ public class SlimeBionicEntity extends PathfinderMob {
 		if (geometry == null)
 			return distanceToSqr(target) <= DEFAULT_ATTACK_DISTANCE_SQR;
 		AABB targetBounds = target.getBoundingBox();
-		double x = getX();
-		double z = getZ();
-		double dx = x < targetBounds.minX ? targetBounds.minX - x
-			: x > targetBounds.maxX ? x - targetBounds.maxX : 0.0d;
-		double dz = z < targetBounds.minZ ? targetBounds.minZ - z
-			: z > targetBounds.maxZ ? z - targetBounds.maxZ : 0.0d;
 		boolean weapon = hasAttackWeapon();
 		SurgicalAssembly.ArmAttackGeometry arm = geometry.arm(preferredAttackLeft(weapon));
 		if (arm == null)
 			return false;
-		double reach = arm.maximumHorizontalReach(weapon);
-		return dx * dx + dz * dz <= reach * reach
-			&& targetBounds.maxY >= getY() + arm.minimumY(weapon)
-			&& targetBounds.minY <= getY() + arm.maximumY(weapon);
+		return SlimeBionicCombat.withinStartEnvelope(targetBounds, position(), arm);
 	}
 
 	@Override
@@ -226,23 +219,30 @@ public class SlimeBionicEntity extends PathfinderMob {
 		super.aiStep();
 		if (attackAnimationTick > 0)
 			attackAnimationTick--;
+		if (attackActionTick > 0)
+			attackActionTick--;
 	}
 
-	/** Starts one telegraphed attack and atomically sends its duration, style and side to clients. */
-	private int beginAttackAnimation(int attackInterval) {
-		attackAnimationDuration = SlimeBionicAttackTiming.playbackTicks(attackInterval);
-		attackAnimationTick = attackAnimationDuration;
-		attackAnimationWeapon = hasAttackWeapon();
-		if (attackAnimationWeapon) {
-			attackAnimationLeft = preferredAttackLeft(true);
+	/** Starts gameplay and presentation clocks together without making either consume the other. */
+	private int beginAttack(int attackInterval) {
+		attackActionDuration = SlimeBionicCombat.duration(attackInterval);
+		attackActionTick = attackActionDuration;
+		attackActionWeapon = hasAttackWeapon();
+		if (attackActionWeapon) {
+			attackActionLeft = preferredAttackLeft(true);
 		} else {
-			attackAnimationLeft = nextEmptyHandAttackLeft;
+			attackActionLeft = nextEmptyHandAttackLeft;
 			nextEmptyHandAttackLeft = !nextEmptyHandAttackLeft;
 		}
-		int encoded = (attackAnimationDuration - 1) * ATTACK_EVENT_STRIDE
-			+ (attackAnimationWeapon ? 2 : 0) + (attackAnimationLeft ? 1 : 0);
+
+		attackAnimationDuration = SlimeBionicAttackTiming.playbackTicks(attackInterval);
+		attackAnimationTick = attackAnimationDuration;
+		attackAnimationWeapon = attackActionWeapon;
+		attackAnimationLeft = attackActionLeft;
+		int encoded = (attackActionDuration - 1) * ATTACK_EVENT_STRIDE
+			+ (attackActionWeapon ? 2 : 0) + (attackActionLeft ? 1 : 0);
 		level().broadcastEntityEvent(this, (byte) (ATTACK_EVENT_BASE + encoded));
-		return attackAnimationDuration;
+		return attackActionDuration;
 	}
 
 	/** Side the next attack will request before the renderer/geometry applies single-arm fallback. */
@@ -254,69 +254,42 @@ public class SlimeBionicEntity extends PathfinderMob {
 		return arm == HumanoidArm.LEFT;
 	}
 
-	/** Applies the scheduled hit without restarting its already-running animation. */
-	private boolean performAnimatedAttackDamage(Entity target) {
+	/** Applies one logical attack hit without touching its independent presentation clock. */
+	private boolean performAttackDamage(Entity target) {
 		return super.doHurtTarget(target);
 	}
 
-	/** Tests only the current target against the baked hand curve; no world entity scan is needed. */
-	private boolean sweptAttackIntersects(LivingEntity target,
-		SurgicalAssembly.ArmAttackGeometry arm, int previousTick, int currentTick, int duration,
-		boolean weaponAttack, float previousBodyYaw, float currentBodyYaw) {
-		float tickFrom = (float) previousTick / duration;
-		float tickTo = (float) currentTick / duration;
-		float from = Math.max(tickFrom,
-			SlimeBionicAttackTiming.hitWindowStart(weaponAttack));
-		float to = Math.min(tickTo,
-			SlimeBionicAttackTiming.hitWindowEnd(weaponAttack));
-		if (to < from)
-			return false;
-		AABB targetBounds = target.getBoundingBox().inflate(arm.radius());
-		float cursor = from;
-		Vec3 start = attackPoint(arm.sample(weaponAttack, cursor), attackYaw(cursor, tickFrom, tickTo,
-			previousBodyYaw, currentBodyYaw));
-		while (true) {
-			float nextBoundary = ((float) Math.floor(cursor
-				* (SurgicalAssembly.AttackGeometry.PATH_SAMPLES - 1)) + 1.0f)
-				/ (SurgicalAssembly.AttackGeometry.PATH_SAMPLES - 1);
-			float next = Math.min(to, nextBoundary);
-			if (next <= cursor + 1.0e-6f)
-				next = to;
-			Vec3 end = attackPoint(arm.sample(weaponAttack, next), attackYaw(next, tickFrom, tickTo,
-				previousBodyYaw, currentBodyYaw));
-			AABB segmentBounds = new AABB(start, end).inflate(1.0e-6d);
-			if (targetBounds.intersects(segmentBounds)
-				&& (targetBounds.contains(start) || targetBounds.contains(end)
-					|| targetBounds.clip(start, end).isPresent()))
-				return true;
-			if (next >= to - 1.0e-6f)
-				return false;
-			cursor = next;
-			start = end;
-		}
-	}
-
-	private static float attackYaw(float progress, float tickFrom, float tickTo,
-		float previousBodyYaw, float currentBodyYaw) {
-		float fraction = tickTo <= tickFrom ? 1.0f
-			: Mth.clamp((progress - tickFrom) / (tickTo - tickFrom), 0.0f, 1.0f);
-		return Mth.rotLerp(fraction, previousBodyYaw, currentBodyYaw);
-	}
-
-	private Vec3 attackPoint(Vec3 local, float bodyYaw) {
-		return local.yRot(-bodyYaw * Mth.DEG_TO_RAD).add(position());
+	private boolean attackSectorIntersects(LivingEntity target,
+		SurgicalAssembly.ArmAttackGeometry arm) {
+		return SlimeBionicCombat.intersects(target.getBoundingBox(), position(), yBodyRot, arm);
 	}
 
 	@Override
 	public void handleEntityEvent(byte id) {
 		int encoded = id - ATTACK_EVENT_BASE;
 		if (encoded >= 0 && encoded < ATTACK_EVENT_VARIANTS) {
-			attackAnimationDuration = encoded / ATTACK_EVENT_STRIDE + 1;
+			attackActionDuration = encoded / ATTACK_EVENT_STRIDE + 1;
+			attackActionTick = attackActionDuration;
+			attackActionLeft = (encoded & 1) != 0;
+			attackActionWeapon = (encoded & 2) != 0;
+			attackAnimationDuration = SlimeBionicAttackTiming.playbackTicks(attackActionDuration);
 			attackAnimationTick = attackAnimationDuration;
-			attackAnimationLeft = (encoded & 1) != 0;
-			attackAnimationWeapon = (encoded & 2) != 0;
+			attackAnimationLeft = attackActionLeft;
+			attackAnimationWeapon = attackActionWeapon;
 		} else
 			super.handleEntityEvent(id);
+	}
+
+	public int getAttackActionTick() {
+		return attackActionTick;
+	}
+
+	public int getAttackActionDuration() {
+		return attackActionDuration;
+	}
+
+	public boolean isAttackActionLeft() {
+		return attackActionLeft;
 	}
 
 	public int getAttackAnimationTick() {
@@ -337,13 +310,6 @@ public class SlimeBionicEntity extends PathfinderMob {
 
 	public boolean hasAttackWeapon() {
 		return isAttackWeapon(getMainHandItem()) || isAttackWeapon(getOffhandItem());
-	}
-
-	/** Authored attack timing is only valid when the body can visibly bend an attacking arm. */
-	private boolean hasArticulatedAttackArm() {
-		SurgicalAssembly assembly = getAssembly();
-		return assembly != null && assembly.limbs().stream()
-			.anyMatch(limb -> limb.type() == SurgicalLimbType.ELBOW);
 	}
 
 	public static boolean isAttackWeapon(ItemStack stack) {
@@ -389,17 +355,18 @@ public class SlimeBionicEntity extends PathfinderMob {
 
 	/** {@code ZombieAttackGoal} verbatim; the vanilla class is bound to {@code Zombie}. */
 	private static class BionicAttackGoal extends MeleeAttackGoal {
+		private static final float ATTACK_TRACKING_DEGREES_PER_TICK = 15.0f;
+		private static final double ATTACK_TRACKING_EPSILON_SQR = 1.0e-8d;
+
 		private final SlimeBionicEntity bionic;
 		private int raiseArmTicks;
 		@Nullable
 		private LivingEntity pendingAttackTarget;
 		private int pendingAttackElapsed;
 		private int pendingAttackDuration;
-		private int pendingImpactTick;
 		private boolean pendingImpactApplied;
 		@Nullable
 		private SurgicalAssembly.ArmAttackGeometry pendingArmGeometry;
-		private float pendingPreviousBodyYaw;
 
 		private BionicAttackGoal(SlimeBionicEntity bionic, double speedModifier, boolean followingTargetEvenIfNotSeen) {
 			super(bionic, speedModifier, followingTargetEvenIfNotSeen);
@@ -434,55 +401,57 @@ public class SlimeBionicEntity extends PathfinderMob {
 				return;
 			resetAttackCooldown();
 			bionic.swing(net.minecraft.world.InteractionHand.MAIN_HAND);
-			if (!bionic.hasArticulatedAttackArm()) {
-				bionic.doHurtTarget(target);
-				return;
-			}
-			pendingAttackDuration = bionic.beginAttackAnimation(getAttackInterval());
-			pendingImpactTick = SlimeBionicAttackTiming.impactTick(pendingAttackDuration,
-				bionic.isAttackAnimationWeapon());
+			pendingAttackDuration = bionic.beginAttack(getAttackInterval());
 			SurgicalAssembly assembly = bionic.getAssembly();
 			SurgicalAssembly.AttackGeometry attackGeometry = assembly == null
 				? null : assembly.attackGeometry();
 			pendingArmGeometry = attackGeometry == null ? null
-				: attackGeometry.arm(bionic.isAttackAnimationLeft());
+				: attackGeometry.arm(bionic.isAttackActionLeft());
 			pendingAttackTarget = target;
 			pendingAttackElapsed = 0;
 			pendingImpactApplied = false;
-			pendingPreviousBodyYaw = bionic.yBodyRot;
+			turnBodyToward(target);
 		}
 
 		private void advancePendingAttack() {
-			int previousElapsed = pendingAttackElapsed;
 			pendingAttackElapsed++;
 			LivingEntity target = pendingAttackTarget;
-			if (!pendingImpactApplied && target != null && target.isAlive()) {
-				if (pendingArmGeometry != null) {
-					if (bionic.sweptAttackIntersects(target, pendingArmGeometry, previousElapsed,
-						pendingAttackElapsed, pendingAttackDuration, bionic.isAttackAnimationWeapon(),
-						pendingPreviousBodyYaw, bionic.yBodyRot)) {
-						pendingImpactApplied = true;
-						bionic.performAnimatedAttackDamage(target);
-					}
-				} else if (pendingAttackElapsed >= pendingImpactTick) {
+			if (target != null && target.isAlive())
+				turnBodyToward(target);
+			if (!pendingImpactApplied && target != null && target.isAlive()
+				&& SlimeBionicCombat.isActiveTick(pendingAttackElapsed, pendingAttackDuration)) {
+				boolean intersects = pendingArmGeometry != null
+					? bionic.attackSectorIntersects(target, pendingArmGeometry)
+					: bionic.isWithinMeleeAttackRange(target);
+				if (intersects) {
 					pendingImpactApplied = true;
-					if (bionic.isWithinMeleeAttackRange(target))
-						bionic.performAnimatedAttackDamage(target);
+					bionic.performAttackDamage(target);
 				}
 			}
-			pendingPreviousBodyYaw = bionic.yBodyRot;
 			if (pendingAttackElapsed >= pendingAttackDuration)
 				clearPendingAttack();
+		}
+
+		private void turnBodyToward(LivingEntity target) {
+			if (pendingAttackElapsed >= SlimeBionicCombat.activeEndTick(pendingAttackDuration))
+				return;
+			double dx = target.getX() - bionic.getX();
+			double dz = target.getZ() - bionic.getZ();
+			if (dx * dx + dz * dz <= ATTACK_TRACKING_EPSILON_SQR)
+				return;
+			float targetYaw = (float) Mth.atan2(dz, dx) * Mth.RAD_TO_DEG - 90.0f;
+			float bodyYaw = Mth.approachDegrees(bionic.yBodyRot, targetYaw,
+				ATTACK_TRACKING_DEGREES_PER_TICK);
+			bionic.yBodyRot = bodyYaw;
+			bionic.setYRot(bodyYaw);
 		}
 
 		private void clearPendingAttack() {
 			pendingAttackTarget = null;
 			pendingAttackElapsed = 0;
 			pendingAttackDuration = 0;
-			pendingImpactTick = 0;
 			pendingImpactApplied = false;
 			pendingArmGeometry = null;
-			pendingPreviousBodyYaw = bionic.yBodyRot;
 		}
 
 		@Override

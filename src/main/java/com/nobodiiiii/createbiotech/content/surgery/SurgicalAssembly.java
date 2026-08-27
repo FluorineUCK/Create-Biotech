@@ -13,8 +13,6 @@ import java.util.UUID;
 import org.jetbrains.annotations.Nullable;
 
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
-import com.nobodiiiii.createbiotech.entity.animation.SlimeBionicAttackTiming;
-
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
@@ -30,7 +28,7 @@ public final class SurgicalAssembly {
 	public static final int MAX_LIMBS = 9;
 	public static final double MAX_BODY_SIZE = 64.0d;
 	public static final double MIN_BODY_SIZE = 1.0d / 64.0d;
-	private static final int CURRENT_VERSION = 13;
+	private static final int CURRENT_VERSION = 14;
 	private static final String VERSION_TAG = "Version";
 	private static final String PROFILE_TAG = "MimicProfile";
 	private static final String CUBE_COUNT_TAG = "CubeCount";
@@ -65,6 +63,13 @@ public final class SurgicalAssembly {
 	private static final String RIGHT_ARM_TAG = "RightArm";
 	private static final String LEFT_ARM_TAG = "LeftArm";
 	private static final String ATTACK_RADIUS_TAG = "Radius";
+	private static final String ATTACK_ORIGIN_X_TAG = "OriginX";
+	private static final String ATTACK_ORIGIN_Y_TAG = "OriginY";
+	private static final String ATTACK_ORIGIN_Z_TAG = "OriginZ";
+	private static final String ATTACK_REACH_TAG = "Reach";
+	private static final String ATTACK_MINIMUM_Y_TAG = "MinimumY";
+	private static final String ATTACK_MAXIMUM_Y_TAG = "MaximumY";
+	// Version 13 stored authored animation paths. They remain readable for save migration only.
 	private static final String EMPTY_HAND_PATH_TAG = "EmptyHandPath";
 	private static final String WEAPON_PATH_TAG = "WeaponPath";
 	private static final String FACING_TAG = "Facing";
@@ -588,10 +593,9 @@ public final class SurgicalAssembly {
 		return List.copyOf(decoded);
 	}
 
-	/** Immutable hand paths baked once from the assembled model's rest geometry. */
+	/** Immutable physical arm dimensions baked once from the assembled model's rest geometry. */
 	public record AttackGeometry(@Nullable ArmAttackGeometry right,
 		@Nullable ArmAttackGeometry left) {
-		public static final int PATH_SAMPLES = 16;
 		private static final double MAX_COORDINATE = MAX_BODY_SIZE * 2.0d;
 
 		public AttackGeometry {
@@ -663,173 +667,107 @@ public final class SurgicalAssembly {
 		}
 	}
 
-	public record ArmAttackGeometry(float radius, List<Vec3> emptyHandPath,
-		List<Vec3> weaponPath, float emptyHandMaximumHorizontalReach, float emptyHandMinimumY,
-		float emptyHandMaximumY, float weaponMaximumHorizontalReach, float weaponMinimumY,
-		float weaponMaximumY) {
+	public record ArmAttackGeometry(Vec3 origin, float reach, float minimumY, float maximumY,
+		float radius) {
 		private static final float MIN_RADIUS = 0.05f;
 		private static final float MAX_RADIUS = 8.0f;
+		private static final int LEGACY_PATH_SAMPLES = 16;
 
 		public ArmAttackGeometry {
-			if (!Float.isFinite(radius) || radius < MIN_RADIUS || radius > MAX_RADIUS
-				|| !validPath(emptyHandPath) || !validPath(weaponPath))
+			if (!AttackGeometry.validPoint(origin) || !Float.isFinite(reach)
+				|| reach < MIN_RADIUS || reach > AttackGeometry.MAX_COORDINATE
+				|| !Float.isFinite(minimumY) || !Float.isFinite(maximumY)
+				|| minimumY > maximumY || Math.abs(minimumY) > AttackGeometry.MAX_COORDINATE
+				|| Math.abs(maximumY) > AttackGeometry.MAX_COORDINATE
+				|| !Float.isFinite(radius) || radius < MIN_RADIUS || radius > MAX_RADIUS)
 				throw new IllegalArgumentException("Invalid arm attack geometry");
-			emptyHandPath = List.copyOf(emptyHandPath);
-			weaponPath = List.copyOf(weaponPath);
-			PathEnvelope emptyHand = envelope(emptyHandPath, radius, false);
-			PathEnvelope weapon = envelope(weaponPath, radius, true);
-			emptyHandMaximumHorizontalReach = emptyHand.reach();
-			emptyHandMinimumY = emptyHand.minimumY();
-			emptyHandMaximumY = emptyHand.maximumY();
-			weaponMaximumHorizontalReach = weapon.reach();
-			weaponMinimumY = weapon.minimumY();
-			weaponMaximumY = weapon.maximumY();
-		}
-
-		private ArmAttackGeometry(float radius, List<Vec3> emptyHandPath, List<Vec3> weaponPath) {
-			this(radius, emptyHandPath, weaponPath, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 		}
 
 		@Nullable
-		public static ArmAttackGeometry create(float radius, List<Vec3> emptyHandPath,
-			List<Vec3> weaponPath) {
+		public static ArmAttackGeometry create(Vec3 origin, float reach, float minimumY,
+			float maximumY, float radius) {
 			try {
-				return new ArmAttackGeometry(radius, emptyHandPath, weaponPath);
+				return new ArmAttackGeometry(origin, reach, minimumY, maximumY, radius);
 			} catch (IllegalArgumentException ignored) {
 				return null;
 			}
 		}
 
-		public Vec3 sample(boolean weapon, float progress) {
-			List<Vec3> path = weapon ? weaponPath : emptyHandPath;
-			float scaled = Math.max(0.0f, Math.min(1.0f, progress)) * (path.size() - 1);
-			int lower = Math.min((int) scaled, path.size() - 1);
-			int upper = Math.min(lower + 1, path.size() - 1);
-			return path.get(lower).lerp(path.get(upper), scaled - lower);
-		}
-
-		private PathEnvelope envelope(boolean weapon) {
-			return new PathEnvelope(maximumHorizontalReach(weapon), minimumY(weapon), maximumY(weapon));
-		}
-
-		public float maximumHorizontalReach(boolean weapon) {
-			return weapon ? weaponMaximumHorizontalReach : emptyHandMaximumHorizontalReach;
-		}
-
-		public float minimumY(boolean weapon) {
-			return weapon ? weaponMinimumY : emptyHandMinimumY;
-		}
-
-		public float maximumY(boolean weapon) {
-			return weapon ? weaponMaximumY : emptyHandMaximumY;
-		}
-
-		private static PathEnvelope envelope(List<Vec3> path, float radius, boolean weapon) {
-			float start = SlimeBionicAttackTiming.hitWindowStart(weapon);
-			float end = SlimeBionicAttackTiming.hitWindowEnd(weapon);
-			float reach = 0.0f;
-			float minY = Float.POSITIVE_INFINITY;
-			float maxY = Float.NEGATIVE_INFINITY;
-			for (int index = 0; index <= AttackGeometry.PATH_SAMPLES; index++) {
-				float progress = index == 0 ? start : index == AttackGeometry.PATH_SAMPLES ? end
-					: (float) index / (AttackGeometry.PATH_SAMPLES - 1);
-				if (progress < start || progress > end)
-					continue;
-				float scaled = progress * (path.size() - 1);
-				int lower = Math.min((int) scaled, path.size() - 1);
-				int upper = Math.min(lower + 1, path.size() - 1);
-				Vec3 point = path.get(lower).lerp(path.get(upper), scaled - lower);
-				reach = Math.max(reach,
-					(float) Math.sqrt(point.x * point.x + point.z * point.z) + radius);
-				minY = Math.min(minY, (float) point.y - radius);
-				maxY = Math.max(maxY, (float) point.y + radius);
-			}
-			return new PathEnvelope(reach, minY, maxY);
-		}
-
 		private CompoundTag save() {
 			CompoundTag tag = new CompoundTag();
+			tag.putFloat(ATTACK_ORIGIN_X_TAG, (float) origin.x);
+			tag.putFloat(ATTACK_ORIGIN_Y_TAG, (float) origin.y);
+			tag.putFloat(ATTACK_ORIGIN_Z_TAG, (float) origin.z);
+			tag.putFloat(ATTACK_REACH_TAG, reach);
+			tag.putFloat(ATTACK_MINIMUM_Y_TAG, minimumY);
+			tag.putFloat(ATTACK_MAXIMUM_Y_TAG, maximumY);
 			tag.putFloat(ATTACK_RADIUS_TAG, radius);
-			tag.putIntArray(EMPTY_HAND_PATH_TAG, savePath(emptyHandPath));
-			tag.putIntArray(WEAPON_PATH_TAG, savePath(weaponPath));
 			return tag;
 		}
 
 		private void write(FriendlyByteBuf buffer) {
+			buffer.writeFloat((float) origin.x);
+			buffer.writeFloat((float) origin.y);
+			buffer.writeFloat((float) origin.z);
+			buffer.writeFloat(reach);
+			buffer.writeFloat(minimumY);
+			buffer.writeFloat(maximumY);
 			buffer.writeFloat(radius);
-			writePath(buffer, emptyHandPath);
-			writePath(buffer, weaponPath);
 		}
 
 		@Nullable
 		private static ArmAttackGeometry read(FriendlyByteBuf buffer) {
-			float radius = buffer.readFloat();
-			List<Vec3> emptyHand = readPath(buffer);
-			List<Vec3> weapon = readPath(buffer);
-			return create(radius, emptyHand, weapon);
+			Vec3 origin = new Vec3(buffer.readFloat(), buffer.readFloat(), buffer.readFloat());
+			return create(origin, buffer.readFloat(), buffer.readFloat(), buffer.readFloat(),
+				buffer.readFloat());
 		}
 
 		@Nullable
 		private static ArmAttackGeometry load(CompoundTag tag) {
-			if (!tag.contains(ATTACK_RADIUS_TAG, Tag.TAG_ANY_NUMERIC)
-				|| !tag.contains(EMPTY_HAND_PATH_TAG, Tag.TAG_INT_ARRAY)
-				|| !tag.contains(WEAPON_PATH_TAG, Tag.TAG_INT_ARRAY))
+			if (!tag.contains(ATTACK_RADIUS_TAG, Tag.TAG_ANY_NUMERIC))
 				return null;
-			List<Vec3> emptyHand = loadPath(tag.getIntArray(EMPTY_HAND_PATH_TAG));
-			List<Vec3> weapon = loadPath(tag.getIntArray(WEAPON_PATH_TAG));
-			return emptyHand == null || weapon == null ? null
-				: create(tag.getFloat(ATTACK_RADIUS_TAG), emptyHand, weapon);
-		}
-
-		private static boolean validPath(List<Vec3> path) {
-			if (path == null || path.size() != AttackGeometry.PATH_SAMPLES)
-				return false;
-			for (Vec3 point : path)
-				if (!AttackGeometry.validPoint(point))
-					return false;
-			return true;
-		}
-
-		private static int[] savePath(List<Vec3> path) {
-			int[] encoded = new int[path.size() * 3];
-			for (int index = 0; index < path.size(); index++) {
-				Vec3 point = path.get(index);
-				encoded[index * 3] = Float.floatToRawIntBits((float) point.x);
-				encoded[index * 3 + 1] = Float.floatToRawIntBits((float) point.y);
-				encoded[index * 3 + 2] = Float.floatToRawIntBits((float) point.z);
-			}
-			return encoded;
-		}
-
-		private static void writePath(FriendlyByteBuf buffer, List<Vec3> path) {
-			for (Vec3 point : path) {
-				buffer.writeFloat((float) point.x);
-				buffer.writeFloat((float) point.y);
-				buffer.writeFloat((float) point.z);
-			}
-		}
-
-		private static List<Vec3> readPath(FriendlyByteBuf buffer) {
-			List<Vec3> path = new ArrayList<>(AttackGeometry.PATH_SAMPLES);
-			for (int index = 0; index < AttackGeometry.PATH_SAMPLES; index++)
-				path.add(new Vec3(buffer.readFloat(), buffer.readFloat(), buffer.readFloat()));
-			return List.copyOf(path);
+			if (tag.contains(ATTACK_ORIGIN_X_TAG, Tag.TAG_ANY_NUMERIC)
+				&& tag.contains(ATTACK_ORIGIN_Y_TAG, Tag.TAG_ANY_NUMERIC)
+				&& tag.contains(ATTACK_ORIGIN_Z_TAG, Tag.TAG_ANY_NUMERIC)
+				&& tag.contains(ATTACK_REACH_TAG, Tag.TAG_ANY_NUMERIC)
+				&& tag.contains(ATTACK_MINIMUM_Y_TAG, Tag.TAG_ANY_NUMERIC)
+				&& tag.contains(ATTACK_MAXIMUM_Y_TAG, Tag.TAG_ANY_NUMERIC))
+				return create(new Vec3(tag.getFloat(ATTACK_ORIGIN_X_TAG),
+					tag.getFloat(ATTACK_ORIGIN_Y_TAG), tag.getFloat(ATTACK_ORIGIN_Z_TAG)),
+					tag.getFloat(ATTACK_REACH_TAG), tag.getFloat(ATTACK_MINIMUM_Y_TAG),
+					tag.getFloat(ATTACK_MAXIMUM_Y_TAG), tag.getFloat(ATTACK_RADIUS_TAG));
+			return loadLegacy(tag);
 		}
 
 		@Nullable
-		private static List<Vec3> loadPath(int[] encoded) {
-			if (encoded.length != AttackGeometry.PATH_SAMPLES * 3)
+		private static ArmAttackGeometry loadLegacy(CompoundTag tag) {
+			if (!tag.contains(EMPTY_HAND_PATH_TAG, Tag.TAG_INT_ARRAY)
+				|| !tag.contains(WEAPON_PATH_TAG, Tag.TAG_INT_ARRAY))
 				return null;
-			List<Vec3> path = new ArrayList<>(AttackGeometry.PATH_SAMPLES);
-			for (int index = 0; index < AttackGeometry.PATH_SAMPLES; index++)
-				path.add(new Vec3(Float.intBitsToFloat(encoded[index * 3]),
-					Float.intBitsToFloat(encoded[index * 3 + 1]),
-					Float.intBitsToFloat(encoded[index * 3 + 2])));
-			return validPath(path) ? List.copyOf(path) : null;
+			int[] emptyHand = tag.getIntArray(EMPTY_HAND_PATH_TAG);
+			int[] weapon = tag.getIntArray(WEAPON_PATH_TAG);
+			if (emptyHand.length != LEGACY_PATH_SAMPLES * 3
+				|| weapon.length != LEGACY_PATH_SAMPLES * 3)
+				return null;
+			float radius = tag.getFloat(ATTACK_RADIUS_TAG);
+			float reach = 0.0f;
+			float minimumY = Float.POSITIVE_INFINITY;
+			float maximumY = Float.NEGATIVE_INFINITY;
+			for (int[] path : List.of(emptyHand, weapon))
+				for (int index = 0; index < LEGACY_PATH_SAMPLES; index++) {
+					Vec3 point = new Vec3(Float.intBitsToFloat(path[index * 3]),
+						Float.intBitsToFloat(path[index * 3 + 1]),
+						Float.intBitsToFloat(path[index * 3 + 2]));
+					if (!AttackGeometry.validPoint(point))
+						return null;
+					reach = Math.max(reach,
+						(float) Math.sqrt(point.x * point.x + point.z * point.z) + radius);
+					minimumY = Math.min(minimumY, (float) point.y - radius);
+					maximumY = Math.max(maximumY, (float) point.y + radius);
+				}
+			return create(Vec3.ZERO, reach, minimumY, maximumY, radius);
 		}
 	}
-
-	private record PathEnvelope(float reach, float minimumY, float maximumY) {}
 
 	/** Volume-weighted upright collision core, visible offset and measured effective leg length. */
 	public record BodyBounds(float width, float height, float depth,

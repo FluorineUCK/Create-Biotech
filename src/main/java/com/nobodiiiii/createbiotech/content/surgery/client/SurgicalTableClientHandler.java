@@ -2755,11 +2755,14 @@ public final class SurgicalTableClientHandler {
 			visible.minY(), (visible.minZ() + visible.maxZ()) * 0.5d + bodyBounds.centerZ());
 		SurgicalAssembly.AttackGeometry attackGeometry =
 			SlimeBionicAnimator.bakeAttackGeometry(preview, measured.sources(), bodyOrigin);
-		int animatedElbows = Math.min(2, (int) preview.limbs().stream()
-			.filter(limb -> limb.type() == SurgicalLimbType.ELBOW).count());
+		int installedShoulders = (int) preview.limbs().stream()
+			.filter(limb -> limb.type() == SurgicalLimbType.SHOULDER).count();
+		int installedElbows = (int) preview.limbs().stream()
+			.filter(limb -> limb.type() == SurgicalLimbType.ELBOW).count();
+		int installedArms = Math.min(2, Math.max(installedShoulders, installedElbows));
 		int bakedArms = attackGeometry == null ? 0
 			: (attackGeometry.right() == null ? 0 : 1) + (attackGeometry.left() == null ? 0 : 1);
-		if (bakedArms != animatedElbows)
+		if (bakedArms != installedArms)
 			return null;
 		return new PackedBodyMetrics(bodyBounds, attackGeometry);
 	}

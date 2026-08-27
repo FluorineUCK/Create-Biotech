@@ -70,10 +70,7 @@ public final class SlimeBionicAnimator {
 		return Map.copyOf(boxes);
 	}
 
-	/**
-	 * Bakes all authored hand paths once while the surgical body still has exact cube corners.
-	 * Runtime combat can then use immutable samples without resolving a skeleton or quaternions.
-	 */
+	/** Bakes immutable arm dimensions for both articulated and single-piece arms. */
 	@Nullable
 	public static SurgicalAssembly.AttackGeometry bakeAttackGeometry(SurgicalAssembly assembly,
 		List<SourceState> sources, Vec3 bodyOrigin) {
@@ -84,50 +81,42 @@ public final class SlimeBionicAnimator {
 		if (limbs.isEmpty())
 			return null;
 		SurgicalAssembly.ArmAttackGeometry right = bakeArm(limbs, sources, bodyOrigin,
-			Bone.RIGHT_ELBOW, Arm.RIGHT);
+			Bone.RIGHT_SHOULDER, Bone.RIGHT_ELBOW);
 		SurgicalAssembly.ArmAttackGeometry left = bakeArm(limbs, sources, bodyOrigin,
-			Bone.LEFT_ELBOW, Arm.LEFT);
+			Bone.LEFT_SHOULDER, Bone.LEFT_ELBOW);
 		return SurgicalAssembly.AttackGeometry.create(right, left);
 	}
 
 	@Nullable
 	private static SurgicalAssembly.ArmAttackGeometry bakeArm(List<ResolvedLimb> limbs,
-		List<SourceState> sources, Vec3 origin, Bone elbowBone, Arm arm) {
+		List<SourceState> sources, Vec3 bodyOrigin, Bone shoulderBone, Bone elbowBone) {
+		int shoulderIndex = -1;
 		int elbowIndex = -1;
-		for (int index = 0; index < limbs.size(); index++)
+		for (int index = 0; index < limbs.size(); index++) {
+			if (limbs.get(index).type() == SurgicalLimbType.SHOULDER
+				&& limbs.get(index).bone() == shoulderBone)
+				shoulderIndex = index;
 			if (limbs.get(index).type() == SurgicalLimbType.ELBOW
-				&& limbs.get(index).bone() == elbowBone) {
+				&& limbs.get(index).bone() == elbowBone)
 				elbowIndex = index;
-				break;
-			}
-		if (elbowIndex < 0)
+		}
+		if (shoulderIndex < 0 && elbowIndex < 0)
 			return null;
-		ResolvedLimb elbow = limbs.get(elbowIndex);
-		TipGeometry tip = distalTip(elbow, sources);
+		ResolvedLimb distal = limbs.get(elbowIndex >= 0 ? elbowIndex : shoulderIndex);
+		TipGeometry tip = distalTip(distal, sources);
 		if (tip == null)
 			return null;
-		List<Vec3> emptyHand = bakePath(elbowIndex, limbs, sources, origin, tip.center(), arm,
-			AttackStyle.EMPTY_HAND);
-		List<Vec3> weapon = bakePath(elbowIndex, limbs, sources, origin, tip.center(), arm,
-			AttackStyle.WEAPON);
-		return SurgicalAssembly.ArmAttackGeometry.create(tip.radius(), emptyHand, weapon);
-	}
-
-	private static List<Vec3> bakePath(int elbowIndex, List<ResolvedLimb> limbs,
-		List<SourceState> sources, Vec3 origin, Vec3 handPoint, Arm arm, AttackStyle style) {
-		List<Vec3> path = new ArrayList<>(SurgicalAssembly.AttackGeometry.PATH_SAMPLES);
-		for (int sample = 0; sample < SurgicalAssembly.AttackGeometry.PATH_SAMPLES; sample++) {
-			float progress = (float) sample / (SurgicalAssembly.AttackGeometry.PATH_SAMPLES - 1);
-			Pose pose = SlimeBionicAnimations.sampleAttack(progress, arm, style);
-			Rotation bodyPose = pose.rotation(Bone.BODY);
-			SurgicalCubeRotation bodyRotation = BODY_SPACE.reframe(SurgicalCubeRotation.IDENTITY,
-				bodyPose.z(), bodyPose.y(), bodyPose.x());
-			Transform bodyTransform = Transform.IDENTITY.rotateAround(bodyPivot(sources), bodyRotation);
-			Transform transform = resolveTransform(elbowIndex, limbs, pose, bodyTransform,
-				new Transform[limbs.size()], new boolean[limbs.size()]);
-			path.add(transform.apply(handPoint).subtract(origin));
-		}
-		return List.copyOf(path);
+		Vec3 attackOrigin = shoulderIndex >= 0 ? limbs.get(shoulderIndex).pivot() : distal.pivot();
+		double boneLength = elbowIndex >= 0 && shoulderIndex >= 0
+			? attackOrigin.distanceTo(distal.pivot()) + distal.pivot().distanceTo(tip.center())
+			: attackOrigin.distanceTo(tip.center());
+		float reach = (float) boneLength + tip.radius();
+		float minimumY = (float) Math.min(attackOrigin.y,
+			Math.min(distal.pivot().y, tip.center().y)) - tip.radius();
+		float maximumY = (float) Math.max(attackOrigin.y,
+			Math.max(distal.pivot().y, tip.center().y)) + tip.radius();
+		return SurgicalAssembly.ArmAttackGeometry.create(attackOrigin.subtract(bodyOrigin), reach,
+			minimumY - (float) bodyOrigin.y, maximumY - (float) bodyOrigin.y, tip.radius());
 	}
 
 	@Nullable

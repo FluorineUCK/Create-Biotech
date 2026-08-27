@@ -571,11 +571,17 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		Set<SurgicalGlueJoint> groupJoints = jointsWithin(group);
 		Set<SurgicalCombination> groupCombinations = combinationsWithin(group);
 		Set<SurgicalLimbJoint> groupLimbs = limbsWithin(group);
-		int animatedElbows = Math.min(2, (int) groupLimbs.stream()
-			.filter(limb -> limb.type() == SurgicalLimbType.ELBOW).count());
+		int installedShoulders = (int) groupLimbs.stream()
+			.filter(limb -> limb.type() == SurgicalLimbType.SHOULDER).count();
+		int installedElbows = (int) groupLimbs.stream()
+			.filter(limb -> limb.type() == SurgicalLimbType.ELBOW).count();
+		// A shoulder drives a complete single-piece arm when no elbow is installed. Keep this
+		// authoritative check identical to the client-side geometry bake so that shoulder-only
+		// bodies are not rejected while being packed into a cardboard box.
+		int installedArms = Math.min(2, Math.max(installedShoulders, installedElbows));
 		int encodedArms = attackGeometry == null ? 0
 			: (attackGeometry.right() == null ? 0 : 1) + (attackGeometry.left() == null ? 0 : 1);
-		if (encodedArms != animatedElbows)
+		if (encodedArms != installedArms)
 			return false;
 		SurgicalAssembly assembly = packedAssembly(subject, component, group, groupJoints,
 			groupCombinations, groupLimbs);
