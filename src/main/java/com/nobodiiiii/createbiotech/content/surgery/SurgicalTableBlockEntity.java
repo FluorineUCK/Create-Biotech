@@ -247,10 +247,6 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		clientRenderBounds = clientRenderBounds == null ? bounds : clientRenderBounds.minmax(bounds);
 	}
 
-	public boolean hasMeasuredClientRenderBounds() {
-		return clientRenderBounds != null;
-	}
-
 	/**
 	 * Rebuilds the limb-joint index from whatever survived the last edit. Cutting a limb away or
 	 * packing it into a box leaves dangling endpoints behind, and a body must never end up with

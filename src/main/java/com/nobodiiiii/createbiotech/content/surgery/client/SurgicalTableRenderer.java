@@ -33,9 +33,11 @@ public class SurgicalTableRenderer implements BlockEntityRenderer<SurgicalTableB
 
 	@Override
 	public boolean shouldRenderOffScreen(SurgicalTableBlockEntity table) {
-		// Permit one conservative capture before exact source-model bounds are available. Once
-		// measured, normal frustum culling remains enabled for the rest of this data revision.
-		return table.hasSubjects() && !table.hasMeasuredClientRenderBounds();
+		// Keep the one subject-owning controller independent of its render section. A large table
+		// can remain visible after the controller's section has left the frustum; NeoForge still
+		// tests getRenderBoundingBox() before dispatching global block entities, and shouldRender()
+		// retains the distance check, so this does not disable culling for the table contents.
+		return table.hasSubjects();
 	}
 
 	@Override
