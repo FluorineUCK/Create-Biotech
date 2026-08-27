@@ -11,6 +11,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
 import com.nobodiiiii.createbiotech.content.slimemimic.MimicProfile;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalProfiler;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
@@ -48,7 +49,9 @@ public final class SurgicalSourceModelRenderer {
 		if (cached != null && cached.level == level && cached.profile.equals(profile))
 			return cached.entity;
 
+		long started = SurgicalProfiler.begin();
 		LivingEntity entity = profile.createPreviewEntity(level);
+		SurgicalProfiler.end("createPreviewEntity", started);
 		if (entity == null)
 			return null;
 		ownerPreviews.put(profile, new CachedPreview(level, profile, entity));
@@ -127,7 +130,9 @@ public final class SurgicalSourceModelRenderer {
 			RenderPlanKey key = new RenderPlanKey(profile, renderer, Float.floatToIntBits(yaw));
 			SurgicalCapturedRenderPlan plan = RENDER_PLANS.get(key);
 			if (plan == null) {
+				long started = SurgicalProfiler.begin();
 				plan = SurgicalCapturedRenderPlan.capture(renderer, preview, yaw, partialTick);
+				SurgicalProfiler.end("capture(plan)", started);
 				RENDER_PLANS.put(key, plan);
 			}
 			return plan;
@@ -148,9 +153,12 @@ public final class SurgicalSourceModelRenderer {
 	public static SurgicalModelRenderContext.Snapshot captureGeometry(LivingEntity preview, int cubeCount,
 		BitSet presentCubes, PoseStack poseStack, int packedLight, float yaw, float partialTick,
 		@Nullable Vec3 cameraPosition, boolean renderSourceGeometry) {
+		long started = SurgicalProfiler.begin();
 		preparePreview(preview, yaw);
-		return plan(preview, yaw, partialTick)
+		SurgicalModelRenderContext.Snapshot snapshot = plan(preview, yaw, partialTick)
 			.snapshot(poseStack, cubeCount, presentCubes, Map.of(), Map.of(), cameraPosition);
+		SurgicalProfiler.end("captureGeometry", started);
+		return snapshot;
 	}
 
 	private static void preparePreview(LivingEntity preview, float yaw) {

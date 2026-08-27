@@ -1915,6 +1915,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	@Override
 	protected void write(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		long started = SurgicalProfiler.begin();
 		if (!subjects.isEmpty()) {
 			ListTag encoded = new ListTag();
 			for (SurgicalSubject subject : subjects)
@@ -1923,10 +1924,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 		tag.putInt(NEXT_SUBJECT_ID_TAG, nextSubjectId);
 		super.write(tag, registries, clientPacket);
+		SurgicalProfiler.end(clientPacket ? "write(sync)" : "write(save)", started);
 	}
 
 	@Override
 	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
+		long started = SurgicalProfiler.begin();
 		boolean previouslyHadSubjects = hasSubjects();
 		Map<UUID, SurgicalSubject> previousSubjects = clientPacket
 			? new HashMap<>(subjectsByPersistentId) : Map.of();
@@ -1981,6 +1984,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			if (previouslyHadSubjects != hasSubjects() && level != null)
 				level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 16);
 		}
+		SurgicalProfiler.end(clientPacket ? "read(sync)" : "read(load)", started);
 	}
 
 	/**

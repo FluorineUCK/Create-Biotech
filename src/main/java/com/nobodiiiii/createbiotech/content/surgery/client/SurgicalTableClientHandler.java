@@ -25,6 +25,7 @@ import com.nobodiiiii.createbiotech.content.surgery.SurgicalCubeRotation;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalCombination;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalGlueJoint;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalLayPose;
+import com.nobodiiiii.createbiotech.content.surgery.SurgicalProfiler;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableBlock;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTableLayout;
 import com.nobodiiiii.createbiotech.content.surgery.SurgicalTablePlane;
@@ -208,8 +209,10 @@ public final class SurgicalTableClientHandler {
 				pendingTopology = CompletableFuture.supplyAsync(() ->
 					SurgicalClientTopology.buildContactTopology(cubeCount, frozenCubes));
 			} else {
+				long started = SurgicalProfiler.begin();
 				SurgicalClientTopology.ContactTopology topology =
 					SurgicalClientTopology.buildContactTopology(cubeCount, snapshot.cubes());
+				SurgicalProfiler.end("buildContactTopology(sync)", started);
 				seams = topology.seams();
 				contacts = topology.contacts();
 			}
@@ -2912,9 +2915,13 @@ public final class SurgicalTableClientHandler {
 	private static List<SurgicalClientTopology.Edge> combinationOuterEdges(BlockPos tablePos,
 		SurgicalTableBlockEntity table, SurgicalCombination combination) {
 		CombinationOutlineKey key = new CombinationOutlineKey(tablePos, combination.id());
+		// The outline is a union contour over the member cubes, which is superlinear in cube count, so
+		// it must survive everything except those cubes actually moving. Keying it on the global
+		// geometry generation instead threw it away whenever any table in the world was touched.
+		long transformSignature = combinationTransformSignature(tablePos, table, combination);
 		CombinationOutlineCache cached = COMBINATION_OUTLINES.get(key);
 		if (cached != null && cached.tableRevision == table.clientDataRevision()
-			&& cached.geometryGeneration == geometryGeneration)
+			&& cached.transformSignature == transformSignature)
 			return cached.edges;
 		List<SurgicalModelRenderContext.CubeGeometry> cubes = new ArrayList<>();
 		for (SurgicalCombination.Member member : combination.members()) {
@@ -2928,13 +2935,29 @@ public final class SurgicalTableClientHandler {
 		}
 		List<SurgicalClientTopology.Edge> edges = outerEdgesForCubes(cubes);
 		COMBINATION_OUTLINES.put(key, new CombinationOutlineCache(table.clientDataRevision(),
-			geometryGeneration, edges));
+			transformSignature, edges));
 		return edges;
+	}
+
+	/** Identifies the exact transform state every member cube of one combination was last drawn at. */
+	private static long combinationTransformSignature(BlockPos tablePos, SurgicalTableBlockEntity table,
+		SurgicalCombination combination) {
+		long signature = 1L;
+		for (SurgicalCombination.Member member : combination.members()) {
+			SurgicalSubject subject = table.getSubjectByPersistentId(member.subjectKey());
+			TableGeometry geometry = subject == null ? null
+				: TABLES.get(new SubjectKey(tablePos, subject.id()));
+			signature = signature * 31L + (geometry == null ? 0L : geometry.transformGeneration + 1L);
+		}
+		return signature;
 	}
 
 	private static List<SurgicalClientTopology.Edge> outerEdgesForCubes(
 		List<SurgicalModelRenderContext.CubeGeometry> cubes) {
-		return SurgicalClientTopology.outerEdges(cubes);
+		long started = SurgicalProfiler.begin();
+		List<SurgicalClientTopology.Edge> edges = SurgicalClientTopology.outerEdges(cubes);
+		SurgicalProfiler.end("outerEdges", started);
+		return edges;
 	}
 
 	@Nullable
@@ -3489,6 +3512,9 @@ public final class SurgicalTableClientHandler {
 		@Nullable
 		private SurgicalGlueJoint pendingGroundingExcludedJoint;
 		private boolean groundingPending;
+		private long lastGroundingAttemptGeneration = Long.MIN_VALUE;
+		/** Bumped by every {@code applyTransforms}, so derived outlines can tell when cubes moved. */
+		private long transformGeneration;
 		private int renderRevision = Integer.MIN_VALUE;
 		private long lastSeenTick;
 
@@ -3574,6 +3600,7 @@ public final class SurgicalTableClientHandler {
 		private void applyTransforms(SurgicalTableBlockEntity table, Map<Integer, Vec3> appliedOffsets,
 			Map<Integer, SurgicalCubeRotation> appliedRotations,
 			BitSet appliedCutSeams, @Nullable SurgicalGlueJoint excludedJoint) {
+			long started = SurgicalProfiler.begin();
 			pendingGroundingOffsets = Map.copyOf(appliedOffsets);
 			pendingGroundingRotations = Map.copyOf(appliedRotations);
 			pendingGroundingCutSeams = (BitSet) appliedCutSeams.clone();
@@ -3596,13 +3623,22 @@ public final class SurgicalTableClientHandler {
 			bounds = boundsFor(cubeTargets);
 			contacts = transformContacts(baseContacts, baseCubesById, rotations, offsets);
 			contactsByCube = contactsByCube(observedCubeCount, contacts);
+			transformGeneration++;
 			if (bounds != null)
 				table.includeClientRenderBounds(bounds);
+			SurgicalProfiler.end("applyTransforms", started);
 		}
 
+		/**
+		 * Grounding fails while some geometry in the connected group is still waiting for its async
+		 * contact topology. Nothing about that can change without some geometry being created or
+		 * refreshed, both of which move {@code geometryGeneration}, so retrying on any other frame would
+		 * only re-run a full transform pass for the same reason it failed last time.
+		 */
 		private boolean retryPendingGrounding(SurgicalTableBlockEntity table) {
-			if (!groundingPending)
+			if (!groundingPending || lastGroundingAttemptGeneration == geometryGeneration)
 				return false;
+			lastGroundingAttemptGeneration = geometryGeneration;
 			applyTransforms(table, pendingGroundingOffsets, pendingGroundingRotations,
 				pendingGroundingCutSeams, pendingGroundingExcludedJoint);
 			return !groundingPending;
@@ -3806,7 +3842,7 @@ public final class SurgicalTableClientHandler {
 
 	private record CombinationOutlineKey(BlockPos tablePos, UUID combinationId) {}
 
-	private record CombinationOutlineCache(int tableRevision, long geometryGeneration,
+	private record CombinationOutlineCache(int tableRevision, long transformSignature,
 		List<SurgicalClientTopology.Edge> edges) {}
 
 	private record SelectionHighlightEdges(List<SurgicalClientTopology.Edge> cubeEdges,
