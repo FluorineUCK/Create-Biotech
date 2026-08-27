@@ -28,11 +28,12 @@ public final class SurgicalConnectionGraph<K> {
 
 	private SurgicalConnectionGraph(List<K> bodyOrder, Map<K, Body<K>> bodies,
 		Map<Endpoint<K>, Set<Endpoint<K>>> adjacency) {
-		this.bodyOrder = List.copyOf(bodyOrder);
-		this.bodies = Map.copyOf(bodies);
-		Map<Endpoint<K>, Set<Endpoint<K>>> frozen = new HashMap<>();
-		adjacency.forEach((endpoint, neighbors) -> frozen.put(endpoint, Set.copyOf(neighbors)));
-		this.adjacency = Map.copyOf(frozen);
+		// Every one of these collections is built by create() and handed over exclusively, and none of
+		// them is ever exposed, so ownership is taken directly. Re-freezing them cost three full copies
+		// of an adjacency map holding one entry per cube on the table.
+		this.bodyOrder = bodyOrder;
+		this.bodies = bodies;
+		this.adjacency = adjacency;
 	}
 
 	/** Returns {@code null} when a body or explicit connection references invalid topology. */
@@ -113,18 +114,22 @@ public final class SurgicalConnectionGraph<K> {
 
 	/** Every connected component, ordered largest-first and then by stable body/cube order. */
 	public List<Component<K>> components() {
-		Set<Endpoint<K>> visited = new HashSet<>();
+		// Visited is tracked as one BitSet per body rather than a set of endpoints: the old version
+		// allocated an Endpoint for every present cube in this scan and then a second one for every cube
+		// of every component it found.
+		Map<K, BitSet> visited = new HashMap<>();
 		List<OrderedComponent<K>> found = new ArrayList<>();
 		for (int bodyIndex = 0; bodyIndex < bodyOrder.size(); bodyIndex++) {
 			K body = bodyOrder.get(bodyIndex);
 			Body<K> descriptor = bodies.get(body);
+			BitSet seen = visited.computeIfAbsent(body, ignored -> new BitSet());
 			for (int cube = descriptor.presentCubes.nextSetBit(0); cube >= 0;
 				cube = descriptor.presentCubes.nextSetBit(cube + 1)) {
-				Endpoint<K> start = new Endpoint<>(body, cube);
-				if (visited.contains(start))
+				if (seen.get(cube))
 					continue;
 				Component<K> component = componentContaining(body, cube);
-				visited.addAll(endpoints(component));
+				component.members.forEach((memberBody, cubes) ->
+					visited.computeIfAbsent(memberBody, ignored -> new BitSet()).or(cubes));
 				found.add(new OrderedComponent<>(component, bodyIndex, cube));
 			}
 		}
@@ -133,26 +138,19 @@ public final class SurgicalConnectionGraph<K> {
 		return found.stream().map(OrderedComponent::component).toList();
 	}
 
-	private Set<Endpoint<K>> endpoints(Component<K> component) {
-		Set<Endpoint<K>> endpoints = new HashSet<>();
-		component.members.forEach((body, cubes) -> {
-			for (int cube = cubes.nextSetBit(0); cube >= 0; cube = cubes.nextSetBit(cube + 1))
-				endpoints.add(new Endpoint<>(body, cube));
-		});
-		return endpoints;
-	}
-
 	private Component<K> component(Set<Endpoint<K>> endpoints) {
+		// Grouping the endpoints in one pass, then emitting in body order, replaces a nested
+		// body × endpoint scan that made every component materialization O(bodies · component size).
+		Map<K, BitSet> grouped = new HashMap<>();
+		for (Endpoint<K> endpoint : endpoints)
+			grouped.computeIfAbsent(endpoint.body, ignored -> new BitSet()).set(endpoint.cube);
 		Map<K, BitSet> members = new LinkedHashMap<>();
 		for (K body : bodyOrder) {
-			BitSet cubes = new BitSet();
-			for (Endpoint<K> endpoint : endpoints)
-				if (body.equals(endpoint.body))
-					cubes.set(endpoint.cube);
-			if (!cubes.isEmpty())
+			BitSet cubes = grouped.get(body);
+			if (cubes != null && !cubes.isEmpty())
 				members.put(body, cubes);
 		}
-		return new Component<>(members);
+		return new Component<>(members, true);
 	}
 
 	public static final class Body<K> {
@@ -192,10 +190,19 @@ public final class SurgicalConnectionGraph<K> {
 		private final int size;
 
 		private Component(Map<K, BitSet> members) {
+			this(members, false);
+		}
+
+		/**
+		 * @param owned when the caller built {@code members} solely for this component, its BitSets are
+		 *              adopted instead of cloned. Cloning them was the third copy of the same data on
+		 *              every component materialization.
+		 */
+		private Component(Map<K, BitSet> members, boolean owned) {
 			Map<K, BitSet> frozen = new LinkedHashMap<>();
 			int total = 0;
 			for (Map.Entry<K, BitSet> entry : members.entrySet()) {
-				BitSet cubes = (BitSet) entry.getValue().clone();
+				BitSet cubes = owned ? entry.getValue() : (BitSet) entry.getValue().clone();
 				if (cubes.isEmpty())
 					continue;
 				frozen.put(entry.getKey(), cubes);
@@ -219,6 +226,11 @@ public final class SurgicalConnectionGraph<K> {
 			Map<K, BitSet> copy = new LinkedHashMap<>();
 			members.forEach((body, cubes) -> copy.put(body, (BitSet) cubes.clone()));
 			return Map.copyOf(copy);
+		}
+
+		/** The bodies this component touches, without materializing any cube set. */
+		public Set<K> bodies() {
+			return java.util.Collections.unmodifiableSet(members.keySet());
 		}
 
 		public boolean contains(K body, int cube) {

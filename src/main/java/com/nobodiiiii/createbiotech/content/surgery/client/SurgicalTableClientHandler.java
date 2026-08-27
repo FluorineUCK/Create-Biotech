@@ -177,6 +177,8 @@ public final class SurgicalTableClientHandler {
 		}
 		if (geometry.refresh(table, subject))
 			geometryGeneration++;
+		else
+			geometry.reportBounds(table);
 		return false;
 	}
 
@@ -2229,22 +2231,25 @@ public final class SurgicalTableClientHandler {
 			abortPendingCut();
 			return;
 		}
-		SurgicalTableBlockEntity.SeamCutPlan current = table.seamCutPlan(pending.subjectId, pending.targetId);
-		if (current == null || !current.separates() || !pending.proposedCuts.equals(current.proposedCuts())
-			|| !pending.movingComponents.equals(current.movingComponents())) {
-			abortPendingCut();
-			return;
-		}
 		SurgicalTablePlane.Plane plane = clientPlane(level, pending.tablePos);
 		if (!plane.valid() || !pending.tablePos.equals(plane.source())) {
 			abortPendingCut();
 			return;
 		}
 		Vec3 target = tableSurfaceTarget(playerRay(player), plane.workArea().y() + 1.01d);
+		// This early-out has to come before the cut plan is re-derived. The plan is a function of the
+		// synced table data, which `plannedTableRevision` already pins, so re-deriving it while the
+		// crosshair sits still only rebuilds the connection graph once per frame for no answer change.
 		if (pending.planned != null && componentSelection != null
 			&& pending.plannedTableRevision == table.clientDataRevision()
 			&& sameHorizontalTarget(target, pending.lastTargetX, pending.lastTargetZ)) {
 			highlightSelection(componentSelection);
+			return;
+		}
+		SurgicalTableBlockEntity.SeamCutPlan current = table.seamCutPlan(pending.subjectId, pending.targetId);
+		if (current == null || !current.separates() || !pending.proposedCuts.equals(current.proposedCuts())
+			|| !pending.movingComponents.equals(current.movingComponents())) {
+			abortPendingCut();
 			return;
 		}
 		TableGeometry editedGeometry = TABLES.get(new SubjectKey(pending.tablePos, pending.subjectId));
@@ -3608,10 +3613,15 @@ public final class SurgicalTableClientHandler {
 			double surfaceY = table.getBlockPos().getY() + 1.0d + SurgicalTablePoseResolver.TABLE_CLEARANCE;
 			SurgicalSubject subject = table.getSubject(subjectId);
 			layoutCubes = SurgicalTableClientHandler.transformCubes(baseCubes, appliedRotations, Map.of());
-			Map<Integer, Vec3> grounded = subject == null ? null
+			// A subject with no glue joint and no combination is its own grounding component, so walking
+			// every subject on the table to build a multi-body connection graph cannot change its answer.
+			// Unifying glue and native seams dropped this guard, which put the full graph build on every
+			// transform of every subject.
+			boolean linked = subject != null && subject.linkedToOtherSubjects();
+			Map<Integer, Vec3> grounded = subject == null || !linked ? null
 				: groundConnectedComponents(table, subject, this, appliedOffsets,
 					appliedCutSeams, excludedJoint, surfaceY);
-			groundingPending = subject != null && grounded == null;
+			groundingPending = subject != null && linked && grounded == null;
 			offsets = grounded == null
 				? SurgicalClientTopology.groundAllComponents(observedCubeCount, presentCubes,
 					seams, appliedCutSeams, layoutCubes, appliedOffsets, surfaceY)
@@ -3627,6 +3637,20 @@ public final class SurgicalTableClientHandler {
 			if (bounds != null)
 				table.includeClientRenderBounds(bounds);
 			SurgicalProfiler.end("applyTransforms", started);
+		}
+
+		/**
+		 * Re-contributes this subject's already-measured bounds to the table.
+		 *
+		 * <p>The table drops its measured render bounds whenever its subject set changes, and the only
+		 * thing that used to put them back was a full transform pass. That forced every subject on the
+		 * table to rebuild its geometry just so the bounds could be re-accumulated, which is what made
+		 * packing and placing cost the whole table instead of the one subject that moved. The bounds are
+		 * already cached here, so re-reporting them is one AABB union.</p>
+		 */
+		private void reportBounds(SurgicalTableBlockEntity table) {
+			if (bounds != null)
+				table.includeClientRenderBounds(bounds);
 		}
 
 		/**

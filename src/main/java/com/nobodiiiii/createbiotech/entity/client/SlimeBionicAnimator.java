@@ -44,6 +44,12 @@ public final class SlimeBionicAnimator {
 	private static final int AXIS_Y = 1;
 	private static final int AXIS_Z = 2;
 	private static final double GEOMETRY_EPSILON = 1.0e-10d;
+	/**
+	 * Connection graphs keyed by the immutable assembly they describe. Weak so a despawned body's
+	 * graph is collected with it.
+	 */
+	private static final Map<SurgicalAssembly, SurgicalConnectionGraph<Integer>> CONNECTION_GRAPHS =
+		java.util.Collections.synchronizedMap(new java.util.WeakHashMap<>());
 	private static final double PRINCIPAL_AXIS_SHARE = 0.55d;
 	private static final Basis BODY_SPACE = Basis.bodySpace();
 
@@ -571,6 +577,12 @@ public final class SlimeBionicAnimator {
 
 	@Nullable
 	private static SurgicalConnectionGraph<Integer> connectionGraph(SurgicalAssembly assembly) {
+		// A packed assembly is immutable, so its connection graph is too. Building it per call put a
+		// full graph construction on every rendered frame of every bionic slime — twice, because
+		// effectiveLegLength resolves the limbs again.
+		SurgicalConnectionGraph<Integer> cached = CONNECTION_GRAPHS.get(assembly);
+		if (cached != null)
+			return cached;
 		List<SurgicalConnectionGraph.Body<Integer>> bodies = new ArrayList<>(assembly.sources().size());
 		for (int sourceId = 0; sourceId < assembly.sources().size(); sourceId++) {
 			SurgicalAssembly.Source source = assembly.sources().get(sourceId);
@@ -581,7 +593,10 @@ public final class SlimeBionicAnimator {
 			.map(joint -> new SurgicalConnectionGraph.Link<>(joint.firstSource(), joint.firstCube(),
 				joint.secondSource(), joint.secondCube()))
 			.toList();
-		return SurgicalConnectionGraph.create(bodies, links);
+		SurgicalConnectionGraph<Integer> graph = SurgicalConnectionGraph.create(bodies, links);
+		if (graph != null)
+			CONNECTION_GRAPHS.put(assembly, graph);
+		return graph;
 	}
 
 	/**

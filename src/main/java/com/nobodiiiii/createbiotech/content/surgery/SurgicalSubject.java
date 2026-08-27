@@ -307,8 +307,33 @@ public final class SurgicalSubject {
 	 * from glue joints and combinations only, so a subject with neither is grounded purely from its own
 	 * data and stays valid while its neighbours change.
 	 */
-	boolean linkedToOtherSubjects() {
+	public boolean linkedToOtherSubjects() {
 		return !glueJoints.isEmpty() || !combinations.isEmpty();
+	}
+
+	/**
+	 * A signature over exactly the fields a {@link SurgicalConnectionGraph} is derived from, so a built
+	 * graph can be reused until one of them moves. It is recomputed from live state on every check
+	 * rather than maintained by the mutators, which is what keeps a missed mutator from producing stale
+	 * connectivity.
+	 *
+	 * <p>{@code seams} is covered by its size alone: it is only ever written by
+	 * {@link #initializeOrMatchTopology}, which writes it together with a {@code cubeCount} that was
+	 * previously zero.</p>
+	 */
+	long connectionSignature() {
+		long signature = cubeCount;
+		signature = signature * 31L + presentCubes.hashCode();
+		signature = signature * 31L + cutSeams.hashCode();
+		signature = signature * 31L + seams.size();
+		signature = signature * 31L + glueJoints.hashCode();
+		// SurgicalCombination hashes on id alone, so membership has to be folded in separately.
+		signature = signature * 31L + combinations.size();
+		for (SurgicalCombination combination : combinations) {
+			signature = signature * 31L + combination.id().hashCode();
+			signature = signature * 31L + combination.members().hashCode();
+		}
+		return signature;
 	}
 
 	void rebase(BlockPos previousController, BlockPos nextController) {
@@ -415,7 +440,7 @@ public final class SurgicalSubject {
 	}
 
 	void removeGlueJoints(java.util.Set<SurgicalGlueJoint> removed) {
-		if (!removed.isEmpty())
+		if (affects(glueJoints, removed))
 			glueJoints = glueJoints.stream().filter(joint -> !removed.contains(joint)).toList();
 	}
 
@@ -432,7 +457,7 @@ public final class SurgicalSubject {
 	}
 
 	void removeCombinations(java.util.Set<SurgicalCombination> removed) {
-		if (!removed.isEmpty())
+		if (affects(combinations, removed))
 			combinations = combinations.stream().filter(combination -> !removed.contains(combination)).toList();
 	}
 
@@ -449,8 +474,24 @@ public final class SurgicalSubject {
 	}
 
 	void removeLimbJoints(java.util.Set<SurgicalLimbJoint> removed) {
-		if (!removed.isEmpty())
+		if (affects(limbJoints, removed))
 			limbJoints = limbJoints.stream().filter(joint -> !removed.contains(joint)).toList();
+	}
+
+	/**
+	 * Whether {@code removed} holds anything {@code held} actually contains.
+	 *
+	 * <p>Packing walks every subject on the table and hands each one the group's joint, combination and
+	 * limb sets. Without this guard each of those calls rebuilt the list through a stream even for
+	 * subjects that had nothing in common with the packed group.</p>
+	 */
+	private static <T> boolean affects(List<T> held, java.util.Set<T> removed) {
+		if (removed.isEmpty() || held.isEmpty())
+			return false;
+		for (T entry : held)
+			if (removed.contains(entry))
+				return true;
+		return false;
 	}
 
 	void replaceLimbJoints(List<SurgicalLimbJoint> replacement) {

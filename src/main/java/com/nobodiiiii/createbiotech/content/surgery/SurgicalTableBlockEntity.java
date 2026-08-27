@@ -66,6 +66,26 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	private AABB clientPlaneBounds;
 	private boolean clientProjectsSourceGeometry;
 	private long clientPlaneCacheUntil = Long.MIN_VALUE;
+	private int clientPlaneLayout = -1;
+	@Nullable
+	private SurgicalConnectionGraph<UUID> cachedConnectionGraph;
+	private long cachedConnectionSignature = Long.MIN_VALUE;
+	private boolean cachedConnectionValid;
+	@Nullable
+	private SurgicalTablePlane.Plane serverPlane;
+	private long serverPlaneTick = Long.MIN_VALUE;
+	private int serverPlaneLayout = -1;
+	private long consolidatedPlaneTick = Long.MIN_VALUE;
+	private int consolidatedPlaneTiles = -1;
+	@Nullable
+	private SurgicalConnectionGraph<UUID> variantConnectionGraph;
+	private long variantConnectionSignature = Long.MIN_VALUE;
+	private Set<SurgicalGlueJoint> variantConnectionExcluded = Set.of();
+	private Map<UUID, BitSet> variantConnectionOverrides = Map.of();
+	private boolean variantConnectionCombinations;
+	private boolean variantConnectionValid;
+	/** Bumped by {@link #invalidateTableLayout()}; see {@link #getServerPlane()}. */
+	private static int tableLayoutRevision;
 
 	public SurgicalTableBlockEntity(BlockPos pos, BlockState state) {
 		super(CBBlockEntityTypes.SURGICAL_TABLE.get(), pos, state);
@@ -79,7 +99,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		super.lazyTick();
 		if (level == null || level.isClientSide || isRemoved() || !hasSubjects())
 			return;
-		SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, worldPosition);
+		SurgicalTablePlane.Plane plane = getServerPlane();
 		if (plane.valid())
 			consolidatePlane(level, plane);
 	}
@@ -106,11 +126,12 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (level == null)
 			return null;
 		if (!level.isClientSide)
-			return SurgicalTablePlane.scan(level, worldPosition);
+			return getServerPlane();
 		long now = level.getGameTime();
-		if (clientPlane == null || now >= clientPlaneCacheUntil) {
+		if (clientPlane == null || now >= clientPlaneCacheUntil || clientPlaneLayout != tableLayoutRevision) {
 			clientPlane = SurgicalTablePlane.scan(level, worldPosition);
 			clientPlaneCacheUntil = now + CLIENT_PLANE_CACHE_TICKS;
+			clientPlaneLayout = tableLayoutRevision;
 			clientPlaneBounds = new AABB(worldPosition);
 			clientProjectsSourceGeometry = false;
 			for (BlockPos tablePos : clientPlane.tiles()) {
@@ -126,6 +147,30 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	public boolean clientProjectsSourceGeometry() {
 		getClientPlane();
 		return clientProjectsSourceGeometry;
+	}
+
+	/**
+	 * The server asks for the same plane repeatedly inside a single edit: once in the packet handler
+	 * and again from every validator that needs the occupied footprints. Each scan is a BFS over the
+	 * whole connected surface, so on a wide table that dominated the edit. A cached plane is reused
+	 * within one tick, and only while no surgical table block has been added or removed since.
+	 */
+	private SurgicalTablePlane.Plane getServerPlane() {
+		long now = level.getGameTime();
+		if (serverPlane == null || serverPlaneTick != now || serverPlaneLayout != tableLayoutRevision) {
+			serverPlane = SurgicalTablePlane.scan(level, worldPosition);
+			serverPlaneTick = now;
+			serverPlaneLayout = tableLayoutRevision;
+		}
+		return serverPlane;
+	}
+
+	/**
+	 * Invalidates every cached plane. Called when a surgical table block is placed or broken, which is
+	 * the only thing that can reshape a connected surface.
+	 */
+	public static void invalidateTableLayout() {
+		tableLayoutRevision++;
 	}
 
 	public int clientDataRevision() {
@@ -224,6 +269,10 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		List<SurgicalLimbJoint> valid = new ArrayList<>();
 		Set<SurgicalGlueJoint.Endpoint> children = new HashSet<>();
 		Map<UUID, Map<SurgicalLimbType, Integer>> counts = new HashMap<>();
+		// Limbs of one body all resolve to the same connection component, so the groups found so far are
+		// consulted before falling back to a traversal. This method runs on every edit and again on
+		// every sync, once per limb joint on the whole table.
+		List<ComponentGroup> knownBodies = new ArrayList<>();
 		for (SurgicalLimbJoint joint : seen) {
 			SurgicalSubject child = getSubjectByPersistentId(joint.child().subjectKey());
 			SurgicalSubject parent = getSubjectByPersistentId(joint.parent().subjectKey());
@@ -231,7 +280,16 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				|| !parent.validPresentCube(joint.parent().cubeId())
 				|| !children.add(joint.child()))
 				continue;
-			ComponentGroup body = connectedGroup(parent, joint.parent().cubeId());
+			ComponentGroup body = null;
+			for (ComponentGroup known : knownBodies)
+				if (known.contains(joint.parent())) {
+					body = known;
+					break;
+				}
+			if (body == null) {
+				body = connectedGroup(parent, joint.parent().cubeId());
+				knownBodies.add(body);
+			}
 			if (!body.contains(joint.child()))
 				continue;
 			UUID bodyKey = bodyKey(body);
@@ -1533,7 +1591,19 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 
 	@Nullable
 	private SurgicalConnectionGraph<UUID> connectionGraph(@Nullable SurgicalGlueJoint excluded) {
-		return connectionGraph(excluded == null ? Set.of() : Set.of(excluded), Map.of());
+		if (excluded != null)
+			return connectionGraph(Set.of(excluded), Map.of());
+		// The unexcluded graph is what connectedGroup, connectedSubjectIds and directConnections all
+		// ask for, several times per edit and — through the cut and selection previews — several times
+		// per frame. Rebuilding it each time is what made unifying glue and native seams expensive, so
+		// it is memoized against a signature of everything it is derived from.
+		long signature = connectionSignature();
+		if (cachedConnectionValid && cachedConnectionSignature == signature)
+			return cachedConnectionGraph;
+		cachedConnectionGraph = buildConnectionGraph(Set.of(), Map.of(), true);
+		cachedConnectionSignature = signature;
+		cachedConnectionValid = true;
+		return cachedConnectionGraph;
 	}
 
 	@Nullable
@@ -1542,8 +1612,45 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		return connectionGraph(excluded, cutOverrides, true);
 	}
 
+	/**
+	 * A one-entry memo for the parameterized graphs. The cut and glue paths ask for the same excluded
+	 * joints and cut overrides two to four times inside a single edit — {@code cutGlueJoint} alone runs
+	 * {@code glueCutState} twice, each building two graphs — and the client previews repeat the same
+	 * request every frame while a cut is held.
+	 */
 	@Nullable
 	private SurgicalConnectionGraph<UUID> connectionGraph(Set<SurgicalGlueJoint> excluded,
+		Map<UUID, BitSet> cutOverrides, boolean includeCombinations) {
+		long signature = connectionSignature();
+		if (variantConnectionValid && variantConnectionSignature == signature
+			&& variantConnectionCombinations == includeCombinations
+			&& variantConnectionExcluded.equals(excluded)
+			&& variantConnectionOverrides.equals(cutOverrides))
+			return variantConnectionGraph;
+		variantConnectionGraph = buildConnectionGraph(excluded, cutOverrides, includeCombinations);
+		variantConnectionSignature = signature;
+		variantConnectionExcluded = Set.copyOf(excluded);
+		// The override BitSets belong to the caller, so they are copied rather than aliased.
+		Map<UUID, BitSet> overrides = new HashMap<>();
+		cutOverrides.forEach((key, cuts) -> overrides.put(key, (BitSet) cuts.clone()));
+		variantConnectionOverrides = overrides;
+		variantConnectionCombinations = includeCombinations;
+		variantConnectionValid = true;
+		return variantConnectionGraph;
+	}
+
+	/** @see SurgicalSubject#connectionSignature() */
+	private long connectionSignature() {
+		long signature = subjects.size();
+		for (SurgicalSubject subject : subjects) {
+			signature = signature * 31L + subject.persistentId().hashCode();
+			signature = signature * 31L + subject.connectionSignature();
+		}
+		return signature;
+	}
+
+	@Nullable
+	private SurgicalConnectionGraph<UUID> buildConnectionGraph(Set<SurgicalGlueJoint> excluded,
 		Map<UUID, BitSet> cutOverrides, boolean includeCombinations) {
 		List<SurgicalConnectionGraph.Body<UUID>> bodies = new ArrayList<>();
 		for (SurgicalSubject subject : subjects)
@@ -1632,9 +1739,19 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (graph == null)
 			return Set.of(subjectId);
 		Set<UUID> connected = new HashSet<>();
+		// One traversal per component rather than one per cube: every further cube of a component
+		// already found would only retrace the same BFS and rebuild the same member map.
+		BitSet visited = new BitSet();
 		for (int cube = start.presentCubes.nextSetBit(0); cube >= 0;
-			cube = start.presentCubes.nextSetBit(cube + 1))
-			connected.addAll(graph.componentContaining(start.persistentId(), cube).members().keySet());
+			cube = start.presentCubes.nextSetBit(cube + 1)) {
+			if (visited.get(cube))
+				continue;
+			SurgicalConnectionGraph.Component<UUID> component =
+				graph.componentContaining(start.persistentId(), cube);
+			visited.set(cube);
+			visited.or(component.cubes(start.persistentId()));
+			connected.addAll(component.bodies());
+		}
 		Set<Integer> ids = new HashSet<>();
 		for (SurgicalSubject subject : subjects)
 			if (connected.contains(subject.persistentId()))
@@ -1830,6 +1947,15 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		if (level.isClientSide || !plane.valid() || plane.source() == null
 			|| !(level.getBlockEntity(plane.source()) instanceof SurgicalTableBlockEntity controller))
 			return;
+		// controller() runs this on every plane lookup, and one edit looks the plane up two or three
+		// times; each pass is a block-entity fetch for every tile of the surface. Subjects can only
+		// appear on a non-source tile when the plane's block layout changes, so a result from this same
+		// tick still holds. The tile count is compared as well so a mid-tick layout change is not missed.
+		long now = level.getGameTime();
+		if (controller.consolidatedPlaneTick == now
+			&& controller.consolidatedPlaneTiles == plane.tiles().size()
+			&& controller.serverPlaneLayout == tableLayoutRevision)
+			return;
 		boolean changed = false;
 		for (BlockPos tile : plane.tiles()) {
 			if (tile.equals(plane.source())
@@ -1840,6 +1966,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			other.setChangedAndSync();
 			changed = true;
 		}
+		controller.consolidatedPlaneTick = now;
+		controller.consolidatedPlaneTiles = plane.tiles().size();
 		if (changed)
 			controller.setChangedAndSync();
 	}
@@ -1962,8 +2090,6 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		}
 		clearSubjects();
 		addSubjects(loaded);
-		normalizeCombinations();
-		normalizeLimbJoints();
 		nextSubjectId = Math.max(tag.getInt(NEXT_SUBJECT_ID_TAG),
 			ids.stream().mapToInt(Integer::intValue).max().orElse(-1) + 1);
 		if (clientPacket) {
@@ -1972,19 +2098,60 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 			clientPlaneCacheUntil = Long.MIN_VALUE;
 			boolean structureChanged = subjects.size() != previousSubjects.size();
 			Set<UUID> changed = adoptUnchangedSubjects(previousSubjects);
+			// Normalizing before the adopt would rewrite the freshly decoded subjects that the adopt is
+			// about to throw away, and both normalizers walk every subject on the table.
 			if (structureChanged || !changed.isEmpty()) {
-				// Only a real change may drop the measured render bounds; doing it unconditionally
-				// would disable frustum culling for the whole table on every idempotent packet.
+				normalizeCombinations();
+				normalizeLimbJoints();
+				// Dropping the measured bounds is safe now that each geometry re-reports its cached
+				// bounds without a transform pass; a subject leaving or arriving must not force every
+				// other subject on the table to rebuild.
 				clientRenderBounds = null;
 				clientDataRevision++;
+				Set<UUID> stale = groundingDependents(changed);
 				for (SurgicalSubject subject : subjects)
-					if (changed.contains(subject.persistentId()) || subject.linkedToOtherSubjects())
+					if (stale.contains(subject.persistentId()))
 						subject.setClientRenderRevision(clientDataRevision);
 			}
 			if (previouslyHadSubjects != hasSubjects() && level != null)
 				level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 16);
+		} else {
+			normalizeCombinations();
+			normalizeLimbJoints();
 		}
 		SurgicalProfiler.end(clientPacket ? "read(sync)" : "read(load)", started);
+	}
+
+	/**
+	 * Every subject that has to re-run its client geometry because one of {@code changed} moved.
+	 *
+	 * <p>A subject is grounded together with the ones it shares a connection component with, so a
+	 * change only propagates along glue joints and combinations. Treating every linked subject on the
+	 * table as stale — which is what a plain {@code linkedToOtherSubjects()} test does — puts a
+	 * full-table grounding pass on each of them, so a glue-heavy table paid for all of them on every
+	 * packet no matter which one was actually edited.</p>
+	 */
+	private Set<UUID> groundingDependents(Set<UUID> changed) {
+		SurgicalConnectionGraph<UUID> graph = connectionGraph(null);
+		if (graph == null)
+			return changed;
+		Set<UUID> stale = new HashSet<>(changed);
+		for (SurgicalSubject subject : subjects) {
+			if (!changed.contains(subject.persistentId()) || !subject.linkedToOtherSubjects())
+				continue;
+			BitSet visited = new BitSet();
+			for (int cube = subject.presentCubes.nextSetBit(0); cube >= 0;
+				cube = subject.presentCubes.nextSetBit(cube + 1)) {
+				if (visited.get(cube))
+					continue;
+				SurgicalConnectionGraph.Component<UUID> component =
+					graph.componentContaining(subject.persistentId(), cube);
+				visited.set(cube);
+				visited.or(component.cubes(subject.persistentId()));
+				stale.addAll(component.bodies());
+			}
+		}
+		return stale;
 	}
 
 	/**
@@ -2021,7 +2188,7 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 				if (clientPlaneBounds != null)
 					bounds = bounds.minmax(clientPlaneBounds);
 			} else {
-				SurgicalTablePlane.Plane plane = SurgicalTablePlane.scan(level, worldPosition);
+				SurgicalTablePlane.Plane plane = getServerPlane();
 				for (BlockPos tablePos : plane.tiles())
 					bounds = bounds.minmax(new AABB(tablePos));
 			}

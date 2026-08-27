@@ -88,9 +88,19 @@ public class SurgicalTableBlock extends Block
 
 	@Override
 	public void onRemove(BlockState state, Level level, BlockPos pos, BlockState newState, boolean isMoving) {
-		if (!state.is(newState.getBlock()) && level.getBlockEntity(pos) instanceof SurgicalTableBlockEntity table)
-			SurgicalTableBlockEntity.transferBeforeRemoval(level, pos, table);
+		if (!state.is(newState.getBlock())) {
+			SurgicalTableBlockEntity.invalidateTableLayout();
+			if (level.getBlockEntity(pos) instanceof SurgicalTableBlockEntity table)
+				SurgicalTableBlockEntity.transferBeforeRemoval(level, pos, table);
+		}
 		IBE.onRemove(state, level, pos, newState);
+	}
+
+	@Override
+	public void onPlace(BlockState state, Level level, BlockPos pos, BlockState oldState, boolean isMoving) {
+		if (!state.is(oldState.getBlock()))
+			SurgicalTableBlockEntity.invalidateTableLayout();
+		super.onPlace(state, level, pos, oldState, isMoving);
 	}
 
 	@Override
