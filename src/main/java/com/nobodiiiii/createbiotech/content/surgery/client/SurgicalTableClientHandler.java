@@ -98,6 +98,12 @@ public final class SurgicalTableClientHandler {
 	private static final double GLUE_POINT_CROSS_HALF_LENGTH_PIXELS = 0.3d;
 	private static final double GLUE_POINT_PIXEL_EPSILON = 1.0e-4d;
 	private static final int ASYNC_TOPOLOGY_CUBE_THRESHOLD = 32;
+	/**
+	 * How long a captured geometry survives after the last frame that used it. Rebuilding one costs a
+	 * full model capture plus a contact-topology pass, so a table must not have to pay that again just
+	 * because the player glanced away for a moment.
+	 */
+	private static final int GEOMETRY_RETENTION_TICKS = 200;
 	private static final int VISUAL_COMMIT_TIMEOUT_TICKS = 40;
 	private static final InteractionHand[] HANDS = { InteractionHand.MAIN_HAND, InteractionHand.OFF_HAND };
 	private static final OutlineState SEAM_OUTLINE = new OutlineState();
@@ -302,11 +308,22 @@ public final class SurgicalTableClientHandler {
 
 		long now = level.getGameTime();
 		updatePendingVisualCommit(level);
-		int geometryCount = TABLES.size();
-		TABLES.entrySet().removeIf(entry -> now - entry.getValue().lastSeenTick > 5
-			|| !(level.getBlockEntity(entry.getKey().tablePos) instanceof SurgicalTableBlockEntity table)
-			|| !table.hasSubject(entry.getKey().subjectId));
-		if (TABLES.size() != geometryCount)
+		boolean strandedGeometry = false;
+		for (java.util.Iterator<Map.Entry<SubjectKey, TableGeometry>> iterator = TABLES.entrySet().iterator();
+			iterator.hasNext();) {
+			Map.Entry<SubjectKey, TableGeometry> entry = iterator.next();
+			boolean expired = now - entry.getValue().lastSeenTick > GEOMETRY_RETENTION_TICKS;
+			if (!expired
+				&& level.getBlockEntity(entry.getKey().tablePos) instanceof SurgicalTableBlockEntity table
+				&& table.hasSubject(entry.getKey().subjectId))
+				continue;
+			iterator.remove();
+			// Only a vanished table or subject can strand a cached selection or outline. A geometry that
+			// merely aged out of view was not feeding either of them, so it must not invalidate the
+			// caches belonging to tables the player is still looking at.
+			strandedGeometry |= !expired;
+		}
+		if (strandedGeometry)
 			geometryGeneration++;
 		if (pendingCut != null && !TABLES.containsKey(new SubjectKey(pendingCut.tablePos, pendingCut.subjectId)))
 			abortPendingCut();
@@ -1758,10 +1775,16 @@ public final class SurgicalTableClientHandler {
 		return false;
 	}
 
+	/**
+	 * Grounding needs every connected body in its rotated-but-unoffset form. That is exactly what each
+	 * geometry already caches as {@code layoutCubes}, including the caller's own — {@code applyTransforms}
+	 * rebuilds it from the same rotations immediately before calling here — so the cubes are reused
+	 * rather than re-transformed once per body per subject.
+	 */
 	@Nullable
 	private static Map<Integer, Vec3> groundConnectedComponents(SurgicalTableBlockEntity table,
 		SurgicalSubject currentSubject, TableGeometry currentGeometry, Map<Integer, Vec3> currentOffsets,
-		Map<Integer, SurgicalCubeRotation> currentRotations, BitSet currentCutSeams,
+		BitSet currentCutSeams,
 		@Nullable SurgicalGlueJoint excludedJoint, double surfaceY) {
 		List<SurgicalClientTopology.GroundingBody<UUID>> bodies = new ArrayList<>();
 		Set<SurgicalGlueJoint> joints = new java.util.HashSet<>();
@@ -1782,12 +1805,10 @@ public final class SurgicalTableClientHandler {
 				continue;
 			}
 			Map<Integer, Vec3> offsets = currentSubjectEntry ? currentOffsets : geometry.serverOffsets;
-			Map<Integer, SurgicalCubeRotation> rotations = currentSubjectEntry ? currentRotations
-				: geometry.serverRotations;
 			BitSet cutSeams = currentSubjectEntry ? currentCutSeams : geometry.cutSeams;
 			bodies.add(new SurgicalClientTopology.GroundingBody<>(subject.persistentId(),
 				geometry.observedCubeCount, geometry.presentCubes, geometry.seams, cutSeams,
-				transformCubes(geometry.baseCubes, rotations, Map.of()), offsets));
+				geometry.layoutCubes, offsets));
 		}
 		List<SurgicalClientTopology.GroundingLink<UUID>> links = new ArrayList<>(joints.stream()
 			.map(joint -> new SurgicalClientTopology.GroundingLink<>(joint.first().subjectKey(),
@@ -3561,7 +3582,7 @@ public final class SurgicalTableClientHandler {
 			SurgicalSubject subject = table.getSubject(subjectId);
 			layoutCubes = SurgicalTableClientHandler.transformCubes(baseCubes, appliedRotations, Map.of());
 			Map<Integer, Vec3> grounded = subject == null ? null
-				: groundConnectedComponents(table, subject, this, appliedOffsets, appliedRotations,
+				: groundConnectedComponents(table, subject, this, appliedOffsets,
 					appliedCutSeams, excludedJoint, surfaceY);
 			groundingPending = subject != null && grounded == null;
 			offsets = grounded == null

@@ -1928,6 +1928,8 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 	@Override
 	protected void read(CompoundTag tag, HolderLookup.Provider registries, boolean clientPacket) {
 		boolean previouslyHadSubjects = hasSubjects();
+		Map<UUID, SurgicalSubject> previousSubjects = clientPacket
+			? new HashMap<>(subjectsByPersistentId) : Map.of();
 		super.read(tag, registries, clientPacket);
 		List<SurgicalSubject> loaded = new ArrayList<>();
 		Set<Integer> ids = new HashSet<>();
@@ -1962,16 +1964,48 @@ public class SurgicalTableBlockEntity extends SmartBlockEntity {
 		nextSubjectId = Math.max(tag.getInt(NEXT_SUBJECT_ID_TAG),
 			ids.stream().mapToInt(Integer::intValue).max().orElse(-1) + 1);
 		if (clientPacket) {
-			clientRenderBounds = null;
 			clientPlane = null;
 			clientPlaneBounds = null;
 			clientPlaneCacheUntil = Long.MIN_VALUE;
-			clientDataRevision++;
-			for (SurgicalSubject subject : subjects)
-				subject.setClientRenderRevision(clientDataRevision);
+			boolean structureChanged = subjects.size() != previousSubjects.size();
+			Set<UUID> changed = adoptUnchangedSubjects(previousSubjects);
+			if (structureChanged || !changed.isEmpty()) {
+				// Only a real change may drop the measured render bounds; doing it unconditionally
+				// would disable frustum culling for the whole table on every idempotent packet.
+				clientRenderBounds = null;
+				clientDataRevision++;
+				for (SurgicalSubject subject : subjects)
+					if (changed.contains(subject.persistentId()) || subject.linkedToOtherSubjects())
+						subject.setClientRenderRevision(clientDataRevision);
+			}
 			if (previouslyHadSubjects != hasSubjects() && level != null)
 				level.sendBlockUpdated(worldPosition, getBlockState(), getBlockState(), 16);
 		}
+	}
+
+	/**
+	 * Every sync packet re-decodes every subject on the table, even the ones the edit never touched.
+	 * Handing those back the instance the client already had keeps the model-preview and captured-
+	 * geometry caches — both keyed on subject identity — warm, so only the subjects that really moved
+	 * pay for a rebuild.
+	 *
+	 * @return the persistent ids of the subjects whose content differs from what the client already had
+	 */
+	private Set<UUID> adoptUnchangedSubjects(Map<UUID, SurgicalSubject> previous) {
+		Set<UUID> changed = new HashSet<>();
+		List<SurgicalSubject> reconciled = new ArrayList<>(subjects.size());
+		for (SurgicalSubject subject : subjects) {
+			SurgicalSubject retained = previous.get(subject.persistentId());
+			if (retained != null && retained.contentEquals(subject)) {
+				reconciled.add(retained);
+				continue;
+			}
+			changed.add(subject.persistentId());
+			reconciled.add(subject);
+		}
+		clearSubjects();
+		addSubjects(reconciled);
+		return changed;
 	}
 
 	@Override

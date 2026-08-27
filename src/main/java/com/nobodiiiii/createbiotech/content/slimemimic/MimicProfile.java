@@ -64,6 +64,11 @@ public final class MimicProfile {
 	private final CompoundTag previewData;
 	@Nullable
 	private final Boolean baby;
+	/**
+	 * Profiles are immutable and are used as render-cache keys several times per subject per frame,
+	 * so the recursive tag hash is paid once here instead of on every lookup.
+	 */
+	private final int hash;
 
 	private MimicProfile(ResourceLocation entityTypeId, CompoundTag stableData, CompoundTag previewData,
 		@Nullable Boolean baby) {
@@ -71,6 +76,7 @@ public final class MimicProfile {
 		this.stableData = stableData.copy();
 		this.previewData = previewData.copy();
 		this.baby = baby;
+		this.hash = Objects.hash(entityTypeId, this.stableData, this.previewData, baby);
 	}
 
 	@Nullable
@@ -142,7 +148,8 @@ public final class MimicProfile {
 			return true;
 		if (!(other instanceof MimicProfile profile))
 			return false;
-		return entityTypeId.equals(profile.entityTypeId)
+		return hash == profile.hash
+			&& entityTypeId.equals(profile.entityTypeId)
 			&& stableData.equals(profile.stableData)
 			&& previewData.equals(profile.previewData)
 			&& Objects.equals(baby, profile.baby);
@@ -150,7 +157,7 @@ public final class MimicProfile {
 
 	@Override
 	public int hashCode() {
-		return Objects.hash(entityTypeId, stableData, previewData, baby);
+		return hash;
 	}
 
 	/**

@@ -255,6 +255,62 @@ public final class SurgicalSubject {
 		clientRenderRevision = revision;
 	}
 
+	/**
+	 * Compares everything a client renderer can observe. A sync packet re-decodes every subject on the
+	 * table, including the ones the edit never touched, so this is what lets an untouched subject keep
+	 * its previous instance instead of forcing a full geometry rebuild. Cheap scalar fields are tested
+	 * before the seam list and the profile tags, which are by far the largest.
+	 */
+	boolean contentEquals(@Nullable SurgicalSubject other) {
+		if (this == other)
+			return true;
+		return other != null
+			&& id == other.id
+			&& cubeCount == other.cubeCount
+			&& placementFacing == other.placementFacing
+			&& Double.compare(originOffsetX, other.originOffsetX) == 0
+			&& Double.compare(originOffsetZ, other.originOffsetZ) == 0
+			&& persistentId.equals(other.persistentId)
+			&& layPose.equals(other.layPose)
+			&& presentCubes.equals(other.presentCubes)
+			&& cutSeams.equals(other.cutSeams)
+			&& cutOrder.equals(other.cutOrder)
+			&& componentOffsets.equals(other.componentOffsets)
+			&& componentRotations.equals(other.componentRotations)
+			&& occupiedFootprints.equals(other.occupiedFootprints)
+			&& glueJoints.equals(other.glueJoints)
+			&& limbJoints.equals(other.limbJoints)
+			&& sameCombinations(combinations, other.combinations)
+			&& seams.equals(other.seams)
+			&& profile.equals(other.profile);
+	}
+
+	/**
+	 * {@link SurgicalCombination#equals} matches on id alone, but a combination that kept its id while
+	 * gaining or losing members is a visible change.
+	 */
+	private static boolean sameCombinations(List<SurgicalCombination> first,
+		List<SurgicalCombination> second) {
+		if (first.size() != second.size())
+			return false;
+		for (int index = 0; index < first.size(); index++) {
+			SurgicalCombination left = first.get(index);
+			SurgicalCombination right = second.get(index);
+			if (!left.id().equals(right.id()) || !left.members().equals(right.members()))
+				return false;
+		}
+		return true;
+	}
+
+	/**
+	 * Whether this subject can share a grounding component with another one. Grounding links are built
+	 * from glue joints and combinations only, so a subject with neither is grounded purely from its own
+	 * data and stays valid while its neighbours change.
+	 */
+	boolean linkedToOtherSubjects() {
+		return !glueJoints.isEmpty() || !combinations.isEmpty();
+	}
+
 	void rebase(BlockPos previousController, BlockPos nextController) {
 		originOffsetX += previousController.getX() - nextController.getX();
 		originOffsetZ += previousController.getZ() - nextController.getZ();
