@@ -1,0 +1,62 @@
+{
+  "multipart": [
+    {
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_duplex_hub"
+      }
+    },
+    {
+      "when": {
+        "north": "true"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_duplex_arm"
+      }
+    },
+    {
+      "when": {
+        "east": "true"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_duplex_arm",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "south": "true"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_duplex_arm",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "west": "true"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_duplex_arm",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "up": "true"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_duplex_arm",
+        "x": 270
+      }
+    },
+    {
+      "when": {
+        "down": "true"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_duplex_arm",
+        "x": 90
+      }
+    }
+  ]
+}

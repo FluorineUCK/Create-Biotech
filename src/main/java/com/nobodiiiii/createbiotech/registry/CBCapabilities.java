@@ -1,5 +1,9 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import com.nobodiiiii.createbiotech.content.biocomputing.block.DataPort;
+import com.nobodiiiii.createbiotech.content.biocomputing.computer.ComputerBehaviour;
+import com.nobodiiiii.createbiotech.content.biocomputing.network.CommunicationEndpoint;
+
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberBlockEntity;
 import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPort;
 import com.nobodiiiii.createbiotech.content.beltsurface.StandardItemBeltPortResolver;
@@ -14,6 +18,27 @@ public final class CBCapabilities {
 	private CBCapabilities() {}
 
 	public static void register(RegisterCapabilitiesEvent event) {
+		if (net.neoforged.fml.ModList.get().isLoaded("computercraft"))
+			com.nobodiiiii.createbiotech.content.biocomputing.device.terminal.TerminalCcPeripheral.register(event);
+		event.registerBlockEntity(CommunicationEndpoint.CAPABILITY,
+			CBBlockEntityTypes.PATTERN_STORAGE_CORE.get(), (be, side) -> {
+				var state = be.getBlockState();
+				if (!(state.getBlock() instanceof DataPort port) || side == null || !port.acceptsCable(state, side)) return null;
+				return be.getBehaviour(com.nobodiiiii.createbiotech.content.biocomputing.library.LibraryServiceBehaviour.TYPE);
+			});
+		event.registerBlockEntity(CommunicationEndpoint.CAPABILITY,
+			CBBlockEntityTypes.CLUSTER_CONTROLLER.get(), (be, side) -> {
+				var state = be.getBlockState();
+				return side != null && state.getBlock() instanceof DataPort port && port.acceptsCable(state, side) ? be : null;
+			});
+		// Transitional physical host only. New Computers/cluster gateways register the same independent capability.
+		event.registerBlockEntity(CommunicationEndpoint.CAPABILITY,
+			CBBlockEntityTypes.COMPUTER.get(), (be, side) -> {
+				var state = be.getBlockState();
+				if (!(state.getBlock() instanceof DataPort port)
+					|| side != null && !port.acceptsCable(state, side)) return null;
+				return be.getBehaviour(ComputerBehaviour.TYPE);
+			});
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.BIO_PACKAGER.get(),
 			(be, side) -> be.getItemCapability(side));
 		event.registerBlockEntity(Capabilities.ItemHandler.BLOCK, CBBlockEntityTypes.SHULKER_PACKAGER.get(),

@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/io_faces/music_output/east",
+    "east": "create_biotech:block/biocomputing/io_faces/music_output/east",
+    "north": "create_biotech:block/biocomputing/io_faces/music_output/north",
+    "west": "create_biotech:block/biocomputing/io_faces/music_output/west",
+    "south": "create_biotech:block/biocomputing/io_faces/music_output/south",
+    "up": "create_biotech:block/biocomputing/io_faces/music_output/up",
+    "down": "create_biotech:block/biocomputing/io_faces/music_output/down"
+  }
+}

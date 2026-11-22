@@ -1,0 +1,7 @@
+{
+  "parent": "create_biotech:block/biocomputing/data_cable_hub",
+  "textures": {
+    "all": "minecraft:block/polished_blackstone",
+    "particle": "minecraft:block/polished_blackstone"
+  }
+}

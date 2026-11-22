@@ -6,6 +6,8 @@ A Minecraft 1.21.1 NeoForge addon based on [Create](https://www.curseforge.com/m
 
 This README is mainly for contributors and AI coding agents. If you want a player-facing overview first, read [docs/INTRODUCTION.md](docs/INTRODUCTION.md).
 
+For Biocomputing development, see the [module guide and architecture proposal (中文)](docs/biocomputing/README.md).
+
 ---
 
 ## Build environment

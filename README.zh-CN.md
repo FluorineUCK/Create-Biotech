@@ -6,6 +6,8 @@
 
 本 README 主要面向贡献者和 AI 编码代理。想先了解玩法的话，请看 [docs/INTRODUCTION.zh-CN.md](docs/INTRODUCTION.zh-CN.md)。
 
+维护生物计算模块，请从[文档目录与架构提案](docs/biocomputing/README.md)进入。
+
 ---
 
 ## 构建环境

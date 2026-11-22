@@ -1,0 +1,7 @@
+{
+  "parent": "create_biotech:block/biocomputing/data_cable_hub",
+  "textures": {
+    "all": "minecraft:block/oxidized_cut_copper",
+    "particle": "minecraft:block/oxidized_cut_copper"
+  }
+}

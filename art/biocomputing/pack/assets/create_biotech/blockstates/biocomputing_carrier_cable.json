@@ -1,0 +1,115 @@
+{
+  "multipart": [
+    {
+      "apply": {
+        "model": "create_biotech:block/biocomputing/data_cable_hub"
+      }
+    },
+    {
+      "when": {
+        "input": "north"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_in"
+      }
+    },
+    {
+      "when": {
+        "input": "east"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_in",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "input": "south"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_in",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "input": "west"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_in",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "input": "up"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_in",
+        "x": 270
+      }
+    },
+    {
+      "when": {
+        "input": "down"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_in",
+        "x": 90
+      }
+    },
+    {
+      "when": {
+        "facing": "north"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_out"
+      }
+    },
+    {
+      "when": {
+        "facing": "east"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_out",
+        "y": 90
+      }
+    },
+    {
+      "when": {
+        "facing": "south"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_out",
+        "y": 180
+      }
+    },
+    {
+      "when": {
+        "facing": "west"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_out",
+        "y": 270
+      }
+    },
+    {
+      "when": {
+        "facing": "up"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_out",
+        "x": 270
+      }
+    },
+    {
+      "when": {
+        "facing": "down"
+      },
+      "apply": {
+        "model": "create_biotech:block/biocomputing/carrier_arm_out",
+        "x": 90
+      }
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+Create Biotech uses the unmodified JavaZoom JLayer 1.0.1 MP3 decoder.
+JLayer is distributed under the GNU Library General Public License version 2
+or (at your option) any later version. See jlayer-LICENSE.txt.
+
+The build includes the upstream corresponding source archive, jlayer-1.0.1-sources.jar,
+alongside this notice. The unmodified binary is a separate NeoForge jar-in-jar entry,
+not merged into Create Biotech classes.
+
+Upstream Maven publication: https://central.sonatype.com/artifact/javazoom/jlayer/1.0.1

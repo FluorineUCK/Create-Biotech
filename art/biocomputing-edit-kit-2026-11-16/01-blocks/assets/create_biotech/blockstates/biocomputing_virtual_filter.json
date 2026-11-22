@@ -1,0 +1,27 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_virtual_filter/create_biotech/block/biocomputing/virtual_filter"
+    },
+    "facing=east": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_virtual_filter/create_biotech/block/biocomputing/virtual_filter",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_virtual_filter/create_biotech/block/biocomputing/virtual_filter",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_virtual_filter/create_biotech/block/biocomputing/virtual_filter",
+      "y": 270
+    },
+    "facing=up": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_virtual_filter/create_biotech/block/biocomputing/virtual_filter",
+      "x": 270
+    },
+    "facing=down": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_virtual_filter/create_biotech/block/biocomputing/virtual_filter",
+      "x": 90
+    }
+  }
+}

@@ -1,0 +1,46 @@
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    def book = project.providers.gradleProperty('browserBookBench').isPresent()
+    def stream = book || project.providers.gradleProperty('browserStreamBench').isPresent()
+    def verification = project.sourceSets.create('browserShipmentBench') {
+        java.srcDir 'src/test/java'
+        def fixtures = ['AuthoredLibraryWorldFixture', 'BiocomputingRecipeBrowserGameTests']
+        fixtures += stream ? ['RecipeStreamPlayerBench'] : ['BiocomputingStockApplicationGameTests', 'RecipeBrowserShipmentBench']
+        if(book) fixtures += ['RecipeBookPlayerBench']
+        if(stream) { resources.srcDir 'src/test/resources'; resources.include 'biocomputing/jei-iron-pickaxe-v3.json' }
+        fixtures.each {
+            java.include "com/nobodiiiii/createbiotech/content/biocomputing/gametest/${it}.java"
+        }
+        compileClasspath += project.sourceSets.main.output
+        runtimeClasspath += project.sourceSets.main.output
+    }
+    if (book) project.tasks.named(verification.processResourcesTaskName) {
+        from(project.file('src/main/resources/data/create_biotech_task4/structure/empty.nbt')) {
+            into 'data/create_biotech_book_scan/structure'
+        }
+    }
+    ['implementation', 'compileOnly', 'runtimeOnly'].each {
+        project.configurations.getByName(verification."${it}ConfigurationName").extendsFrom(project.configurations.getByName(it))
+    }
+    def neo = project.extensions.getByName('neoForge')
+    neo.addModdingDependenciesTo(verification)
+    neo.mods.named('create_biotech') { sourceSet verification }
+    def runId = project.providers.gradleProperty('browserBenchRun').getOrElse('game')
+    if (!(runId ==~ /[a-z0-9-]+/)) throw new GradleException('Invalid bench name')
+    def directory = project.file((book ? '.superpowers/cache/c109-player/' : stream ? '.superpowers/cache/c106-player/' : '.superpowers/cache/c95-recipe-shipment/') + runId)
+    neo.runs.named('gameTestServer') {
+        gameDirectory = directory
+        systemProperty 'neoforge.gameTestServer', 'true'
+        systemProperty 'neoforge.enabledGameTestNamespaces', book ? 'create_biotech_book_scan' : 'create_biotech_task4'
+        jvmArguments.add('-Xmx2G')
+    }
+    project.tasks.named('runGameTestServer') {
+        workingDir = directory
+        doFirst {
+            if (workingDir.canonicalFile != directory.canonicalFile) throw new GradleException('Wrong isolated browser test directory')
+            if (new File(directory, 'world').exists()) throw new GradleException('Use a new -PbrowserBenchRun=name; an existing world is never reseeded')
+            logger.lifecycle("Browser shipment fixture (no order submitted): ${directory}")
+        }
+    }
+}
+

@@ -16,6 +16,8 @@ java {
     withSourcesJar()
 }
 
+def gameTestDirectory = layout.buildDirectory.dir('gametest')
+
 neoForge {
     version = neo_version
 
@@ -59,8 +61,15 @@ neoForge {
 
         gameTestServer {
             type = 'gameTestServer'
+            gameDirectory = gameTestDirectory.get().asFile
         }
     }
+}
+
+// GameTests must not reuse development-client worlds, configs or optional mods.
+// Opt-in test init scripts may still supply their own isolated model/task directory.
+tasks.named('runGameTestServer') {
+    workingDir = gameTestDirectory.get().asFile
 }
 
 repositories {
@@ -70,14 +79,36 @@ repositories {
     maven { url = 'https://api.modrinth.com/maven' }
     maven { url = 'https://raw.githubusercontent.com/Fuzss/modresources/main/maven' }
     maven { url = 'https://maven.ryanhcode.dev/releases/' }
+    maven {
+        url = 'https://maven.squiddev.cc'
+        content { includeGroup('cc.tweaked') }
+    }
     mavenCentral()
 }
 
+def minecraftTestArtifact = files(
+        layout.buildDirectory.file("moddev/artifacts/neoforge-${neo_version}.jar")
+).builtBy(tasks.named('createMinecraftArtifacts'))
+
 configurations {
     quickPlayMods
+    speakerMp3Sources {
+        canBeConsumed = false
+        transitive = false
+    }
+    createAccessTransformers {
+        canBeConsumed = false
+        transitive = false
+    }
 }
 
 dependencies {
+    // Keep the decoder separately replaceable in the mod jar. NeoForge 1.21.1 also needs it in dev runs.
+    def speakerDecoder = "javazoom:jlayer:1.0.1"
+    jarJar(implementation(speakerDecoder)) { transitive = false }
+    additionalRuntimeClasspath(speakerDecoder) { transitive = false }
+    speakerMp3Sources("${speakerDecoder}:sources")
+    createAccessTransformers("com.simibubi.create:create-${minecraft_version}:${create_version}")
     implementation("com.simibubi.create:create-${minecraft_version}:${create_version}") {
         transitive = false
     }
@@ -104,6 +135,8 @@ dependencies {
     runtimeOnly("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}")
 
     compileOnly("maven.modrinth:jade:${jade_version}")
+    compileOnly("cc.tweaked:cc-tweaked-${minecraft_version}-core-api:${cc_tweaked_version}") { transitive = false }
+    compileOnly("cc.tweaked:cc-tweaked-${minecraft_version}-forge-api:${cc_tweaked_version}") { transitive = false }
 
     compileOnly("io.github.llamalad7:mixinextras-common:${mixinextras_version}")
     annotationProcessor("io.github.llamalad7:mixinextras-common:${mixinextras_version}")
@@ -117,11 +150,60 @@ dependencies {
     quickPlayMods("mezz.jei:jei-${minecraft_version}-neoforge:${jei_version}") {
         transitive = false
     }
+
+    testImplementation("org.junit.jupiter:junit-jupiter:5.11.4")
+    // Native moving-structure tests compile against Sable; loading it remains opt-in.
+    testCompileOnly(sable_compile_coordinate) { transitive = false }
+    testCompileOnly("com.mojang:datafixerupper:8.0.16")
+    testCompileOnly(files(configurations.neoFormRuntimeDependenciesRuntimeClasspath))
+    testImplementation(minecraftTestArtifact)
+    testRuntimeOnly(files(configurations.neoFormRuntimeDependenciesRuntimeClasspath))
+    // Item-name search uses Minecraft's real Language resources in plain JVM tests too.
+    testRuntimeOnly(files(layout.buildDirectory.file(
+            "moddev/artifacts/neoforge-${neo_version}-client-extra-aka-minecraft-resources.jar"
+    )).builtBy(tasks.named('createMinecraftArtifacts')))
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher:1.11.4")
+}
+
+tasks.named('jar') {
+    from(configurations.speakerMp3Sources) { into('META-INF/third-party') }
+}
+
+// Plain JVM tests do not run FML's transformer pipeline. Use the same access rules
+// that Create supplies at runtime, including AbstractWidget.render's non-final API.
+def extractCreateAccessTransformer = tasks.register('extractCreateAccessTransformer', Copy) {
+    from({ zipTree(configurations.createAccessTransformers.singleFile) }) {
+        include 'META-INF/accesstransformer.cfg'
+    }
+    into(layout.buildDirectory.dir('generated/createAccessTransformers'))
+}
+neoForge.accessTransformers.from(extractCreateAccessTransformer.map {
+    new File(it.destinationDir, 'META-INF/accesstransformer.cfg')
+})
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
 }
 
 sourceSets.main.resources {
     srcDir 'src/generated/resources'
     exclude '.cache/'
+}
+
+// The editable client pack supplies the default art, not its standalone pack metadata.
+tasks.named('processResources', ProcessResources) {
+    // Package the very same editable workcell documents that the native fixtures load.
+    from('examples/biocomputing') {
+        include 'motion_panel_a.bcp', 'line_drain_a.bcp', 'line_filter_switch_a.bcp',
+            'line_machine_switch_a.bcp', 'line_process_panel_a.bcp', 'line_resume_panel_a.bcp', 'line_resume_panel_report_a.bcp',
+            'radio_probe_send.bcp', 'radio_probe_receive.bcp'
+        into 'assets/create_biotech/biocomputing/examples'
+        duplicatesStrategy = DuplicatesStrategy.FAIL
+    }
+    from('art/biocomputing/pack/assets') {
+        into 'assets'
+        duplicatesStrategy = DuplicatesStrategy.FAIL
+    }
 }
 
 def generateModMetadata = tasks.register('generateModMetadata', ProcessResources) {

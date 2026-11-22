@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    " I ",
+    "GSD",
+    " I "
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "G": {
+      "item": "minecraft:redstone"
+    },
+    "S": {
+      "item": "minecraft:dispenser"
+    },
+    "D": {
+      "item": "create_biotech:biocomputing_data_cable"
+    }
+  },
+  "result": {
+    "id": "create_biotech:biocomputing_particle_output",
+    "count": 1
+  }
+}

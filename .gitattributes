@@ -1,0 +1,9 @@
+# These fixed-version Scratch commands persist their assembly source as part of the definition.
+src/main/resources/assets/create_biotech/biocomputing/extensions/narrator_output_speak.asm text eol=lf
+src/main/resources/assets/create_biotech/biocomputing/extensions/narrator_output_status.asm text eol=lf
+# The editable ROM drivers are also embedded verbatim in their archived programs.
+src/main/resources/assets/create_biotech/biocomputing/examples/recipe_book_*.asm text eol=lf
+docs/examples/biocomputing/recipe_book_*.asm text eol=lf
+
+# PDF initial-view updates contain byte offsets; never normalize their line endings.
+src/main/resources/biocomputing/manual/*.view binary

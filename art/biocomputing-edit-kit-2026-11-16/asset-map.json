@@ -1,0 +1,1044 @@
+{
+  "source_worktree": "D:\\mymod\\Create-Biotech-Official-1.21.1\\.worktrees\\factory-computing-orchestration",
+  "registered_blocks": [
+    {
+      "id": "factory_panel",
+      "name": "工厂面板",
+      "state": "01-blocks/assets/create_biotech/blockstates/factory_panel.json",
+      "item": "01-blocks/assets/create_biotech/models/item/factory_panel.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/factory_panel",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/factory_panel",
+      "note": "补入原美术包遗漏的状态／物品入口；Create stock_ticker 父模型已复制。"
+    },
+    {
+      "id": "pattern_storage_core",
+      "name": "样板存储核心",
+      "state": "01-blocks/assets/create_biotech/blockstates/pattern_storage_core.json",
+      "item": "01-blocks/assets/create_biotech/models/item/pattern_storage_core.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/pattern_storage_core",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/pattern_storage_core",
+      "note": "原版讲台父模型与材质已带上；上半层 elements=[] 是原设计，不是漏模型。"
+    },
+    {
+      "id": "computer",
+      "name": "计算机",
+      "state": "01-blocks/assets/create_biotech/blockstates/computer.json",
+      "item": "01-blocks/assets/create_biotech/models/item/computer.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/computer",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/computer",
+      "note": "上下半模型／束缚部件齐全；居民皮肤由原版实体渲染，不是缺少 Computer PNG。"
+    },
+    {
+      "id": "biocomputing_data_cable",
+      "name": "数据线缆",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_data_cable.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_data_cable.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_data_cable",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_data_cable",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_block_reader",
+      "name": "方块读取器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_block_reader.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_block_reader.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_block_reader",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_block_reader",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_redstone_output",
+      "name": "红石输出器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_redstone_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_redstone_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_redstone_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_redstone_output",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_stock_link_output",
+      "name": "仓储连接器输出适配器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_stock_link_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_stock_link_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_stock_link_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_stock_link_output",
+      "note": "原与文本输出器共用模型；本包已拆开，编辑不再连带修改文本输出器。"
+    },
+    {
+      "id": "biocomputing_text_output",
+      "name": "文本输出适配器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_text_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_text_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_text_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_text_output",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_music_output",
+      "name": "音符输出适配器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_music_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_music_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_music_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_music_output",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_virtual_filter",
+      "name": "虚拟过滤控制器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_virtual_filter.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_virtual_filter.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_virtual_filter",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_virtual_filter",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_component_settings",
+      "name": "元件配置",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_component_settings.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_component_settings.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_component_settings",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_component_settings",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_label_output",
+      "name": "悬浮标签适配器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_label_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_label_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_label_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_label_output",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_particle_output",
+      "name": "粒子发射器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_particle_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_particle_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_particle_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_particle_output",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_narrator_output",
+      "name": "音箱",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_narrator_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_narrator_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_narrator_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_narrator_output",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_chat_output",
+      "name": "聊天输出器",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_chat_output.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_chat_output.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_chat_output",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_chat_output",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_terminal_ui",
+      "name": "可编程终端",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_terminal_ui.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_terminal_ui.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_terminal_ui",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_terminal_ui",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "biocomputing_cluster_controller",
+      "name": "biocomputing_cluster_controller",
+      "state": "01-blocks/assets/create_biotech/blockstates/biocomputing_cluster_controller.json",
+      "item": "01-blocks/assets/create_biotech/models/item/biocomputing_cluster_controller.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_cluster_controller",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_cluster_controller",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "computer_casing",
+      "name": "计算机外壳",
+      "state": "01-blocks/assets/create_biotech/blockstates/computer_casing.json",
+      "item": "01-blocks/assets/create_biotech/models/item/computer_casing.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/computer_casing",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/art_edit/computer_casing",
+      "note": "材质与父模型已独立复制；保持方块 ID 和状态键。"
+    },
+    {
+      "id": "transparent_computer_casing",
+      "name": "透明计算机外壳",
+      "state": "01-blocks/assets/create_biotech/blockstates/transparent_computer_casing.json",
+      "item": "01-blocks/assets/create_biotech/models/item/transparent_computer_casing.json",
+      "models": "01-blocks/assets/create_biotech/models/block/biocomputing/art_edit/transparent_computer_casing",
+      "textures": "01-blocks/assets/create_biotech/textures/block/biocomputing/computer",
+      "note": "连接纹理保留原 ID；工厂面板透明框架也使用它，不要任意改名。"
+    }
+  ],
+  "models": [
+    {
+      "block": "factory_panel",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/factory_panel/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "factory_panel",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/factory_panel/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "factory_panel",
+      "original": "minecraft:block/cube_all",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/factory_panel/minecraft/block/cube_all.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube_all.json"
+    },
+    {
+      "block": "factory_panel",
+      "original": "create_biotech:block/biocomputing/computer/casing",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/factory_panel/create_biotech/block/biocomputing/computer/casing.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\computer\\casing.json"
+    },
+    {
+      "block": "factory_panel",
+      "original": "create_biotech:block/biocomputing/computer/transparent_casing",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/factory_panel/create_biotech/block/biocomputing/computer/transparent_casing.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\computer\\transparent_casing.json"
+    },
+    {
+      "block": "factory_panel",
+      "original": "create:block/stock_ticker",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/factory_panel/create/block/stock_ticker.json",
+      "source": ".superpowers\\cache\\gradle-user-home\\caches\\modules-2\\files-2.1\\com.simibubi.create\\create-1.21.1\\6.0.10-281\\79f11cca15c31cf0e6730fa343a443bf686ee39e\\create-1.21.1-6.0.10-281.jar!/assets/create/models/block/stock_ticker.json"
+    },
+    {
+      "block": "factory_panel",
+      "original": "create_biotech:block/biocomputing/terminal/panel",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/factory_panel/create_biotech/block/biocomputing/terminal/panel.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\terminal\\panel.json"
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/pattern_storage_core/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "minecraft:block/lectern",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/pattern_storage_core/minecraft/block/lectern.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/lectern.json"
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "create_biotech:block/pattern_storage_core_lower",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/pattern_storage_core/create_biotech/block/pattern_storage_core_lower.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\pattern_storage_core_lower.json"
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "create_biotech:block/pattern_storage_core_upper",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/pattern_storage_core/create_biotech/block/pattern_storage_core_upper.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\pattern_storage_core_upper.json"
+    },
+    {
+      "block": "computer",
+      "original": "create_biotech:block/biocomputing/computer/lower",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/computer/create_biotech/block/biocomputing/computer/lower.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\computer\\lower.json"
+    },
+    {
+      "block": "computer",
+      "original": "create_biotech:block/biocomputing/computer/upper",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/computer/create_biotech/block/biocomputing/computer/upper.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\computer\\upper.json"
+    },
+    {
+      "block": "biocomputing_data_cable",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_data_cable/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_data_cable",
+      "original": "create_biotech:block/biocomputing/data_cable_hub",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_data_cable/create_biotech/block/biocomputing/data_cable_hub.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\data_cable_hub.json"
+    },
+    {
+      "block": "biocomputing_data_cable",
+      "original": "create_biotech:block/biocomputing/data_cable_arm",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_data_cable/create_biotech/block/biocomputing/data_cable_arm.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\data_cable_arm.json"
+    },
+    {
+      "block": "biocomputing_data_cable",
+      "original": "create_biotech:block/biocomputing/data_cable_item",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_data_cable/create_biotech/block/biocomputing/data_cable_item.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\data_cable_item.json"
+    },
+    {
+      "block": "biocomputing_block_reader",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_block_reader/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_block_reader",
+      "original": "create_biotech:block/biocomputing/block_reader",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\block_reader.json"
+    },
+    {
+      "block": "biocomputing_redstone_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_redstone_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_redstone_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_redstone_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_redstone_output",
+      "original": "create_biotech:block/biocomputing/redstone_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_redstone_output/create_biotech/block/biocomputing/redstone_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\redstone_output.json"
+    },
+    {
+      "block": "biocomputing_stock_link_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_stock_link_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_stock_link_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_stock_link_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_stock_link_output",
+      "original": "create_biotech:block/biocomputing/text_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_stock_link_output/create_biotech/block/biocomputing/text_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\text_output.json"
+    },
+    {
+      "block": "biocomputing_text_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_text_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_text_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_text_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_text_output",
+      "original": "create_biotech:block/biocomputing/text_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_text_output/create_biotech/block/biocomputing/text_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\text_output.json"
+    },
+    {
+      "block": "biocomputing_music_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_music_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_music_output",
+      "original": "create_biotech:block/biocomputing/music_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_music_output/create_biotech/block/biocomputing/music_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\music_output.json"
+    },
+    {
+      "block": "biocomputing_virtual_filter",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_virtual_filter/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_virtual_filter",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_virtual_filter/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_virtual_filter",
+      "original": "create_biotech:block/biocomputing/virtual_filter",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_virtual_filter/create_biotech/block/biocomputing/virtual_filter.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\virtual_filter.json"
+    },
+    {
+      "block": "biocomputing_component_settings",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_component_settings/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_component_settings",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_component_settings/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_component_settings",
+      "original": "minecraft:block/orientable_with_bottom",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_component_settings/minecraft/block/orientable_with_bottom.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/orientable_with_bottom.json"
+    },
+    {
+      "block": "biocomputing_component_settings",
+      "original": "minecraft:block/orientable",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_component_settings/minecraft/block/orientable.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/orientable.json"
+    },
+    {
+      "block": "biocomputing_component_settings",
+      "original": "create_biotech:block/biocomputing/component_settings",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_component_settings/create_biotech/block/biocomputing/component_settings.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\component_settings.json"
+    },
+    {
+      "block": "biocomputing_label_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_label_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_label_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_label_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_label_output",
+      "original": "create_biotech:block/biocomputing/label_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_label_output/create_biotech/block/biocomputing/label_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\label_output.json"
+    },
+    {
+      "block": "biocomputing_particle_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_particle_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_particle_output",
+      "original": "create_biotech:block/biocomputing/particle_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_particle_output/create_biotech/block/biocomputing/particle_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\particle_output.json"
+    },
+    {
+      "block": "biocomputing_narrator_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_narrator_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_narrator_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_narrator_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_narrator_output",
+      "original": "create_biotech:block/biocomputing/narrator_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_narrator_output/create_biotech/block/biocomputing/narrator_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\narrator_output.json"
+    },
+    {
+      "block": "biocomputing_chat_output",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_chat_output/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_chat_output",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_chat_output/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_chat_output",
+      "original": "create_biotech:block/biocomputing/chat_output",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_chat_output/create_biotech/block/biocomputing/chat_output.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\chat_output.json"
+    },
+    {
+      "block": "biocomputing_terminal_ui",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_terminal_ui/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_terminal_ui",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_terminal_ui/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "biocomputing_terminal_ui",
+      "original": "create_biotech:block/biocomputing/terminal_ui",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_terminal_ui/create_biotech/block/biocomputing/terminal_ui.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\terminal_ui.json"
+    },
+    {
+      "block": "biocomputing_cluster_controller",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_cluster_controller/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "biocomputing_cluster_controller",
+      "original": "create_biotech:block/biocomputing/cluster/controller",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/biocomputing_cluster_controller/create_biotech/block/biocomputing/cluster/controller.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\cluster\\controller.json"
+    },
+    {
+      "block": "computer_casing",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/computer_casing/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "computer_casing",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/computer_casing/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "computer_casing",
+      "original": "minecraft:block/cube_all",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/computer_casing/minecraft/block/cube_all.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube_all.json"
+    },
+    {
+      "block": "computer_casing",
+      "original": "create_biotech:block/biocomputing/computer/casing",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/computer_casing/create_biotech/block/biocomputing/computer/casing.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\computer\\casing.json"
+    },
+    {
+      "block": "transparent_computer_casing",
+      "original": "minecraft:block/block",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/transparent_computer_casing/minecraft/block/block.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/block.json"
+    },
+    {
+      "block": "transparent_computer_casing",
+      "original": "minecraft:block/cube",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/transparent_computer_casing/minecraft/block/cube.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube.json"
+    },
+    {
+      "block": "transparent_computer_casing",
+      "original": "minecraft:block/cube_all",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/transparent_computer_casing/minecraft/block/cube_all.json",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/models/block/cube_all.json"
+    },
+    {
+      "block": "transparent_computer_casing",
+      "original": "create_biotech:block/biocomputing/computer/transparent_casing",
+      "editable": "assets/create_biotech/models/block/biocomputing/art_edit/transparent_computer_casing/create_biotech/block/biocomputing/computer/transparent_casing.json",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\models\\block\\biocomputing\\computer\\transparent_casing.json"
+    }
+  ],
+  "textures": [
+    {
+      "block": "factory_panel",
+      "original": "create_biotech:block/biotech_casing",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/factory_panel/create_biotech/block/biotech_casing.png",
+      "source": "src\\main\\resources\\assets\\create_biotech\\textures\\block\\biotech_casing.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "factory_panel",
+      "original": "create_biotech:block/biocomputing/computer/transparent_casing",
+      "editable": "assets/create_biotech/textures/block/biocomputing/computer/transparent_casing.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\transparent_casing.png",
+      "shared_connected_texture": true
+    },
+    {
+      "block": "factory_panel",
+      "original": "create:block/stock_ticker",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/factory_panel/create/block/stock_ticker.png",
+      "source": ".superpowers\\cache\\gradle-user-home\\caches\\modules-2\\files-2.1\\com.simibubi.create\\create-1.21.1\\6.0.10-281\\79f11cca15c31cf0e6730fa343a443bf686ee39e\\create-1.21.1-6.0.10-281.jar!/assets/create/textures/block/stock_ticker.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "factory_panel",
+      "original": "create:block/andesite_casing",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/factory_panel/create/block/andesite_casing.png",
+      "source": ".superpowers\\cache\\gradle-user-home\\caches\\modules-2\\files-2.1\\com.simibubi.create\\create-1.21.1\\6.0.10-281\\79f11cca15c31cf0e6730fa343a443bf686ee39e\\create-1.21.1-6.0.10-281.jar!/assets/create/textures/block/andesite_casing.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "block/lectern_sides",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/pattern_storage_core/minecraft/block/lectern_sides.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/lectern_sides.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "block/oak_planks",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/pattern_storage_core/minecraft/block/oak_planks.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/oak_planks.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "block/lectern_base",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/pattern_storage_core/minecraft/block/lectern_base.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/lectern_base.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "block/lectern_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/pattern_storage_core/minecraft/block/lectern_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/lectern_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "pattern_storage_core",
+      "original": "block/lectern_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/pattern_storage_core/minecraft/block/lectern_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/lectern_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "computer",
+      "original": "create_biotech:block/biocomputing/computer/base",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/computer/create_biotech/block/biocomputing/computer/base.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\base.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "computer",
+      "original": "create_biotech:block/biocomputing/computer/stage",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/computer/create_biotech/block/biocomputing/computer/stage.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\stage.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "computer",
+      "original": "create_biotech:block/biocomputing/computer/restrictor_feet_2",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/computer/create_biotech/block/biocomputing/computer/restrictor_feet_2.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\restrictor_feet_2.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "computer",
+      "original": "create_biotech:block/biocomputing/computer/restrictor_feet_1",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/computer/create_biotech/block/biocomputing/computer/restrictor_feet_1.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\restrictor_feet_1.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "computer",
+      "original": "create_biotech:block/biocomputing/computer/restrictor_head",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/computer/create_biotech/block/biocomputing/computer/restrictor_head.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\restrictor_head.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_data_cable",
+      "original": "create_biotech:block/biocomputing/data_cable/hub",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_data_cable/create_biotech/block/biocomputing/data_cable/hub.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\data_cable\\hub.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_data_cable",
+      "original": "create_biotech:block/biocomputing/data_cable/arm",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_data_cable/create_biotech/block/biocomputing/data_cable/arm.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\data_cable\\arm.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_block_reader",
+      "original": "create_biotech:block/biocomputing/block_reader/side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/side.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\block_reader\\side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_block_reader",
+      "original": "create_biotech:block/biocomputing/block_reader/front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/front.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\block_reader\\front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_block_reader",
+      "original": "create_biotech:block/biocomputing/block_reader/back",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/back.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\block_reader\\back.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_block_reader",
+      "original": "create_biotech:block/biocomputing/block_reader/top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/top.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\block_reader\\top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_block_reader",
+      "original": "create_biotech:block/biocomputing/block_reader/bottom",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/bottom.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\block_reader\\bottom.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_redstone_output",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_redstone_output/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_redstone_output",
+      "original": "minecraft:block/observer_back",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_redstone_output/minecraft/block/observer_back.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_back.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_redstone_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_redstone_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_redstone_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_redstone_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_stock_link_output",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_stock_link_output/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_stock_link_output",
+      "original": "minecraft:block/jukebox_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_stock_link_output/minecraft/block/jukebox_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/jukebox_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_stock_link_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_stock_link_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_stock_link_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_stock_link_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_text_output",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_text_output/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_text_output",
+      "original": "minecraft:block/jukebox_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_text_output/minecraft/block/jukebox_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/jukebox_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_text_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_text_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_text_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_text_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_music_output",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_music_output",
+      "original": "minecraft:block/note_block",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/note_block.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/note_block.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_music_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_music_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_virtual_filter",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_virtual_filter/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_virtual_filter",
+      "original": "minecraft:block/hopper_outside",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_virtual_filter/minecraft/block/hopper_outside.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/hopper_outside.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_virtual_filter",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_virtual_filter/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_virtual_filter",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_virtual_filter/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_component_settings",
+      "original": "create_biotech:block/asurine_casing",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_component_settings/create_biotech/block/asurine_casing.png",
+      "source": "src\\main\\resources\\assets\\create_biotech\\textures\\block\\asurine_casing.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_component_settings",
+      "original": "minecraft:block/repeater",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_component_settings/minecraft/block/repeater.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/repeater.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_label_output",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_label_output/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_label_output",
+      "original": "minecraft:block/smooth_stone",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_label_output/minecraft/block/smooth_stone.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/smooth_stone.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_label_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_label_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_label_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_label_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_particle_output",
+      "original": "minecraft:block/dispenser_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/dispenser_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/dispenser_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_particle_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_particle_output",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_particle_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_narrator_output",
+      "original": "minecraft:block/jukebox_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_narrator_output/minecraft/block/jukebox_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/jukebox_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_narrator_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_narrator_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_narrator_output",
+      "original": "minecraft:block/jukebox_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_narrator_output/minecraft/block/jukebox_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/jukebox_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_narrator_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_narrator_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_chat_output",
+      "original": "minecraft:block/chiseled_bookshelf_empty",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_chat_output/minecraft/block/chiseled_bookshelf_empty.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/chiseled_bookshelf_empty.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_chat_output",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_chat_output/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_chat_output",
+      "original": "minecraft:block/spruce_planks",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_chat_output/minecraft/block/spruce_planks.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/spruce_planks.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_chat_output",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_chat_output/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_terminal_ui",
+      "original": "minecraft:block/observer_side",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_terminal_ui/minecraft/block/observer_side.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_side.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_terminal_ui",
+      "original": "minecraft:block/redstone_lamp_on",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_terminal_ui/minecraft/block/redstone_lamp_on.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/redstone_lamp_on.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_terminal_ui",
+      "original": "minecraft:block/observer_front",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_terminal_ui/minecraft/block/observer_front.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_front.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_terminal_ui",
+      "original": "minecraft:block/observer_top",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_terminal_ui/minecraft/block/observer_top.png",
+      "source": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar!/assets/minecraft/textures/block/observer_top.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_cluster_controller",
+      "original": "create_biotech:block/biotech_casing",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_cluster_controller/create_biotech/block/biotech_casing.png",
+      "source": "src\\main\\resources\\assets\\create_biotech\\textures\\block\\biotech_casing.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "biocomputing_cluster_controller",
+      "original": "create_biotech:block/blast_chamber_display/panel",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/biocomputing_cluster_controller/create_biotech/block/blast_chamber_display/panel.png",
+      "source": "src\\main\\resources\\assets\\create_biotech\\textures\\block\\blast_chamber_display\\panel.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "computer_casing",
+      "original": "create_biotech:block/biotech_casing",
+      "editable": "assets/create_biotech/textures/block/biocomputing/art_edit/computer_casing/create_biotech/block/biotech_casing.png",
+      "source": "src\\main\\resources\\assets\\create_biotech\\textures\\block\\biotech_casing.png",
+      "shared_connected_texture": false
+    },
+    {
+      "block": "transparent_computer_casing",
+      "original": "create_biotech:block/biocomputing/computer/transparent_casing",
+      "editable": "assets/create_biotech/textures/block/biocomputing/computer/transparent_casing.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\transparent_casing.png",
+      "shared_connected_texture": true
+    },
+    {
+      "block": "transparent_computer_casing",
+      "original": "create_biotech:block/biocomputing/computer/transparent_casing_connected",
+      "editable": "assets/create_biotech/textures/block/biocomputing/computer/transparent_casing_connected.png",
+      "source": "art\\biocomputing\\pack\\assets\\create_biotech\\textures\\block\\biocomputing\\computer\\transparent_casing_connected.png",
+      "shared_connected_texture": true
+    }
+  ],
+  "dependency_versions": {
+    "create": "6.0.10-281",
+    "minecraft": "1.21.1"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [
+    " I ",
+    "GOD",
+    " I "
+  ],
+  "key": {
+    "I": {
+      "item": "minecraft:iron_ingot"
+    },
+    "G": {
+      "item": "minecraft:glass_pane"
+    },
+    "O": {
+      "item": "minecraft:observer"
+    },
+    "D": {
+      "item": "create_biotech:biocomputing_data_cable"
+    }
+  },
+  "result": {
+    "id": "create_biotech:biocomputing_terminal_ui",
+    "count": 1
+  }
+}

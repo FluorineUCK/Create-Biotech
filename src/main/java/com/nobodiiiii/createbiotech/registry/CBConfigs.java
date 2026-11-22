@@ -1,5 +1,8 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import com.nobodiiiii.createbiotech.content.biocomputing.library.LibrarySettings;
+import com.nobodiiiii.createbiotech.content.biocomputing.hardware.BiocomputingConfig;
+
 import net.minecraft.core.registries.Registries;
 
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -66,6 +69,9 @@ public class CBConfigs {
 		public final ModConfigSpec.BooleanValue enableShulkerTeleporterCameraOffset;
 		public final ModConfigSpec.BooleanValue enableShulkerTeleporterPlayerClipping;
 		public final ModConfigSpec.BooleanValue renderExperienceAsFluid;
+		public final ModConfigSpec.BooleanValue narratorOutputEnabled;
+		public final ModConfigSpec.BooleanValue speakerMediaEnabled;
+		public final ModConfigSpec.IntValue narratorQueueCapacity, narratorMinimumGapTicks, narratorTicksPerCodePoint;
 		public final ClientCreeperBlastChamber creeperBlastChamber;
 		public final ClientUniversalJoint universalJoint;
 		public final BeltParticles beltParticles;
@@ -79,6 +85,15 @@ public class CBConfigs {
 			creeperBlastChamber = new ClientCreeperBlastChamber(builder);
 			universalJoint = new ClientUniversalJoint(builder);
 			beltParticles = new BeltParticles(builder);
+			builder.comment("Local Biocomputing speech preferences; does not affect Minecraft's narrator.").push("biocomputingNarration");
+			narratorOutputEnabled = builder.define("enabled", false);
+			narratorQueueCapacity = builder.defineInRange("queueCapacity", 4, 1, 16);
+			narratorMinimumGapTicks = builder.defineInRange("minimumGapTicks", 40, 1, 1200);
+			narratorTicksPerCodePoint = builder.defineInRange("ticksPerCodePoint", 3, 1, 20);
+			builder.pop();
+			builder.push("biocomputingSpeaker");
+			speakerMediaEnabled = builder.define("enabled", false);
+			builder.pop();
 		}
 	}
 
@@ -110,6 +125,8 @@ public class CBConfigs {
 		public final ShulkerTeleporter shulkerTeleporter;
 		public final TeleportationFluid teleportationFluid;
 		public final AllayCourier allayCourier;
+		public final LibrarySettings library;
+		public final BiocomputingConfig biocomputing;
 		public final Features features;
 
 		Server(ModConfigSpec.Builder builder) {
@@ -140,9 +157,12 @@ public class CBConfigs {
 			shulkerTeleporter = new ShulkerTeleporter(builder);
 			teleportationFluid = new TeleportationFluid(builder);
 			allayCourier = new AllayCourier(builder);
+			library = new LibrarySettings(builder);
+			biocomputing = new BiocomputingConfig(builder);
 			features = new Features(builder);
 		}
 	}
+
 
 	public static class Features {
 		private final EnumMap<CBFeature, ModConfigSpec.BooleanValue> enabled = new EnumMap<>(CBFeature.class);

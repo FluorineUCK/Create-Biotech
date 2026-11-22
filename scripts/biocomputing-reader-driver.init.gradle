@@ -1,0 +1,32 @@
+// Isolated native acceptance of the public reader drivers, never a player save.
+// ./gradlew.bat -I scripts/biocomputing-reader-driver.init.gradle runGameTestServer --offline --no-daemon
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    def verification = project.sourceSets.create('readerDriverGameTest') {
+        java.srcDir 'src/test/java'
+        java.include 'com/nobodiiiii/createbiotech/content/biocomputing/peripheral/ReaderDriverGameTests.java'
+        java.include 'com/nobodiiiii/createbiotech/content/biocomputing/peripheral/ReaderOutputGameTests.java'
+        compileClasspath += project.sourceSets.main.output
+        runtimeClasspath += project.sourceSets.main.output
+    }
+    ['implementation', 'compileOnly', 'runtimeOnly'].each {
+        project.configurations.getByName(verification."${it}ConfigurationName").extendsFrom(project.configurations.getByName(it))
+    }
+    def neo = project.extensions.getByName('neoForge')
+    neo.addModdingDependenciesTo(verification)
+    neo.mods.named('create_biotech') { sourceSet verification }
+    def directory = project.file('.superpowers/cache/redstone-output/reader-driver-native-game')
+    neo.runs.named('gameTestServer') {
+        gameDirectory = directory
+        systemProperty 'neoforge.gameTestServer', 'true'
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'create_biotech'
+        jvmArguments.add('-Xmx2G')
+    }
+    project.tasks.named('runGameTestServer') {
+        workingDir = directory
+        doFirst {
+            if (workingDir.canonicalFile != directory.canonicalFile) throw new GradleException('Wrong isolated reader driver test directory')
+            logger.lifecycle("Verified reader driver GameTest directory: ${directory}")
+        }
+    }
+}

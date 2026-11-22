@@ -1,0 +1,53 @@
+{
+  "id": "text_next",
+  "revision": 1,
+  "inputs": {
+    "text": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        }
+      ],
+      "root": 0
+    },
+    "offset": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        }
+      ],
+      "root": 0
+    }
+  },
+  "outputs": {
+    "result": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "BOOLEAN"
+        },
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        },
+        {
+          "kind": "record",
+          "fields": {
+            "done": 0,
+            "next": 1,
+            "codepoint": 1,
+            "whitespace": 0,
+            "control": 0
+          }
+        }
+      ],
+      "root": 2
+    }
+  },
+  "returns": {
+    "result": "result"
+  },
+  "assembly_version": 1
+}

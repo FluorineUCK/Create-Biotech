@@ -1,0 +1,8 @@
+{
+  "type": "minecraft:block",
+  "pools": [{
+    "rolls": 1,
+    "entries": [{"type": "minecraft:item", "name": "create_biotech:biocomputing_serial_panel"}],
+    "conditions": [{"condition": "minecraft:survives_explosion"}]
+  }]
+}

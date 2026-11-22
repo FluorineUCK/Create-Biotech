@@ -1,0 +1,90 @@
+{
+  "versions": {
+    "create": "6.0.10-281",
+    "minecraft": "1.21.1"
+  },
+  "source_jars": {
+    "create": ".superpowers\\cache\\gradle-user-home\\caches\\modules-2\\files-2.1\\com.simibubi.create\\create-1.21.1\\6.0.10-281\\79f11cca15c31cf0e6730fa343a443bf686ee39e\\create-1.21.1-6.0.10-281.jar",
+    "minecraft": "build\\moddev\\artifacts\\neoforge-21.1.234-client-extra-aka-minecraft-resources.jar"
+  },
+  "groups": {
+    "create-smart-observer": [
+      "CREATE-LICENSE.md",
+      "assets/create/blockstates/content_observer.json",
+      "assets/create/models/block/content_observer/block.json",
+      "assets/create/models/block/content_observer/block_powered.json",
+      "assets/create/models/item/content_observer.json",
+      "assets/create/textures/block/content_observer.png",
+      "assets/create/textures/block/content_observer_inner.png",
+      "assets/create/textures/block/content_observer_inner_powered.png",
+      "assets/create/textures/block/content_observer_powered.png",
+      "assets/create/textures/block/smart_observer.png",
+      "assets/create/textures/block/smart_observer_bottom.png",
+      "assets/create/textures/block/smart_observer_front.png",
+      "assets/create/textures/block/smart_observer_powered.png",
+      "assets/create/textures/block/smart_observer_side.png",
+      "assets/create/textures/block/smart_observer_side_powered.png",
+      "assets/create/textures/block/smart_observer_top.png",
+      "assets/minecraft/models/block/block.json"
+    ],
+    "minecraft-dispenser": [
+      "assets/minecraft/blockstates/dispenser.json",
+      "assets/minecraft/models/block/block.json",
+      "assets/minecraft/models/block/cube.json",
+      "assets/minecraft/models/block/dispenser.json",
+      "assets/minecraft/models/block/dispenser_vertical.json",
+      "assets/minecraft/models/block/orientable.json",
+      "assets/minecraft/models/block/orientable_vertical.json",
+      "assets/minecraft/models/block/orientable_with_bottom.json",
+      "assets/minecraft/models/item/dispenser.json",
+      "assets/minecraft/textures/block/dispenser_front.png",
+      "assets/minecraft/textures/block/dispenser_front_vertical.png",
+      "assets/minecraft/textures/block/furnace_side.png",
+      "assets/minecraft/textures/block/furnace_top.png",
+      "assets/minecraft/textures/gui/container/dispenser.png"
+    ],
+    "minecraft-dropper": [
+      "assets/minecraft/blockstates/dropper.json",
+      "assets/minecraft/models/block/block.json",
+      "assets/minecraft/models/block/cube.json",
+      "assets/minecraft/models/block/dropper.json",
+      "assets/minecraft/models/block/dropper_vertical.json",
+      "assets/minecraft/models/block/orientable.json",
+      "assets/minecraft/models/block/orientable_vertical.json",
+      "assets/minecraft/models/block/orientable_with_bottom.json",
+      "assets/minecraft/models/item/dropper.json",
+      "assets/minecraft/textures/block/dropper_front.png",
+      "assets/minecraft/textures/block/dropper_front_vertical.png",
+      "assets/minecraft/textures/block/furnace_side.png",
+      "assets/minecraft/textures/block/furnace_top.png",
+      "assets/minecraft/textures/gui/container/dispenser.png"
+    ],
+    "minecraft-crafter": [
+      "assets/minecraft/blockstates/crafter.json",
+      "assets/minecraft/models/block/block.json",
+      "assets/minecraft/models/block/crafter.json",
+      "assets/minecraft/models/block/crafter_crafting.json",
+      "assets/minecraft/models/block/crafter_crafting_triggered.json",
+      "assets/minecraft/models/block/crafter_triggered.json",
+      "assets/minecraft/models/item/crafter.json",
+      "assets/minecraft/textures/block/crafter_bottom.png",
+      "assets/minecraft/textures/block/crafter_east.png",
+      "assets/minecraft/textures/block/crafter_east_crafting.png",
+      "assets/minecraft/textures/block/crafter_east_triggered.png",
+      "assets/minecraft/textures/block/crafter_north.png",
+      "assets/minecraft/textures/block/crafter_north_crafting.png",
+      "assets/minecraft/textures/block/crafter_south.png",
+      "assets/minecraft/textures/block/crafter_south_triggered.png",
+      "assets/minecraft/textures/block/crafter_top.png",
+      "assets/minecraft/textures/block/crafter_top_crafting.png",
+      "assets/minecraft/textures/block/crafter_top_triggered.png",
+      "assets/minecraft/textures/block/crafter_west.png",
+      "assets/minecraft/textures/block/crafter_west_crafting.png",
+      "assets/minecraft/textures/block/crafter_west_triggered.png",
+      "assets/minecraft/textures/gui/container/crafter.png",
+      "assets/minecraft/textures/gui/sprites/container/crafter/disabled_slot.png",
+      "assets/minecraft/textures/gui/sprites/container/crafter/powered_redstone.png",
+      "assets/minecraft/textures/gui/sprites/container/crafter/unpowered_redstone.png"
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+{
+  "variants": {
+    "": {
+      "model": "create_biotech:block/biocomputing/art_edit/transparent_computer_casing/create_biotech/block/biocomputing/computer/transparent_casing"
+    }
+  }
+}

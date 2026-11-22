@@ -6,6 +6,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.function.Predicate;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
 import com.nobodiiiii.createbiotech.content.universaljoint.UniversalJointRepair;
@@ -218,14 +219,24 @@ public class CapturedEntityBoxHelper {
 	}
 
 	public static Entity createCapturedEntity(ItemStack stack, Level level) {
+		return createCapturedEntity(stack, level, true);
+	}
+
+	public static Entity createCapturedEntityPreservingUuid(ItemStack stack, Level level) {
+		return createCapturedEntity(stack, level, false);
+	}
+
+	private static Entity createCapturedEntity(ItemStack stack, Level level, boolean reseedOnCollision) {
 		CompoundTag entityData = getCapturedEntityData(stack);
 		if (entityData == null)
 			return null;
 
-		CompoundTag entityDataForLoad = entityData.copy();
-		if (level instanceof ServerLevel serverLevel
-			&& hasUuidCollision(serverLevel.getServer(), entityDataForLoad))
-			reseedEntityTree(entityDataForLoad);
+		Predicate<UUID> collision = level instanceof ServerLevel serverLevel
+			? uuid -> hasUuidCollision(serverLevel.getServer(), uuid) : uuid -> false;
+		CompoundTag entityDataForLoad = prepareEntityDataForLoad(entityData, collision,
+			reseedOnCollision);
+		if (entityDataForLoad == null)
+			return null;
 
 		Entity entity = EntityType.loadEntityRecursive(entityDataForLoad, level, Function.identity());
 		if (entity == null)
@@ -234,22 +245,44 @@ public class CapturedEntityBoxHelper {
 		CompoundTag stackTag = CBItemData.getOrEmpty(stack);
 		if (entity instanceof LivingEntity living
 			&& stackTag.contains(CAPTURED_ENTITY_HEALTH_TAG, Tag.TAG_ANY_NUMERIC))
-			living.setHealth(Math.min(living.getMaxHealth(), stackTag.getFloat(CAPTURED_ENTITY_HEALTH_TAG)));
+			living.setHealth(clampCapturedHealth(stackTag.getFloat(CAPTURED_ENTITY_HEALTH_TAG),
+				living.getMaxHealth()));
 
 		return entity;
 	}
 
-	private static boolean hasUuidCollision(MinecraftServer server, CompoundTag entityData) {
+	static CompoundTag prepareEntityDataForLoad(CompoundTag entityData,
+		Predicate<UUID> collision, boolean reseedOnCollision) {
+		CompoundTag prepared = entityData.copy();
+		if (!hasUuidCollision(prepared, collision))
+			return prepared;
+		if (!reseedOnCollision)
+			return null;
+		reseedEntityTree(prepared);
+		return prepared;
+	}
+
+	static float clampCapturedHealth(float capturedHealth, float maximumHealth) {
+		return Math.min(maximumHealth, capturedHealth);
+	}
+
+	private static boolean hasUuidCollision(MinecraftServer server, UUID uuid) {
+		for (ServerLevel level : server.getAllLevels())
+			if (level.getEntity(uuid) != null)
+				return true;
+		return false;
+	}
+
+	private static boolean hasUuidCollision(CompoundTag entityData, Predicate<UUID> collision) {
 		if (entityData.hasUUID("UUID")) {
 			UUID uuid = entityData.getUUID("UUID");
-			for (ServerLevel level : server.getAllLevels())
-				if (level.getEntity(uuid) != null)
-					return true;
+			if (collision.test(uuid))
+				return true;
 		}
 
 		ListTag passengers = entityData.getList("Passengers", Tag.TAG_COMPOUND);
 		for (int i = 0; i < passengers.size(); i++)
-			if (hasUuidCollision(server, passengers.getCompound(i)))
+			if (hasUuidCollision(passengers.getCompound(i), collision))
 				return true;
 
 		return false;

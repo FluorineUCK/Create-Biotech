@@ -6,6 +6,10 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "SimBlockMovementChecksMixin",
+    "AeroBurnerScrollRangeMixin",
+    "SimAltitudeSettingsMixin",
+    "SimReceiverSettingsMixin",
+    "SimInductorSettingsMixin",
     "UniversalJointEndpointBlockSableMixin",
     "UniversalJointBlockEntitySableMixin"
   ],

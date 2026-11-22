@@ -1,0 +1,7 @@
+{
+  "parent": "create_biotech:block/biocomputing/data_cable_arm",
+  "textures": {
+    "all": "minecraft:block/amethyst_block",
+    "particle": "minecraft:block/amethyst_block"
+  }
+}

@@ -39,6 +39,13 @@ public final class SubLevelCompat {
 		return COMPANION.getContaining(level, pos);
 	}
 
+	/** Resolves a raw position only when it still belongs to its saved physical-space identity. */
+	@Nullable
+	public static SubLevelAccess getContaining(Level level, BlockPos pos,
+		@Nullable UUID expectedSubLevelId) {
+		return matchesSpace(level, pos, expectedSubLevelId) ? getContaining(level, pos) : null;
+	}
+
 	public static Iterable<? extends SubLevelAccess> getAllIntersecting(Level level, AABB worldBounds) {
 		return COMPANION.getAllIntersecting(level, new BoundingBox3d(worldBounds));
 	}

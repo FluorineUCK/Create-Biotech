@@ -18,6 +18,9 @@ import com.nobodiiiii.createbiotech.content.experience.ExperienceConstants;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberItem;
 import com.nobodiiiii.createbiotech.content.experience.HiddenExperienceItem;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultItem;
+import com.nobodiiiii.createbiotech.content.biocomputing.application.production.port.MaterialRequestPortItem;
+import com.nobodiiiii.createbiotech.content.biocomputing.application.production.network.tool.LogisticsConfigurationToolItem;
+import com.nobodiiiii.createbiotech.content.biocomputing.item.LibraryCoreBlockItem;
 import com.nobodiiiii.createbiotech.content.cardboardbox.LargeCardboardBoxItem;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogItem;
 import com.nobodiiiii.createbiotech.content.magmabelt.MagmaBeltConnectorItem;
@@ -114,6 +117,68 @@ public class CBItems {
 
 	public static final DeferredHolder<Item, Item> WIRELESS_TERMINAL = ITEMS.register("wireless_terminal",
 		() -> new WirelessTerminalItem(new Item.Properties().stacksTo(1)));
+
+	public static final DeferredHolder<Item, MaterialRequestPortItem> MATERIAL_REQUEST_PORT =
+		ITEMS.register("biocomputing_material_request_port", () -> new MaterialRequestPortItem(CBBlocks.MATERIAL_REQUEST_PORT.get(),
+			new Item.Properties().stacksTo(1)));
+
+	public static final DeferredHolder<Item, LogisticsConfigurationToolItem>
+		LOGISTICS_CONFIGURATION_TOOL = ITEMS.register("logistics_configuration_tool",
+			() -> new LogisticsConfigurationToolItem(new Item.Properties().stacksTo(1)));
+
+	public static final DeferredHolder<Item, LibraryCoreBlockItem> PATTERN_STORAGE_CORE =
+		ITEMS.register("pattern_storage_core",
+			() -> new LibraryCoreBlockItem(CBBlocks.PATTERN_STORAGE_CORE.get(),
+				new Item.Properties().stacksTo(1)));
+
+	/** Inert ID for legacy inventory stacks; never published as stock or accepted as an order. */
+	public static final DeferredHolder<Item, Item> PATTERN_DISPLAY =
+		ITEMS.register("pattern_display", () -> new Item(new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> COMPUTER = ITEMS.register("computer",
+		() -> new BlockItem(CBBlocks.COMPUTER.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> COMPUTER_CASING = ITEMS.register("computer_casing",
+		() -> new BlockItem(CBBlocks.COMPUTER_CASING.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> DATA_CABLE = ITEMS.register("biocomputing_data_cable",
+		() -> new BlockItem(CBBlocks.DATA_CABLE.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> FAST_DATA_CABLE = ITEMS.register("biocomputing_fast_data_cable",
+		() -> new BlockItem(CBBlocks.FAST_DATA_CABLE.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> DUPLEX_DATA_CABLE = ITEMS.register("biocomputing_duplex_data_cable",
+		() -> new BlockItem(CBBlocks.DUPLEX_DATA_CABLE.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> CARRIER_CABLE = ITEMS.register("biocomputing_carrier_cable",
+		() -> new BlockItem(CBBlocks.CARRIER_CABLE.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> BLOCK_READER = ITEMS.register("biocomputing_block_reader",
+		() -> new BlockItem(CBBlocks.BLOCK_READER.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> REDSTONE_OUTPUT = ITEMS.register("biocomputing_redstone_output",
+		() -> new BlockItem(CBBlocks.REDSTONE_OUTPUT.get(), new Item.Properties()));
+    public static final DeferredHolder<Item, Item> STOCK_LINK_OUTPUT = ITEMS.register("biocomputing_stock_link_output",
+        () -> new BlockItem(CBBlocks.STOCK_LINK_OUTPUT.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> TEXT_OUTPUT = ITEMS.register("biocomputing_text_output",
+		() -> new BlockItem(CBBlocks.TEXT_OUTPUT.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> MUSIC_OUTPUT = ITEMS.register("biocomputing_music_output",
+		() -> new BlockItem(CBBlocks.MUSIC_OUTPUT.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> VIRTUAL_FILTER = ITEMS.register("biocomputing_virtual_filter",
+		() -> new BlockItem(CBBlocks.VIRTUAL_FILTER.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> COMPONENT_SETTINGS = ITEMS.register("biocomputing_component_settings",
+		() -> new BlockItem(CBBlocks.COMPONENT_SETTINGS.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> LABEL_OUTPUT = ITEMS.register("biocomputing_label_output",
+		() -> new BlockItem(CBBlocks.LABEL_OUTPUT.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> PARTICLE_OUTPUT = ITEMS.register("biocomputing_particle_output",
+		() -> new BlockItem(CBBlocks.PARTICLE_OUTPUT.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> NARRATOR_OUTPUT = ITEMS.register("biocomputing_narrator_output",
+		() -> new BlockItem(CBBlocks.NARRATOR_OUTPUT.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> CHAT_OUTPUT = ITEMS.register("biocomputing_chat_output",
+		() -> new BlockItem(CBBlocks.CHAT_OUTPUT.get(), new Item.Properties()));
+	public static final DeferredHolder<Item, Item> TERMINAL_UI = ITEMS.register("biocomputing_terminal_ui",
+		() -> new BlockItem(CBBlocks.TERMINAL_UI.get(), new Item.Properties()));
+	public static final DeferredHolder<Item,Item> SERIAL_PANEL = ITEMS.register("biocomputing_serial_panel", () -> new BlockItem(CBBlocks.SERIAL_PANEL.get(),new Item.Properties()));
+	public static final DeferredHolder<Item, Item> CLUSTER_CONTROLLER = ITEMS.register("biocomputing_cluster_controller",
+		() -> new BlockItem(CBBlocks.CLUSTER_CONTROLLER.get(), new Item.Properties()));
+
+	public static final DeferredHolder<Item, Item> TRANSPARENT_COMPUTER_CASING =
+		ITEMS.register("transparent_computer_casing",
+			() -> new BlockItem(CBBlocks.TRANSPARENT_COMPUTER_CASING.get(), new Item.Properties()));
 
 	public static final DeferredHolder<Item, Item> HALF_SHAFT = ITEMS.register("half_shaft",
 		() -> new BlockItem(CBBlocks.HALF_SHAFT.get(), new Item.Properties()));

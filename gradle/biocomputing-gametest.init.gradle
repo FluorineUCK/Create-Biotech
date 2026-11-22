@@ -1,0 +1,46 @@
+// Opt-in live regression tests. The ordinary build and production JAR remain unchanged.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    def verification = project.sourceSets.create('biocomputingGameTest') {
+        java.srcDir 'src/test/java'
+        java.include 'com/nobodiiiii/createbiotech/content/biocomputing/gametest/**'
+        // Preserve the real legacy player-entry paths while their production application moves to the new module.
+        java.include 'com/nobodiiiii/createbiotech/gametest/FactoryPlayerEntryGameTests.java'
+        compileClasspath += project.sourceSets.main.output
+        runtimeClasspath += project.sourceSets.main.output
+    }
+    project.configurations.getByName(verification.implementationConfigurationName)
+        .extendsFrom(project.configurations.implementation)
+    project.configurations.getByName(verification.compileOnlyConfigurationName)
+        .extendsFrom(project.configurations.compileOnly)
+    project.configurations.getByName(verification.runtimeOnlyConfigurationName)
+        .extendsFrom(project.configurations.runtimeOnly)
+    def neo = project.extensions.getByName('neoForge')
+    neo.addModdingDependenciesTo(verification)
+    neo.mods.named('create_biotech') { sourceSet verification }
+    def phase = project.findProperty('biocomputingDiskPhase')
+    def run = project.findProperty('biocomputingDiskRun')
+    if ((phase == null) != (run == null)
+        || (phase != null && (!(phase in ['seed', 'resume', 'verify']) || !(run ==~ /[a-zA-Z0-9_-]{1,80}/)))) {
+        throw new GradleException('Disk verification requires a valid phase and a simple, isolated run identifier')
+    }
+    def directory = project.layout.buildDirectory.dir(phase == null
+        ? 'biocomputing-gametest' : "biocomputing-disk/${run}").get().asFile
+    neo.runs.named('gameTestServer') {
+        gameDirectory = directory
+        // Preserve the main DevLaunch runtime; only the selected test output is added to the mod.
+        systemProperty 'neoforge.gameTestServer', 'true'
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'create_biotech'
+        if (phase != null) systemProperty 'biocomputing.diskPhase', phase
+        jvmArguments.add('-Xmx2G')
+    }
+    project.tasks.named('runGameTestServer') {
+        workingDir = directory
+        doFirst { task ->
+            if (task.workingDir.canonicalFile != directory.canonicalFile) {
+                throw new GradleException('Refusing a non-isolated GameTest working directory')
+            }
+            logger.lifecycle("Verified isolated GameTest directory: ${directory}")
+        }
+    }
+}

@@ -1,0 +1,19 @@
+{
+  "variants": {
+    "facing=north": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_narrator_output/create_biotech/block/biocomputing/narrator_output"
+    },
+    "facing=east": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_narrator_output/create_biotech/block/biocomputing/narrator_output",
+      "y": 90
+    },
+    "facing=south": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_narrator_output/create_biotech/block/biocomputing/narrator_output",
+      "y": 180
+    },
+    "facing=west": {
+      "model": "create_biotech:block/biocomputing/art_edit/biocomputing_narrator_output/create_biotech/block/biocomputing/narrator_output",
+      "y": 270
+    }
+  }
+}

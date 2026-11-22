@@ -1,0 +1,41 @@
+{
+  "parent": "create_biotech:block/biocomputing/art_edit/biocomputing_data_cable/minecraft/block/block",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/art_edit/biocomputing_data_cable/create_biotech/block/biocomputing/data_cable/hub",
+    "all": "create_biotech:block/biocomputing/art_edit/biocomputing_data_cable/create_biotech/block/biocomputing/data_cable/hub"
+  },
+  "elements": [
+    {
+      "from": [
+        6,
+        6,
+        6
+      ],
+      "to": [
+        10,
+        10,
+        10
+      ],
+      "faces": {
+        "north": {
+          "texture": "#all"
+        },
+        "east": {
+          "texture": "#all"
+        },
+        "south": {
+          "texture": "#all"
+        },
+        "west": {
+          "texture": "#all"
+        },
+        "up": {
+          "texture": "#all"
+        },
+        "down": {
+          "texture": "#all"
+        }
+      }
+    }
+  ]
+}

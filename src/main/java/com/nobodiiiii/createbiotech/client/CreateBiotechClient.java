@@ -3,6 +3,10 @@ package com.nobodiiiii.createbiotech.client;
 import java.util.function.Predicate;
 
 import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineRenderer;
+import com.nobodiiiii.createbiotech.content.biocomputing.computer.ComputerRenderer;
+import com.nobodiiiii.createbiotech.content.biocomputing.library.LibraryRenderer;
+import com.nobodiiiii.createbiotech.content.biocomputing.application.recipe.menu.PatternStorageCoreScreen;
+import com.nobodiiiii.createbiotech.content.biocomputing.application.production.network.tool.LogisticsAliasScreen;
 import com.nobodiiiii.createbiotech.content.evokerenchantingchamber.EvokerEnchantingChamberRenderer;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpRenderer;
 import com.nobodiiiii.createbiotech.content.buttercat.block.ButterCatEngineRenderer;
@@ -132,8 +136,11 @@ public class CreateBiotechClient {
 
 	@SubscribeEvent
 	public static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+		event.registerBlockEntityRenderer(CBBlockEntityTypes.LABEL_OUTPUT.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.label.LabelOutputRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.AUTOMATIC_FISH_RELEASE_MACHINE.get(),
 			AutomaticFishReleaseMachineRenderer::new);
+		event.registerBlockEntityRenderer(CBBlockEntityTypes.COMPUTER.get(), ComputerRenderer::new);
+		event.registerBlockEntityRenderer(CBBlockEntityTypes.PATTERN_STORAGE_CORE.get(), LibraryRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.EVOKER_ENCHANTING_CHAMBER.get(),
 			EvokerEnchantingChamberRenderer::new);
 		event.registerBlockEntityRenderer(CBBlockEntityTypes.EXPERIENCE_PUMP.get(), ExperiencePumpRenderer::new);
@@ -224,6 +231,23 @@ public class CreateBiotechClient {
 
 	@SubscribeEvent
 	public static void registerMenuScreens(RegisterMenuScreensEvent event) {
+		event.register(CBMenuTypes.PATTERN_STORAGE_CORE.get(), PatternStorageCoreScreen::new);
+		event.register(CBMenuTypes.BIOCOMPUTING_LIBRARY.get(), com.nobodiiiii.createbiotech.content.biocomputing.library.menu.LibraryBookScreen::new);
+        event.register(CBMenuTypes.REDSTONE_OUTPUT.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.redstone.RedstoneOutputScreen::new);
+        event.register(CBMenuTypes.STOCK_APPLICATION.get(), com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockApplicationScreen::new);
+        event.register(CBMenuTypes.TEXT_OUTPUT.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.display.TextOutputScreen::new);
+        event.register(CBMenuTypes.MUSIC_OUTPUT.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.music.MusicOutputScreen::new);
+        event.register(CBMenuTypes.VIRTUAL_FILTER.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.filter.VirtualFilterScreen::new);
+        event.register(CBMenuTypes.COMPONENT_SETTINGS.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.settings.ComponentSettingsScreen::new);
+        event.register(CBMenuTypes.LABEL_OUTPUT.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.label.LabelOutputScreen::new);
+        event.register(CBMenuTypes.PARTICLE_OUTPUT.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.particle.ParticleOutputScreen::new);
+        event.register(CBMenuTypes.NARRATOR_OUTPUT.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.localtext.LocalTextOutputScreen::new);
+        event.register(CBMenuTypes.TERMINAL_UI.get(), com.nobodiiiii.createbiotech.content.biocomputing.device.terminal.TerminalUiScreen::new);
+        event.register(CBMenuTypes.PRODUCTION_PORT.get(), com.nobodiiiii.createbiotech.content.biocomputing.application.production.port.ProductionPortScreen::new);
+        event.register(CBMenuTypes.BLOCK_READER.get(), com.nobodiiiii.createbiotech.content.biocomputing.peripheral.ReaderScreen::new);
+		event.register(CBMenuTypes.COMPUTER_PROGRAM.get(), com.nobodiiiii.createbiotech.content.biocomputing.editor.ComputerScratchScreen::new);
+		event.register(CBMenuTypes.BIOCOMPUTING_CLUSTER.get(), com.nobodiiiii.createbiotech.content.biocomputing.cluster.menu.ClusterControllerScreen::new);
+		event.register(CBMenuTypes.LOGISTICS_ALIAS.get(), LogisticsAliasScreen::new);
 		event.register(CBMenuTypes.SPIDER_ASSEMBLY_TABLE.get(), SpiderAssemblyTableScreen::new);
 		event.register(CBMenuTypes.ALLAY_PORT.get(), AllayPortScreen::new);
 		event.register(CBMenuTypes.ALLAY_COURIER.get(), AllayCourierScreen::new);
@@ -268,6 +292,8 @@ public class CreateBiotechClient {
 		event.registerSpriteSet(CBParticleTypes.STRAIGHT_ENCHANT.get(), StraightEnchantParticle.Provider::new);
 		event.registerSpriteSet(CBParticleTypes.ALLAY_COURIER_NOTE.get(), CourierNoteParticle.Provider::new);
 		event.registerSpriteSet(CBParticleTypes.FROG_PORTAL.get(), FrogPortalParticle.Provider::new);
+		event.registerSpriteSet(CBParticleTypes.BIOCOMPUTING_READ_WAIT.get(),
+			com.nobodiiiii.createbiotech.content.biocomputing.client.ClusterReadWaitParticle.Provider::new);
 	}
 
 	@SubscribeEvent
@@ -279,6 +305,7 @@ public class CreateBiotechClient {
 
 	@SubscribeEvent
 	public static void onClientSetup(FMLClientSetupEvent event) {
+		net.neoforged.neoforge.common.NeoForge.EVENT_BUS.addListener(com.nobodiiiii.createbiotech.content.biocomputing.library.goggles.FactoryGoggleClient::tick);
 		event.enqueueWork(() -> {
 			registerItemTooltips();
 			registerCardboardBoxModelProperties();
@@ -353,6 +380,7 @@ public class CreateBiotechClient {
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.FIXED_CARROT_FISHING_ROD.get(), RenderType.cutout());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.BLAST_PROOF_GLASS.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.BLAST_PROOF_FRAMED_GLASS.get(), RenderType.translucent());
+			ItemBlockRenderTypes.setRenderLayer(CBBlocks.TRANSPARENT_COMPUTER_CASING.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.FROG_STOMACH_SECRETION.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.FROG_DIGESTIVE_TRACT.get(), RenderType.translucent());
 			ItemBlockRenderTypes.setRenderLayer(CBBlocks.CUTE_CAT_ON_SHAFT.get(), RenderType.cutoutMipped());
@@ -369,6 +397,8 @@ public class CreateBiotechClient {
 			CreateClient.CASING_CONNECTIVITY.makeCasing(CBBlocks.ASURINE_CASING.get(),
 				CBSpriteShifts.ASURINE_CASING);
 			CreateClient.CASING_CONNECTIVITY.makeCasing(CBBlocks.BIOTECH_CASING.get(),
+				CBSpriteShifts.BIOTECH_CASING);
+			CreateClient.CASING_CONNECTIVITY.makeCasing(CBBlocks.COMPUTER_CASING.get(),
 				CBSpriteShifts.BIOTECH_CASING);
 			CreateClient.CASING_CONNECTIVITY.makeCasing(CBBlocks.EXPLOSION_PROOF_CASING.get(),
 				CBSpriteShifts.EXPLOSION_PROOF_CASING_SIDE);
@@ -402,6 +432,8 @@ public class CreateBiotechClient {
 			model -> new CTModel(model, new EncasedCTBehaviour(CBSpriteShifts.ASURINE_CASING)));
 		customBlockModels.register(CreateBiotech.asResource("biotech_casing"),
 			model -> new CTModel(model, new EncasedCTBehaviour(CBSpriteShifts.BIOTECH_CASING)));
+		customBlockModels.register(CreateBiotech.asResource("computer_casing"),
+			model -> new CTModel(model, new EncasedCTBehaviour(CBSpriteShifts.BIOTECH_CASING)));
 		customBlockModels.register(CreateBiotech.asResource("explosion_proof_casing"),
 			model -> new CTModel(model, new CasingConnectedHorizontalCTBehaviour(
 				CBSpriteShifts.EXPLOSION_PROOF_CASING_SIDE, CBSpriteShifts.EXPLOSION_PROOF_CASING)));
@@ -414,6 +446,8 @@ public class CreateBiotechClient {
 			model -> new CTModel(model, new EncasedCTBehaviour(CBSpriteShifts.EXPLOSION_PROOF_CASING_SIDE)));
 		customBlockModels.register(CreateBiotech.asResource("blast_proof_framed_glass"),
 			model -> new CTModel(model, new SimpleCTBehaviour(CBSpriteShifts.BLAST_PROOF_FRAMED_GLASS)));
+		customBlockModels.register(CreateBiotech.asResource("transparent_computer_casing"),
+			model -> new CTModel(model, new SimpleCTBehaviour(CBSpriteShifts.TRANSPARENT_COMPUTER_CASING)));
 		customBlockModelsRegistered = true;
 	}
 
@@ -438,6 +472,7 @@ public class CreateBiotechClient {
 		registerCreateStyleTooltip(CBItems.SMART_SUPER_GLUE.get());
 		registerCreateStyleTooltip(CBItems.FIXED_CARROT_FISHING_ROD.get());
 		registerCreateStyleTooltip(CBItems.WIRELESS_TERMINAL.get());
+		registerCreateStyleTooltip(CBItems.LOGISTICS_CONFIGURATION_TOOL.get());
 		registerCreateStyleTooltip(CBItems.MAGMA_CUBE_BURNER.get());
 		registerCreateStyleTooltip(CBItems.SHULKER_PACKAGER.get());
 		registerCreateStyleTooltip(CBItems.SHULKER_TELEPORTER.get());

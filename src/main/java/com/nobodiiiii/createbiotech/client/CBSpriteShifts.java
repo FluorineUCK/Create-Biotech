@@ -11,6 +11,7 @@ public class CBSpriteShifts {
 
 	public static final CTSpriteShiftEntry ASURINE_CASING = omni("asurine_casing"),
 		BIOTECH_CASING = omni("biotech_casing"),
+		TRANSPARENT_COMPUTER_CASING = omni("biocomputing/computer/transparent_casing"),
 		EXPLOSION_PROOF_CASING = omni("explosion_proof_casing"),
 		EXPLOSION_PROOF_CASING_SIDE = omni("explosion_proof_casing_side"),
 		BLAST_PROOF_FRAMED_GLASS = omni("blast_proof_framed_glass");

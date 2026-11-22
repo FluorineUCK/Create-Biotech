@@ -45,7 +45,30 @@ public class CreateBiotechJeiPlugin implements IModPlugin {
 	}
 
 	@Override
+	public void registerGuiHandlers(mezz.jei.api.registration.IGuiHandlerRegistration registration) {
+		registration.addGhostIngredientHandler(
+			com.nobodiiiii.createbiotech.content.biocomputing.application.recipe.menu.PatternStorageCoreScreen.class,
+			new PatternBrowserGhostHandler());
+		registration.addGhostIngredientHandler(
+			com.nobodiiiii.createbiotech.content.biocomputing.application.recipe.menu.PatternRecipeEditorScreen.class,
+			new PatternEditorGhostHandler());
+	}
+
+    @Override public void registerRecipeTransferHandlers(mezz.jei.api.registration.IRecipeTransferRegistration registration) {
+        registerDraftTransfer(registration, mezz.jei.api.constants.RecipeTypes.STONECUTTING);
+        registerDraftTransfer(registration, mezz.jei.api.constants.RecipeTypes.CRAFTING);
+    }
+    private static <R extends net.minecraft.world.item.crafting.Recipe<?>> void registerDraftTransfer(
+        mezz.jei.api.registration.IRecipeTransferRegistration registration, RecipeType<RecipeHolder<R>> type) {
+        registration.addRecipeTransferHandler(new PatternRecipeTransfer<>(registration.getTransferHelper(), type), type);
+    }
+    @Override public void onRuntimeAvailable(mezz.jei.api.runtime.IJeiRuntime runtime) { PatternRecipeTransfer.runtime = runtime; }
+    @Override public void onRuntimeUnavailable() { PatternRecipeTransfer.runtime = null; }
+
+	@Override
 	public void registerRecipes(IRecipeRegistration registration) {
+        registration.addIngredientInfo(new ItemStack(CBBlocks.PATTERN_STORAGE_CORE.get()),
+            mezz.jei.api.constants.VanillaTypes.ITEM_STACK, Component.translatable("create_biotech.jei.library_core.info"));
 		registration.addIngredientInfo(
 			new FluidStack(CBFluids.TELEPORTATION.get(), FluidType.BUCKET_VOLUME),
 			NeoForgeTypes.FLUID_STACK,

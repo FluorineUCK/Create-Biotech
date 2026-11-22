@@ -1,0 +1,104 @@
+{
+  "id": "scale_materials",
+  "revision": 1,
+  "inputs": {
+    "materials": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "optional",
+          "child": 0
+        },
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        },
+        {
+          "kind": "scalar",
+          "name": "NBT"
+        },
+        {
+          "kind": "record",
+          "fields": {
+            "item": 1,
+            "tag": 1,
+            "count": 2,
+            "components": 3
+          }
+        },
+        {
+          "kind": "list",
+          "child": 4
+        }
+      ],
+      "root": 5
+    },
+    "batches": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        }
+      ],
+      "root": 0
+    }
+  },
+  "outputs": {
+    "result": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "optional",
+          "child": 0
+        },
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        },
+        {
+          "kind": "scalar",
+          "name": "NBT"
+        },
+        {
+          "kind": "record",
+          "fields": {
+            "item": 1,
+            "tag": 1,
+            "count": 2,
+            "components": 3
+          }
+        },
+        {
+          "kind": "list",
+          "child": 4
+        },
+        {
+          "kind": "optional",
+          "child": 5
+        },
+        {
+          "kind": "scalar",
+          "name": "BOOLEAN"
+        },
+        {
+          "kind": "record",
+          "fields": {
+            "ok": 7,
+            "materials": 6
+          }
+        }
+      ],
+      "root": 8
+    }
+  },
+  "returns": {
+    "result": "result"
+  },
+  "assembly_version": 1
+}

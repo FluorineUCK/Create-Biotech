@@ -1,0 +1,108 @@
+{
+  "parent": "minecraft:block/block",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/data_cable/hub",
+    "hub": "create_biotech:block/biocomputing/data_cable/hub",
+    "wire": "create_biotech:block/biocomputing/data_cable/arm",
+    "input_wire": "#wire",
+    "output_wire": "#wire"
+  },
+  "elements": [
+    {
+      "from": [
+        6,
+        6,
+        6
+      ],
+      "to": [
+        10,
+        10,
+        10
+      ],
+      "faces": {
+        "north": {
+          "texture": "#hub"
+        },
+        "east": {
+          "texture": "#hub"
+        },
+        "south": {
+          "texture": "#hub"
+        },
+        "west": {
+          "texture": "#hub"
+        },
+        "up": {
+          "texture": "#hub"
+        },
+        "down": {
+          "texture": "#hub"
+        }
+      }
+    },
+    {
+      "from": [
+        0,
+        6,
+        6
+      ],
+      "to": [
+        6,
+        10,
+        10
+      ],
+      "faces": {
+        "north": {
+          "texture": "#input_wire"
+        },
+        "east": {
+          "texture": "#input_wire"
+        },
+        "south": {
+          "texture": "#input_wire"
+        },
+        "west": {
+          "texture": "#input_wire"
+        },
+        "up": {
+          "texture": "#input_wire"
+        },
+        "down": {
+          "texture": "#input_wire"
+        }
+      }
+    },
+    {
+      "from": [
+        10,
+        6,
+        6
+      ],
+      "to": [
+        16,
+        10,
+        10
+      ],
+      "faces": {
+        "north": {
+          "texture": "#output_wire"
+        },
+        "east": {
+          "texture": "#output_wire"
+        },
+        "south": {
+          "texture": "#output_wire"
+        },
+        "west": {
+          "texture": "#output_wire"
+        },
+        "up": {
+          "texture": "#output_wire"
+        },
+        "down": {
+          "texture": "#output_wire"
+        }
+      }
+    }
+  ]
+}

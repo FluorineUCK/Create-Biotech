@@ -1,0 +1,12 @@
+{
+  "parent": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/cube",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/dispenser_front",
+    "north": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/dispenser_front",
+    "south": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_front",
+    "east": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_side",
+    "west": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_side",
+    "up": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_top",
+    "down": "create_biotech:block/biocomputing/art_edit/biocomputing_particle_output/minecraft/block/observer_top"
+  }
+}

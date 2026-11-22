@@ -29,7 +29,21 @@ final class CBClientPacketHandlers {
 			allayPortFlap.handle(player);
 		} else if (packet instanceof AllayCourierHudPacket allayCourierHud) {
 			allayCourierHud.handle(player);
-		} else if (packet instanceof GiantFrogEatPacket giantFrogEat) {
+		} else if (packet instanceof com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockApplicationMenuResponse stockApplication) {
+            stockApplication.handle(player);
+        } else if (packet instanceof com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockControls state) {
+            if (player.containerMenu.containerId == state.container()
+                && net.minecraft.client.Minecraft.getInstance().screen instanceof com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockControls.Listener listener)
+                listener.showStockControls(state);
+        } else if (packet instanceof com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockNativeOrderResponse nativeOrder) {
+            nativeOrder.handle(player);
+        } else if (packet instanceof com.nobodiiiii.createbiotech.content.biocomputing.device.narrator.NarratorSpeechPacket speech) {
+            com.nobodiiiii.createbiotech.content.biocomputing.device.narrator.NarratorOutputClient.receive(speech, player);
+        } else if (packet instanceof com.nobodiiiii.createbiotech.content.biocomputing.device.localtext.SpeakerPlaybackPacket media) {
+            com.nobodiiiii.createbiotech.content.biocomputing.device.localtext.SpeakerPlaybackClient.receive(media, player);
+        } else if (packet instanceof com.nobodiiiii.createbiotech.content.biocomputing.device.localtext.SpeakerMediaPage media) {
+            if (player.containerMenu instanceof com.nobodiiiii.createbiotech.content.biocomputing.editor.ComputerProgramMenu computer) computer.accept(media);
+        } else if (packet instanceof GiantFrogEatPacket giantFrogEat) {
 			giantFrogEat.handle(player);
 		} else {
 			throw new IllegalArgumentException("Unhandled Create Biotech clientbound packet "

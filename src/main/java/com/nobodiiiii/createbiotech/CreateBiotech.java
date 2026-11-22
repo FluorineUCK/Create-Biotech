@@ -1,8 +1,10 @@
 package com.nobodiiiii.createbiotech;
 
+
 import net.minecraft.core.registries.Registries;
 
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodGoalHandler;
+import com.nobodiiiii.createbiotech.content.biocomputing.application.production.network.tool.BoundLogisticsTooltipData;
 import com.nobodiiiii.createbiotech.content.shulkerpackager.ShulkerPackagerArmInteractions;
 import com.nobodiiiii.createbiotech.content.bufferpad.BufferPadMovementBehaviour;
 import com.nobodiiiii.createbiotech.content.experience.ExperienceOpenPipeEffectHandler;
@@ -47,6 +49,8 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.DyeColor;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
+import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
+import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
@@ -60,6 +64,7 @@ public class CreateBiotech {
 	public CreateBiotech(IEventBus modEventBus, ModContainer modContainer) {
 		CBConfigs.register(modContainer);
 		CBBlocks.register(modEventBus);
+		CBDisplaySources.register(modEventBus);
 		CBDataComponents.register(modEventBus);
 		CBItems.register(modEventBus);
 		CBIngredients.register(modEventBus);
@@ -79,6 +84,7 @@ public class CreateBiotech {
 		modEventBus.addListener(CreateBiotech::onCommonSetup);
 		modEventBus.addListener(CreateBiotech::onRegister);
 		CBPackets.register();
+		com.nobodiiiii.createbiotech.content.biocomputing.application.production.create.CreateProductionReceipts.register(NeoForge.EVENT_BUS);
 		registerAllayEvents();
 		FixedCarrotFishingRodGoalHandler.register();
 		FrogStomachSlimeSpawning.register();
@@ -92,6 +98,16 @@ public class CreateBiotech {
 			AllayPortTargetRegistry.clear();
 			AllayCourierTaskManager.onServerStarting(event.getServer());
 		});
+		NeoForge.EVENT_BUS.addListener((ServerTickEvent.Post event) -> {
+			if (Math.floorMod(event.getServer().getTickCount(), 20) == 0)
+				for (var player : event.getServer().getPlayerList().getPlayers())
+					BoundLogisticsTooltipData.refreshVisibleMenu(player);
+		});
+		NeoForge.EVENT_BUS.addListener((PlayerContainerEvent.Open event) -> {
+			if (event.getEntity() instanceof net.minecraft.server.level.ServerPlayer player)
+				BoundLogisticsTooltipData.refreshVisibleMenu(player);
+		});
+
 	}
 
 	private static void onCommonSetup(FMLCommonSetupEvent event) {

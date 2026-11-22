@@ -16,6 +16,29 @@ public final class CBDataComponents {
 	private static final DeferredRegister.DataComponents COMPONENTS =
 		DeferredRegister.createDataComponents(Registries.DATA_COMPONENT_TYPE, CreateBiotech.MOD_ID);
 
+	public static final Supplier<DataComponentType<net.minecraft.world.item.component.CustomData>> BIOCOMPUTING_FILTER_RULES =
+		COMPONENTS.registerComponentType("biocomputing_filter_rules",
+			builder -> builder.persistent(net.minecraft.world.item.component.CustomData.CODEC)
+				.networkSynchronized(net.minecraft.world.item.component.CustomData.STREAM_CODEC));
+
+	/** Physical volume name, independent of the book's existing contents and original pages. */
+	public static final Supplier<DataComponentType<String>> BIOCOMPUTING_LIBRARY_VOLUME =
+		COMPONENTS.registerComponentType("biocomputing_library_volume",
+			builder -> builder.persistent(Codec.STRING).networkSynchronized(ByteBufCodecs.STRING_UTF8));
+
+	/** Raw carrier preserves unknown schemas; services validate entries without rewriting malformed data. */
+	public static final Supplier<DataComponentType<net.minecraft.world.item.component.CustomData>> BIOCOMPUTING_LIBRARY_CONTENTS =
+		COMPONENTS.registerComponentType("biocomputing_library_contents",
+			builder -> builder.persistent(net.minecraft.world.item.component.CustomData.CODEC)
+				.networkSynchronized(net.minecraft.world.item.component.CustomData.STREAM_CODEC));
+
+	/** Server-owned service archive; item viewers receive only a presence marker, never queued requests. */
+	public static final Supplier<DataComponentType<net.minecraft.world.item.component.CustomData>> BIOCOMPUTING_LIBRARY_SERVICE =
+		COMPONENTS.registerComponentType("biocomputing_library_service",
+			builder -> builder.persistent(net.minecraft.world.item.component.CustomData.CODEC)
+				.networkSynchronized(net.minecraft.network.codec.StreamCodec.of((buffer, value) -> {},
+					buffer -> net.minecraft.world.item.component.CustomData.EMPTY)));
+
 	public static final Supplier<DataComponentType<AllayCourierCargo>> ALLAY_COURIER_CARGO =
 		COMPONENTS.registerComponentType("allay_courier_cargo",
 			builder -> builder.persistent(AllayCourierCargo.CODEC)

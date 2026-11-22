@@ -1,0 +1,52 @@
+{
+  "parent": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/minecraft/block/block",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/side",
+    "north": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/front",
+    "south": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/back",
+    "east": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/side",
+    "west": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/side",
+    "up": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/top",
+    "down": "create_biotech:block/biocomputing/art_edit/biocomputing_block_reader/create_biotech/block/biocomputing/block_reader/bottom"
+  },
+  "elements": [
+    {
+      "from": [
+        0,
+        0,
+        0
+      ],
+      "to": [
+        16,
+        16,
+        16
+      ],
+      "faces": {
+        "down": {
+          "texture": "#down",
+          "cullface": "down"
+        },
+        "up": {
+          "texture": "#up",
+          "cullface": "up"
+        },
+        "north": {
+          "texture": "#north",
+          "cullface": "north"
+        },
+        "south": {
+          "texture": "#south",
+          "cullface": "south"
+        },
+        "west": {
+          "texture": "#west",
+          "cullface": "west"
+        },
+        "east": {
+          "texture": "#east",
+          "cullface": "east"
+        }
+      }
+    }
+  ]
+}

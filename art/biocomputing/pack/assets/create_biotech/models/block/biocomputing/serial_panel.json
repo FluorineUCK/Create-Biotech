@@ -1,0 +1,8 @@
+{
+  "parent": "minecraft:block/orientable",
+  "textures": {
+    "front": "minecraft:block/observer_back",
+    "top": "minecraft:block/cut_copper",
+    "side": "create_biotech:block/asurine_casing"
+  }
+}

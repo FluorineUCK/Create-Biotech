@@ -34,9 +34,26 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 			CBBlocks.SPIDER_ASSEMBLY_TABLE.get(),
 			CBBlocks.SPIDER_ASSEMBLY_TABLE_COG.get(),
 			CBBlocks.ASURINE_CASING.get(),
-			CBBlocks.BIOTECH_CASING.get());
+			CBBlocks.BIOTECH_CASING.get(),
+			CBBlocks.PATTERN_STORAGE_CORE.get());
 
 		add(BlockTags.MINEABLE_WITH_PICKAXE,
+			CBBlocks.DATA_CABLE.get(),
+			CBBlocks.FAST_DATA_CABLE.get(),
+			CBBlocks.DUPLEX_DATA_CABLE.get(),
+			CBBlocks.BLOCK_READER.get(),
+			CBBlocks.REDSTONE_OUTPUT.get(),
+			CBBlocks.TEXT_OUTPUT.get(),
+			CBBlocks.MUSIC_OUTPUT.get(),
+			CBBlocks.LABEL_OUTPUT.get(),
+			CBBlocks.PARTICLE_OUTPUT.get(),
+			CBBlocks.NARRATOR_OUTPUT.get(),
+            CBBlocks.STOCK_LINK_OUTPUT.get(),
+			CBBlocks.CLUSTER_CONTROLLER.get(),
+			CBBlocks.MATERIAL_REQUEST_PORT.get(),
+			CBBlocks.COMPUTER.get(),
+			CBBlocks.COMPUTER_CASING.get(),
+			CBBlocks.TRANSPARENT_COMPUTER_CASING.get(),
 			CBBlocks.SLIME_BELT.get(),
 			CBBlocks.MAGMA_BELT.get(),
 			CBBlocks.POWER_BELT.get(),
@@ -73,6 +90,9 @@ public class CBBlockTagsProvider extends BlockTagsProvider {
 			CBBlocks.BLAST_PROOF_GLASS.get(),
 			CBBlocks.BLAST_PROOF_FRAMED_GLASS.get(),
 			CBBlocks.BLAST_PROOF_CHAIN_DRIVE.get());
+		tag(BlockTags.MINEABLE_WITH_PICKAXE).add(CBBlocks.PATTERN_STORAGE_CORE.get());
+		tag(BlockTags.MINEABLE_WITH_PICKAXE).add(CBBlocks.CARRIER_CABLE.get());
+		tag(BlockTags.MINEABLE_WITH_PICKAXE).add(CBBlocks.COMPONENT_SETTINGS.get());
 
 		add(BlockTags.NEEDS_DIAMOND_TOOL,
 			CBBlocks.CREEPER_BLAST_CHAMBER.get(),

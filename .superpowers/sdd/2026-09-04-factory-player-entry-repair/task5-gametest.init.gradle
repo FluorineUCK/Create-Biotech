@@ -1,0 +1,9 @@
+allprojects { project ->
+    def workspace = project.file('.superpowers/sdd/2026-09-04-factory-player-entry-repair')
+    layout.buildDirectory = new File(workspace, 'build')
+    afterEvaluate {
+        neoForge.runs.gameTestServer {
+            gameDirectory = new File(workspace, 'world-final-fix-green2-20260820')
+        }
+    }
+}

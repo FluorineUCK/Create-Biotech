@@ -1,5 +1,25 @@
 {
   "values": [
+    "create_biotech:biocomputing_carrier_cable",
+    "create_biotech:biocomputing_data_cable",
+    "create_biotech:biocomputing_fast_data_cable",
+    "create_biotech:biocomputing_duplex_data_cable",
+    "create_biotech:biocomputing_block_reader",
+    "create_biotech:biocomputing_redstone_output",
+    "create_biotech:biocomputing_text_output",
+    "create_biotech:biocomputing_music_output",
+    "create_biotech:biocomputing_label_output",
+    "create_biotech:biocomputing_particle_output",
+    "create_biotech:biocomputing_narrator_output",
+    "create_biotech:biocomputing_terminal_ui",
+    "create_biotech:biocomputing_chat_output",
+    "create_biotech:biocomputing_stock_link_output",
+    "create_biotech:biocomputing_cluster_controller",
+    "create_biotech:biocomputing_serial_panel",
+    "create_biotech:biocomputing_material_request_port",
+    "create_biotech:computer",
+    "create_biotech:computer_casing",
+    "create_biotech:transparent_computer_casing",
     "create_biotech:slime_belt",
     "create_biotech:magma_belt",
     "create_biotech:power_belt",
@@ -35,6 +55,8 @@
     "create_biotech:explosion_proof_item_vault",
     "create_biotech:blast_proof_glass",
     "create_biotech:blast_proof_framed_glass",
-    "create_biotech:blast_proof_chain_drive"
+    "create_biotech:blast_proof_chain_drive",
+    "create_biotech:pattern_storage_core",
+    "create_biotech:biocomputing_component_settings"
   ]
 }

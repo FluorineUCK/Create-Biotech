@@ -3,6 +3,13 @@ package com.nobodiiiii.createbiotech.registry;
 import net.minecraft.core.registries.Registries;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.ClusterControllerBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.redstone.RedstoneOutputBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.display.TextOutputBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.music.MusicOutputBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.label.LabelOutputBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.particle.ParticleOutputBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.localtext.LocalTextOutputBlockEntity;
 import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineBlockEntity;
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetBlockEntity;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerBlockEntity;
@@ -12,6 +19,9 @@ import com.nobodiiiii.createbiotech.content.experience.BuddingExperienceBlockEnt
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlockEntity;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlockEntity;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.application.production.port.MaterialRequestPortBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.library.LibraryBlockEntity;
+import com.nobodiiiii.createbiotech.content.biocomputing.computer.ComputerBlockEntity;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlockEntity;
 import com.nobodiiiii.createbiotech.content.giantfrog.GiantFrogBlockEntity;
 import com.nobodiiiii.createbiotech.content.fluid.NetherPortalFluidBlockEntity;
@@ -45,6 +55,79 @@ public class CBBlockEntityTypes {
 
 	public static final DeferredRegister<BlockEntityType<?>> BLOCK_ENTITY_TYPES =
 		DeferredRegister.create(Registries.BLOCK_ENTITY_TYPE, CreateBiotech.MOD_ID);
+
+	public static final DeferredHolder<BlockEntityType<?>,BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.block.SerialPanelEntity>> SERIAL_PANEL = BLOCK_ENTITY_TYPES.register("biocomputing_serial_panel", () -> BlockEntityType.Builder.of(com.nobodiiiii.createbiotech.content.biocomputing.block.SerialPanelEntity::new,CBBlocks.SERIAL_PANEL.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ClusterControllerBlockEntity>> CLUSTER_CONTROLLER =
+		BLOCK_ENTITY_TYPES.register("biocomputing_cluster_controller", () -> BlockEntityType.Builder
+			.of((pos, state) -> new ClusterControllerBlockEntity(CBBlockEntityTypes.CLUSTER_CONTROLLER.get(), pos, state),
+				CBBlocks.CLUSTER_CONTROLLER.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<RedstoneOutputBlockEntity>> REDSTONE_OUTPUT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_redstone_output", () -> BlockEntityType.Builder
+			.of((pos, state) -> new RedstoneOutputBlockEntity(CBBlockEntityTypes.REDSTONE_OUTPUT.get(), pos, state),
+				CBBlocks.REDSTONE_OUTPUT.get()).build(null));
+    public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockLinkOutputBlockEntity>> STOCK_LINK_OUTPUT =
+        BLOCK_ENTITY_TYPES.register("biocomputing_stock_link_output", () -> BlockEntityType.Builder
+            .of((pos, state) -> new com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockLinkOutputBlockEntity(CBBlockEntityTypes.STOCK_LINK_OUTPUT.get(), pos, state),
+                CBBlocks.STOCK_LINK_OUTPUT.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<TextOutputBlockEntity>> TEXT_OUTPUT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_text_output", () -> BlockEntityType.Builder
+			.of((pos, state) -> new TextOutputBlockEntity(CBBlockEntityTypes.TEXT_OUTPUT.get(), pos, state),
+				CBBlocks.TEXT_OUTPUT.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MusicOutputBlockEntity>> MUSIC_OUTPUT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_music_output", () -> BlockEntityType.Builder
+			.of((pos, state) -> new MusicOutputBlockEntity(CBBlockEntityTypes.MUSIC_OUTPUT.get(), pos, state),
+				CBBlocks.MUSIC_OUTPUT.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.device.filter.VirtualFilterBlockEntity>> VIRTUAL_FILTER =
+		BLOCK_ENTITY_TYPES.register("biocomputing_virtual_filter", () -> BlockEntityType.Builder
+			.of((pos, state) -> new com.nobodiiiii.createbiotech.content.biocomputing.device.filter.VirtualFilterBlockEntity(VIRTUAL_FILTER_TYPE(), pos, state),
+				CBBlocks.VIRTUAL_FILTER.get()).build(null));
+	private static BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.device.filter.VirtualFilterBlockEntity> VIRTUAL_FILTER_TYPE() {
+		return VIRTUAL_FILTER.get();
+	}
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.device.settings.ComponentSettingsBlockEntity>> COMPONENT_SETTINGS =
+		BLOCK_ENTITY_TYPES.register("biocomputing_component_settings", () -> BlockEntityType.Builder
+			.of((pos, state) -> new com.nobodiiiii.createbiotech.content.biocomputing.device.settings.ComponentSettingsBlockEntity(componentSettingsType(), pos, state),
+				CBBlocks.COMPONENT_SETTINGS.get()).build(null));
+	private static BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.device.settings.ComponentSettingsBlockEntity> componentSettingsType() {
+		return COMPONENT_SETTINGS.get();
+	}
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LabelOutputBlockEntity>> LABEL_OUTPUT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_label_output", () -> BlockEntityType.Builder
+			.of((pos, state) -> new LabelOutputBlockEntity(CBBlockEntityTypes.LABEL_OUTPUT.get(), pos, state),
+				CBBlocks.LABEL_OUTPUT.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ParticleOutputBlockEntity>> PARTICLE_OUTPUT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_particle_output", () -> BlockEntityType.Builder
+			.of((pos, state) -> new ParticleOutputBlockEntity(CBBlockEntityTypes.PARTICLE_OUTPUT.get(), pos, state),
+				CBBlocks.PARTICLE_OUTPUT.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LocalTextOutputBlockEntity>> NARRATOR_OUTPUT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_narrator_output", () -> BlockEntityType.Builder
+			.of((pos, state) -> new LocalTextOutputBlockEntity(CBBlockEntityTypes.NARRATOR_OUTPUT.get(), pos, state),
+				CBBlocks.NARRATOR_OUTPUT.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LocalTextOutputBlockEntity>> CHAT_OUTPUT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_chat_output", () -> BlockEntityType.Builder
+			.of((pos, state) -> new LocalTextOutputBlockEntity(CBBlockEntityTypes.CHAT_OUTPUT.get(), pos, state),
+				CBBlocks.CHAT_OUTPUT.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.device.terminal.TerminalUiBlockEntity>> TERMINAL_UI =
+		BLOCK_ENTITY_TYPES.register("biocomputing_terminal_ui", () -> BlockEntityType.Builder
+			.of((pos, state) -> new com.nobodiiiii.createbiotech.content.biocomputing.device.terminal.TerminalUiBlockEntity(CBBlockEntityTypes.TERMINAL_UI.get(), pos, state),
+				CBBlocks.TERMINAL_UI.get()).build(null));
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<com.nobodiiiii.createbiotech.content.biocomputing.block.BlockReaderBlockEntity>> BLOCK_READER =
+		BLOCK_ENTITY_TYPES.register("biocomputing_block_reader", () -> BlockEntityType.Builder
+			.of((pos, state) -> new com.nobodiiiii.createbiotech.content.biocomputing.block.BlockReaderBlockEntity(CBBlockEntityTypes.BLOCK_READER.get(), pos, state),
+				CBBlocks.BLOCK_READER.get()).build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<MaterialRequestPortBlockEntity>> MATERIAL_REQUEST_PORT =
+		BLOCK_ENTITY_TYPES.register("biocomputing_material_request_port", () -> BlockEntityType.Builder
+			.of(MaterialRequestPortBlockEntity::new, CBBlocks.MATERIAL_REQUEST_PORT.get()).build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<LibraryBlockEntity>>
+		PATTERN_STORAGE_CORE = BLOCK_ENTITY_TYPES.register("pattern_storage_core",
+			() -> BlockEntityType.Builder.of(LibraryBlockEntity::new,
+				CBBlocks.PATTERN_STORAGE_CORE.get()).build(null));
+
+	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<ComputerBlockEntity>> COMPUTER =
+		BLOCK_ENTITY_TYPES.register("computer", () -> BlockEntityType.Builder
+			.of(ComputerBlockEntity::new, CBBlocks.COMPUTER.get()).build(null));
 
 	public static final DeferredHolder<BlockEntityType<?>, BlockEntityType<AutomaticFishReleaseMachineBlockEntity>>
 		AUTOMATIC_FISH_RELEASE_MACHINE = BLOCK_ENTITY_TYPES.register("automatic_fish_release_machine",

@@ -1,0 +1,35 @@
+// Two separate invocations, same coldRun: prepare then verify. Never reseeds an existing cut.
+gradle.projectsEvaluated {
+    def p = gradle.rootProject
+    def phase = p.findProperty('coldPhase')
+    def scenario = p.findProperty('coldCase')
+    def run = p.findProperty('coldRun')
+    if (!(phase in ['prepare', 'verify']) || !(scenario in ['received', 'reply']) ||
+        run == null || !(run ==~ /[a-z0-9_-]{1,48}/))
+        throw new GradleException('Require -PcoldPhase=prepare|verify -PcoldCase=received|reply -PcoldRun=<new run name>')
+    def verification = p.sourceSets.create('redstoneColdGameTest') {
+        java.srcDir 'src/test/java'
+        java.include 'com/nobodiiiii/createbiotech/content/biocomputing/device/redstone/RedstoneOutputColdRecoveryGameTests.java'
+        compileClasspath += p.sourceSets.main.output
+        runtimeClasspath += p.sourceSets.main.output
+    }
+    ['implementation', 'compileOnly', 'runtimeOnly'].each {
+        p.configurations.getByName(verification."${it}ConfigurationName").extendsFrom(p.configurations.getByName(it))
+    }
+    def neo = p.extensions.getByName('neoForge')
+    neo.addModdingDependenciesTo(verification)
+    neo.mods.named('create_biotech') { sourceSet verification }
+    def directory = p.file(".superpowers/cache/redstone-output/cold-${run}-game").canonicalFile
+    neo.runs.named('gameTestServer') {
+        gameDirectory = directory
+        systemProperty 'neoforge.gameTestServer', 'true'
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'create_biotech'
+        systemProperty 'biocomputing.redstoneColdPhase', phase
+        systemProperty 'biocomputing.redstoneColdCase', scenario
+        jvmArguments.add('-Xmx2G')
+    }
+    p.tasks.named('runGameTestServer') {
+        workingDir = directory
+        doFirst { if (workingDir.canonicalFile != directory) throw new GradleException('Wrong isolated cold recovery directory') }
+    }
+}

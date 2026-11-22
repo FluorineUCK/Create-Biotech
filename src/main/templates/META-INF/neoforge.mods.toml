@@ -63,3 +63,10 @@ versionRange = "[15.10,)"
 ordering = "AFTER"
 side = "CLIENT"
 
+[[dependencies."${mod_id}"]]
+modId = "computercraft"
+type = "optional"
+versionRange = "[1.120.2,)"
+ordering = "AFTER"
+side = "BOTH"
+

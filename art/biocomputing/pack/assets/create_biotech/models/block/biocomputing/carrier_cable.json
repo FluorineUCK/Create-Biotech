@@ -1,0 +1,7 @@
+{
+  "parent": "create_biotech:block/biocomputing/data_cable_item",
+  "textures": {
+    "input_wire": "minecraft:block/polished_deepslate",
+    "output_wire": "minecraft:block/cut_copper"
+  }
+}

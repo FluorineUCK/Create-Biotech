@@ -1,0 +1,13 @@
+{
+  "id": "recipe_validate",
+  "revision": 1,
+  "inputs": {"source": {"nodes": [{"kind": "scalar", "name": "ANY"}], "root": 0}},
+  "outputs": {"result": {"nodes": [
+    {"kind": "semantic", "fmt": "recipe", "version": 1},
+    {"kind": "optional", "child": 0},
+    {"kind": "scalar", "name": "BOOLEAN"},
+    {"kind": "record", "fields": {"ok": 2, "value": 1}}
+  ], "root": 3}},
+  "returns": {"result": "checked"},
+  "assembly_version": 1
+}

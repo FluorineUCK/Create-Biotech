@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/io_faces/carrier_divider/east",
+    "east": "create_biotech:block/biocomputing/io_faces/carrier_divider/east",
+    "north": "create_biotech:block/biocomputing/io_faces/carrier_divider/north",
+    "west": "create_biotech:block/biocomputing/io_faces/carrier_divider/west",
+    "south": "create_biotech:block/biocomputing/io_faces/carrier_divider/south",
+    "up": "create_biotech:block/biocomputing/io_faces/carrier_divider/up",
+    "down": "create_biotech:block/biocomputing/io_faces/carrier_divider/down"
+  }
+}

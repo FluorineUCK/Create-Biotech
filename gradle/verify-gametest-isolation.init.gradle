@@ -1,0 +1,27 @@
+// Read-only configuration regression; does not start a client/server or modify worlds.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    project.tasks.register('verifyGameTestIsolation') {
+        group = 'verification'
+        description = 'Checks the real GameTest task is isolated without moving development client/server directories.'
+        doLast {
+            def runs = project.extensions.getByName('neoForge').runs
+            def expected = project.layout.buildDirectory.dir(
+                project.findProperty('expectedGameTestDirectory') ?: 'gametest').get().asFile.canonicalFile
+            def model = runs.named('gameTestServer').get().gameDirectory.get().asFile.canonicalFile
+            def task = project.tasks.named('runGameTestServer').get().workingDir.canonicalFile
+            logger.lifecycle("GameTest directory model=${model}, task=${task}, expected=${expected}")
+            if (model != expected || task != expected) {
+                throw new GradleException('GameTest must use the expected isolated directory in both model and task')
+            }
+            def client = runs.named('client').get().gameDirectory.get().asFile.canonicalFile
+            def server = runs.named('server').get().gameDirectory.get().asFile.canonicalFile
+            if (client != project.file('run').canonicalFile || server != project.file('run/server').canonicalFile) {
+                throw new GradleException('Isolating GameTest must not move development client/server directories')
+            }
+            if (expected == client || expected == server) {
+                throw new GradleException('GameTest cannot share a development client/server directory')
+            }
+        }
+    }
+}

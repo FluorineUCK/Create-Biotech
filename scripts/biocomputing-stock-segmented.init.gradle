@@ -1,0 +1,71 @@
+// One opt-in physical source -> alternate stock -> segmented book -> delivery/ACK acceptance.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    // Short geometry regression in a separate world; never a substitute for the real order.
+    def proofOnly = project.providers.gradleProperty('stockEnclosureOnly').map { it.toBoolean() }.getOrElse(false)
+    def menuOnly = project.providers.gradleProperty('stockMenuOnly').map { it.toBoolean() }.getOrElse(false)
+    def resumeOnly = project.providers.gradleProperty('stockResumeOnly').map { it.toBoolean() }.getOrElse(false)
+    def recipeOnly = project.providers.gradleProperty('stockRecipeCatalogOnly').map { it.toBoolean() }.getOrElse(false)
+    def orderPreview = project.providers.gradleProperty('stockRecipeOrderPreviewOnly').map { it.toBoolean() }.getOrElse(false)
+    def materialsOnly = project.providers.gradleProperty('stockRecipeMaterialsOnly').map { it.toBoolean() }.getOrElse(false)
+    if ([proofOnly, menuOnly, resumeOnly, recipeOnly, orderPreview, materialsOnly].count { it } > 1) throw new GradleException('Select one stock verification path')
+    orderPreview |= materialsOnly
+    recipeOnly |= orderPreview
+    def verification = project.sourceSets.create('nativeScopedArchiveGameTest') {
+        java.srcDir 'src/test/java'
+        if (recipeOnly) {
+            java.include 'com/nobodiiiii/createbiotech/content/biocomputing/gametest/AuthoredLibraryWorldFixture.java'
+            java.include 'com/nobodiiiii/createbiotech/content/biocomputing/gametest/BiocomputingStockApplicationGameTests.java'
+            if (menuOnly) java.include 'com/nobodiiiii/createbiotech/content/biocomputing/gametest/StockRetiredOrderGameTests.java'
+        } else if (resumeOnly) {
+            java.include 'com/nobodiiiii/createbiotech/content/biocomputing/gametest/StockBookWriteResumeGameTests.java'
+        } else if (proofOnly) {
+            java.include 'com/nobodiiiii/createbiotech/content/biocomputing/cluster/EnclosureProofGameTests.java'
+        } else {
+            java.include 'com/nobodiiiii/createbiotech/content/biocomputing/gametest/AuthoredLibraryWorldFixture.java'
+            java.include 'com/nobodiiiii/createbiotech/content/biocomputing/gametest/BiocomputingNativeOrderCompletionGameTests.java'
+        }
+        compileClasspath += project.sourceSets.main.output
+        runtimeClasspath += project.sourceSets.main.output
+    }
+    project.configurations.getByName(verification.implementationConfigurationName)
+        .extendsFrom(project.configurations.implementation)
+    project.configurations.getByName(verification.compileOnlyConfigurationName)
+        .extendsFrom(project.configurations.compileOnly)
+    project.configurations.getByName(verification.runtimeOnlyConfigurationName)
+        .extendsFrom(project.configurations.runtimeOnly)
+    def neo = project.extensions.getByName('neoForge')
+    neo.addModdingDependenciesTo(verification)
+    neo.mods.named('create_biotech') { sourceSet verification }
+    def directory = project.layout.buildDirectory.dir(materialsOnly ? 'stock-recipe-materials' : orderPreview ? 'stock-recipe-order-preview' : recipeOnly ? 'stock-recipe-catalog' : resumeOnly ? 'logistics-stock-write-resume' : proofOnly ? 'logistics-enclosure-proof' : (menuOnly ? 'logistics-stock-menu' : 'logistics-segmented-stock')).get().asFile
+    // Fixture-only topology allowance: 33 XBus links and 10 SIO links. Never change a player world.
+    neo.runs.named('gameTestServer') {
+        gameDirectory = directory
+        systemProperty 'neoforge.gameTestServer', 'true'
+        if (resumeOnly) programArguments.addAll('--spawnPos', '1000,60,1000')
+        if (menuOnly) systemProperty 'biocomputing.stockMenuOnly', 'true'
+        if (materialsOnly) systemProperty 'biocomputing.stockRecipeMaterials', 'true'
+        if (orderPreview) systemProperty 'biocomputing.stockRecipeOrderPreview', 'true'
+        if (recipeOnly) systemProperty 'biocomputing.stockRecipeCatalogue', 'true'
+        if (!proofOnly && !resumeOnly && !recipeOnly) systemProperty 'biocomputing.nativeCompletionScopedArchive', 'true'
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'create_biotech'
+        jvmArguments.add('-Xmx2G')
+    }
+    project.tasks.named('runGameTestServer') {
+        workingDir = directory
+        doFirst { task ->
+            if (task.workingDir.canonicalFile != directory.canonicalFile)
+                throw new GradleException('Unexpected stock application verification game directory')
+            if (resumeOnly && !['world/level.dat', 'config/create_biotech-server.toml', 'partial.properties', 'actual-order.typed.nbt'].every { new File(directory, it).isFile() })
+                throw new GradleException('Missing partial write fixture: use an isolated copy of an existing staged order')
+            if (!proofOnly && !resumeOnly && !recipeOnly) ['defaultconfigs','config'].each { subdir ->
+                def defaults = new File(directory, subdir + '/create_biotech-server.toml')
+                if (!defaults.exists()) {
+                    defaults.parentFile.mkdirs()
+                    defaults.text = '[biocomputing.cluster]\nconfigurationEntries = 43\n'
+                }
+            }
+            logger.lifecycle("Verified stock application GameTest directory: ${directory}")
+        }
+    }
+}

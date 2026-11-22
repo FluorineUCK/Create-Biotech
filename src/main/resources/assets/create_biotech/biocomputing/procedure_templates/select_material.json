@@ -1,0 +1,134 @@
+{
+  "id": "select_material",
+  "revision": 1,
+  "inputs": {
+    "item": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "optional",
+          "child": 0
+        }
+      ],
+      "root": 1
+    },
+    "tag": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "optional",
+          "child": 0
+        }
+      ],
+      "root": 1
+    },
+    "count": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        }
+      ],
+      "root": 0
+    },
+    "components": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "NBT"
+        }
+      ],
+      "root": 0
+    },
+    "option": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        },
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "list",
+          "child": 2
+        },
+        {
+          "kind": "record",
+          "fields": {
+            "slot": 0,
+            "item": 1,
+            "tags": 3
+          }
+        },
+        {
+          "kind": "optional",
+          "child": 4
+        }
+      ],
+      "root": 5
+    }
+  },
+  "outputs": {
+    "result": {
+      "nodes": [
+        {
+          "kind": "scalar",
+          "name": "BOOLEAN"
+        },
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "scalar",
+          "name": "TEXT"
+        },
+        {
+          "kind": "scalar",
+          "name": "INTEGER"
+        },
+        {
+          "kind": "scalar",
+          "name": "NBT"
+        },
+        {
+          "kind": "record",
+          "fields": {
+            "item": 2,
+            "count": 3,
+            "components": 4
+          }
+        },
+        {
+          "kind": "optional",
+          "child": 5
+        },
+        {
+          "kind": "record",
+          "fields": {
+            "ok": 0,
+            "code": 1,
+            "item": 6
+          }
+        }
+      ],
+      "root": 7
+    }
+  },
+  "returns": {
+    "result": "result"
+  },
+  "assembly_version": 1
+}

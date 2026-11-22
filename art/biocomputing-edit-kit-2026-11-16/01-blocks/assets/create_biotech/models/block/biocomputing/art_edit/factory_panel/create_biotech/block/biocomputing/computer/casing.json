@@ -1,0 +1,6 @@
+{
+  "parent": "create_biotech:block/biocomputing/art_edit/factory_panel/minecraft/block/cube_all",
+  "textures": {
+    "all": "create_biotech:block/biocomputing/art_edit/factory_panel/create_biotech/block/biotech_casing"
+  }
+}

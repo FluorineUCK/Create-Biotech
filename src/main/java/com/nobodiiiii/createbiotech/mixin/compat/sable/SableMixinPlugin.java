@@ -66,6 +66,9 @@ public final class SableMixinPlugin implements IMixinConfigPlugin {
 	public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
 		if (!sableApiAvailable)
 			return false;
+		if (mixinClassName.endsWith(".AeroBurnerScrollRangeMixin") || mixinClassName.endsWith(".SimAltitudeSettingsMixin")
+			|| mixinClassName.endsWith(".SimReceiverSettingsMixin") || mixinClassName.endsWith(".SimInductorSettingsMixin"))
+			return isPresent(targetClassName, SableMixinPlugin.class.getClassLoader());
 		if (mixinClassName.equals(SIMULATED_MOVEMENT_CHECKS_MIXIN))
 			return simulatedMovementChecksAvailable;
 		return true;

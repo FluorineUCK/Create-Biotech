@@ -1,0 +1,12 @@
+{
+  "parent": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/cube",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_side",
+    "north": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/note_block",
+    "south": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_front",
+    "east": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_side",
+    "west": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_side",
+    "up": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_top",
+    "down": "create_biotech:block/biocomputing/art_edit/biocomputing_music_output/minecraft/block/observer_top"
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "redstone",
+  "pattern": [" I ", "ROD", " I "],
+  "key": {
+    "I": {"item":"minecraft:iron_ingot"},
+    "R": {"item":"minecraft:redstone_torch"},
+    "O": {"item":"minecraft:observer"},
+    "D": {"item":"create_biotech:biocomputing_data_cable"}
+  },
+  "result": {"id":"create_biotech:biocomputing_stock_link_output","count":1}
+}

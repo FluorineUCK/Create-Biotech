@@ -1,0 +1,35 @@
+// Opt-in admission recovery acceptance, isolated from other tests that own a live production runtime.
+gradle.projectsEvaluated {
+    def project = gradle.rootProject
+    def verification = project.sourceSets.create('productionAdmissionGameTest') {
+        java.srcDir 'src/test/java'
+        java.include 'com/nobodiiiii/createbiotech/gametest/FactoryProductionGameTestFixture.java'
+        java.include 'com/nobodiiiii/createbiotech/gametest/ProductionAdmissionGameTests.java'
+        compileClasspath += project.sourceSets.main.output
+        runtimeClasspath += project.sourceSets.main.output
+    }
+    project.configurations.getByName(verification.implementationConfigurationName)
+        .extendsFrom(project.configurations.implementation)
+    project.configurations.getByName(verification.compileOnlyConfigurationName)
+        .extendsFrom(project.configurations.compileOnly)
+    project.configurations.getByName(verification.runtimeOnlyConfigurationName)
+        .extendsFrom(project.configurations.runtimeOnly)
+    def neo = project.extensions.getByName('neoForge')
+    neo.addModdingDependenciesTo(verification)
+    neo.mods.named('create_biotech') { sourceSet verification }
+    def directory = project.layout.buildDirectory.dir('biocomputing-production-admission-native').get().asFile
+    neo.runs.named('gameTestServer') {
+        gameDirectory = directory
+        systemProperty 'neoforge.gameTestServer', 'true'
+        systemProperty 'neoforge.enabledGameTestNamespaces', 'create_biotech'
+        jvmArguments.add('-Xmx2G')
+    }
+    project.tasks.named('runGameTestServer') {
+        workingDir = directory
+        doFirst { task ->
+            if (task.workingDir.canonicalFile != directory.canonicalFile)
+                throw new GradleException('Unexpected admission verification game directory')
+            logger.lifecycle("Verified admission GameTest directory: ${directory}")
+        }
+    }
+}

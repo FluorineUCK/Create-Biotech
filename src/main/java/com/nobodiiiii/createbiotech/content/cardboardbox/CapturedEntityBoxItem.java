@@ -48,6 +48,12 @@ public abstract class CapturedEntityBoxItem extends PackageItem {
 	}
 
 	@Override
+	public InteractionResult onItemUseFirst(ItemStack stack, UseOnContext context) {
+		var result = com.nobodiiiii.createbiotech.content.biocomputing.library.LibraryLecternConversion.tryConvert(context);
+		return result == InteractionResult.PASS ? super.onItemUseFirst(stack, context) : result;
+	}
+
+	@Override
 	public InteractionResult useOn(UseOnContext context) {
 		Player player = context.getPlayer();
 		if (player == null)

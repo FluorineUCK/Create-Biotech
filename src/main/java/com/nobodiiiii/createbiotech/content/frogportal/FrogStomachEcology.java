@@ -436,12 +436,12 @@ final class FrogStomachEcology {
 				Mth.floor(Math.abs(offset) / (double) halfWidth * 1.4d
 					+ (Math.sin(offset * 1.73d + outlinePhase) + 1.0d) * 0.65d),
 				0, Math.max(0, edge.wallDistance() - 1));
-			int localDepth = Math.max(1, edge.wallDistance() - edgeInset);
-			for (int inwardStep = 1; inwardStep <= localDepth; inwardStep++) {
+			int inwardDepth = Math.max(1, edge.wallDistance() - edgeInset);
+			for (int inwardStep = 1; inwardStep <= inwardDepth; inwardStep++) {
 				int x = waterfallPlatformX(origin, size, edge, offset, inwardStep);
 				int z = waterfallPlatformZ(origin, size, edge, offset, inwardStep);
 				double undersideNoise = Math.sin(offset * 1.41d + inwardStep * 0.83d + undersidePhase);
-				int thickness = inwardStep <= Math.max(2, localDepth / 2) || undersideNoise > 0.4d ? 2 : 1;
+				int thickness = inwardStep <= Math.max(2, inwardDepth / 2) || undersideNoise > 0.4d ? 2 : 1;
 				for (int layer = 0; layer < thickness; layer++)
 					setMucosa(level, pos.set(x, topY - layer, z), mucosa);
 			}
@@ -587,15 +587,15 @@ final class FrogStomachEcology {
 		int lastOffset = width - halfWidth - 1;
 		for (int offset = firstOffset; offset <= lastOffset; offset++) {
 			double edgeDistance = Math.abs(offset) / (double) Math.max(1, halfWidth);
-			int localDepth = Math.max(2, depth - (int) Math.floor(edgeDistance * 2.0d));
-			for (int inward = 0; inward < localDepth; inward++) {
+			int inwardDepth = Math.max(2, depth - (int) Math.floor(edgeDistance * 2.0d));
+			for (int inward = 0; inward < inwardDepth; inward++) {
 				int x = platformX(wall, minX, maxX, center, offset, inward);
 				int z = platformZ(wall, minZ, maxZ, center, offset, inward);
 				int thickness = inward <= 1 ? 2 : 1;
 				for (int layer = 0; layer < thickness; layer++)
 					setMucosa(level, pos.set(x, topY - layer, z), mucosa);
 
-				if (inward >= MAX_LINING_THICKNESS && inward >= localDepth - 2)
+				if (inward >= MAX_LINING_THICKNESS && inward >= inwardDepth - 2)
 					vineAnchors.add(new BlockPos(x, topY - thickness + 1, z));
 			}
 		}

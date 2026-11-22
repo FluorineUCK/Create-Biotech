@@ -1,0 +1,10 @@
+{
+  "variants": {
+    "facing=north": {"model": "create_biotech:block/biocomputing/serial_panel"},
+    "facing=east": {"model": "create_biotech:block/biocomputing/serial_panel", "y": 90},
+    "facing=south": {"model": "create_biotech:block/biocomputing/serial_panel", "y": 180},
+    "facing=west": {"model": "create_biotech:block/biocomputing/serial_panel", "y": 270},
+    "facing=up": {"model": "create_biotech:block/biocomputing/serial_panel", "x": 270},
+    "facing=down": {"model": "create_biotech:block/biocomputing/serial_panel", "x": 90}
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "parent": "create_biotech:block/biocomputing/art_edit/biocomputing_component_settings/minecraft/block/orientable",
+  "textures": {
+    "top": "create_biotech:block/biocomputing/art_edit/biocomputing_component_settings/create_biotech/block/asurine_casing",
+    "side": "create_biotech:block/biocomputing/art_edit/biocomputing_component_settings/create_biotech/block/asurine_casing",
+    "front": "create_biotech:block/biocomputing/art_edit/biocomputing_component_settings/minecraft/block/repeater"
+  }
+}

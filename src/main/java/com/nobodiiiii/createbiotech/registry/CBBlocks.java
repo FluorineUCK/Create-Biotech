@@ -1,5 +1,6 @@
 package com.nobodiiiii.createbiotech.registry;
 
+import com.nobodiiiii.createbiotech.content.biocomputing.device.carrier.CarrierCableBlock;
 import net.minecraft.core.registries.Registries;
 
 import java.util.Collections;
@@ -7,6 +8,16 @@ import java.util.EnumMap;
 import java.util.Map;
 
 import com.nobodiiiii.createbiotech.CreateBiotech;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.BlockReaderBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.redstone.RedstoneOutputBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.display.TextOutputBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.music.MusicOutputBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.label.LabelOutputBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.particle.ParticleOutputBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.device.localtext.LocalTextOutputBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.DataCableBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.network.serial.SerialWireMedium.Material;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.ClusterControllerBlock;
 import com.nobodiiiii.createbiotech.content.automaticfishreleasemachine.AutomaticFishReleaseMachineBlock;
 import com.nobodiiiii.createbiotech.content.boneratchet.BoneRatchetBlock;
 import com.nobodiiiii.createbiotech.content.biopackager.BioPackagerBlock;
@@ -19,6 +30,11 @@ import com.nobodiiiii.createbiotech.content.experience.ExperienceConstants;
 import com.nobodiiiii.createbiotech.content.experience.ExperiencePumpBlock;
 import com.nobodiiiii.createbiotech.content.explosionproofitemvault.ExplosionProofItemVaultBlock;
 import com.nobodiiiii.createbiotech.content.fixedcarrotfishingrod.FixedCarrotFishingRodBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.application.production.port.MaterialRequestPortBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.LibraryCoreBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.ComputerBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.ComputerCasingBlock;
+import com.nobodiiiii.createbiotech.content.biocomputing.block.TransparentComputerCasingBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogDigestiveTractWallBlock;
 import com.nobodiiiii.createbiotech.content.frogportal.FrogStomachSecretionBlock;
@@ -65,6 +81,64 @@ public class CBBlocks {
 
 	public static final DeferredRegister<Block> BLOCKS =
 		DeferredRegister.create(Registries.BLOCK, CreateBiotech.MOD_ID);
+
+	public static final DeferredHolder<Block, MaterialRequestPortBlock> MATERIAL_REQUEST_PORT =
+		BLOCKS.register("biocomputing_material_request_port", () -> new MaterialRequestPortBlock(CBSharedProperties.createSoftMetal()
+			.noOcclusion().mapColor(MapColor.COLOR_LIGHT_BLUE)));
+
+	public static final DeferredHolder<Block, LibraryCoreBlock> PATTERN_STORAGE_CORE =
+		BLOCKS.register("pattern_storage_core", () -> new LibraryCoreBlock(
+			Block.Properties.ofFullCopy(Blocks.LECTERN).noOcclusion()));
+
+	public static final DeferredHolder<Block, ComputerBlock> COMPUTER =
+		BLOCKS.register("computer", () -> new ComputerBlock(
+			CBSharedProperties.createSoftMetal().noOcclusion()
+				.mapColor(MapColor.COLOR_LIGHT_BLUE)));
+
+	public static final DeferredHolder<Block, DataCableBlock> DATA_CABLE =
+		BLOCKS.register("biocomputing_data_cable", () -> new DataCableBlock(CBSharedProperties.createSoftMetal().noOcclusion()));
+	public static final DeferredHolder<Block, DataCableBlock> FAST_DATA_CABLE =
+		BLOCKS.register("biocomputing_fast_data_cable", () -> new DataCableBlock(CBSharedProperties.createSoftMetal().noOcclusion(), Material.FAST));
+	public static final DeferredHolder<Block, DataCableBlock> DUPLEX_DATA_CABLE =
+		BLOCKS.register("biocomputing_duplex_data_cable", () -> new DataCableBlock(CBSharedProperties.createSoftMetal().noOcclusion(), Material.DUPLEX));
+	public static final DeferredHolder<Block, CarrierCableBlock> CARRIER_CABLE =
+		BLOCKS.register("biocomputing_carrier_cable", () -> new CarrierCableBlock(CBSharedProperties.createSoftMetal().noOcclusion()));
+	public static final DeferredHolder<Block, BlockReaderBlock> BLOCK_READER =
+		BLOCKS.register("biocomputing_block_reader", () -> new BlockReaderBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, RedstoneOutputBlock> REDSTONE_OUTPUT =
+		BLOCKS.register("biocomputing_redstone_output", () -> new RedstoneOutputBlock(CBSharedProperties.createSoftMetal()));
+    public static final DeferredHolder<Block, com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockLinkOutputBlock> STOCK_LINK_OUTPUT =
+        BLOCKS.register("biocomputing_stock_link_output", () -> new com.nobodiiiii.createbiotech.content.biocomputing.application.stockkeeper.StockLinkOutputBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, TextOutputBlock> TEXT_OUTPUT =
+		BLOCKS.register("biocomputing_text_output", () -> new TextOutputBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, MusicOutputBlock> MUSIC_OUTPUT =
+		BLOCKS.register("biocomputing_music_output", () -> new MusicOutputBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, com.nobodiiiii.createbiotech.content.biocomputing.device.filter.VirtualFilterBlock> VIRTUAL_FILTER =
+		BLOCKS.register("biocomputing_virtual_filter", () -> new com.nobodiiiii.createbiotech.content.biocomputing.device.filter.VirtualFilterBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, com.nobodiiiii.createbiotech.content.biocomputing.device.settings.ComponentSettingsBlock> COMPONENT_SETTINGS =
+		BLOCKS.register("biocomputing_component_settings", () -> new com.nobodiiiii.createbiotech.content.biocomputing.device.settings.ComponentSettingsBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, LabelOutputBlock> LABEL_OUTPUT =
+		BLOCKS.register("biocomputing_label_output", () -> new LabelOutputBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, ParticleOutputBlock> PARTICLE_OUTPUT =
+		BLOCKS.register("biocomputing_particle_output", () -> new ParticleOutputBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, LocalTextOutputBlock> NARRATOR_OUTPUT =
+		BLOCKS.register("biocomputing_narrator_output", () -> new LocalTextOutputBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, LocalTextOutputBlock> CHAT_OUTPUT =
+		BLOCKS.register("biocomputing_chat_output", () -> LocalTextOutputBlock.chat(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, com.nobodiiiii.createbiotech.content.biocomputing.device.terminal.TerminalUiBlock> TERMINAL_UI =
+		BLOCKS.register("biocomputing_terminal_ui", () -> new com.nobodiiiii.createbiotech.content.biocomputing.device.terminal.TerminalUiBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block,com.nobodiiiii.createbiotech.content.biocomputing.block.SerialPanelBlock> SERIAL_PANEL = BLOCKS.register("biocomputing_serial_panel", () -> new com.nobodiiiii.createbiotech.content.biocomputing.block.SerialPanelBlock(CBSharedProperties.createSoftMetal()));
+	public static final DeferredHolder<Block, ClusterControllerBlock> CLUSTER_CONTROLLER =
+		BLOCKS.register("biocomputing_cluster_controller", () -> new ClusterControllerBlock(CBSharedProperties.createSoftMetal()));
+
+	public static final DeferredHolder<Block, ComputerCasingBlock> COMPUTER_CASING =
+		BLOCKS.register("computer_casing", () -> new ComputerCasingBlock(
+			CBSharedProperties.createStone().sound(SoundType.WOOD)
+				.mapColor(MapColor.COLOR_LIGHT_BLUE)));
+
+	public static final DeferredHolder<Block, TransparentComputerCasingBlock> TRANSPARENT_COMPUTER_CASING =
+		BLOCKS.register("transparent_computer_casing",
+			() -> new TransparentComputerCasingBlock(blastProofGlassProperties()));
 
 	public static final DeferredHolder<Block, SlimeBeltBlock> SLIME_BELT = BLOCKS.register("slime_belt",
 		() -> new SlimeBeltBlock(CBSharedProperties.createWooden()

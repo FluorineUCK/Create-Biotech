@@ -1,0 +1,8 @@
+{
+  "id": "recipe_project",
+  "revision": 1,
+  "inputs": {"recipe": {"nodes": [{"kind": "semantic", "fmt": "recipe", "version": 1}], "root": 0}},
+  "outputs": {"result": {"nodes": [{"kind": "scalar", "name": "ANY"}], "root": 0}},
+  "returns": {"result": "projected"},
+  "assembly_version": 1
+}

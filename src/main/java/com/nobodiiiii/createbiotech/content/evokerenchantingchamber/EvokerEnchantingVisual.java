@@ -2,6 +2,7 @@ package com.nobodiiiii.createbiotech.content.evokerenchantingchamber;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import com.mojang.blaze3d.vertex.VertexConsumer;
+import com.nobodiiiii.createbiotech.foundation.render.SeatedModelPose;
 
 import net.minecraft.client.model.IllagerModel;
 import net.minecraft.client.model.geom.ModelPart;
@@ -19,12 +20,6 @@ public final class EvokerEnchantingVisual {
 		ResourceLocation.fromNamespaceAndPath("minecraft", "textures/entity/illager/evoker.png");
 
 	private static final float HEAD_X_ROT = 0.08726646f;
-	private static final float RIGHT_LEG_X_ROT = -1.4137167f;
-	private static final float RIGHT_LEG_Y_ROT = 0.31415927f;
-	private static final float RIGHT_LEG_Z_ROT = 0.07853982f;
-	private static final float LEFT_LEG_X_ROT = -1.4137167f;
-	private static final float LEFT_LEG_Y_ROT = -0.31415927f;
-	private static final float LEFT_LEG_Z_ROT = -0.07853982f;
 	private static final float ARM_CAST_X_ROT = -0.95f;
 	private static final float ARM_CAST_Y_ROT = 0.18f;
 	private static final float ARM_RAISED_Z_ROT = 2.3561945f;
@@ -43,16 +38,8 @@ public final class EvokerEnchantingVisual {
 		evokerModel.setupAnim(evoker, 0.0f, 0.0f, ageInTicks, 0.0f, 0.0f);
 
 		ModelPart head = root.getChild("head");
-		ModelPart rightLeg = root.getChild("right_leg");
-		ModelPart leftLeg = root.getChild("left_leg");
-
 		head.xRot = HEAD_X_ROT;
-		rightLeg.xRot = RIGHT_LEG_X_ROT;
-		rightLeg.yRot = RIGHT_LEG_Y_ROT;
-		rightLeg.zRot = RIGHT_LEG_Z_ROT;
-		leftLeg.xRot = LEFT_LEG_X_ROT;
-		leftLeg.yRot = LEFT_LEG_Y_ROT;
-		leftLeg.zRot = LEFT_LEG_Z_ROT;
+		SeatedModelPose.apply(root);
 
 		applyArmPose(root, casting);
 	}

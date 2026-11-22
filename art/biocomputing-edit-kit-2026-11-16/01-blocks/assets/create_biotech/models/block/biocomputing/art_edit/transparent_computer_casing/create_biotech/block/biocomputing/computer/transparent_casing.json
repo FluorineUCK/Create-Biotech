@@ -1,0 +1,7 @@
+{
+  "parent": "create_biotech:block/biocomputing/art_edit/transparent_computer_casing/minecraft/block/cube_all",
+  "render_type": "minecraft:translucent",
+  "textures": {
+    "all": "create_biotech:block/biocomputing/computer/transparent_casing"
+  }
+}

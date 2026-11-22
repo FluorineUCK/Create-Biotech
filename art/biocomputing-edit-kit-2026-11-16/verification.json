@@ -1,0 +1,12 @@
+{
+  "blocks": 19,
+  "model_copies": 64,
+  "texture_bindings": 68,
+  "block_pack_files": 170,
+  "ui_pack_files": 64,
+  "original_art_files": 641,
+  "source_files_unchanged": 643,
+  "missing_asset_references": [],
+  "geometry_and_states_preserved": true,
+  "native_game_visual_check": "not_run"
+}

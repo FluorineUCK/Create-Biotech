@@ -1,0 +1,12 @@
+{
+  "parent": "minecraft:block/cube",
+  "textures": {
+    "particle": "create_biotech:block/biocomputing/io_faces/terminal_ui/east",
+    "east": "create_biotech:block/biocomputing/io_faces/terminal_ui/east",
+    "north": "create_biotech:block/biocomputing/io_faces/terminal_ui/north",
+    "west": "create_biotech:block/biocomputing/io_faces/terminal_ui/west",
+    "south": "create_biotech:block/biocomputing/io_faces/terminal_ui/south",
+    "up": "create_biotech:block/biocomputing/io_faces/terminal_ui/up",
+    "down": "create_biotech:block/biocomputing/io_faces/terminal_ui/down"
+  }
+}
